@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { ExpertRouteHero, ExpertRouteSectionHeader } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Calendar, Clock, Video, Star, Plus, Trash2, Pencil, X, Link2, Unlink, Download, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  type LiveClassJoinToken,
   type PrivateSpeakingCalendarStatus,
   fetchExpertPrivateSpeakingProfile,
   fetchExpertPrivateSpeakingSessions,
@@ -18,14 +16,13 @@ import {
   updateExpertPrivateSpeakingAvailabilityRule,
   deleteExpertPrivateSpeakingAvailability,
   cancelExpertPrivateSpeakingSession,
-  fetchExpertPrivateSpeakingJoinToken,
   fetchExpertPrivateSpeakingCalendarStatus,
   connectExpertPrivateSpeakingGoogleCalendar,
   disconnectExpertPrivateSpeakingCalendar,
   downloadExpertPrivateSpeakingCalendarInvite,
   markExpertPrivateSpeakingNoShow,
 } from '@/lib/api';
-import { safeZoomUrl } from '@/lib/zoom-url';
+import { createSpeakingExamFromBookingAsTutor } from '@/lib/api/speaking-exams';
 
 type TutorProfile = {
   id: string; displayName: string; bio: string | null; timezone: string;
@@ -35,8 +32,8 @@ type TutorProfile = {
 
 type ExpertSession = {
   id: string; learnerUserId: string; status: string; sessionStartUtc: string;
-  durationMinutes: number; zoomJoinUrl: string | null;
-  zoomStatus: string; learnerRating: number | null; learnerFeedback: string | null;
+  durationMinutes: number;
+  learnerRating: number | null; learnerFeedback: string | null;
 };
 
 type AvailabilityRule = {
@@ -47,16 +44,9 @@ type AvailabilityRule = {
 type ExpertTab = 'sessions' | 'availability';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type ActiveMeeting = {
-  token: LiveClassJoinToken;
-  title: string;
-  startsAt: string;
-};
-
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     Confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    ZoomCreated: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
     InProgress: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
     Completed: 'bg-background-light text-muted',
     Cancelled: 'bg-red-100 text-red-600',
@@ -86,7 +76,6 @@ export default function ExpertPrivateSpeakingPage() {
   // separate tab; drives a short poll of the calendar status.
   const [calendarPolling, setCalendarPolling] = useState(false);
   const [startingSessionId, setStartingSessionId] = useState<string | null>(null);
-  const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
 
   // New availability rule form
   const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
@@ -288,7 +277,7 @@ export default function ExpertPrivateSpeakingPage() {
 
   // Mirrors the admin mark-no-show flow (window.confirm gate). Only offered
   // for scheduled sessions whose slot is already in the past — the backend
-  // additionally enforces the Confirmed/ZoomCreated/InProgress state gate.
+  // additionally enforces the Confirmed/InProgress state gate.
   async function handleMarkNoShow(session: ExpertSession) {
     if (!window.confirm('Mark the learner as a no-show for this session? The session is forfeited per policy (no refund) and this cannot be undone.')) return;
     setMarkingNoShowId(session.id);
@@ -309,21 +298,10 @@ export default function ExpertPrivateSpeakingPage() {
     setStartingSessionId(session.id);
     setError(null);
     try {
-      const token = await fetchExpertPrivateSpeakingJoinToken(session.id);
-      if (token.sdkKey && token.signature && (token.role === 0 || token.zak)) {
-        setActiveMeeting({ token, title: 'Private Speaking Session', startsAt: session.sessionStartUtc });
-        return;
-      }
-
-      const joinUrl = safeZoomUrl(token.joinUrl);
-      if (joinUrl) {
-        window.open(joinUrl, '_blank', 'noopener,noreferrer');
-        return;
-      }
-
-      setError('Zoom host details are not ready for this session yet.');
+      const exam = await createSpeakingExamFromBookingAsTutor(session.id);
+      window.location.href = `/expert/speaking/exam/${exam.examId}`;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the Zoom host room.');
+      setError(err instanceof Error ? err.message : 'Could not prepare the LiveKit tutor room.');
     } finally {
       setStartingSessionId(null);
     }
@@ -388,7 +366,7 @@ export default function ExpertPrivateSpeakingPage() {
   }, [tab]);
 
   const upcomingSessions = sessions.filter(s =>
-    ['Confirmed', 'ZoomCreated', 'ZoomPending', 'InProgress'].includes(s.status)
+    ['Confirmed', 'InProgress'].includes(s.status)
   ).sort((a, b) => new Date(a.sessionStartUtc).getTime() - new Date(b.sessionStartUtc).getTime());
 
   const pastSessions = sessions.filter(s =>
@@ -446,24 +424,6 @@ export default function ExpertPrivateSpeakingPage() {
           </ul>
         </div>
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
-      </div>
-    );
-  }
-
-  if (activeMeeting && activeMeeting.token.sdkKey && activeMeeting.token.signature) {
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Private Speaking</p>
-            <h1 className="text-xl font-semibold text-navy">{activeMeeting.title}</h1>
-            <p className="text-sm text-muted">{new Date(activeMeeting.startsAt).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
-          </div>
-          <Button type="button" variant="outline" onClick={() => setActiveMeeting(null)}>
-            Close meeting
-          </Button>
-        </div>
-        <ZoomMeetingEmbed joinToken={activeMeeting.token} onLeave={() => setActiveMeeting(null)} />
       </div>
     );
   }
@@ -545,10 +505,10 @@ export default function ExpertPrivateSpeakingPage() {
                 const isStartingSoon = start.getTime() - Date.now() < 15 * 60 * 1000;
                 // Scheduled slot fully elapsed but the booking never completed —
                 // offer the tutor-side "learner no-show" action (backend also
-                // gates on Confirmed/ZoomCreated/InProgress).
+                // gates on Confirmed/InProgress).
                 const slotEnded = start.getTime() + session.durationMinutes * 60_000 < Date.now();
                 const canMarkNoShow = slotEnded
-                  && ['Confirmed', 'ZoomCreated', 'InProgress'].includes(session.status);
+                  && ['Confirmed', 'InProgress'].includes(session.status);
                 return (
                   <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
                     <div className="flex items-center justify-between">
@@ -567,10 +527,10 @@ export default function ExpertPrivateSpeakingPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {(session.status === 'ZoomCreated' || session.status === 'InProgress') && (
+                        {(session.status === 'Confirmed' || session.status === 'InProgress') && (
                           <button onClick={() => handleStartSession(session)} disabled={startingSessionId === session.id}
                             className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                            <Video className="w-4 h-4" /> {startingSessionId === session.id ? 'Opening...' : 'Start'}
+                            <Video className="w-4 h-4" /> {startingSessionId === session.id ? 'Opening...' : 'Open LiveKit'}
                           </button>
                         )}
                         <button onClick={() => handleDownloadInvite(session.id)}

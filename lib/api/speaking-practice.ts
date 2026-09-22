@@ -44,31 +44,6 @@ export async function postExpertSpeakingTranscriptComment(
   return mapTranscriptComment(json);
 }
 
-// Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a speaking
-// task into the AI-patient Conversation module. Returns the redirect
-// path the caller should navigate the learner to.
-export interface SpeakingSelfPracticeStartResult {
-  sessionId: string;
-  redirectPath: string;
-  feedbackMessage?: string | null;
-}
-
-export async function startSpeakingSelfPracticeSession(
-  taskId: string,
-): Promise<SpeakingSelfPracticeStartResult> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/speaking/tasks/${encodeURIComponent(taskId)}/self-practice`,
-    { method: 'POST', body: JSON.stringify({}) },
-  );
-  const session = asRecord(json.session);
-  const sessionId = typeof session.id === 'string' ? session.id : '';
-  const redirectPath = typeof json.redirectPath === 'string' && json.redirectPath
-    ? json.redirectPath
-    : `/conversation/${sessionId}`;
-  const feedbackMessage = typeof json.feedbackMessage === 'string' ? json.feedbackMessage : null;
-  return { sessionId, redirectPath, feedbackMessage };
-}
-
 // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
 export interface SpeakingDrillRow {
   id: string;

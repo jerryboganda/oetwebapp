@@ -4,28 +4,28 @@
  * Recording room for a Speaking session (plan C.2).
  *
  * Mounted at `/speaking/sessions/[id]`. Branches by `mode`:
- *   • `ai_self_practice` / `ai_exam` → runs the hands-free AI patient voice
- *     conversation via `useSpeakingConversation` (mic → Whisper → Claude →
- *     ElevenLabs → auto-play, with barge-in). Renders the card, a 5-minute
- *     timer, an "End early" button, a captions strip and a mic-level indicator.
+ *   • `ai_self_practice` / `ai_exam` → runs the hands-free native realtime AI
+ *     patient voice conversation through the selected live provider. Renders
+ *     the card, a 5-minute timer, an "End early" button, captions, and a
+ *     mic-level indicator.
  *   • `live_tutor` → immediately redirects to `./live-tutor` where the
  *     LiveKit room is provisioned.
  *
  * The consent banner is mounted up front for AI sessions — the existing
  * `SpeakingConsentBanner` writes a server-side consent row before mic capture
  * begins (Phase 7 contract). The conversation hook is only handed the session
- * id once consent is accepted, so no hub/mic work starts before then.
+ * id once consent is accepted, so no provider/mic work starts before then.
  *
  * NOTE: this page does NOT replace the 50KB native-capable recorder at
  * `app/speaking/task/[id]/page.tsx`. It targets the new SessionId-based flow.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import { Activity, Loader2, PhoneOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
-import { useSpeakingConversation, type ConversationPhase } from '@/hooks/useSpeakingConversation';
+import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
 import {
   endSpeakingSession,
   getSpeakingSession,
@@ -37,16 +37,10 @@ import {
 } from '@/lib/api/speaking-sessions';
 import { ApiError } from '@/lib/api';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
+import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
 const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
 const CLOCK_SYNC_INTERVAL_MS = 10_000;
-
-const PHASE_LABEL: Record<ConversationPhase, string> = {
-  idle: 'Paused',
-  listening: 'Listening…',
-  thinking: 'Thinking…',
-  speaking: 'Speaking…',
-};
 
 function isAiMode(mode: string | SpeakingSessionMode): boolean {
   return mode === 'ai_self_practice' || mode === 'ai_exam';
@@ -69,23 +63,24 @@ export default function SpeakingSessionRecordingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
   const [secondsLeft, setSecondsLeft] = useState<number>(ROLE_PLAY_HARD_LIMIT_SECONDS);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
 
   const endedRef = useRef(false);
   const roleplayStartedAtRef = useRef<number | null>(null);
-  const trackedRoleplayStartRef = useRef(false);
   const trackedTimeWarningRef = useRef(false);
+  const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
   const handleFinalizeRef = useRef<((reason?: 'manual' | 'timer') => Promise<void>) | null>(null);
+  const handleVoiceStopReady = useCallback((stop: (() => Promise<boolean>) | null) => {
+    voiceStopRef.current = stop;
+  }, []);
 
-  // The conversation hook only engages once consent is accepted for an AI
-  // session — until then it is handed an empty id and stays fully idle.
-  const convoSessionId =
-    consentAccepted && session && isAiMode(session.mode) && session.mode !== 'live_tutor'
-      ? session.sessionId
-      : '';
-  const convo = useSpeakingConversation(convoSessionId);
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get('voiceProvider');
+    if (value === 'openai' || value === 'gemini') setRequestedVoiceProvider(value);
+  }, []);
 
   // ── Load session ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -185,7 +180,10 @@ export default function SpeakingSessionRecordingPage() {
     setEnding(true);
     setEndError(null);
     try {
-      convo.disableMic();
+      const voiceSaved = await voiceStopRef.current?.() ?? true;
+      if (!voiceSaved) {
+        throw new Error('The live voice transcript could not be saved. Please retry before ending the session.');
+      }
       await endSpeakingSession(session.sessionId);
       // WS4 (§14.2) — commit the finished role-play for marking. Best-effort:
       // the backend gate stamps `submittedAt` only when assessable evidence
@@ -225,26 +223,8 @@ export default function SpeakingSessionRecordingPage() {
       endedRef.current = false;
       setEnding(false);
     }
-  }, [convo, router, session]);
+  }, [router, session]);
   handleFinalizeRef.current = handleFinalize;
-
-  // Track the role-play start the first time the learner enables the mic.
-  useEffect(() => {
-    if (!session || !convo.micEnabled || trackedRoleplayStartRef.current) return;
-    trackedRoleplayStartRef.current = true;
-    roleplayStartedAtRef.current ??= Date.now();
-    trackSpeaking('roleplay_started', {
-      sessionId: session.sessionId,
-      cardId: session.card.cardId,
-    });
-  }, [convo.micEnabled, session]);
-
-  // The AI (or the server-side timer) can signal the conversation is over.
-  useEffect(() => {
-    if (convo.ended && !endedRef.current) {
-      void handleFinalizeRef.current?.('timer');
-    }
-  }, [convo.ended]);
 
   useEffect(() => {
     if (!session || !consentAccepted || !isAiMode(session.mode)) return;
@@ -312,8 +292,6 @@ export default function SpeakingSessionRecordingPage() {
 
   const { card } = session;
   const isWarning = secondsLeft > 0 && secondsLeft <= 30;
-  const connected = convo.connection === 'connected';
-
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       {!consentAccepted ? (
@@ -376,99 +354,13 @@ export default function SpeakingSessionRecordingPage() {
           ) : null}
         </section>
 
-        {/* Live HUD */}
         <aside className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Mic className="h-4 w-4 text-muted" aria-hidden /> Microphone
-            </div>
-            <MicLevelMeter level={convo.micLevel} />
-            <p className="mt-2 text-xs text-muted" aria-live="polite">
-              {!connected
-                ? 'Connecting AI patient…'
-                : convo.micEnabled
-                  ? convo.awaitingCandidateStart
-                    ? 'The patient is waiting — introduce yourself to begin.'
-                    : PHASE_LABEL[convo.phase]
-                  : 'AI patient connected.'}
-            </p>
-            {!convo.micEnabled ? (
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                className="mt-3 w-full"
-                onClick={() => void convo.enableMic()}
-                disabled={!connected || !consentAccepted}
-                data-testid="speaking-session-record-turn"
-              >
-                <Mic className="mr-2 h-4 w-4" aria-hidden /> Start talking
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                className="mt-3 w-full"
-                onClick={convo.disableMic}
-                data-testid="speaking-session-pause-mic"
-              >
-                <MicOff className="mr-2 h-4 w-4" aria-hidden /> Pause microphone
-              </Button>
-            )}
-            <p className="mt-2 text-[11px] leading-snug text-muted">
-              Tap <span className="font-medium">Start talking</span>, then open the consultation
-              yourself — greet the patient and ask what brings them in. They listen, reply in
-              character, and the mic re-opens automatically.
-            </p>
-            {convo.voiceUnavailable ? (
-              <p className="mt-2 flex items-center gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-[11px] text-warning">
-                <Volume2 className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-                The patient&apos;s voice is unavailable — showing text only. Please tell your administrator.
-              </p>
-            ) : null}
-            {convo.error ? (
-              <p
-                role="alert"
-                className="mt-2 rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
-              >
-                {convo.error}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Activity className="h-4 w-4 text-muted" aria-hidden /> Live captions
-            </div>
-            <div
-              className="h-40 overflow-y-auto rounded-md bg-muted p-2 text-sm text-foreground"
-              aria-live="polite"
-            >
-              {convo.captions.length === 0 ? (
-                <p className="italic text-muted">
-                  Captions will appear here as you speak.
-                </p>
-              ) : (
-                <ul className="space-y-1">
-                  {convo.captions.map((c) => (
-                    <li key={c.id}>
-                      <span
-                        className={cn(
-                          'mr-1 text-xs font-semibold uppercase tracking-wide',
-                          c.speaker === 'candidate' ? 'text-success' : 'text-info',
-                        )}
-                      >
-                        {c.speaker === 'candidate' ? 'You' : 'Patient'}:
-                      </span>
-                      {c.text}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
+          <ExamConversationPanel
+            sessionId={session.sessionId}
+            micAllowed={consentAccepted}
+            requestedProvider={requestedVoiceProvider}
+            onVoiceStopReady={handleVoiceStopReady}
+          />
           {endError ? (
             <p
               role="alert"
@@ -495,22 +387,6 @@ function Timer({ secondsLeft, isWarning }: { secondsLeft: number; isWarning: boo
     >
       <Activity className="h-4 w-4" aria-hidden />
       {formatMmSs(secondsLeft)}
-    </div>
-  );
-}
-
-function MicLevelMeter({ level }: { level: number }) {
-  const clamped = Math.max(0, Math.min(1, level));
-  return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-background-light">
-      <div
-        className={cn(
-          'h-full rounded-full transition-[width,background-color] duration-100',
-          clamped > 0.85 ? 'bg-danger' : clamped > 0.4 ? 'bg-success' : 'bg-muted',
-        )}
-        style={{ width: `${Math.round(clamped * 100)}%` }}
-        aria-hidden
-      />
     </div>
   );
 }

@@ -10,17 +10,18 @@
  * Steps:
  *   1. Fetch the live room → derives `speakingSessionId` and the LiveKit URL.
  *   2. Fetch the session → derives `cardId` for the cue panel.
- *   3. Mint a tutor JWT.
- *   4. Render `LiveTutorRoomShell` with `<TutorCuePanel>` as sidebar child.
+ *   3. Collect the tutor's own recording/video consent.
+ *   4. Mint a tutor JWT.
+ *   5. Render `LiveTutorRoomShell` with `<TutorCuePanel>` as sidebar child.
  *
- * The tutor never sees the candidate's consent banner — consent
- * applies to the learner only; the tutor's own attestation lives in
- * the booking flow.
+ * No LiveKit token or media shell is issued before the tutor's consent is
+ * recorded server-side.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, NotebookPen, PhoneOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
 import { LiveTutorRoomShell } from '@/components/domain/speaking/LiveTutorRoomShell';
 import { TutorCuePanel } from '@/components/domain/speaking/TutorCuePanel';
 import {
@@ -41,6 +42,7 @@ export default function ExpertSpeakingLiveRoomPage() {
   const [tokenInfo, setTokenInfo] = useState<LiveRoomTokenResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [privateNotes, setPrivateNotes] = useState('');
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
@@ -102,6 +104,11 @@ export default function ExpertSpeakingLiveRoomPage() {
         if (cancelled) return;
         setRoom(r);
 
+        if (!consentAccepted) {
+          setTokenInfo(null);
+          return;
+        }
+
         const token = await issueLiveRoomToken(r.liveRoomId, 'tutor');
         if (cancelled) return;
         setTokenInfo(token);
@@ -122,7 +129,7 @@ export default function ExpertSpeakingLiveRoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [liveRoomId]);
+  }, [consentAccepted, liveRoomId]);
 
   const handleEndSession = useCallback(async () => {
     if (!room || endedRef.current) return;
@@ -147,7 +154,7 @@ export default function ExpertSpeakingLiveRoomPage() {
     );
   }
 
-  if (error || !room || !tokenInfo) {
+  if (error || !room || (consentAccepted && !tokenInfo)) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
         <h2 className="text-base font-semibold">Could not open this tutor room</h2>
@@ -198,16 +205,31 @@ export default function ExpertSpeakingLiveRoomPage() {
         </Button>
       </header>
 
-      <LiveTutorRoomShell
-        livekitWssUrl={room.livekitWssUrl}
-        token={tokenInfo.token}
-        onEnd={() => void handleEndSession()}
-      >
-        <TutorCuePanel
-          cardId={card.cardId}
-          rolePlayDurationSeconds={card.rolePlayTimeSeconds || 5 * 60}
+      {!consentAccepted ? (
+        <SpeakingConsentBanner
+          sessionMode="live_tutor"
+          onAccepted={() => setConsentAccepted(true)}
         />
-      </LiveTutorRoomShell>
+      ) : null}
+
+      {consentAccepted && tokenInfo ? (
+        <LiveTutorRoomShell
+          liveRoomId={room.liveRoomId}
+          livekitWssUrl={room.livekitWssUrl}
+          token={tokenInfo.token}
+          onEnd={() => void handleEndSession()}
+        >
+          <TutorCuePanel
+            cardId={card.cardId}
+            liveRoomId={room.liveRoomId}
+            rolePlayDurationSeconds={card.rolePlayTimeSeconds || 5 * 60}
+          />
+        </LiveTutorRoomShell>
+      ) : (
+        <div className="flex min-h-[480px] items-center justify-center rounded-2xl border border-border bg-surface text-sm text-muted">
+          Waiting for tutor consent before joining the LiveKit room...
+        </div>
+      )}
 
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-2 flex items-center gap-2">

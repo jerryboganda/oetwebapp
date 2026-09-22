@@ -648,14 +648,12 @@ export {
 export type {
   SpeakingDrillRow,
   SpeakingDrillsListResponse,
-  SpeakingSelfPracticeStartResult,
   SpeakingTranscriptComment,
 } from './api/speaking-practice';
 export {
   fetchSpeakingDrills,
   fetchSpeakingTranscriptComments,
   postExpertSpeakingTranscriptComment,
-  startSpeakingSelfPracticeSession,
 } from './api/speaking-practice';
 
 // ── Admin: Vocabulary Management ──
@@ -945,6 +943,7 @@ export type {
   ExpertMockBookingDetail,
   ExpertSpeakingContent,
   ExpertSpeakingInterlocutorCard,
+  MockSpeakingExamResponse,
   MockLiveRoomTargetState,
   MockLiveRoomTransitionOptions,
 } from './api/mock-bookings';
@@ -952,6 +951,8 @@ export {
   fetchAdminMockBookings,
   fetchExpertMockBookings,
   fetchExpertMockBookingDetail,
+  createMockSpeakingExam,
+  createExpertMockSpeakingExam,
   mapMockBooking,
   normalizeMockDeliveryMode,
   transitionAdminMockBookingLiveRoom,
@@ -1102,20 +1103,17 @@ export {
   fetchAllPrivateSpeakingSlots,
   fetchExpertPrivateSpeakingAvailability,
   fetchExpertPrivateSpeakingCalendarStatus,
-  fetchExpertPrivateSpeakingJoinToken,
   fetchExpertPrivateSpeakingProfile,
   fetchExpertPrivateSpeakingSessionDetail,
   fetchExpertPrivateSpeakingSessions,
   fetchLearnerPrivateSpeakingBookings,
   fetchPrivateSpeakingBookingDetail,
   fetchPrivateSpeakingConfig,
-  fetchPrivateSpeakingJoinToken,
   fetchPrivateSpeakingSlots,
   fetchPrivateSpeakingTutors,
   markExpertPrivateSpeakingNoShow,
   ratePrivateSpeakingSession,
   reschedulePrivateSpeakingBooking,
-  retryAdminPrivateSpeakingZoom,
   updateAdminPrivateSpeakingConfig,
   updateAdminPrivateSpeakingTutor,
   updateExpertPrivateSpeakingAvailability,
@@ -1680,4 +1678,3 @@ export {
   saveAdminVoiceDesignConfig,
   startAdminRecallsAudioBackfill,
 } from './api/voice-design';
-

@@ -31,6 +31,40 @@ public static class LearnerEndpoints
         app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
         app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct)));
 
+        var participantV1 = app.MapGroup("/v1").RequireAuthorization("RulebookReader");
+        participantV1.MapGet("/speaking/compliance", async (
+            Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingComplianceOptions> opts,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var o = opts.Value;
+            var approvedV11RetentionDays = await db.SpeakingSimulationV11OwnerApprovals
+                .AsNoTracking()
+                .Where(x => x.ApprovalKey == "retention_days"
+                    && x.ScopeKey == "global"
+                    && x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion
+                    && x.RubricVersion == SpeakingSimulationV11Contracts.RubricVersion
+                    && x.Status == SpeakingSimulationV11ApprovalStatus.Approved
+                    && x.NumericValue.HasValue
+                    && x.NumericValue.Value > 0)
+                .OrderByDescending(x => x.ApprovedAt ?? x.UpdatedAt)
+                .Select(x => x.NumericValue)
+                .FirstOrDefaultAsync(ct);
+            var v11RetentionDays = approvedV11RetentionDays is > 0
+                ? (int)Math.Min((decimal)int.MaxValue, approvedV11RetentionDays.Value)
+                : Math.Max(1, o.RetentionDaysDefault);
+
+            return Results.Ok(new
+            {
+                consentText = o.ConsentText,
+                scoreDisclaimer = o.ScoreDisclaimer,
+                audioRetentionDays = o.AudioRetentionDays,
+                speakingSimulationV11RetentionDays = v11RetentionDays,
+                speakingSimulationV11RetentionNotice =
+                    $"For this AI simulation, original audio and transcript evidence are retained for up to {v11RetentionDays} days, then deleted according to the retention policy. You may request deletion sooner.",
+            });
+        });
+
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
 
         v1.MapGet("/me", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMeAsync(http.UserId(), ct)));
@@ -123,7 +157,7 @@ public static class LearnerEndpoints
         var speaking = v1.MapGroup("/speaking");
         speaking.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingHomeAsync(http.UserId(), ct)));
         speaking.MapGet("/tasks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTasksAsync(http.UserId(), ct)));
-        speaking.MapGet("/tasks/{contentId}", async (HttpContext http, string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTaskAsync(http.UserId(), contentId, ct)));
+        speaking.MapGet("/tasks/{contentId}", async (HttpContext http, string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetLegacyFreeSpeakingTaskAsync(http.UserId(), contentId, ct)));
         speaking.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateSpeakingAttemptAsync(http.UserId(), request, ct)));
         speaking.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingAttemptAsync(http.UserId(), attemptId, ct)));
         speaking.MapPost("/attempts/{attemptId}/audio/upload-session", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.CreateSpeakingUploadSessionAsync(http.UserId(), attemptId, contentId, mockSessionId, ct)));
@@ -171,16 +205,14 @@ public static class LearnerEndpoints
         speaking.MapPost("/mock-sessions/{sessionId}/aggregate", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
             Results.Ok(await service.AggregateAsync(http.UserId(), sessionId, ct)));
 
-        // Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a
-        // speaking task into the AI-patient Conversation module so the
-        // learner can practise the same scenario unlimited times. Reuses
-        // ConversationService end-to-end — no new AI provider, no new
-        // grounding code. Free-tier caps come from
-        // IConversationEntitlementService inside CreateSessionAsync.
-        speaking.MapPost("/tasks/{contentId}/self-practice", async (
-            HttpContext http, string contentId,
-            LearnerService service, ConversationService conversation, CancellationToken ct) =>
-            Results.Ok(await service.StartSpeakingSelfPracticeAsync(http.UserId(), contentId, conversation, ct)));
+        // The former text ConversationHub self-practice route is retired.
+        // Speaking AI sessions must use the typed native realtime voice flow.
+        speaking.MapPost("/tasks/{contentId}/self-practice", (string contentId) => Results.Json(new
+        {
+            errorCode = "live_voice_required",
+            message = "Speaking AI practice now uses the native realtime live voice role-play.",
+            redirectPath = $"/speaking/roleplay/{Uri.EscapeDataString(contentId)}",
+        }, statusCode: StatusCodes.Status410Gone));
 
         // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
         // Filterable by drill kind / profession / criterion focus.
@@ -189,43 +221,6 @@ public static class LearnerEndpoints
             string? kind, string? profession, string? criterion,
             LearnerService service, CancellationToken ct) =>
             Results.Ok(await service.ListSpeakingDrillsAsync(http.UserId(), kind, profession, criterion, ct)));
-
-        // Wave 7 of docs/SPEAKING-MODULE-PLAN.md - learner-facing
-        // compliance copy (consent text + score disclaimer + retention
-        // window). Driven by SpeakingComplianceOptions so operators can
-        // tune wording and retention without code changes.
-        speaking.MapGet("/compliance", async (
-            Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingComplianceOptions> opts,
-            LearnerDbContext db,
-            CancellationToken ct) =>
-        {
-            var o = opts.Value;
-            var approvedV11RetentionDays = await db.SpeakingSimulationV11OwnerApprovals
-                .AsNoTracking()
-                .Where(x => x.ApprovalKey == "retention_days"
-                    && x.ScopeKey == "global"
-                    && x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion
-                    && x.RubricVersion == SpeakingSimulationV11Contracts.RubricVersion
-                    && x.Status == SpeakingSimulationV11ApprovalStatus.Approved
-                    && x.NumericValue.HasValue
-                    && x.NumericValue.Value > 0)
-                .OrderByDescending(x => x.ApprovedAt ?? x.UpdatedAt)
-                .Select(x => x.NumericValue)
-                .FirstOrDefaultAsync(ct);
-            var v11RetentionDays = approvedV11RetentionDays is > 0
-                ? (int)Math.Min((decimal)int.MaxValue, approvedV11RetentionDays.Value)
-                : Math.Max(1, o.RetentionDaysDefault);
-
-            return Results.Ok(new
-            {
-                consentText = o.ConsentText,
-                scoreDisclaimer = o.ScoreDisclaimer,
-                audioRetentionDays = o.AudioRetentionDays,
-                speakingSimulationV11RetentionDays = v11RetentionDays,
-                speakingSimulationV11RetentionNotice =
-                    $"For this AI simulation, original audio and transcript evidence are retained for up to {v11RetentionDays} days, then deleted according to the retention policy. You may request deletion sooner.",
-            });
-        });
 
         var reading = v1.MapGroup("/reading");
         reading.MapGet("/home", () => ReadingLegacyGone("/v1/reading-papers/home"));

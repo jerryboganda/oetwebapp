@@ -3309,6 +3309,8 @@ public partial class AdminService
             config.MaxSpeakingMockSets,
             config.TrialDurationDays,
             config.ShowUpgradePrompts,
+            config.FreeWritingScenarioByProfessionJson,
+            config.FreeSpeakingCardByProfessionJson,
             config.UpdatedAt
         };
     }
@@ -3356,6 +3358,8 @@ public partial class AdminService
             config.MaxSpeakingMockSets,
             config.TrialDurationDays,
             config.ShowUpgradePrompts,
+            config.FreeWritingScenarioByProfessionJson,
+            config.FreeSpeakingCardByProfessionJson,
             config.UpdatedAt
         };
     }

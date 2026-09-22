@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
-  FileText, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
+  FileText, Play, User, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -14,8 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchRoleCard } from '@/lib/api';
+import { ApiError, fetchRoleCard } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { createSpeakingSession } from '@/lib/api/speaking-sessions';
+import { getFreeSpeakingCard } from '@/lib/api/speaking-role-play-cards';
 import type { RoleCard } from '@/lib/mock-data';
 
 type TaskMode = 'self' | 'exam';
@@ -23,11 +24,10 @@ type TaskMode = 'self' | 'exam';
 export default function RoleCardPreview() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const rawId = params?.id;
   const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
-  // Display-only hint set by the Free Speaking Mock entry (copy + the AI-patient
-  // button). Never sent to the server — the server decides what is free.
-  const isFreeSample = useSearchParams()?.get('free') === '1';
+  const requestedFreeCard = searchParams?.get('free') === '1';
 
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +35,10 @@ export default function RoleCardPreview() {
     typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? ''
   ));
   const [selectedMode, setSelectedMode] = useState<TaskMode>('self');
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [isFreeCard, setIsFreeCard] = useState(false);
+  const [freeCardKnown, setFreeCardKnown] = useState(!requestedFreeCard);
   const [prepRunning, setPrepRunning] = useState(true);
   const [layLanguagePlan, setLayLanguagePlan] = useState(() => (
     typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:lay-language-plan`) ?? ''
@@ -43,11 +47,35 @@ export default function RoleCardPreview() {
   const roleplayTimeSeconds = card?.roleplayTimeSeconds ?? 300;
 
   useEffect(() => {
-    fetchRoleCard(id)
+    fetchRoleCard(id, { freeSample: requestedFreeCard })
       .then(setCard)
       .catch(() => setCard(null))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, requestedFreeCard]);
+
+  useEffect(() => {
+    let active = true;
+    if (!requestedFreeCard || !id) {
+      setIsFreeCard(false);
+      setFreeCardKnown(true);
+      return () => { active = false; };
+    }
+
+    setFreeCardKnown(false);
+    getFreeSpeakingCard(id)
+      .then((freeCard) => {
+        if (!active) return;
+        setIsFreeCard(freeCard.cardId === id);
+        setFreeCardKnown(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setIsFreeCard(false);
+        setFreeCardKnown(true);
+      });
+
+    return () => { active = false; };
+  }, [id, requestedFreeCard]);
 
   useEffect(() => {
     window.localStorage.setItem(`speaking-prep:${id}:notes`, notes);
@@ -57,9 +85,37 @@ export default function RoleCardPreview() {
     window.localStorage.setItem(`speaking-prep:${id}:lay-language-plan`, layLanguagePlan);
   }, [id, layLanguagePlan]);
 
-  const handleStartTask = () => {
+  const handleStartTask = async () => {
+    if (starting) return;
+    if (requestedFreeCard && !freeCardKnown) return;
+    if (requestedFreeCard && !isFreeCard) {
+      setStartError('This is not the designated free Speaking card.');
+      return;
+    }
+    setStarting(true);
+    setStartError(null);
     analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: selectedMode });
-    router.push(`/speaking/task/${id}?mode=${selectedMode}${isFreeSample ? '&free=1' : ''}`);
+    if (isFreeCard) {
+      router.push(`/speaking/task/${encodeURIComponent(id)}?mode=self&free=1`);
+      return;
+    }
+    try {
+      const session = await createSpeakingSession({
+        rolePlayCardId: id,
+        mode: selectedMode === 'exam' ? 'ai_exam' : 'ai_self_practice',
+        consentVersion: 'recording.v1',
+      });
+      router.push(`/speaking/sessions/${encodeURIComponent(session.sessionId)}/warmup`);
+    } catch (error) {
+      setStartError(
+        error instanceof ApiError
+          ? error.userMessage
+          : error instanceof Error
+            ? error.message
+            : 'Could not start the live Speaking session.',
+      );
+      setStarting(false);
+    }
   };
 
   if (loading) {
@@ -101,7 +157,9 @@ export default function RoleCardPreview() {
           icon={FileText}
           accent="purple"
           title={card.title}
-          description="Use the preparation window to read the card, plan your opening, and choose a practice mode before the recorder starts."
+          description={isFreeCard
+            ? 'Use the existing Speaking recorder for this designated free card. Record, submit, and receive real AI grading without spending a credit.'
+            : 'Use the preparation window to read the card, plan your opening, and choose a live voice practice mode before the session starts.'}
           highlights={[
             { icon: User, label: 'Role', value: card.profession },
             { icon: ShieldCheck, label: 'Prep timer', value: prepRunning ? `${Math.round(prepTimeSeconds / 60)} min running` : 'Finished' },
@@ -192,8 +250,10 @@ export default function RoleCardPreview() {
         <section className="flex flex-col">
           <LearnerSurfaceSectionHeader
             eyebrow="Preparation"
-            title="Plan, then enter the recorder"
-            description="Self-practice mode lets you review the transcript afterwards. Simulation mode follows strict exam timing."
+            title={isFreeCard ? 'Plan, then use the free recorder' : 'Plan, then enter live voice'}
+            description={isFreeCard
+              ? 'This designated free card uses the existing recorder and the normal real-audio grading pipeline.'
+              : 'Self-practice mode lets you review the transcript afterwards. Simulation mode follows strict exam timing.'}
             className="mb-4"
           />
 
@@ -228,59 +288,59 @@ export default function RoleCardPreview() {
             </Card>
 
             <Card className="p-6 space-y-6">
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {([
-                    { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-primary', bg: 'bg-primary/10' },
-                    { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-warning/10' },
-                  ] as const).map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setSelectedMode(m.id)}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-                        selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.bg}`}>
-                        <m.icon className={`w-4 h-4 ${m.color}`} />
-                      </div>
-                      <span className={`text-xs font-bold ${selectedMode === m.id ? 'text-primary' : 'text-muted'}`}>
-                        {m.label}
-                      </span>
-                    </button>
-                  ))}
+              {isFreeCard ? (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-primary">Free Speaking Mock</h4>
+                  <p className="mt-2 text-sm leading-relaxed text-navy">
+                    Record your response in the existing recorder, submit the real audio, and wait for the AI-grading result. This path requires zero credits.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {([
+                      { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-primary', bg: 'bg-primary/10' },
+                      { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-warning/10' },
+                    ] as const).map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedMode(m.id)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
+                          selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.bg}`}>
+                          <m.icon className={`w-4 h-4 ${m.color}`} />
+                        </div>
+                        <span className={`text-xs font-bold ${selectedMode === m.id ? 'text-primary' : 'text-muted'}`}>
+                          {m.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <InlineAlert variant="info">
-                {selectedMode === 'self'
-                  ? 'Use guided self-practice with local recording and transcript review after the task.'
-                  : `Strict exam conditions. ${Math.round(roleplayTimeSeconds / 60)}-minute timer with no feedback and no pause.`}
+                {isFreeCard
+                  ? 'The designated free card uses the existing recorder. Record, submit, then receive real AI grading with no credit charge.'
+                  : selectedMode === 'self'
+                  ? 'Use native realtime voice practice with a live AI patient and transcript review after the task.'
+                  : `Strict exam conditions with a native realtime AI patient. ${Math.round(roleplayTimeSeconds / 60)}-minute timer with no feedback and no pause.`}
               </InlineAlert>
 
-              <Button fullWidth size="lg" onClick={handleStartTask}>
-                <Play className="w-5 h-5 fill-current" /> Start Speaking Task
+              {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
+
+              <Button fullWidth size="lg" onClick={() => void handleStartTask()} disabled={starting || (requestedFreeCard && !freeCardKnown)}>
+                {starting ? <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Play className="w-5 h-5 fill-current" />}
+                {starting ? (isFreeCard ? 'Opening free recorder…' : 'Preparing live voice…') : (isFreeCard ? 'Start free Speaking recorder' : 'Start Live Speaking')}
               </Button>
               <p className="text-center text-xs font-semibold text-muted" data-testid="speaking-card-credit-cost">
-                {isFreeSample ? 'Free sample · no credits used' : 'Uses 2 AI credits · Browsing is free'}
+                {isFreeCard ? 'No AI credit required for the designated free card' : 'Uses 2 AI credits · Browsing is free'}
               </p>
             </Card>
 
-            <Card className="border-primary/15 bg-primary/5 p-5">
-              <div className="flex items-start gap-3">
-                <MessageCircle className="h-5 w-5 shrink-0 text-primary" aria-hidden />
-                <div>
-                  <p className="text-sm font-bold text-navy">Need an AI patient?</p>
-                  <p className="mt-1 text-sm leading-relaxed text-muted">
-                    Interactive AI practice is handled by the dedicated conversation module so it stays server-authoritative.
-                  </p>
-                  <Link href="/conversation" className="mt-3 inline-flex text-sm font-bold text-primary hover:underline">
-                    Open AI Conversation Practice
-                  </Link>
-                </div>
-              </div>
-            </Card>
           </div>
         </section>
         </div>

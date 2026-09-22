@@ -20,9 +20,9 @@ public static class SpeakingComplianceEndpoints
 {
     public static IEndpointRouteBuilder MapSpeakingComplianceEndpoints(this IEndpointRouteBuilder app)
     {
-        var learner = app.MapGroup("/v1/speaking").RequireAuthorization("LearnerOnly");
+        var participant = app.MapGroup("/v1/speaking").RequireAuthorization("RulebookReader");
 
-        learner.MapPost("/consents", async (
+        participant.MapPost("/consents", async (
             HttpContext http,
             RecordConsentRequest body,
             SpeakingComplianceService svc,
@@ -33,6 +33,8 @@ public static class SpeakingComplianceEndpoints
             var record = await svc.RecordConsentAsync(http.UserId(), body, ip, ua, ct);
             return Results.Ok(record);
         });
+
+        var learner = app.MapGroup("/v1/speaking").RequireAuthorization("LearnerOnly");
 
         learner.MapGet("/consents/me", async (
             HttpContext http,

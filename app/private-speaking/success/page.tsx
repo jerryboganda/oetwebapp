@@ -35,8 +35,8 @@ export default function PrivateSpeakingSuccessPage() {
       <div>
         <h1 className="text-2xl font-bold text-navy mb-2">Payment Successful!</h1>
         <p className="text-muted">
-          Your private speaking session has been booked. You&rsquo;ll receive a confirmation
-          with Zoom details shortly.
+          Your private speaking session has been booked. Open your dashboard to join the
+          LiveKit tutor room when the session window opens.
         </p>
         {bookingId && (
           <p className="text-xs text-muted/60 mt-2">Booking ID: {bookingId}</p>

@@ -731,6 +731,10 @@ public record AdminWritingOptionsUpdateRequest(
     int FreeTierLimit,
     int FreeTierWindowDays);
 
+public sealed record AdminFreeTierContentSelectionUpdateRequest(
+    IReadOnlyDictionary<string, string?> WritingScenarioByProfession,
+    IReadOnlyDictionary<string, string?> SpeakingCardByProfession);
+
 // ── Vocabulary Admin ──
 
 public record AdminVocabularyItemCreateRequest(

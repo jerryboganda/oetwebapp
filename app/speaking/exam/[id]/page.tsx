@@ -23,6 +23,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { OfficialCandidateCard } from '@/components/domain/speaking/OfficialCandidateCard';
 import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
+import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
+import { LearnerLiveRoomShell } from '@/components/domain/speaking/LearnerLiveRoomShell';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking/intro-questions';
 import {
   getSpeakingExam,
@@ -31,6 +33,15 @@ import {
   type SpeakingExamDetail,
 } from '@/lib/api/speaking-exams';
 import { ApiError, completeMockSection } from '@/lib/api';
+import {
+  createLiveRoom,
+  endLiveRoom,
+  issueLiveRoomToken,
+  startRecording,
+  type CreateLiveRoomResponse,
+  type LiveRoomTokenResponse,
+} from '@/lib/api/speaking-live-rooms';
+import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
 const POLL_INTERVAL_MS = 3_000;
 
@@ -62,15 +73,49 @@ export default function SpeakingExamPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiConsentAccepted, setAiConsentAccepted] = useState(false);
+  const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
+  const [liveTutorConsentAccepted, setLiveTutorConsentAccepted] = useState(false);
+  const [liveRoom, setLiveRoom] = useState<CreateLiveRoomResponse | null>(null);
+  const [liveRoomToken, setLiveRoomToken] = useState<LiveRoomTokenResponse | null>(null);
+  const [liveRoomError, setLiveRoomError] = useState<string | null>(null);
+  const [recordingReady, setRecordingReady] = useState(false);
 
   const examRef = useRef<SpeakingExamDetail | null>(null);
   examRef.current = exam;
   const mockSectionCompletedRef = useRef(false);
+  const liveRoomSessionRef = useRef<string | null>(null);
+  const liveRoomRef = useRef<CreateLiveRoomResponse | null>(null);
+  const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
+  const handleVoiceStopReady = useCallback((stop: (() => Promise<boolean>) | null) => {
+    voiceStopRef.current = stop;
+  }, []);
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get('voiceProvider');
+    if (value === 'openai' || value === 'gemini') setRequestedVoiceProvider(value);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!examId) return;
     try {
       const detail = await getSpeakingExam(examId);
+      const previous = examRef.current;
+      const previousAiSessionActive = previous?.mode !== 'live_tutor'
+        && (previous?.state === 'active_a' || previous?.state === 'active_b')
+        && Boolean(previous.currentSessionId);
+      const nextAiSessionActive = detail.mode !== 'live_tutor'
+        && (detail.state === 'active_a' || detail.state === 'active_b')
+        && Boolean(detail.currentSessionId);
+      if (previousAiSessionActive
+        && (!nextAiSessionActive || previous?.currentSessionId !== detail.currentSessionId)) {
+        const saved = await voiceStopRef.current?.() ?? true;
+        if (!saved) {
+          setLoadError('The live voice transcript could not be saved. Retrying before moving to the next card.');
+          setLoading(false);
+          return;
+        }
+      }
       setExam(detail);
       setFetchedAt(Date.now());
       setLoadError(null);
@@ -101,6 +146,49 @@ export default function SpeakingExamPage() {
     }
   }, [examId, router]);
 
+  useEffect(() => {
+    setAiConsentAccepted(false);
+    setLiveTutorConsentAccepted(false);
+  }, [exam?.currentSessionId]);
+
+  useEffect(() => {
+    const sessionId = exam?.currentSessionId ?? null;
+    const active = exam?.state === 'active_a' || exam?.state === 'active_b';
+    if (exam?.mode !== 'live_tutor' || !sessionId || !active) {
+      const roomToClose = liveRoomRef.current;
+      liveRoomRef.current = null;
+      liveRoomSessionRef.current = null;
+      setLiveRoom(null);
+      setLiveRoomToken(null);
+      setRecordingReady(false);
+      if (roomToClose) {
+        void endLiveRoom(roomToClose.liveRoomId).catch(() => undefined);
+      }
+      return;
+    }
+
+    if (liveRoomSessionRef.current && liveRoomSessionRef.current !== sessionId) {
+      const roomToClose = liveRoomRef.current;
+      liveRoomRef.current = null;
+      liveRoomSessionRef.current = null;
+      setLiveRoom(null);
+      setLiveRoomToken(null);
+      setRecordingReady(false);
+      if (roomToClose) {
+        void endLiveRoom(roomToClose.liveRoomId).catch(() => undefined);
+      }
+    }
+  }, [exam?.currentSessionId, exam?.mode, exam?.state]);
+
+  useEffect(() => () => {
+    const roomToClose = liveRoomRef.current;
+    liveRoomRef.current = null;
+    liveRoomSessionRef.current = null;
+    if (roomToClose) {
+      void endLiveRoom(roomToClose.liveRoomId).catch(() => undefined);
+    }
+  }, []);
+
   // Initial load + poll for server-authoritative phase changes.
   useEffect(() => {
     void refresh();
@@ -117,6 +205,54 @@ export default function SpeakingExamPage() {
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [exam, fetchedAt]);
+
+  useEffect(() => {
+    const sessionId = exam?.currentSessionId ?? null;
+    const active = exam?.state === 'active_a' || exam?.state === 'active_b';
+    if (exam?.mode !== 'live_tutor' || !sessionId || !active
+      || !liveTutorConsentAccepted || liveRoomSessionRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    liveRoomSessionRef.current = sessionId;
+    setLiveRoomError(null);
+    setRecordingReady(false);
+
+    (async () => {
+      let createdRoom: CreateLiveRoomResponse | null = null;
+      try {
+        createdRoom = await createLiveRoom({ speakingSessionId: sessionId });
+        const token = await issueLiveRoomToken(createdRoom.liveRoomId, 'learner');
+        await startRecording(createdRoom.liveRoomId);
+        if (cancelled) {
+          await endLiveRoom(createdRoom.liveRoomId).catch(() => undefined);
+          return;
+        }
+        liveRoomRef.current = createdRoom;
+        setLiveRoom(createdRoom);
+        setLiveRoomToken(token);
+        setRecordingReady(true);
+      } catch (err) {
+        if (cancelled) {
+          if (createdRoom) await endLiveRoom(createdRoom.liveRoomId).catch(() => undefined);
+          return;
+        }
+        liveRoomSessionRef.current = null;
+        setLiveRoomError(
+          err instanceof ApiError
+            ? err.userMessage
+            : err instanceof Error
+              ? err.message
+              : 'Could not start the LiveKit room.',
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exam?.currentSessionId, exam?.mode, exam?.state, liveTutorConsentAccepted]);
 
   const handleFinishIntro = useCallback(async () => {
     if (busy) return;
@@ -298,15 +434,62 @@ export default function SpeakingExamPage() {
             cardNumber={exam.currentCardNumber}
           />
           {exam.mode === 'live_tutor' ? (
-            <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
-              <p className="font-medium text-foreground">Speak with your tutor now</p>
-              <p className="mt-1">
-                Your tutor is playing the patient on your booked video call. Use this card to lead the
-                conversation — the timer and cards advance automatically.
-              </p>
-            </div>
+            <>
+              {!liveTutorConsentAccepted ? (
+                <SpeakingConsentBanner
+                  sessionMode="live_tutor"
+                  sessionId={exam.currentSessionId}
+                  onAccepted={() => setLiveTutorConsentAccepted(true)}
+                />
+              ) : null}
+              <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+                <p className="font-medium text-foreground">LiveKit tutor room</p>
+                <p className="mt-1">
+                  Your microphone and camera connect directly to the assigned tutor through LiveKit.
+                  The room is recorded for tutor review and the timer advances from the server.
+                </p>
+              </div>
+              {liveRoomError ? (
+                <p className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
+                  {liveRoomError}
+                </p>
+              ) : liveRoom && liveRoomToken && recordingReady ? (
+                <LearnerLiveRoomShell
+                  liveRoomId={liveRoom.liveRoomId}
+                  livekitWssUrl={liveRoom.livekitWssUrl}
+                  token={liveRoomToken.token}
+                  onEnd={() => {
+                    const roomId = liveRoom.liveRoomId;
+                    liveRoomRef.current = null;
+                    liveRoomSessionRef.current = null;
+                    setLiveRoom(null);
+                    setLiveRoomToken(null);
+                    setRecordingReady(false);
+                    void endLiveRoom(roomId).catch(() => undefined);
+                  }}
+                />
+              ) : (
+                <div className="flex min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted text-sm text-muted">
+                  {liveTutorConsentAccepted ? 'Preparing the LiveKit room...' : 'Waiting for live-room consent...'}
+                </div>
+              )}
+            </>
           ) : (
-            <ExamConversationPanel sessionId={exam.currentSessionId} />
+            <>
+              {!aiConsentAccepted ? (
+                <SpeakingConsentBanner
+                  sessionMode="ai"
+                  sessionId={exam.currentSessionId}
+                  onAccepted={() => setAiConsentAccepted(true)}
+                />
+              ) : null}
+              <ExamConversationPanel
+                sessionId={exam.currentSessionId}
+                micAllowed={aiConsentAccepted}
+                requestedProvider={requestedVoiceProvider}
+                onVoiceStopReady={handleVoiceStopReady}
+              />
+            </>
           )}
           {secondsLeft != null && secondsLeft <= 30 ? (
             <p className="flex items-center justify-center gap-2 text-sm font-medium text-rose-600">

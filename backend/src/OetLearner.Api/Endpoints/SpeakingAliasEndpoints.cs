@@ -254,15 +254,15 @@ public static class SpeakingAliasEndpoints
                 : Results.BadRequest(new { error = result.Error });
         });
 
-        me.MapPost("/bookings/{bookingId}/join-token", async (
-            HttpContext http,
-            string bookingId,
-            PrivateSpeakingService svc,
-            CancellationToken ct) =>
-        {
-            var token = await svc.CreateLearnerJoinTokenAsync(bookingId, http.UserId(), ct);
-            return Results.Ok(token);
-        });
+        me.MapPost("/bookings/{bookingId}/join-token", (
+            string bookingId) => Results.Json(
+                new
+                {
+                    code = "livekit_required",
+                    message = "Private Speaking uses the canonical LiveKit room. Use the Speaking exam entry point.",
+                    bookingId,
+                },
+                statusCode: StatusCodes.Status410Gone));
 
         // ── Admin — PDF /v1/admin/speaking ───────────────────────────────
         var admin = app.MapGroup("/v1/admin/speaking")

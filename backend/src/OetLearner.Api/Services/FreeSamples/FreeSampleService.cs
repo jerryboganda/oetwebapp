@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -39,6 +40,8 @@ public interface IFreeSampleService
 
 public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 {
+    private static readonly JsonSerializerOptions SelectionJsonOptions = new(JsonSerializerDefaults.Web);
+
     public const string Writing = "writing";
     public const string Speaking = "speaking";
 
@@ -303,6 +306,24 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             picks.TryAdd(candidate.Profession, candidate.ContentId); // `live` is already lowest-order first
         }
 
+        var config = await db.FreeTierConfigs.AsNoTracking().FirstOrDefaultAsync(ct);
+        var configured = ReadSelectionMap(
+            subtest == Writing
+                ? config?.FreeWritingScenarioByProfessionJson
+                : config?.FreeSpeakingCardByProfessionJson);
+        foreach (var selection in configured)
+        {
+            var profession = NormalizeProfession(selection.Key);
+            var contentId = selection.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(profession) || string.IsNullOrWhiteSpace(contentId)) continue;
+            if (live.Any(candidate => candidate.Profession == profession
+                && string.Equals(candidate.ContentId, contentId, StringComparison.OrdinalIgnoreCase)))
+            {
+                picks[profession] = live.First(candidate => candidate.Profession == profession
+                    && string.Equals(candidate.ContentId, contentId, StringComparison.OrdinalIgnoreCase)).ContentId;
+            }
+        }
+
         var designations = await db.FreeSampleDesignations.AsNoTracking()
             .Where(d => d.Subtest == subtest)
             .ToListAsync(ct);
@@ -356,12 +377,41 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
                 && item.SubtestCode == Speaking
             select new { card.Id, card.ProfessionId, card.DisplayCardNumber, card.CreatedAt })
             .ToListAsync(ct);
+        var cardIds = rows.Select(row => row.Id).ToArray();
+        var unresolvedProjectionIds = cardIds.Length == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : await db.InterlocutorScripts.AsNoTracking()
+                .Where(script => cardIds.Contains(script.RolePlayCardId)
+                    && script.ContentOrigin == "live_voice_projection"
+                    && script.NeedsOwnerInput)
+                .Select(script => script.RolePlayCardId)
+                .ToHashSetAsync(ct);
         return rows
-            .Where(r => !string.IsNullOrWhiteSpace(r.ProfessionId))
+            .Where(r => !string.IsNullOrWhiteSpace(r.ProfessionId)
+                && !unresolvedProjectionIds.Contains(r.Id))
             .OrderBy(r => r.DisplayCardNumber ?? int.MaxValue)
             .ThenBy(r => r.CreatedAt)
             .ThenBy(r => r.Id, StringComparer.Ordinal)
             .Select(r => new ResolvedContent(NormalizeProfession(r.ProfessionId), r.Id))
             .ToList();
+    }
+
+    private static Dictionary<string, string?> ReadSelectionMap(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string?>>(json, SelectionJsonOptions);
+            return parsed is null
+                ? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                : parsed.ToDictionary(
+                    pair => NormalizeProfession(pair.Key),
+                    pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 }

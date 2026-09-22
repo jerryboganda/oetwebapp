@@ -175,8 +175,8 @@ public class RuntimeSettingsRow
     // 2026-05-28 audit fix — Dr. Hesham asked for the Whisper API key to be
     // configurable from the admin panel. Stored encrypted via the existing
     // RuntimeSettings.Secret.v1 protector. When null the OpenAiWhisperSpeakingProvider
-    // falls back to the appsettings (`Speaking:Whisper:ApiKey`) or, ultimately,
-    // the MockSpeakingTranscriptionProvider.
+    // falls back to the appsettings (`Speaking:Whisper:ApiKey`) or, when no
+    // key is configured, an explicit unavailable provider.
     public string? SpeakingWhisperApiKeyEncrypted { get; set; }
     [MaxLength(512)] public string? SpeakingWhisperBaseUrl { get; set; }
     [MaxLength(64)] public string? SpeakingWhisperModel { get; set; }

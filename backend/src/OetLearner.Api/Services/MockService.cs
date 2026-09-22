@@ -2886,7 +2886,7 @@ public sealed class MockService(
         timezoneIana = booking.TimezoneIana,
         status = booking.Status,
         liveRoomState = booking.LiveRoomState,
-        startUrl = booking.ZoomStartUrl,
+        startUrl = (string?)null,
         zoomStartUrl = Mocks.MockBookingPresentation.ExpertZoomStartUrl(booking),
         joinUrl = Mocks.MockBookingPresentation.LearnerZoomJoinUrl(booking),
         zoomJoinUrl = Mocks.MockBookingPresentation.LearnerZoomJoinUrl(booking),

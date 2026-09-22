@@ -162,6 +162,8 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
+builder.Services.Configure<OetLearner.Api.Configuration.LiveVoiceOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveVoiceOptions.SectionName));
+builder.Services.Configure<OetLearner.Api.Configuration.FeatureFlagOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.FeatureFlagOptions.SectionName));
 // TypeSafe SystemOne (Jev) judgment calls — direct, non-gateway; see
 // Services/Ai/TypeSafe/. Enabled=false by default; the key exists only in
 // the VPS env (TypeSafe__ApiKey), never in a tracked file or client bundle.
@@ -1028,13 +1030,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Readiness.ReadinessComputatio
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionService>();
 // W2-D — Speaking transcription pipeline (ASR adapter).
-// Default provider is the deterministic Mock; production wiring swaps this DI line for a real ASR adapter.
-// 2026-05-27 audit fix — bind both providers; the pipeline picks Whisper when
-// the API key is configured (admin-panel DB override OR `Speaking:Whisper:ApiKey`
-// in appsettings), otherwise falls back to the deterministic mock so dev / CI
-// environments without an API key remain usable. 2026-05-28: the API key is
-// now resolved via IRuntimeSettingsProvider so admins can rotate it from the
-// admin panel without an app restart.
+// Recorded Speaking grading requires the real Whisper adapter. If it is not
+// configured, the provider returns an explicit unavailable error and the
+// evaluation remains retryable instead of fabricating a transcript.
 builder.Services.AddHttpClient("SpeakingWhisperClient");
 // TypeSafe SystemOne (Jev) judgment transport. Per-call timeout is applied
 // inside TypeSafeJudgmentClient from TypeSafe:TimeoutSeconds (a slow judgment
@@ -1053,13 +1051,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevConversationA
 // /v1/models and warn if the pinned model id is not served to this account.
 builder.Services.AddHostedService<OetLearner.Api.Services.Ai.TypeSafe.TypeSafeModelPinProbe>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
-builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionProviderUnavailable>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
 {
     var whisper = sp.GetRequiredService<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
     return whisper.IsConfigured
         ? whisper
-        : sp.GetRequiredService<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
+        : sp.GetRequiredService<OetLearner.Api.Services.Speaking.SpeakingTranscriptionProviderUnavailable>();
 });
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
 // RULE_40 tone assessor — consumed by SpeakingTranscriptionEndpoints below.
@@ -1072,6 +1070,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreServic
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceNoteService>();
 // Phase 2 (B.3) — typed Speaking session lifecycle service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.IFreeTierContentResolver,
+    OetLearner.Api.Services.FreeTierContentResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11EvidenceCaptureService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11PersonaService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AudioCaptureService>();
@@ -1090,12 +1090,25 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingCanonicalAs
     OetLearner.Api.Services.Speaking.SpeakingCanonicalAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingPatientTurnService,
     OetLearner.Api.Services.Speaking.SpeakingPatientTurnService>();
+// Native full-duplex AI Speaking voice. Provider keys remain server-side;
+// provider failures are surfaced rather than downgraded to text or mocks.
+builder.Services.AddHttpClient("LiveVoiceProvider", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceProviderProbeState>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceProviderProbe>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryQueue>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceContentReadinessService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryWorker>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
-// Phase 6 (P6) — LiveKit gateway. When LiveKit is configured (api key
-// present) the cloud adapter mints real JWTs and hits the LiveKit REST
-// surface; otherwise we fall back to the stub used by dev + tests.
-// Webhook signature verification in both implementations is real.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingLiveTutorService>();
+// Phase 6 (P6) — LiveKit gateway. Production never receives synthetic room
+// identifiers or fake tokens. The stub is limited to development/testing;
+// an unconfigured production instance fails closed with a provider-unavailable
+// response instead of presenting a room that cannot carry media.
 {
     var liveKitSection = builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName);
     var liveKitOptions = liveKitSection.Get<OetLearner.Api.Configuration.LiveKitOptions>()
@@ -1106,14 +1119,22 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>
         builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
             OetLearner.Api.Services.Speaking.LiveKitCloudGateway>();
     }
-    else
+    else if (builder.Environment.IsDevelopment()
+        || string.Equals(builder.Environment.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase))
     {
         builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
             OetLearner.Api.Services.Speaking.LiveKitGatewayStub>();
     }
+    else
+    {
+        builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ILiveKitGateway,
+            OetLearner.Api.Services.Speaking.LiveKitProviderUnavailable>();
+    }
 }
 // Phase 3 (B.4) — live-tutor room orchestration service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveRoomService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveTutorRoomLifecycleWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveKitRecordingReadinessWorker>();
 // Phase 4 — tutor-side scoring + review-queue services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11TutorOverrideService>();
@@ -2746,7 +2767,16 @@ app.UseWebSockets();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
     .AllowAnonymous();
-app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions> storageOptions, ILoggerFactory loggerFactory, CancellationToken ct) =>
+app.MapGet("/health/ready", async (
+    LearnerDbContext db,
+    IOptions<StorageOptions> storageOptions,
+    IOptions<FeatureFlagOptions> featureFlags,
+    IOptions<LiveVoiceOptions> liveVoiceOptions,
+    IOptions<LiveKitOptions> liveKitOptions,
+    OetLearner.Api.Services.Speaking.LiveVoiceProviderProbeState liveVoiceProbe,
+    IHostEnvironment hostEnvironment,
+    ILoggerFactory loggerFactory,
+    CancellationToken ct) =>
 {
     try
     {
@@ -2819,6 +2849,37 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
                 checks["storage"] = "unavailable";
                 healthy = false;
             }
+        }
+
+        // Speaking launch gate. Development and test stacks intentionally use
+        // the fail-closed adapters without live provider credentials, but a
+        // production Speaking rollout is not ready until both supported live
+        // voice engines have passed the account probe and LiveKit recording is
+        // configured. The learner never receives a text or mock fallback.
+        if (hostEnvironment.IsProduction() && featureFlags.Value.SpeakingV2)
+        {
+            foreach (var provider in new[] { LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini })
+            {
+                var key = $"live_voice_{provider}";
+                if (!liveVoiceOptions.Value.IsConfigured(provider))
+                {
+                    checks[key] = "not_configured";
+                    healthy = false;
+                }
+                else if (!liveVoiceProbe.IsVerified(provider))
+                {
+                    checks[key] = "unverified";
+                    healthy = false;
+                }
+                else
+                {
+                    checks[key] = "ok";
+                }
+            }
+
+            var liveKitReady = liveKitOptions.Value.IsEnabled && liveKitOptions.Value.EgressEnabled;
+            checks["livekit_recording"] = liveKitReady ? "ok" : "not_configured";
+            if (!liveKitReady) healthy = false;
         }
 
         var result = new { status = healthy ? "ok" : "failed", service = "OET Learner API", checks, timestamp = DateTimeOffset.UtcNow, check = "ready" };
@@ -3008,6 +3069,7 @@ app.MapSpeakingComplianceEndpoints();
 // Phase 2 — typed Speaking session lifecycle (prep → active → finished).
 app.MapSpeakingSessionEndpoints();
 app.MapSpeakingExamEndpoints();
+app.MapLiveVoiceEndpoints();
 app.MapSpeakingSimulationV11Endpoints();
 app.MapSpeakingSimulationV11TutorEndpoints();
 // WS6 — Speaking result-visibility (learner read + admin upsert, §10).

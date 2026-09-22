@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
 
@@ -47,6 +49,31 @@ public static class WritingScenarioEndpoints
         })
         .WithName("GetRandomWritingScenario");
 
+        group.MapGet("/free", async (
+            HttpContext http,
+            LearnerDbContext db,
+            IFreeTierContentResolver freeTierContent,
+            IWritingScenarioService service,
+            CancellationToken ct) =>
+        {
+            var userId = http.WritingV2UserId();
+            var profession = await db.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.ActiveProfessionId)
+                .FirstOrDefaultAsync(ct);
+            var scenario = await freeTierContent.ResolveWritingScenarioAsync(profession, ct);
+            if (scenario is null)
+            {
+                throw ApiException.Conflict(
+                    "free_tier_content_unavailable",
+                    "No eligible free Writing task is published for your profession yet.");
+            }
+
+            var response = await service.GetScenarioAsync(userId, scenario.Id, ct);
+            return response is null ? Results.NotFound() : Results.Ok(response);
+        })
+        .WithName("GetFreeWritingScenario");
+
         group.MapGet("/{id:guid}", async (
             Guid id,
             HttpContext http,
@@ -80,6 +107,8 @@ public static class WritingScenarioEndpoints
         HttpContext http,
         IWritingScenarioService scenarios,
         IWritingEntitlementService writingEntitlement,
+        LearnerDbContext db,
+        IFreeTierContentResolver freeTierContent,
         CancellationToken ct)
     {
         // Addendum Rev8 §16-§17: the task must exist, be published and be
@@ -88,6 +117,27 @@ public static class WritingScenarioEndpoints
         await scenarios.EnsureCandidateStartableAsync(id, ct);
 
         var userId = http.WritingV2UserId();
+        var entitlement = await writingEntitlement.CheckAsync(userId, ct);
+        if (entitlement.Allowed && string.Equals(entitlement.Tier, "free", StringComparison.OrdinalIgnoreCase))
+        {
+            var profession = await db.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.ActiveProfessionId)
+                .FirstOrDefaultAsync(ct);
+            var featured = await freeTierContent.ResolveWritingScenarioAsync(profession, ct);
+            if (featured is null)
+            {
+                throw ApiException.Conflict(
+                    "free_tier_content_unavailable",
+                    "No eligible free Writing task is published for your profession yet.");
+            }
+            if (featured.Id != id)
+            {
+                throw ApiException.PaymentRequired(
+                    "free_tier_featured_item_only",
+                    "Free Writing access is limited to the featured case-note task for your profession.");
+            }
+        }
         // §12.4: the reference id must advance once this attempt's
         // submission is actually graded, so "Practice this again" is
         // billed as the genuinely new attempt it is — see

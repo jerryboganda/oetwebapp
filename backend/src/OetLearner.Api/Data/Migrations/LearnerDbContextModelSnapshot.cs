@@ -9911,6 +9911,16 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("FreeSpeakingCardByProfessionJson")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
+                    b.Property<string>("FreeWritingScenarioByProfessionJson")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
                     b.Property<int>("MaxListeningAttempts")
                         .HasColumnType("integer");
 
@@ -10098,6 +10108,11 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("ContentOrigin")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -10110,10 +10125,25 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateTimeOffset?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Generator")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("GeneratorModel")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("HiddenInformation")
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("JevValidationStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("LayLanguageTriggersJson")
                         .IsRequired()
@@ -10153,6 +10183,9 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("NeedsOwnerInput")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ProfessionRoleNotes")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -10184,6 +10217,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("SecondVisitIndicator")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SourceDigest")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

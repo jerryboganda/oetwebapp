@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, FilterIcon, Layers, Library, Search } from 'lucide-react';
+import { ArrowRight, FilterIcon, Layers, Library, Search, Sparkles } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
-import { listWritingScenarios } from '@/lib/writing/api';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { getFreeWritingScenario, listWritingScenarios } from '@/lib/writing/api';
 import { WRITING_PROFESSIONS, WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import type {
   WritingLetterType,
@@ -32,6 +32,11 @@ export default function WritingPracticeLibraryPage() {
   const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [letterType, setLetterType] = useState<WritingLetterType | null>(null);
   const [search, setSearch] = useState('');
+  const [freeScenario, setFreeScenario] = useState<WritingScenarioDto | null>(null);
+
+  useEffect(() => {
+    getFreeWritingScenario().then(setFreeScenario).catch(() => setFreeScenario(null));
+  }, []);
 
   // Load page 1 (replacing the list) whenever a filter changes.
   useEffect(() => {
@@ -112,6 +117,28 @@ export default function WritingPracticeLibraryPage() {
             { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[profession, letterType, search].filter(Boolean).length}` },
           ]}
         />
+
+        {freeScenario ? (
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_setup',
+              accent: 'emerald',
+              eyebrow: 'Free featured case note',
+              eyebrowIcon: Sparkles,
+              title: freeScenario.title,
+              description: 'Start the admin-designated case note for your profession. Free-tier access uses the normal Writing editor and grading flow.',
+              metaItems: [
+                { icon: Sparkles, label: freeScenario.letterType },
+                { icon: Sparkles, label: 'Zero-credit access' },
+              ],
+              primaryAction: {
+                label: 'Open free case note',
+                href: `/writing/practice/session/${encodeURIComponent(freeScenario.id)}`,
+              },
+            }}
+          />
+        ) : null}
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 

@@ -29,7 +29,8 @@ public sealed class SpeakingSessionService(
     IEffectiveEntitlementResolver? entitlementResolver = null,
     SpeakingSimulationV11PersonaService? personaService = null,
     OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
-    ISpeakingCanonicalAssessmentService? canonical = null)
+    ISpeakingCanonicalAssessmentService? canonical = null,
+    IFreeTierContentResolver? freeTierContentResolver = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -50,7 +51,7 @@ public sealed class SpeakingSessionService(
         }
 
         var card = await db.RolePlayCards.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == req.RolePlayCardId, ct)
+            .FirstOrDefaultAsync(x => x.Id == req.RolePlayCardId || x.ContentItemId == req.RolePlayCardId, ct)
             ?? throw ApiException.NotFound("role_play_card_not_found",
                 "That role-play card does not exist.");
 
@@ -61,6 +62,14 @@ public sealed class SpeakingSessionService(
         }
 
         var mode = SpeakingSessionModes.Parse(req.Mode);
+        if (mode is SpeakingSessionMode.AiSelfPractice or SpeakingSessionMode.AiExam
+            && await IsFreeFeaturedSpeakingCardAsync(userId, card.Id, ct))
+        {
+            throw ApiException.Conflict(
+                "free_speaking_recorder_required",
+                "The designated free Speaking card must be completed with the existing recorder.");
+        }
+
         var consentVersion = string.IsNullOrWhiteSpace(req.ConsentVersion)
             ? DefaultConsentVersion
             : req.ConsentVersion!.Trim();
@@ -565,6 +574,33 @@ public sealed class SpeakingSessionService(
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
+
+    private async Task<bool> IsFreeFeaturedSpeakingCardAsync(
+        string userId,
+        string cardId,
+        CancellationToken ct)
+    {
+        if (entitlementResolver is null
+            || aiPackageCreditService is null
+            || freeTierContentResolver is null)
+        {
+            return false;
+        }
+
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (!string.Equals(entitlement.Tier, "free", StringComparison.OrdinalIgnoreCase)
+            || entitlement.HasEligibleSubscription)
+        {
+            return false;
+        }
+
+        var credits = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
+        return !credits.HasSpeakingActivity
+            && await freeTierContentResolver.IsFeaturedSpeakingCardAsync(
+                entitlement.ProfessionId,
+                cardId,
+                ct);
+    }
 
     private async Task<SpeakingSession> LoadOwnedSessionAsync(
         string userId,

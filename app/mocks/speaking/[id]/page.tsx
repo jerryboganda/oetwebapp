@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { GraduationCap, Users } from 'lucide-react';
+import { GraduationCap, Mic, Users } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerSurfaceCard } from '@/components/domain/learner-surface';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { fetchMockSpeakingAccess } from '@/lib/api';
+import { getFreeSpeakingCard, type RolePlayCardLearnerDetail } from '@/lib/api/speaking-role-play-cards';
 
 /**
  * Full Mock Speaking gateway (W8). AI grades the Speaking section on the
@@ -17,6 +18,7 @@ export default function MockSpeakingGatewayPage() {
   const searchParams = useSearchParams();
 
   const [access, setAccess] = useState<{ requiresAiOnly: boolean; daysUntilExam: number | null } | null>(null);
+  const [freeCard, setFreeCard] = useState<RolePlayCardLearnerDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,9 +35,40 @@ export default function MockSpeakingGatewayPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getFreeSpeakingCard()
+      .then((card) => {
+        if (!cancelled) setFreeCard(card);
+      })
+      .catch(() => {
+        if (!cancelled) setFreeCard(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const forwardedQuery = searchParams?.toString() ?? '';
   const aiHref = `/speaking/exam?${forwardedQuery}`;
   const tutorHref = `/mocks/bookings/new?${forwardedQuery}`;
+  const freeParams = new URLSearchParams(forwardedQuery);
+  freeParams.set('mode', 'exam');
+  freeParams.set('free', '1');
+  const freeHref = freeCard
+    ? `/speaking/task/${encodeURIComponent(freeCard.cardId)}?${freeParams.toString()}`
+    : '/speaking/selection';
+
+  const freeCardSurface: LearnerSurfaceCardModel | null = freeCard ? {
+    kind: 'task',
+    sourceType: 'backend_task',
+    accent: 'emerald',
+    eyebrow: 'Free Speaking Card',
+    eyebrowIcon: Mic,
+    title: freeCard.scenarioTitle,
+    description: 'Use the existing Speaking recorder. Submit once, then receive the AI grading result without spending a credit.',
+    primaryAction: { label: 'Start free Speaking card', href: freeHref },
+  } : null;
 
   const aiCard: LearnerSurfaceCardModel = {
     kind: 'task',
@@ -67,6 +100,7 @@ export default function MockSpeakingGatewayPage() {
         <p className="text-sm text-muted">Checking your Speaking options…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
+          {freeCardSurface ? <LearnerSurfaceCard card={freeCardSurface} /> : null}
           <LearnerSurfaceCard card={aiCard} />
           <LearnerSurfaceCard card={tutorCard} />
         </div>

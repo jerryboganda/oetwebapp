@@ -71,6 +71,7 @@ export interface SpeakingExamDetail {
   completedAt?: string | null;
   mockAttemptId?: string | null;
   mockSectionId?: string | null;
+  liveRoomId?: string | null;
 }
 
 export interface CreateSpeakingExamInput {
@@ -133,6 +134,14 @@ export function createSpeakingExamFromBooking(bookingId: string) {
   );
 }
 
+/** Creates (or resumes) the assigned tutor's live exam for a booking. */
+export function createSpeakingExamFromBookingAsTutor(bookingId: string) {
+  return apiClient.post<SpeakingExamDetail>(
+    `/v1/expert/speaking/exams/from-booking/${encodeURIComponent(bookingId)}`,
+    {},
+  );
+}
+
 // ── Tutor-only view of a live-tutor exam (roleplayer cards + phase) ──────────
 
 export interface SpeakingExamRoleplayerCard {
@@ -156,6 +165,8 @@ export interface SpeakingExamTutorView {
   bookingId?: string | null;
   clock: SpeakingExamClock;
   cards: SpeakingExamRoleplayerCard[];
+  currentCardId?: string | null;
+  liveRoomId?: string | null;
 }
 
 /** Tutor/expert: fetch both roleplayer cards + the live phase for an exam. */
