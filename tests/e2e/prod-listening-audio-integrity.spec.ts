@@ -106,8 +106,14 @@ for (const paper of PAPERS) {
 
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
+      // Required pre-flight: "Start exam" stays disabled until the candidate runs the audio-readiness probe
+      // (components/domain/listening/TechReadinessCheck.tsx — plays a short clip to confirm playback works).
+      // Not part of the regression being checked here, so just clear it.
+      await page.getByRole('button', { name: /play audio probe/i }).click();
+      await expect(page.getByText(/audio confirmed/i)).toBeVisible({ timeout: 20_000 });
+
       const startButton = page.getByRole('button', { name: /^start exam$/i });
-      await expect(startButton).toBeVisible({ timeout: 30_000 });
+      await expect(startButton).toBeEnabled({ timeout: 30_000 });
       await startButton.click();
 
       // A1: wait for the hidden <audio> element to mount and for playback to actually begin.
