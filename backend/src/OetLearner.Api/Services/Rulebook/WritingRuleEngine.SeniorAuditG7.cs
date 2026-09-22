@@ -44,7 +44,7 @@ public sealed partial class WritingRuleEngine
 
     private static IEnumerable<LintFinding> DetectSaG7ReLineAgeWhenNoDob(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (!input.IsModelAnswer) yield break;
+        if (!input.IsModelAnswer || input.PatientAgeContradicted) yield break;
         if (input.CaseNotesText is not { Length: > 0 } notes || s.ReLineIndex is null) yield break;
         if (FindNotesDob(notes) is not null || SaG7NotesDobMarkerRe.IsMatch(notes)) yield break;
         if (global::OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract(notes) is not int age) yield break;
