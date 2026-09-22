@@ -581,8 +581,19 @@ async function verifyPaperLive(paper, { stateDir, useJev, useLocalStt, fixRoot, 
         marks[code] = 'fail';
       }
     } else if (ev[code].headAnyCue.length === 0) {
-      reasons[code].push(`expected Extract Two introduction cue missing from ${code} head (first ${CUE_MAX_HEAD_SEC}s)`);
-      marks[code] = marks[code] ?? 'fail';
+      // No cue phrase at the destination head. When the SOURCE tail has no
+      // cue mention either, the source material simply does not announce
+      // "Extract Two" near this boundary — that is not mis-split evidence
+      // and needs a human listen against the source, not an automatic fail.
+      const srcCode = code[0] + '1';
+      const srcHasCue = ev[srcCode]?.tailCue?.length > 0;
+      if (srcHasCue) {
+        reasons[code].push(`expected Extract Two introduction cue missing from ${code} head (first ${CUE_MAX_HEAD_SEC}s) while the cue sits at ${srcCode} tail — mis-split`);
+        marks[code] = marks[code] ?? 'fail';
+      } else {
+        reasons[code].push(`no Extract Two cue phrase at ${code} head, and none at ${srcCode} tail either — source convention unverified, listen against the original recording`);
+        marks[code] = marks[code] ?? 'review';
+      }
     } else {
       reasons[code].push(`Extract Two cue present but later than ${CUE_MAX_HEAD_SEC}s into ${code} head`);
       marks[code] = marks[code] ?? 'review';
