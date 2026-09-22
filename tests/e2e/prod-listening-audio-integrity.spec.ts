@@ -75,9 +75,15 @@ async function signInOnce(browser: Browser) {
   });
 
   await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
-  await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
-  await page.getByRole('button', { name: /^sign in$/i }).click();
+  const emailBox = page.getByRole('textbox', { name: /email address/i });
+  const passwordBox = page.getByRole('textbox', { name: /^password$/i });
+  await emailBox.fill(EMAIL!);
+  await passwordBox.fill(PASSWORD!);
+  const [emailVal, passwordVal] = await Promise.all([emailBox.inputValue(), passwordBox.inputValue()]);
+  console.log(`[signInOnce] after fill: email field has ${emailVal.length} chars (expected ${EMAIL!.length}), password field has ${passwordVal.length} chars (expected ${PASSWORD!.length})`);
+  const signInButton = page.getByRole('button', { name: /^sign in$/i });
+  console.log(`[signInOnce] Sign In button: visible=${await signInButton.isVisible()} enabled=${await signInButton.isEnabled()}`);
+  await signInButton.click();
   try {
     await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
   } catch {
