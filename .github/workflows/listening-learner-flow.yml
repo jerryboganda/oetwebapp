@@ -24,7 +24,9 @@ permissions:
 env:
   PROD_LEARNER_EMAIL: ${{ secrets.LISTENING_TEST_LEARNER_EMAIL }}
   PROD_LEARNER_PASSWORD: ${{ secrets.LISTENING_TEST_LEARNER_PASSWORD }}
-  LISTENING_TEST_DEVICE_ID: gha-listening-audit-fixed-device
+  # Must be an ALREADY-TRUSTED device id for this account (one-time bootstrap done manually when the account
+  # was created); a brand-new id here would hit the OTP/device-verification gate instead of signing straight in.
+  LISTENING_TEST_DEVICE_ID: ${{ secrets.LISTENING_TEST_LEARNER_DEVICE_ID }}
 
 jobs:
   learner-flow:
