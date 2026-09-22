@@ -42,8 +42,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install local STT runtime
-        run: pip install faster-whisper
+      - name: Install ffmpeg and local STT runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install faster-whisper
 
       - name: Content verification (read-only)
         if: ${{ github.event.inputs.mode != 'apply' }}
