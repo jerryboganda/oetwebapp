@@ -67,12 +67,18 @@ async function signInOnce(browser: Browser) {
 
   // Diagnostic instrumentation: log the ACTUAL sign-in network response and any visible page error, instead of
   // inferring failure only from "the URL never changed". One attempt only — a real cause needs seeing, not hiding
-  // behind more retries.
+  // behind more retries. The two earlier diagnostic rounds showed fields correctly filled and the button
+  // enabled+clicked, yet NO request to /v1/auth/sign-in was ever observed — so this round logs every request,
+  // every console message, and every uncaught page error to find out what actually happens after the click.
+  page.on('request', (r) => { if (r.method() !== 'GET') console.log(`[signInOnce] request: ${r.method()} ${r.url()}`); });
   page.on('response', (r) => {
-    if (r.url().includes('/v1/auth/sign-in')) {
-      r.text().then((body) => console.log(`[signInOnce] POST /v1/auth/sign-in -> ${r.status()}: ${body.slice(0, 300)}`)).catch(() => {});
+    if (r.url().includes('/v1/auth/sign-in') || r.url().includes('/v1/')) {
+      r.text().then((body) => console.log(`[signInOnce] response: ${r.status()} ${r.url()} :: ${body.slice(0, 300)}`)).catch(() => {});
     }
   });
+  page.on('console', (m) => console.log(`[signInOnce] console.${m.type()}: ${m.text().slice(0, 300)}`));
+  page.on('pageerror', (e) => console.log(`[signInOnce] pageerror: ${e.message}`));
+  page.on('requestfailed', (r) => console.log(`[signInOnce] request FAILED: ${r.method()} ${r.url()} :: ${r.failure()?.errorText}`));
 
   await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
   const emailBox = page.getByRole('textbox', { name: /email address/i });
