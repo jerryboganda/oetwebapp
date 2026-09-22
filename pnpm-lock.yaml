@@ -345,10 +345,6 @@ packages:
   '@livekit/components-core@0.12.15':
     resolution: {integrity: sha512-bDkK+jkPMgyT4a5lZmdcuc/hZ8fZUrXW+qQPNHVeSpXCBMzk5q9QWzx+HPtTsPJ8hnncWGfoT81RnXHBsy+Z8g==}
     engines: {node: '>=18'}
-    dependencies:
-      '@floating-ui/dom': 1.7.6
-      loglevel: 1.9.1
-      rxjs: 7.8.2
     peerDependencies:
       livekit-client: ^2.20.1
       tslib: ^2.6.2
@@ -356,12 +352,6 @@ packages:
   '@livekit/components-react@2.9.24':
     resolution: {integrity: sha512-qw5Oy1EfPg1f/xrKYrFielSrmtxY8BZ9mDt6299G5aikotQIztmldBfTNosrVS7VSNit7qeYfOFSyKaML20W6Q==}
     engines: {node: '>=18'}
-    dependencies:
-      '@livekit/components-core': 0.12.15
-      clsx: 2.1.1
-      events: 3.3.0
-      jose: 6.2.3
-      usehooks-ts: 3.1.1
     peerDependencies:
       '@livekit/krisp-noise-filter': ^0.2.12 || ^0.3.0 || ^0.4.0
       livekit-client: ^2.20.1
@@ -380,8 +370,6 @@ packages:
 
   '@livekit/protocol@1.50.4':
     resolution: {integrity: sha512-L1uggNQAqyY21smQY8AllyOYbcv9Me9TaxwuLytL1R8ck9nbYPmQLNwEDi3pOFGAMa5F8I2nUi2Jc59W5awxlA==}
-    dependencies:
-      '@bufbuild/protobuf': 1.10.0
 
   '@types/dom-mediacapture-record@1.0.22':
     resolution: {integrity: sha512-mUMZLK3NvwRLcAAT9qmcK+9p7tpU2FHdDsntR3YI4+GY88XrgG4XiE7u1Q2LAN2/FZOz/tdMDC3GQCR4T8nFuw==}
@@ -5961,17 +5949,6 @@ packages:
     resolution: {integrity: sha512-jw9zBKXY5Gtr5MZ7vEON3QhMNccuDvYHck1PFSyG1aaateQPqgKZFBMgZkFZaXHIf9RV4MDW5xpTK2b/+qbwOg==}
     peerDependencies:
       '@types/dom-mediacapture-record': ^1
-    dependencies:
-      '@livekit/mutex': 1.1.1
-      '@livekit/protocol': 1.50.4
-      events: 3.3.0
-      jose: 6.2.3
-      loglevel: 1.9.2
-      machina: 7.0.0
-      sdp-transform: 2.15.0
-      tslib: 2.8.1
-      typed-emitter: 2.1.0
-      webrtc-adapter: 9.0.6
 
   machina@7.0.0:
     resolution: {integrity: sha512-QZY8V9N7Opmc60JMGl+6UCg0rQW04Wb55U/0CpzTCzhmCLw4FnP1/n/hv4HaTKts4kGRD7s46KLDvYy2rdxCw==}
@@ -5994,8 +5971,6 @@ packages:
   usehooks-ts@3.1.1:
     resolution: {integrity: sha512-I4diPp9Cq6ieSUH2wu+fDAVQO43xwtulo+fKEidHUwZPnYImbtkTjzIJYcDcJqxgmX31GVqNFURodvcgHcW0pA==}
     engines: {node: '>=16.15.0'}
-    dependencies:
-      lodash.debounce: 4.0.8
     peerDependencies:
       react: ^16.8.0  || ^17 || ^18 || ^19 || ^19.0.0-rc
 
@@ -7221,17 +7196,16 @@ snapshots:
   '@livekit/components-core@0.12.15(livekit-client@2.22.3(@types/dom-mediacapture-record@1.0.22))(tslib@2.8.1)':
     dependencies:
       '@floating-ui/dom': 1.7.6
-      livekit-client: 2.22.3(@types/dom-mediacapture-record@1.0.22)
       loglevel: 1.9.1
       rxjs: 7.8.2
 
   '@livekit/components-react@2.9.24(livekit-client@2.22.3(@types/dom-mediacapture-record@1.0.22))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tslib@2.8.1)':
     dependencies:
-      '@livekit/components-core': 0.12.15(livekit-client@2.22.3(@types/dom-mediacapture-record@1.0.22))(tslib@2.8.1)
+      '@livekit/components-core': 0.12.15
       clsx: 2.1.1
       events: 3.3.0
       jose: 6.2.3
-      usehooks-ts: 3.1.1(react@19.2.7)
+      usehooks-ts: 3.1.1
 
   '@livekit/components-styles@1.2.0': {}
 
