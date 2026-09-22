@@ -1,0 +1,92 @@
+name: listening-content-verify
+
+# Atlas/Nova Listening audio content verification + boundary repair.
+# Per AGENTS.md compute policy: all compute (STT, ffmpeg, audits) runs here,
+# never on the local machine or the VPS.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'verify (read-only) | apply (repair pairs planned recut/split)'
+        required: false
+        default: 'verify'
+      paper:
+        description: 'optional paper id or slug filter (single paper)'
+        required: false
+        default: ''
+      pair:
+        description: 'apply mode only: restrict to pair A or C'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listening-content-${{ github.event.inputs.paper || 'fleet' }}
+  cancel-in-progress: false
+
+jobs:
+  listening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install local STT runtime
+        run: pip install faster-whisper
+
+      - name: Content verification (read-only)
+        if: ${{ github.event.inputs.mode != 'apply' }}
+        continue-on-error: true
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          HF_HUB_DISABLE_SYMLINKS_WARNING: '1'
+        run: |
+          ARGS="--live"
+          P="${{ github.event.inputs.paper }}"
+          if [ -n "$P" ]; then ARGS="$ARGS --paper $P"; fi
+          node scripts/listening/verify-audio-splits.mjs $ARGS
+
+      - name: Structural boundary audit (read-only)
+        if: ${{ github.event.inputs.mode != 'apply' }}
+        continue-on-error: true
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+        run: node scripts/listening/audit-audio-boundaries.mjs
+
+      - name: Apply boundary repairs (writes to production papers)
+        if: ${{ github.event.inputs.mode == 'apply' }}
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          HF_HUB_DISABLE_SYMLINKS_WARNING: '1'
+        run: |
+          ARGS="apply --local-stt"
+          P="${{ github.event.inputs.paper }}"
+          if [ -n "$P" ]; then ARGS="$ARGS --paper $P"; fi
+          PR="${{ github.event.inputs.pair }}"
+          if [ -n "$PR" ]; then ARGS="$ARGS --pair $PR"; fi
+          node scripts/listening/fix-audio-boundaries.mjs $ARGS
+
+      - name: Upload reports and state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: listening-state-${{ github.run_id }}
+          path: |
+            scripts/listening/state/
+          retention-days: 14
