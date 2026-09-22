@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Mic } from 'lucide-react';
-import { LearnerDashboardShell, LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero } from '@/components/domain';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { createMockSpeakingExam } from '@/lib/api';
