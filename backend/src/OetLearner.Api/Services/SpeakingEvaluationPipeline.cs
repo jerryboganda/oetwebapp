@@ -329,7 +329,6 @@ public sealed class SpeakingEvaluationPipeline(
         IReadOnlyList<SpeakingTranscriptLine> transcript)
         => string.Equals(ReadTranscriptionProvider(attempt.AnalysisJson), "mock-dev", StringComparison.OrdinalIgnoreCase)
             || transcript.Any(line => line.Text.Contains("Mock development ASR transcript", StringComparison.OrdinalIgnoreCase));
-    }
 
     private void MarkTranscriptionProvenance(Attempt attempt, string provider, bool mock)
     {
