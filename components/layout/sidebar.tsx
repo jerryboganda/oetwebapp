@@ -12,7 +12,9 @@ import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReduc
 import type { UserRole } from '@/lib/types/auth';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import { useEnabledModules } from '@/hooks/use-enabled-modules';
+import { PLACEMENT_NAV_HREF, usePlacementAccess } from '@/hooks/use-placement-access';
 import {
+  ClipboardCheck,
   LayoutDashboard,
   FilePenLine,
   Mic,
@@ -118,6 +120,9 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/reading', label: 'Reading', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
   { href: '/writing', label: 'Writing', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
   { href: '/speaking', label: 'Speaking', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
+  // Free General English placement test. Shown only when the learner can
+  // actually open it (flag on + inside any active beta) — see usePlacementAccess.
+  { href: PLACEMENT_NAV_HREF, label: 'Placement Test', icon: <ClipboardCheck className="w-5 h-5" />, matchPrefix: PLACEMENT_NAV_HREF },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks', moduleKey: 'Mocks' },
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/materials', label: 'Materials', sidebarLabel: 'Course Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
@@ -154,14 +159,22 @@ export const mobileNavItems: NavItem[] = [
 // Videos takes the 7th slot (mobile is a primary Video Library surface);
 // Materials, Progress and Billing remain
 // reachable via the desktop sidebar and Settings page.
+// Looked up by href, not array position, so adding a sidebar item can never
+// silently re-point a bottom-nav slot.
+const learnerNavItemByHref = (href: string): NavItem => {
+  const item = learnerMainNavItems.find((candidate) => candidate.href === href);
+  if (!item) throw new Error(`learnerMainNavItems is missing ${href}`);
+  return item;
+};
+
 export const learnerMobileNavItems: NavItem[] = [
-  learnerMainNavItems[0], // Dashboard
-  learnerMainNavItems[1], // Listening
-  learnerMainNavItems[2], // Reading
-  learnerMainNavItems[3], // Writing
-  learnerMainNavItems[4], // Speaking
-  learnerMainNavItems[5], // Mocks
-  learnerMainNavItems[8], // Videos
+  learnerNavItemByHref('/'),
+  learnerNavItemByHref('/listening'),
+  learnerNavItemByHref('/reading'),
+  learnerNavItemByHref('/writing'),
+  learnerNavItemByHref('/speaking'),
+  learnerNavItemByHref('/mocks'),
+  learnerNavItemByHref('/videos'),
 ];
 
 function isActive(pathname: string | null, item: NavItem): boolean {
@@ -343,6 +356,7 @@ export function Sidebar({
   const learnerFeatureFlags = useFeatureFlagMap(navFeatureKeys, isLearnerWorkspace);
   const { isModuleEnabled, modules: enabledModules } = useEnabledModules(isLearnerWorkspace);
   const enabledModulesKey = enabledModules.join('|');
+  const placementAccess = usePlacementAccess(isLearnerWorkspace);
   const visibleLearnNavItems = useMemo(
     () => learnNavItems.filter(
       (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace) && isModuleEnabled(item.moduleKey),
@@ -352,10 +366,12 @@ export function Sidebar({
   );
   const visibleMainItems = useMemo(
     () => resolvedItems.filter(
-      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace) && isModuleEnabled(item.moduleKey),
+      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)
+        && isModuleEnabled(item.moduleKey)
+        && (item.href !== PLACEMENT_NAV_HREF || placementAccess),
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems, enabledModulesKey],
+    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems, enabledModulesKey, placementAccess],
   );
 
   const handleSignOut = async () => {

@@ -34,7 +34,7 @@ env:
 
 jobs:
   syntax-gate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +57,7 @@ jobs:
 
   build-web:
     needs: [syntax-gate]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: Assert production rollout is image-only
@@ -95,7 +95,7 @@ jobs:
 
   build-api:
     needs: [syntax-gate]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -136,7 +136,7 @@ jobs:
 
   build-backup:
     needs: [syntax-gate]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -160,7 +160,7 @@ jobs:
 
   build-agent-gateway:
     needs: [syntax-gate]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -184,7 +184,7 @@ jobs:
 
   migrate-production:
     needs: [build-web, build-api, build-backup]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -214,6 +214,9 @@ jobs:
           test -s output/oet-production-migrations.sql
           sha256sum output/oet-production-migrations.sql
       - name: Retain migration artifact for deployment audit
+        # Best-effort: the SQL's sha256 is already in the log above, and an
+        # account-level Actions artifact-storage quota must not block a deploy.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: oet-production-migrations-${{ github.sha }}
@@ -255,7 +258,7 @@ jobs:
 
   deploy:
     needs: [build-web, build-api, build-backup, build-agent-gateway, migrate-production]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to VPS over SSH (pull + blue/green redeploy)

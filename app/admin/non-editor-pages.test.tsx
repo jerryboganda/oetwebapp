@@ -1363,8 +1363,11 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<ContentEditPage />);
 
-    expect(await screen.findByRole('main')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /edit sepsis handover/i })).toBeInTheDocument();
+    // The workspace shell (role="main", heading "Edit content-1") renders
+    // before the detail/impact fetch resolves, so wait for the loaded title
+    // rather than the shell; everything below lands in the same state batch.
+    expect(await screen.findByRole('heading', { name: /edit sepsis handover/i })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /core content metadata/i })).toBeInTheDocument();
     expect(screen.getByText('18')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /revisions/i })).toBeInTheDocument();

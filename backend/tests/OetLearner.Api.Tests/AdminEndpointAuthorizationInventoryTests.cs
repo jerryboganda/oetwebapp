@@ -110,6 +110,16 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/ai/budgets/override", "POST", "AdminAiConfig")]
     [InlineData("/v1/admin/ai/circuits", "GET", "AdminAiConfig")]
     [InlineData("/v1/admin/ai/circuits/{key}/reset", "POST", "AdminAiConfig")]
+    [InlineData("/v1/admin/placement/health", "GET", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/inventory", "GET", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/review/queue", "GET", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/review/{sessionId}", "GET", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/review/{sessionId}/audio/{taskId}", "GET", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/review/{sessionId}/rescore", "POST", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/review/{sessionId}/human-score", "POST", "AdminReviewOps")]
+    [InlineData("/v1/admin/placement/accommodations", "GET", "AdminLearnerRead")]
+    [InlineData("/v1/admin/placement/accommodations", "POST", "AdminLearnerWrite")]
+    [InlineData("/v1/admin/placement/accommodations/{id}/revoke", "POST", "AdminLearnerWrite")]
     public void SensitiveAdminRoutes_UseExpectedGranularPolicies(string routePattern, string method, string policy)
     {
         using var client = _factory.CreateClient();

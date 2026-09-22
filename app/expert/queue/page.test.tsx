@@ -103,8 +103,9 @@ describe('Tutor queue page', () => {
     expect(screen.getByText('Speaking Queue Items')).toBeInTheDocument();
     expect(screen.getByText('Writing Reviews Pending')).toBeInTheDocument();
 
-    // Empty state rendered with actionable guidance
-    expect(screen.getByText(/no reviews in queue/i)).toBeInTheDocument();
+    // Empty state rendered with actionable guidance (hero renders before the
+    // queue fetch resolves, so wait for the empty state itself).
+    expect(await screen.findByText(/no reviews in queue/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /view writing reviews/i })).toBeInTheDocument();
   });
 

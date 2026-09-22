@@ -165,23 +165,47 @@ describe('Billing payment return page', () => {
     });
   });
 
-  it('renders a cancellable retry state without polling when no reference is present', async () => {
+  // `?status=cancelled` is only a hint since 464f74467 (fail-closed payment
+  // binding): the backend owns the verdict, so the URL can never decide it.
+  it('renders a retry state without polling when no reference is present, even with a cancel hint', async () => {
     renderWithRouter(<BillingPaymentReturnPage />, {
       searchParams: new URLSearchParams('status=cancelled'),
     });
 
-    expect(await screen.findByText('Checkout cancelled')).toBeInTheDocument();
+    expect(await screen.findByText('Payment could not be confirmed')).toBeInTheDocument();
+    expect(screen.getByText(/missing checkout reference/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /try again/i })).toHaveAttribute('href', '/catalog');
     expect(mockFetchBillingPaymentStatus).not.toHaveBeenCalled();
   });
 
-  it('stays on the cancelled screen even when a checkout reference is present', async () => {
+  it('still polls when a cancel hint has a checkout reference, and the backend verdict wins', async () => {
+    mockFetchBillingPaymentStatus.mockResolvedValue({
+      status: 'completed',
+      quoteId: 'quote-123',
+      checkoutSessionId: 'cs_test_123',
+      productType: 'plan_purchase',
+      targetPlanId: 'nursing-complete',
+      addOnCodes: [],
+      items: [],
+      totalAmount: 199,
+      currency: 'AUD',
+      invoiceId: 'inv-123',
+      subscriptionId: 'sub-123',
+      failureReason: null,
+      fulfilledAt: '2026-06-09T12:00:00Z',
+      expiresAt: null,
+    });
+
     renderWithRouter(<BillingPaymentReturnPage />, {
       searchParams: new URLSearchParams('status=cancelled&quote=quote-123&session=cs_test_123'),
     });
 
-    expect(await screen.findByText('Checkout cancelled')).toBeInTheDocument();
-    expect(mockFetchBillingPaymentStatus).not.toHaveBeenCalled();
+    expect(await screen.findByText('Payment confirmed')).toBeInTheDocument();
+    expect(screen.queryByText('Checkout cancelled')).not.toBeInTheDocument();
+    expect(mockFetchBillingPaymentStatus).toHaveBeenCalledWith({
+      quoteId: 'quote-123',
+      sessionId: 'cs_test_123',
+    });
   });
 
   it('shows a Check again action after the polling window elapses and restarts polling on click', async () => {

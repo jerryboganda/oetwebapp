@@ -39,6 +39,7 @@ import { CreditBalanceCard, hasVisibleCreditActivity } from '@/components/domain
 import { AsyncStateWrapper } from '@/components/state';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { AppDownloadPromo, PostLoginAppModal } from '@/components/marketing/app-download-promo';
+import { PlacementDashboardCard } from '@/components/placement/placement-dashboard-card';
 import { AuthContext } from '@/contexts/auth-context';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import {
@@ -507,6 +508,8 @@ export default function Dashboard() {
                 <LearnerSurfaceCard card={nextMockCard} className="min-h-[260px]" />
               </MotionItem>
             ) : null}
+            {/* Self-gating: renders nothing unless the learner can open the test. */}
+            <PlacementDashboardCard className="min-h-[260px]" />
             {!nextActionCard && !nextMockCard ? (
               <LearnerEmptyState
                 className="lg:col-span-2"

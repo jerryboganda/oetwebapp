@@ -62,6 +62,12 @@ function getStorage(persistence: AuthPersistence): Storage | null {
 
 const E2E_KEEP_TOKENS_KEY = 'oet.e2e.keep-tokens';
 
+// IAM-05: captured once at module load so the gate is a build-time constant.
+// The bundler inlines NODE_ENV, and evaluating it here (not per call) keeps
+// unbundled runtimes identical: nothing that mutates process.env after load
+// can re-open the E2E token-persistence path in a production module.
+const IS_PRODUCTION_BUILD = process.env.NODE_ENV === 'production';
+
 function shouldKeepTokensForE2E(): boolean {
   // IAM-05: this test-only path must be UNAVAILABLE in production builds.
   // NODE_ENV is inlined at build time, so in a production bundle this whole
@@ -69,7 +75,7 @@ function shouldKeepTokensForE2E(): boolean {
   // localStorage (attacker-seeded via XSS or devtools) — can make the app
   // persist access/refresh tokens to web storage. Only Playwright builds
   // (development/test) honor the seeded flag.
-  if (process.env.NODE_ENV === 'production') return false;
+  if (IS_PRODUCTION_BUILD) return false;
   // Only true when the Playwright bootstrap explicitly seeds this flag into
   // localStorage. Production sign-in flows never set this key, so production
   // behavior (XSS hardening: tokens never persisted to web storage) is
@@ -112,7 +118,7 @@ function fromPersistedSnapshot(snapshot: PersistedSessionSnapshot): AuthSession 
   // that each refresh on cold load. IAM-05: in production builds the extras
   // are NEVER honored — a hand-seeded payload with tokens is treated as
   // token-less and the normal refresh flow takes over.
-  const honorPersistedTokens = process.env.NODE_ENV !== 'production';
+  const honorPersistedTokens = !IS_PRODUCTION_BUILD;
   const extras = snapshot as PersistedSessionSnapshot & {
     accessToken?: unknown;
     refreshToken?: unknown;

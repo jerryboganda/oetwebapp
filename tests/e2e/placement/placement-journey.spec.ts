@@ -217,7 +217,7 @@ async function mockPlacementApi(page: Page) {
 }
 
 test.describe('Placement journey @placement @mocks', () => {
-  test('start → objective modules → foundation profile with honest unmeasured skills', async ({ page }, testInfo) => {
+  test('overview → five-part transitions → foundation profile with honest unmeasured skills', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
@@ -227,21 +227,39 @@ test.describe('Placement journey @placement @mocks', () => {
 
     await page.goto('/placement-test');
     await expect(page.getByRole('heading', { name: /free general english placement test/i })).toBeVisible();
+    // The overview names all five parts and the full-profile time.
+    await expect(page.getByText(/part 5 of 5 — writing/i)).toBeVisible();
+    await expect(page.getByText(/approximate full-profile time: 60–85 minutes/i)).toBeVisible();
 
     await page.getByRole('button', { name: /start free placement test/i }).click();
 
-    // The runner walks LS → RD → LSN (each mocked complete) and lands on
-    // the receptive foundation profile.
-    await expect(page.getByRole('heading', { name: /your foundation profile/i })).toBeVisible({ timeout: 20_000 });
+    // Owner spec §3.2 transitions: each objective module is mocked complete.
+    await expect(page.getByRole('heading', { name: /part 1 of 5 — language systems/i })).toBeVisible();
+    await page.getByRole('button', { name: /start part 1/i }).click();
 
-    const profile = page.locator('div', { has: page.getByRole('heading', { name: /your foundation profile/i }) });
+    await expect(page.getByRole('heading', { name: /language systems complete/i })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: /continue to reading/i }).click();
+
+    await expect(page.getByRole('heading', { name: /reading complete/i })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: /check audio/i }).click();
+
+    await expect(page.getByRole('heading', { name: /part 3 of 5 — listening/i })).toBeVisible();
+    await page.getByRole('button', { name: /start listening/i }).click();
+
+    // After Listening: the foundation section with the receptive profile.
+    await expect(page.getByRole('heading', { name: /foundation section complete/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: /your foundation profile/i })).toBeVisible();
+
+    const profile = page.getByRole('region', { name: /skill profile/i });
     await expect(profile.getByText('B1', { exact: true })).toBeVisible();
     await expect(profile.getByText('A2', { exact: true })).toBeVisible();
-    // Productive skills are honestly unmeasured at this stage — never a band.
-    await expect(profile.getByText('not_measured').first()).toBeVisible();
+    // Productive skills are honestly unmeasured at this stage — never a band,
+    // never a raw wire status.
+    await expect(profile.getByText(/not taken yet/i).first()).toBeVisible();
+    await expect(profile.getByText('not_measured')).toHaveCount(0);
 
     // Next stage CTA present.
-    await expect(page.getByRole('button', { name: /continue to speaking/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /check microphone/i })).toBeVisible();
 
     // The engine session id stays reachable for support (sr-only marker).
     const pageContent = await page.content();
