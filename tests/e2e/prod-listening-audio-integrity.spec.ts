@@ -96,6 +96,11 @@ for (const paper of PAPERS) {
       const page = await context.newPage();
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+      page.on('response', (r) => {
+        if (r.url().includes('/advance-section')) {
+          r.text().then((body) => console.log(`[diag] POST .../advance-section -> ${r.status()}: ${body.slice(0, 500)}`)).catch(() => {});
+        }
+      });
 
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
