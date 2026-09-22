@@ -135,6 +135,13 @@ for (const paper of PAPERS) {
 
       // Manually advance (the popup path — timer hasn't expired). This is the supported manual flow;
       // auto-advance-at-00:00 is covered by the existing unit/integration tests, not re-tested live here.
+      // The server owns the one-way cursor (advance() in page.tsx only moves currentIndex after
+      // POST .../advance-section resolves) — wait for that response before checking anything client-side.
+      // An earlier version of this test raced ahead of that response using `currentTime > 0 && < 5` as its
+      // "next section started" signal, which is ALSO trivially true during A1's own first few seconds of
+      // normal playback — it captured stale A1 data a fraction of a second before the real advance landed
+      // and misread it as a silent-replay regression. currentSrc changing is a signal that can't false-positive.
+      const advanceResponse = page.waitForResponse((r) => r.url().includes('/advance-section'), { timeout: 20_000 });
       const nextButton = page.getByRole('button', { name: /advance to next sub-section/i });
       await expect(nextButton).toBeVisible({ timeout: 15_000 });
       await nextButton.click();
@@ -142,13 +149,15 @@ for (const paper of PAPERS) {
       if (await continueButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
         await continueButton.click();
       }
+      await advanceResponse;
 
-      // A2 (or the next section): auto-starts, and its decoded duration must differ from A1's — proof it's a
-      // different underlying file, not a silent replay (the exact Atlas ST8 regression this remediation fixed).
-      await page.waitForFunction(() => {
+      // A2 (or the next section): auto-starts with its OWN source (currentSrc differs from A1's — proof it's
+      // not a silent replay, the exact Atlas ST8 regression this remediation fixed), and its decoded duration
+      // must differ from A1's too.
+      await page.waitForFunction((prevSrc) => {
         const el = document.querySelector('audio');
-        return !!el && !el.paused && el.currentTime > 0 && el.currentTime < 5;
-      }, { timeout: 20_000 });
+        return !!el && el.currentSrc !== prevSrc && !el.paused && el.currentTime > 0;
+      }, a1Src, { timeout: 20_000 });
       const a2Duration = await audio.evaluate((el: HTMLAudioElement) => el.duration);
       expect(Number.isFinite(a2Duration) && a2Duration > 0, `A2 audio must report a real duration, got ${a2Duration}`).toBe(true);
       const a2Src = await audio.evaluate((el: HTMLAudioElement) => el.currentSrc);
