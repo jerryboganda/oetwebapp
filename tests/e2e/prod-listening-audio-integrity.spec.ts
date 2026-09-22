@@ -100,6 +100,9 @@ for (const paper of PAPERS) {
         if (r.url().includes('/advance-section')) {
           r.text().then((body) => console.log(`[diag] POST .../advance-section -> ${r.status()}: ${body.slice(0, 500)}`)).catch(() => {});
         }
+        if (r.status() === 404) {
+          console.log(`[diag] 404: ${r.request().method()} ${r.url()}`);
+        }
       });
 
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
