@@ -210,6 +210,20 @@ Kill-switch semantics: when engaged, platform-keyed calls throw
 `AiGloballyDisabledException`. **BYOK calls continue** — the switch protects
 the platform budget, not learner sovereignty over their own key.
 
+**Admin-side AI carries no day or class-month ceilings (owner directive,
+2026-09-23).** `AdminBatch`-class calls — `admin.*` content drafts,
+listening Part A/B/C extraction, OCR content-PDF fallback, AI-assistant
+indexing/embeddings, `class.recording.*`, `tutor.*`, the `ai_assistant.admin`
+and `ai_assistant.expert` assistants — skip the global daily cap, the class
+daily cap and the class monthly cap entirely. They remain governed by the
+global monthly budget (`AiGlobalBudgetUsd` + hard-kill), the kill switch, the
+per-feature kill list, and full `AiUsageRecord` accounting. Student-facing
+classes (`ScoringCritical`, `InteractiveLearning`) keep every daily and
+monthly ceiling, as do all per-learner caps (coach cost cap, companion daily
+cap, daily plan regens, plan token caps). Implementation:
+`AiBudgetClasses.IsBudgetExempt` + the `admin_batch.unrestricted` quota
+trace.
+
 ---
 
 ## 8. Custody & security options
