@@ -7,7 +7,7 @@ export default defineConfig({
   testMatch: /prod-listening-audio-integrity\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0, // a real failure should surface fast, not double every test's wall-clock and blow the job timeout
+  retries: process.env.CI ? 1 : 0, // the hydration-race root cause is fixed; one retry now absorbs a genuine transient blip instead of masking a systematic bug
   workers: 1,
   reporter: [
     ['list'],

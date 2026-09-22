@@ -65,31 +65,24 @@ async function signInOnce(browser: Browser) {
     try { window.localStorage.setItem('oet_device_id', deviceId); } catch { /* ignore */ }
   }, DEVICE_ID);
 
-  // Diagnostic instrumentation: log the ACTUAL sign-in network response and any visible page error, instead of
-  // inferring failure only from "the URL never changed". One attempt only — a real cause needs seeing, not hiding
-  // behind more retries. The two earlier diagnostic rounds showed fields correctly filled and the button
-  // enabled+clicked, yet NO request to /v1/auth/sign-in was ever observed — so this round logs every request,
-  // every console message, and every uncaught page error to find out what actually happens after the click.
-  page.on('request', (r) => { if (r.method() !== 'GET') console.log(`[signInOnce] request: ${r.method()} ${r.url()}`); });
+  // Log the actual sign-in response and any uncaught page error, so a future failure shows a real cause instead
+  // of just "did not redirect".
   page.on('response', (r) => {
-    if (r.url().includes('/v1/auth/sign-in') || r.url().includes('/v1/')) {
-      r.text().then((body) => console.log(`[signInOnce] response: ${r.status()} ${r.url()} :: ${body.slice(0, 300)}`)).catch(() => {});
+    if (r.url().includes('/v1/auth/sign-in')) {
+      r.text().then((body) => console.log(`[signInOnce] POST /v1/auth/sign-in -> ${r.status()}: ${body.slice(0, 300)}`)).catch(() => {});
     }
   });
-  page.on('console', (m) => console.log(`[signInOnce] console.${m.type()}: ${m.text().slice(0, 300)}`));
   page.on('pageerror', (e) => console.log(`[signInOnce] pageerror: ${e.message}`));
-  page.on('requestfailed', (r) => console.log(`[signInOnce] request FAILED: ${r.method()} ${r.url()} :: ${r.failure()?.errorText}`));
 
-  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-  const emailBox = page.getByRole('textbox', { name: /email address/i });
-  const passwordBox = page.getByRole('textbox', { name: /^password$/i });
-  await emailBox.fill(EMAIL!);
-  await passwordBox.fill(PASSWORD!);
-  const [emailVal, passwordVal] = await Promise.all([emailBox.inputValue(), passwordBox.inputValue()]);
-  console.log(`[signInOnce] after fill: email field has ${emailVal.length} chars (expected ${EMAIL!.length}), password field has ${passwordVal.length} chars (expected ${PASSWORD!.length})`);
-  const signInButton = page.getByRole('button', { name: /^sign in$/i });
-  console.log(`[signInOnce] Sign In button: visible=${await signInButton.isVisible()} enabled=${await signInButton.isEnabled()}`);
-  await signInButton.click();
+  // Root cause found by the diagnostic rounds above: `domcontentloaded` fires before React hydrates the sign-in
+  // form's onSubmit handler. A click that lands in that window falls back to the server-rendered <form
+  // method="post"> submitting natively to the CURRENT page URL — POST /sign-in on the app host, never reaching
+  // the API — which is silent (no error, no redirect, no visible text change). `load` + a short settle covers it.
+  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'load' });
+  await page.waitForTimeout(1000);
+  await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
+  await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
+  await page.getByRole('button', { name: /^sign in$/i }).click();
   try {
     await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
   } catch {
