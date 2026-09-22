@@ -200,6 +200,16 @@ Scoring rules:
 
         var userInput = BuildUserInput(card, script, transcript, cardTypeRow);
 
+        // Free Mocks: is this attempt the learner's ONE free AI-graded sample?
+        // Derived server-side from the claim bound to the attempt — never from
+        // the request — so only that grading call skips the plan/token gate.
+        var freeSample = await new OetLearner.Api.Services.FreeSamples.FreeSampleService(db)
+            .IsFreeAttemptAsync(
+                session.UserId,
+                OetLearner.Api.Services.FreeSamples.FreeSampleService.Speaking,
+                session.AttemptId,
+                ct);
+
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
         AiGatewayResult aiResult;
         try
@@ -212,6 +222,7 @@ Scoring rules:
                 Temperature = 0.1,
                 MaxTokens = 4096,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
+                FreeSampleGrant = freeSample,
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 // Tag the assessment context for the audit trail + gateway

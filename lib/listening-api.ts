@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { FREE_SAMPLE_FEEDBACK } from './free-sample';
 import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from './reading-authoring-api';
 
 export interface ListeningHomePaperDto {
@@ -547,9 +548,10 @@ export const startListeningAttempt = (paperId: string, mode: ListeningSessionMod
       mockSectionId: options.mockSectionId ?? undefined,
     }),
   }).then((attempt) => {
-    if (!options.mockAttemptId && !options.mockSectionId) {
+    if (!options.mockAttemptId && !options.mockSectionId && attempt.feedbackMessage !== FREE_SAMPLE_FEEDBACK) {
       // Live balance feedback (Rule E): announce the debit, never for mocks
-      // which spend their separate allowance.
+      // which spend their separate allowance, nor for the free sample (no debit;
+      // the toast would read a stale ledger row).
       void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
     }
     return attempt;

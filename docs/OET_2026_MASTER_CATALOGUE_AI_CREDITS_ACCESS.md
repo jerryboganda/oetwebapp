@@ -55,6 +55,15 @@ The candidate dashboard must show the same balances the admin can see: Reading C
 
 After every use, the candidate must immediately see what was used and what remains. Example: “1 Reading credit used - 2 Reading Credits remaining.” If Shared Credits are used, the message must say so explicitly.
 
+### Rule F - Free samples (owner 2026-09-22)
+
+A free sample is an extra conversion entry point that uses **zero credits**. It never relocates library content, and the server alone decides what is free — the client never sends a "free" flag.
+
+- **Listening / Reading:** a paper tagged `free-sample` (NOT `access:`-prefixed — admin tooling strips those) opens the content gate and skips the per-paper debit on every entry path (card, library, Part practice). Listening = Atlas ST3; Reading = Atlas 02 (never Atlas 01 — official OET material). Remove the tag to switch it off.
+- **Writing / Speaking:** every learner gets exactly ONE free AI-graded attempt per subtest, on the designated item of a profession of their choice (one row per subtest+profession in `FreeSampleDesignations`; with no row the server auto-picks the lowest-order live item). The once-only claim is `FreeSampleClaims` UNIQUE(UserId, Subtest); it is spent only once its attempt is graded, so a failed grade leaves it re-usable. The Speaking sample never changes the learner's account profession. Revisions and every other item stay paid.
+- **Switch:** Writing/Speaking samples are granted only while the `free_samples_enabled` feature flag exists and is Enabled (absent = OFF). Admin emergency controls (kill list, kill switch, global budget, per-user disable) still override the sample's AI-quota bypass.
+- History: the sample's start response carries "Free sample — no credits used." (the client suppresses the stale "credit used" toast on it).
+
 ### Credit types
 
 ```text

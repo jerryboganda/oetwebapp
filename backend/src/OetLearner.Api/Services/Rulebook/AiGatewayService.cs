@@ -381,7 +381,7 @@ public sealed class AiGatewayService(
         if (quotaService is not null)
         {
             quotaDecision = await quotaService.TryReserveAsync(
-                request.UserId, featureCode, prospectiveKeySource, ct);
+                request.UserId, featureCode, prospectiveKeySource, request.FreeSampleGrant, ct);
 
             if (!quotaDecision.Allowed)
             {
@@ -957,6 +957,7 @@ public sealed class AiGatewayService(
         var shouldCommit = quotaService is not null
             && aggregatedUsage is not null
             && !string.IsNullOrWhiteSpace(request.UserId)
+            && !request.FreeSampleGrant // the free sample must not burn the learner's free-plan token counters
             && prospectiveKeySource != AiKeySource.Byok
             && prospectiveKeySource != AiKeySource.None;
 
@@ -2121,6 +2122,15 @@ public sealed record AiGatewayRequest
     /// <c>IAiCreditReservationService</c>, skip the legacy token-ledger debit.
     /// </summary>
     public string? CreditReservationId { get; init; }
+
+    /// <summary>
+    /// Free Mocks — SERVER-ONLY. Set solely by code that verified the learner's
+    /// free-sample claim (<c>FreeSampleService</c>). Lets a writing.grade /
+    /// speaking.grade call skip the plan feature list and token caps, and keeps
+    /// the sample's tokens out of the learner's shared free-plan counters. Never
+    /// bound from a request DTO.
+    /// </summary>
+    public bool FreeSampleGrant { get; init; }
 }
 
 public sealed class AiGatewayResult

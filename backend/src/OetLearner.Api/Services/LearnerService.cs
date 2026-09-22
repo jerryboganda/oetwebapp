@@ -74,8 +74,9 @@ public sealed record WritingEntitlement(
 /// <summary>
 /// Outcome of <see cref="IWritingEntitlementService.AuthorizeStartAsync"/>.
 /// <see cref="EntitlementSource"/> is one of "unlimited" | "free_tier" |
-/// "ai_package" | "none" (blocked). <see cref="Charged"/> is true only for the
-/// "ai_package" source — Unlimited and free-tier authorisations never deduct.
+/// "free_sample" | "ai_package" | "none" (blocked). <see cref="Charged"/> is true
+/// only for the "ai_package" source — Unlimited, free-tier and free-sample
+/// authorisations never deduct.
 /// </summary>
 public sealed record WritingStartAuthorization(
     bool Allowed,
@@ -7169,10 +7170,20 @@ public partial class LearnerService(
             throw ApiException.Conflict("content_not_available", "This practice content is not currently available.");
         }
 
+        // Free Mocks (owner 2026-09-22): the learner's ONE free AI-graded Speaking
+        // sample. Decided here, server-side, from the profession's designated card
+        // and the learner's once-only claim — never from the request. It must be
+        // known BEFORE the profession-isolation and credit gates below, because a
+        // learner may pick ANY profession's designated card (without changing
+        // their account profession) and may hold no credits at all.
+        var freeSample = string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase)
+            && await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
+                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, cancellationToken);
+
         // Master Catalogue §5 profession isolation: a candidate must never open
         // another profession's content through a direct URL/API call. A null
         // ContentItem.ProfessionId means the item applies to all professions.
-        if (!string.IsNullOrWhiteSpace(contentForAttempt.ProfessionId))
+        if (!freeSample && !string.IsNullOrWhiteSpace(contentForAttempt.ProfessionId))
         {
             var learnerProfession = await db.Users.AsNoTracking()
                 .Where(u => u.Id == userId)
@@ -7187,8 +7198,10 @@ public partial class LearnerService(
         // Master Catalogue §5 authorization model: starting a graded Writing or
         // Speaking activity requires an applicable balance (dedicated pool,
         // Flexible W/S, or Shared at the subtest rate) or an active unlimited
-        // entitlement. The actual debit still happens once, downstream.
-        if ((subtest is "writing" or "speaking") && aiPackageCreditService is not null)
+        // entitlement. NOTE: this is a read-only pre-check — for a single-card
+        // Speaking attempt no debit happens downstream today (verified 2026-09-22),
+        // so this is the only credit gate on that path.
+        if (!freeSample && (subtest is "writing" or "speaking") && aiPackageCreditService is not null)
         {
             var eligible = await aiPackageCreditService.CheckGradingCreditAsync(userId, subtest, 1, cancellationToken);
             if (!eligible.Debited && !eligible.Bypassed)
@@ -7266,9 +7279,16 @@ public partial class LearnerService(
                     markingPolicyErrorCode = markingPolicy.ErrorCode,
                 })
         };
+        if (freeSample
+            && !await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, attempt.Id, cancellationToken))
+        {
+            // Lost the once-only race (second tab) or the sample was spent meanwhile.
+            throw ApiException.Conflict("free_sample_unavailable", "Your free Speaking sample is no longer available.");
+        }
         db.Attempts.Add(attempt);
         await LearnerWorkflowCoordinator.AttachAttemptToDiagnosticAsync(db, attempt, cancellationToken);
-        await RecordEventAsync(userId, "task_started", new { attemptId = attempt.Id, contentId = attempt.ContentId, subtest = attempt.SubtestCode, mode = attempt.Mode, context = attempt.Context }, cancellationToken);
+        await RecordEventAsync(userId, "task_started", new { attemptId = attempt.Id, contentId = attempt.ContentId, subtest = attempt.SubtestCode, mode = attempt.Mode, context = attempt.Context, freeSample }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (markingPolicy is not null)
         {
@@ -7280,7 +7300,10 @@ public partial class LearnerService(
             var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
             await conversionResolver.MarkUsedAsync(conversionAtStart.TableId, cancellationToken);
         }
-        return await GetAttemptAsync(attempt.Id, cancellationToken);
+        var created = await GetAttemptAsync(attempt.Id, cancellationToken);
+        return freeSample
+            ? MergeWritingAttemptWithFeedback(created, ContentEntitlementService.FreeSampleFeedback)
+            : created;
     }
 
     private async Task<object> GetAttemptAsync(string attemptId, CancellationToken cancellationToken)

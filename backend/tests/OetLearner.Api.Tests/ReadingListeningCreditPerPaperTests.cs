@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Entitlements;
@@ -40,7 +41,7 @@ public sealed class ReadingListeningCreditPerPaperTests
         return (db, attempt, credit);
     }
 
-    private static async Task SeedFreePaperAsync(LearnerDbContext db, string paperId)
+    private static async Task SeedFreePaperAsync(LearnerDbContext db, string paperId, string tagsCsv = "access:free")
     {
         db.ContentPapers.Add(new ContentPaper
         {
@@ -53,7 +54,7 @@ public sealed class ReadingListeningCreditPerPaperTests
             EstimatedDurationMinutes = 60,
             Status = ContentStatus.Published,
             SourceProvenance = "Test",
-            TagsCsv = "access:free",
+            TagsCsv = tagsCsv,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
@@ -241,4 +242,67 @@ public sealed class ReadingListeningCreditPerPaperTests
         var snapshot = await credit.GetSnapshotAsync("u1", 20, CancellationToken.None);
         Assert.Equal(4, snapshot.ReadingTestsRemaining); // one credit total
     }
+
+    // ── Free Mocks: the `free-sample` paper tag skips the per-paper debit ──────
+
+    [Fact]
+    public async Task FreeSamplePaper_DoesNotConsumeReadingCredit_AndReturnsFreeSampleFeedback()
+    {
+        var (db, attempt, credit) = Build();
+        await SeedFreePaperAsync(db, "rp-free", "reading,atlas-practice-series,free-sample");
+        await GrantReadingTestsAsync(credit, "u1", 5);
+
+        var started = await attempt.StartInModeAsync("u1", "rp-free", ReadingAttemptMode.Drill, PartScope("A"), CancellationToken.None);
+
+        Assert.Equal(ContentEntitlementService.FreeSampleFeedback, started.FeedbackMessage);
+        var snapshot = await credit.GetSnapshotAsync("u1", 20, CancellationToken.None);
+        Assert.Equal(5, snapshot.ReadingTestsRemaining); // untouched
+    }
+
+    [Fact]
+    public async Task FreeSamplePaper_StartsForExhaustedPurchaser_WhileUntaggedPaperStillReturns402()
+    {
+        var (db, attempt, credit) = Build();
+        await SeedFreePaperAsync(db, "rp-free", "reading,free-sample");
+        await SeedFreePaperAsync(db, "rp-1");
+        await SeedFreePaperAsync(db, "rp-2");
+        await GrantReadingTestsAsync(credit, "u1", 1);
+
+        // The only credit is spent on rp-1 …
+        await attempt.StartInModeAsync("u1", "rp-1", ReadingAttemptMode.Drill, PartScope("A"), CancellationToken.None);
+        // … the free sample still starts at a zero balance …
+        await attempt.StartInModeAsync("u1", "rp-free", ReadingAttemptMode.Drill, PartScope("A"), CancellationToken.None);
+        // … and an ordinary paper is still refused (the tag is per-paper, not per-user).
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            attempt.StartInModeAsync("u1", "rp-2", ReadingAttemptMode.Drill, PartScope("A"), CancellationToken.None));
+        Assert.Equal(402, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task FreeSampleTag_OpensContentGateForAnonymousUser_ButPremiumTagDoesNot()
+    {
+        var (db, _, _) = Build();
+        var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var free = new ContentPaper { Id = "p-free", SubtestCode = "reading", TagsCsv = "reading,free-sample" };
+        var premium = new ContentPaper { Id = "p-premium", SubtestCode = "reading", TagsCsv = "reading,access:premium" };
+
+        var freeResult = await entitlements.AllowAccessAsync(null, free, CancellationToken.None);
+        var premiumResult = await entitlements.AllowAccessAsync(null, premium, CancellationToken.None);
+
+        Assert.True(freeResult.Allowed);
+        Assert.Equal("free", freeResult.CurrentTier);
+        Assert.False(premiumResult.Allowed);
+    }
+
+    [Theory]
+    [InlineData("free-sample", true)]
+    [InlineData("reading,atlas-practice-series,official-key,free-sample", true)]
+    [InlineData(" FREE-SAMPLE ,x", true)]
+    [InlineData("free-sample-2", false)]
+    [InlineData("access:free-sample", false)]
+    [InlineData("access:free", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsFreeSample_MatchesTheExactTagOnly(string? tagsCsv, bool expected)
+        => Assert.Equal(expected, ContentEntitlementService.IsFreeSample(tagsCsv));
 }

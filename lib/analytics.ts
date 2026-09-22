@@ -31,6 +31,7 @@ const TRACKED_EVENTS = [
   'subscription_started',
   'subscription_changed',
   'module_entry',
+  'free_sample_click',
   'content_view',
   // Expert Console events
   'review_queue_viewed',

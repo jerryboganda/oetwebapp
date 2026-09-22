@@ -2167,6 +2167,9 @@ builder.Services.AddScoped<IWritingEntitlementService,
     OetLearner.Api.Services.Writing.WritingEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiCreditReservationService,
     OetLearner.Api.Services.Ai.AiCreditReservationService>();
+// Free Mocks — per-learner free AI-graded Writing/Speaking sample (designation + once-only claim).
+builder.Services.AddScoped<OetLearner.Api.Services.FreeSamples.IFreeSampleService,
+    OetLearner.Api.Services.FreeSamples.FreeSampleService>();
 
 // ── Writing Module V2 services and crons (OET_WRITING_MODULE_PATHWAY.md §WS5) ──
 // Config root bound from appsettings.json:Writing.* — feature flags,
@@ -3009,6 +3012,8 @@ app.MapSpeakingSimulationV11Endpoints();
 app.MapSpeakingSimulationV11TutorEndpoints();
 // WS6 — Speaking result-visibility (learner read + admin upsert, §10).
 app.MapSpeakingResultVisibilityEndpoints();
+// Free Mocks — learner discovery + admin designation of the free Writing/Speaking sample.
+app.MapFreeSampleEndpoints();
 // Phase 3 — live-tutor rooms + LiveKit webhook ingestion.
 app.MapSpeakingLiveRoomEndpoints();
 app.MapLiveKitWebhookEndpoint();

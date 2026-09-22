@@ -9,6 +9,7 @@
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
+import { FREE_SAMPLE_FEEDBACK } from './free-sample';
 
 // ── Types mirror the .NET contracts 1:1 ────────────────────────────────
 
@@ -1120,9 +1121,10 @@ export const startReadingAttempt = (
   const suffix = params.toString() ? `?${params.toString()}` : '';
   return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' })
     .then((attempt) => {
-      if (!options.mockAttemptId && !options.mockSectionId) {
+      if (!options.mockAttemptId && !options.mockSectionId && attempt.feedbackMessage !== FREE_SAMPLE_FEEDBACK) {
         // Live balance feedback (Rule E): announce the debit; mocks spend
-        // their separate allowance.
+        // their separate allowance, and the free sample has no debit at all
+        // (the toast would read a stale ledger row).
         void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('reading'));
       }
       return attempt;

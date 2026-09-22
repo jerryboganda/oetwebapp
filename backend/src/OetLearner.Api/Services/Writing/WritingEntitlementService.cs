@@ -3,6 +3,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Writing;
@@ -161,6 +162,21 @@ public sealed class WritingEntitlementService(
 
     public async Task<WritingStartAuthorization> AuthorizeStartAsync(string? userId, string referenceId, string? taskId, CancellationToken ct)
     {
+        // Free Mocks (owner 2026-09-22): the learner's ONE free AI-graded Writing
+        // sample. READ-ONLY here — the once-only claim is taken when the letter is
+        // submitted for grading, so this eligibility GET (page mount, Retry) can
+        // never burn it. Runs before the paid gate because a zero-credit learner
+        // must be able to open the designated task. CheckAsync is untouched: the
+        // legacy attempt flow depends on it.
+        if (!string.IsNullOrWhiteSpace(userId)
+            && Guid.TryParse(taskId, out var freeScenarioId)
+            && await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
+                userId, FreeSamples.FreeSampleService.Writing, freeScenarioId.ToString("D"), ct))
+        {
+            await RecordStartAsync(userId, referenceId, taskId, "free_sample", charged: 0, ct);
+            return new WritingStartAuthorization(true, "free_sample", false, null, null, ContentEntitlementService.FreeSampleFeedback);
+        }
+
         var entitlement = await CheckAsync(userId, ct);
         if (!entitlement.Allowed)
         {

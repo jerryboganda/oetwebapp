@@ -16,11 +16,13 @@ import {
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
+import { FreeSampleCard } from '@/components/domain/free-sample-card';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
+import { findFreeSamplePaper } from '@/lib/free-sample';
 import { useListeningProfile } from '@/hooks/useListeningProfile';
 import {
   getListeningHome,
@@ -48,7 +50,10 @@ import { submitAudioCheck } from '@/lib/listening-pathway-api';
 
 // Per the 2026-05-27 OET sample-test alignment directive, the Listening hub
 // shows exactly four candidate-facing entries — three Practice-by-Part cards
-// (A / B / C) and one Full Listening Exam card. Below that grid we now mirror
+// (A / B / C) and one Full Listening Exam card. The only addition is the
+// out-of-grid FREE SAMPLE card above them (Free Mocks, 2026-09-22): it is not a
+// fifth grid entry and is hidden unless a paper carries the `free-sample` tag.
+// Below that grid we now mirror
 // the Reading hub's operational dashboard (Reading parity, 2026-06-26): an
 // "Available papers" paper library so learners can see and launch every
 // published full listening exam in-module, plus recent results — instead of
@@ -169,6 +174,13 @@ export default function ListeningHome() {
     () => groupListeningExamPapers(papers).flatMap((section) => section.papers),
     [papers],
   );
+  // The free-sample paper stays in the library too; this only finds it for the card.
+  const freeSample = useMemo(() => findFreeSamplePaper(papers), [papers]);
+  const freeSampleHref = freeSample
+    ? freeSample.lastAttempt && !freeSample.lastAttempt.submittedAt
+      ? `/listening/paper/${freeSample.id}?attemptId=${freeSample.lastAttempt.attemptId}`
+      : freeSample.route
+    : null;
   const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
   const recentResults = useMemo(() => home?.recentResults ?? [], [home]);
   const latestResult = recentResults[0] ?? null;
@@ -327,6 +339,18 @@ export default function ListeningHome() {
           </div>
 
           <CreditUsageInfoCard module="listening" className="mb-4" />
+
+          {freeSampleHref ? (
+            <FreeSampleCard
+              testId="listening-free-mock-card"
+              icon={Headphones}
+              title="Free Listening Mock"
+              description="Try one complete OET Listening mock for free."
+              href={freeSampleHref}
+              onClick={() => analytics.track('free_sample_click', { module: 'listening' })}
+              className="mb-4"
+            />
+          ) : null}
 
           <ul
             className="grid grid-cols-1 gap-4 sm:grid-cols-2"

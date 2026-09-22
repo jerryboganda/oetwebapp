@@ -1511,6 +1511,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W11 — encrypted raw provider payloads with retention.
         OnModelCreatingAiRawResponses(modelBuilder);
 
+        // Free Mocks — per-profession free-sample designation + once-only claim.
+        OnModelCreatingFreeSamples(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1713,6 +1716,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiRawResponses.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiRawResponses(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.FreeSamples.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingFreeSamples(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

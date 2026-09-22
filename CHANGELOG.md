@@ -5,6 +5,11 @@ All notable changes to this repo are documented here. Format inspired by
 changelogs live alongside their modules (e.g. `docs/speaking/changelog.md`).
 
 
+## [Unreleased] - Free Mocks (2026-09-22)
+
+- **Free Listening / Reading sample:** a paper tagged `free-sample` opens the content gate and skips the per-paper credit debit; a FREE SAMPLE card sits above the practice cards on both hubs (outside the four-card grid). Reading uses Atlas 02, Listening Atlas ST3; both stay in their libraries.
+- **Free Writing / Speaking sample:** one free AI-graded attempt per learner per subtest, on the designated (or auto-picked lowest-order live) item of a profession the learner chooses. New `FreeSampleDesignations` / `FreeSampleClaims` tables, `GET /v1/free-samples/{subtest}`, admin `PUT/DELETE /v1/admin/free-samples/{subtest}/{profession}`. Dark-launched behind the `free_samples_enabled` feature flag (absent = OFF). See Master Catalogue Rule F.
+- **Speaking hub:** criteria → intro questions → "Open Practice Library" text link → Free Speaking Mock → Full AI Speaking Mock → Book a Tutor (visible, gated by the entitlement snapshot).
 
 ## [R-2026-09-14-PARITY-2] - 2026-09-14
 
