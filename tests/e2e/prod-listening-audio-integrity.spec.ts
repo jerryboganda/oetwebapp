@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Production learner-flow acceptance check for the Listening audio remediation (owner-approved 2026-09-22).
@@ -46,29 +46,47 @@ test.skip(!EMAIL || !PASSWORD, 'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD
 test.skip(PAPERS.length === 0, 'Set LISTENING_TARGET_PAPERS_JSON to a non-empty array of {paperId,label}.');
 
 // NOT `mode: 'serial'` — Playwright serial mode fail-fasts the whole file on one failure, which would skip
-// every other paper/viewport combo. `workers: 1` in the config already keeps runs sequential in time (the one
-// real constraint: concurrent sign-ins would fight over the account's single active session).
+// every other paper/viewport combo. `workers: 1` in the config already keeps runs sequential in time.
 
 /**
- * Real sign-in through the actual UI form (not a session-seeding shortcut — an earlier version of this spec
- * tried to pre-seed cookies/localStorage to skip the form, but the SPA's boot check didn't recognize it and
- * bounced to /sign-in anyway). `lib/device-id.ts` persists its id under localStorage key 'oet_device_id' and
- * that is what `lib/auth-client.ts` sends as X-OET-Device-Id; pre-seeding it with an ALREADY-TRUSTED id (set up
- * once via make-test-learner.mjs) means the real sign-in never hits the OTP/new-device gate.
+ * Sign in through the real UI form exactly ONCE for the whole file (an earlier version logged in per test —
+ * 24 sign-ins in ~11 minutes tripped the account's own AuthBruteforce rate limit, 10/min) and capture Playwright
+ * `storageState` (cookies + localStorage) from that single authenticated context. Every test then opens its
+ * context FROM that snapshot instead of logging in again. `lib/device-id.ts` persists its id under localStorage
+ * key 'oet_device_id', which `lib/auth-client.ts` sends as X-OET-Device-Id; pre-seeding it with an
+ * ALREADY-TRUSTED id (set up once via make-test-learner.mjs) means the one real sign-in never hits the OTP gate.
  */
-async function seedAuth(page: Page, targetPath: string) {
+let authState: Awaited<ReturnType<BrowserContext['storageState']>> | null = null;
+
+async function signInOnce(browser: Browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
   await page.addInitScript((deviceId) => {
     try { window.localStorage.setItem('oet_device_id', deviceId); } catch { /* ignore */ }
   }, DEVICE_ID);
-  await page.goto(`${PROD_URL}${targetPath}`, { waitUntil: 'domcontentloaded' });
-  const emailBox = page.getByRole('textbox', { name: /email address/i });
-  if (await emailBox.isVisible({ timeout: 10_000 }).catch(() => false)) {
-    await emailBox.fill(EMAIL!);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
     await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
     await page.getByRole('button', { name: /^sign in$/i }).click();
-    await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
+    try {
+      await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
+      authState = await context.storageState();
+      await context.close();
+      return;
+    } catch {
+      // AuthBruteforce is 10/min; back off well past a full window before retrying.
+      console.log(`[signInOnce] sign-in did not redirect (attempt ${attempt + 1}/4) — possible rate limit, waiting 65s`);
+      await page.waitForTimeout(65_000);
+    }
   }
+  await context.close();
+  throw new Error('signInOnce: sign-in never redirected away from /sign-in after 4 attempts.');
 }
+
+test.beforeAll(async ({ browser }) => {
+  if (EMAIL && PASSWORD && PAPERS.length) await signInOnce(browser);
+});
 
 /** media asset id -> first-seen order, populated from /v1/media/{id}/content requests. */
 function trackMediaRequests(page: Page) {
@@ -84,13 +102,14 @@ for (const paper of PAPERS) {
   for (const vp of VIEWPORTS) {
     test(`${paper.label} [${vp.name}] — auto-start, distinct sections, one-way, no replay`, async ({ browser }) => {
       test.setTimeout(120_000);
-      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+      if (!authState) throw new Error('no authenticated session available (beforeAll sign-in failed) — see the earlier [signInOnce] log lines');
+      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, storageState: authState });
       const page = await context.newPage();
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
       const media = trackMediaRequests(page);
 
-      await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
+      await page.goto(`${PROD_URL}/listening/paper/${encodeURIComponent(paper.paperId)}`, { waitUntil: 'domcontentloaded' });
 
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeVisible({ timeout: 30_000 });
