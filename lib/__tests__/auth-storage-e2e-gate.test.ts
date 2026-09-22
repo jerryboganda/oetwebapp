@@ -78,10 +78,10 @@ describe('auth-storage E2E token persistence (IAM-05)', () => {
   it('production: a hand-seeded payload containing tokens is read back token-less', async () => {
     const storage = await loadAuthStorage('production');
 
-    window.localStorage.setItem(
-      LOCAL_SESSION_KEY,
-      JSON.stringify({ persistence: 'local', session: sessionPayload }),
-    );
+    // Same flat snapshot shape the Playwright bootstrap seeds
+    // (tests/e2e/fixtures/auth-bootstrap.ts); a nested `{ persistence, session }`
+    // record is never read as tokens, so it would pass vacuously.
+    window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionPayload));
 
     const loaded = storage.loadStoredSession();
     expect(loaded?.accessToken).toBe('');

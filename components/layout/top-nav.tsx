@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { buildSupportMailto } from '@/lib/auth/support';
 import { AuthContext } from '@/contexts/auth-context';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
+import { PLACEMENT_NAV_HREF, usePlacementAccess } from '@/hooks/use-placement-access';
 import type { UserRole } from '@/lib/types/auth';
 import { ChevronDown, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Image from 'next/image';
@@ -239,15 +240,20 @@ export function TopNav({
     [sectionedItems],
   );
   const learnerFeatureFlags = useFeatureFlagMap(sectionFeatureKeys, shouldFilterFeatures && Boolean(sectionedItems?.length));
+  const placementAccess = usePlacementAccess(shouldFilterFeatures && Boolean(sectionedItems?.length));
   const visibleSectionedItems = useMemo(
     () =>
       sectionedItems
         ?.map((section) => ({
           ...section,
-          items: section.items.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, shouldFilterFeatures)),
+          items: section.items.filter(
+            (item) =>
+              isFeatureFlaggedItemVisible(item, learnerFeatureFlags, shouldFilterFeatures)
+              && (item.href !== PLACEMENT_NAV_HREF || !shouldFilterFeatures || placementAccess),
+          ),
         }))
         .filter((section) => section.items.length > 0),
-    [learnerFeatureFlags, sectionedItems, shouldFilterFeatures],
+    [learnerFeatureFlags, placementAccess, sectionedItems, shouldFilterFeatures],
   );
   const sectionedActiveHref = useMemo(
     () => getActiveHref(pathname, visibleSectionedItems?.flatMap((section) => section.items) ?? []),

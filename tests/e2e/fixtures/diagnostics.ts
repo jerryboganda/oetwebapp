@@ -169,6 +169,12 @@ function shouldIgnoreClientErrorResponseText(text: string, options: DiagnosticEx
   ) {
     return true;
   }
+  // GET /v1/placement/status answers 404 on purpose ("as if absent") for an
+  // account outside the placement flag / beta, and every learner page probes it
+  // to decide whether to show the Placement Test entry.
+  if (text.startsWith('404 :: ') && text.includes('/api/backend/v1/placement/status')) {
+    return true;
+  }
 
   // During middleware auth redirects, in-flight API prefetch requests from the
   // client may receive 401 before the redirect completes. These are expected

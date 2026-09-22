@@ -84,6 +84,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
     // Placement test (private GEPA engine): OET-owned result history.
     public DbSet<PlacementResult> PlacementResults => Set<PlacementResult>();
+    // Placement test: admin-approved extra-time grants + the sessions that used them.
+    public DbSet<PlacementAccommodation> PlacementAccommodations => Set<PlacementAccommodation>();
+    public DbSet<PlacementAccommodationUse> PlacementAccommodationUses => Set<PlacementAccommodationUse>();
 
     // Multi-exam reference entities
     public DbSet<ExamType> ExamTypes => Set<ExamType>();

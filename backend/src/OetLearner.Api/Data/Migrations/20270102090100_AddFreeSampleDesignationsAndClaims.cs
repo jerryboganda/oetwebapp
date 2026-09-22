@@ -11,8 +11,10 @@ namespace OetLearner.Api.Data.Migrations
     // created with EnsureCreated does not fail with "already exists".
     // Free Mocks (owner 2026-09-22): per-profession free-sample designation and
     // the per-learner once-only claim (UNIQUE(UserId, Subtest)).
+    // Same-day second migration (+0100): 20270102090000 was independently taken
+    // by PlacementAccommodations (PR #234) before this one merged.
     [DbContext(typeof(LearnerDbContext))]
-    [Migration("20270102090000_AddFreeSampleDesignationsAndClaims")]
+    [Migration("20270102090100_AddFreeSampleDesignationsAndClaims")]
     public partial class AddFreeSampleDesignationsAndClaims : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

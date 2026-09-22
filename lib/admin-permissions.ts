@@ -135,6 +135,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/roles': [AdminPermission.ManagePermissions],
   '/admin/content/publish-requests': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/pending-review': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
+  '/admin/placement': [AdminPermission.ReviewOps],
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/escalations': [AdminPermission.SystemAdmin],
   '/admin/live-classes': [AdminPermission.ReviewOps],
@@ -251,6 +252,8 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
     AdminPermission.ContentPublish,
   ],
   '/admin/permissions': [AdminPermission.ManagePermissions],
+  /** Placement review queue: candidate audio playback, re-rate, human score. */
+  '/admin/placement': [AdminPermission.ReviewOps],
   '/admin/playbook': [AdminPermission.SystemAdmin],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],

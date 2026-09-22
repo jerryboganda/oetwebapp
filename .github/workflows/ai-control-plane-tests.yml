@@ -73,7 +73,7 @@ concurrency:
 jobs:
   ai-control-plane-schema:
     name: AI control-plane schema + shared PostgreSQL harness
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;Password=postgres
@@ -132,3 +132,9 @@ jobs:
           --configuration Debug --no-restore --nologo
           --logger "console;verbosity=normal"
           --filter "FullyQualifiedName~AiControlPlane|FullyQualifiedName~PostgreSql|FullyQualifiedName~MigrationHygieneTests|FullyQualifiedName~AiOperationLeaseTests"
+
+      # A persistent (self-hosted) runner keeps this container and its :5432
+      # binding after the job, which breaks the next job that needs Postgres.
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker rm -f oet-ai-pg || true

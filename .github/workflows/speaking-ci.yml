@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     services:
       postgres:
         image: postgres:16
@@ -63,7 +63,7 @@ jobs:
           path: '**/TestResults/*.trx'
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -80,7 +80,7 @@ jobs:
         run: pnpm run build
 
   migrations-check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     needs: backend
     steps:
       - uses: actions/checkout@v4
@@ -103,11 +103,16 @@ jobs:
             echo "OK: no pending model changes."
           else
             echo "FAIL: pending model changes detected or EF check failed - create a migration or fix the EF command." >&2
+            # has-pending-model-changes never says WHAT drifted. Scaffold a
+            # throwaway migration on this ephemeral runner and print its Up()
+            # so the log names the exact entity/property.
+            "$HOME/.dotnet/tools/dotnet-ef" migrations add CiDriftProbe --configuration Release --no-build > /dev/null 2>&1 \
+              && find . -name '*_CiDriftProbe.cs' ! -name '*.Designer.cs' -exec cat {} + || true
             exit 1
           fi
 
   secrets-scan:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:

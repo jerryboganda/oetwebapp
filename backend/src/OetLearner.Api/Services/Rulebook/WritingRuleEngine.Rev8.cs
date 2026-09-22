@@ -1960,6 +1960,20 @@ public sealed partial class WritingRuleEngine
         return keys;
     }
 
+    private static readonly string[] ReLineAgeUnits =
+    {
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    };
+    private static readonly string[] ReLineAgeTens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
+
+    private static string? ReLineAgeInWords(int n) => n switch
+    {
+        < 1 or > 99 => null,
+        < 20 => ReLineAgeUnits[n],
+        _ => n % 10 == 0 ? ReLineAgeTens[n / 10] : ReLineAgeTens[n / 10] + "-" + ReLineAgeUnits[n % 10],
+    };
+
     private static IEnumerable<LintFinding> DetectReLineIdentityUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesText is not { Length: > 0 } notes || s.ReLineIndex is null) yield break;
@@ -1999,6 +2013,16 @@ public sealed partial class WritingRuleEngine
         if (Regex.IsMatch(notes, @"\bage[ds]?\s*:?\s*" + value + @"\b", RegexOptions.IgnoreCase)) yield break;
         if (Regex.IsMatch(notes, @"\(\s*age\s*" + value + @"\b", RegexOptions.IgnoreCase)) yield break;
         if (Regex.IsMatch(notes, @"\b" + value + @"[\s-]*(?:year|yr)s?(?:[\s-]*old)?\b", RegexOptions.IgnoreCase)) yield break;
+        // Notes also record an age in apposition ("Mr Martin Wilson, 62, was admitted") and in words
+        // ("a ten-year-old boy"). Both are source-supported, and re_line_age_when_no_dob demands
+        // exactly that "aged N", so rejecting them left no wording that could pass (Wilson, Apple).
+        if (Regex.IsMatch(notes, @"\b[A-Z][a-zA-Z'’\-]+,\s*" + value + @"\s*[,.;)]")) yield break;
+        if (int.TryParse(value, out var years) && ReLineAgeInWords(years) is { } words)
+        {
+            var w = words.Replace("-", @"[\s-]");
+            if (Regex.IsMatch(notes, @"\b" + w + @"[\s-]*(?:year|yr)s?(?:[\s-]*old)?\b|\bage[ds]?\s*:?\s*" + w + @"\b",
+                    RegexOptions.IgnoreCase)) yield break;
+        }
         yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
             "The Re: line states an age (\"aged " + value + "\") that the canonical case notes do not record. Carry only source-supported patient identification.",
             Quote: reLine.Trim());
