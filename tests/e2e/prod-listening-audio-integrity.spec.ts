@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Production learner-flow acceptance check for the Listening audio remediation (owner-approved 2026-09-22).
@@ -13,9 +13,15 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
  *      locked/completed, not clickable
  *   4. correct next section — advancing loads the next section's own audio, not a stale/duplicate load
  *
- * Uses a DEDICATED test-only learner account (scripts/listening/state/make-test-learner.mjs), never the shared
- * QA account. Read-only for content: starts real attempts (unavoidable — the player only exists inside an
- * attempt) but asserts no unexpected mutating call and never submits.
+ * Uses a DEDICATED test-only learner account (scripts/listening/make-test-learner.mjs), never the shared QA
+ * account. Read-only for content: starts real attempts (unavoidable — the player only exists inside an attempt)
+ * but never submits.
+ *
+ * One real sign-in PER TEST, straight to the target paper URL (a `storageState` snapshot from a single shared
+ * login was tried and did not carry authentication into a fresh context for this app — something about session
+ * recognition here needs the live sign-in flow, not just replayed cookies/localStorage). This is safe: each
+ * login now takes ~2-3s and succeeds on the first try (see the hydration-race note below), so even the full
+ * paper x viewport matrix stays well under the account's own AuthBruteforce limit (10/min).
  *
  * Run (PowerShell):
  *   $env:PROD_LEARNER_EMAIL = "..."; $env:PROD_LEARNER_PASSWORD = "..."
@@ -26,8 +32,8 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
 const EMAIL = process.env.PROD_LEARNER_EMAIL;
 const PASSWORD = process.env.PROD_LEARNER_PASSWORD;
-// One id for the whole file: the first sign-in bootstraps it as a trusted device, every later sign-in with the
-// same id resolves as already-trusted (no OTP). A fresh id per test would hit the OTP/replacement gate.
+// Must be an ALREADY-TRUSTED device id for this account (bootstrapped once via make-test-learner.mjs); a
+// brand-new id would hit the OTP/device-verification gate instead of signing straight in.
 const DEVICE_ID = process.env.LISTENING_TEST_DEVICE_ID ?? `pw-listening-audit-${Date.now()}`;
 
 interface TargetPaper {
@@ -45,59 +51,38 @@ const VIEWPORTS = [
 test.skip(!EMAIL || !PASSWORD, 'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD.');
 test.skip(PAPERS.length === 0, 'Set LISTENING_TARGET_PAPERS_JSON to a non-empty array of {paperId,label}.');
 
-// NOT `mode: 'serial'` — Playwright serial mode fail-fasts the whole file on one failure, which would skip
-// every other paper/viewport combo. `workers: 1` in the config already keeps runs sequential in time.
+// NOT `mode: 'serial'` — Playwright serial mode fail-fasts the whole file on one failure, which would skip every
+// other paper/viewport combo. `workers: 1` in the config already keeps runs sequential in time.
 
 /**
- * Sign in through the real UI form exactly ONCE for the whole file (an earlier version logged in per test —
- * 24 sign-ins in ~11 minutes tripped the account's own AuthBruteforce rate limit, 10/min) and capture Playwright
- * `storageState` (cookies + localStorage) from that single authenticated context. Every test then opens its
- * context FROM that snapshot instead of logging in again. `lib/device-id.ts` persists its id under localStorage
- * key 'oet_device_id', which `lib/auth-client.ts` sends as X-OET-Device-Id; pre-seeding it with an
- * ALREADY-TRUSTED id (set up once via make-test-learner.mjs) means the one real sign-in never hits the OTP gate.
+ * Sign in through the real UI form, then land on `targetPath`.
+ *
+ * Root cause of every earlier failure in this file's history: `domcontentloaded` fires before React hydrates
+ * the sign-in form's onSubmit handler. A click that lands in that window falls back to the server-rendered
+ * <form method="post"> submitting NATIVELY to the current page URL (POST /sign-in on the app host, never
+ * reaching the API) — silently: no error, no redirect, no visible text change, nothing to retry into fixing.
+ * Confirmed by logging every network request during a failing run. Fix: wait for `load` plus a short settle
+ * before interacting, on EVERY navigation that leads to a click, not just the first one.
  */
-let authState: Awaited<ReturnType<BrowserContext['storageState']>> | null = null;
-
-async function signInOnce(browser: Browser) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
+async function seedAuth(page: Page, targetPath: string) {
   await page.addInitScript((deviceId) => {
     try { window.localStorage.setItem('oet_device_id', deviceId); } catch { /* ignore */ }
   }, DEVICE_ID);
-
-  // Log the actual sign-in response and any uncaught page error, so a future failure shows a real cause instead
-  // of just "did not redirect".
   page.on('response', (r) => {
-    if (r.url().includes('/v1/auth/sign-in')) {
-      r.text().then((body) => console.log(`[signInOnce] POST /v1/auth/sign-in -> ${r.status()}: ${body.slice(0, 300)}`)).catch(() => {});
+    if (r.url().includes('/v1/auth/sign-in') && !r.ok()) {
+      r.text().then((body) => console.log(`[seedAuth] POST /v1/auth/sign-in -> ${r.status()}: ${body.slice(0, 300)}`)).catch(() => {});
     }
   });
-  page.on('pageerror', (e) => console.log(`[signInOnce] pageerror: ${e.message}`));
 
-  // Root cause found by the diagnostic rounds above: `domcontentloaded` fires before React hydrates the sign-in
-  // form's onSubmit handler. A click that lands in that window falls back to the server-rendered <form
-  // method="post"> submitting natively to the CURRENT page URL — POST /sign-in on the app host, never reaching
-  // the API — which is silent (no error, no redirect, no visible text change). `load` + a short settle covers it.
-  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'load' });
+  await page.goto(`${PROD_URL}/sign-in?next=${encodeURIComponent(targetPath)}`, { waitUntil: 'load' });
   await page.waitForTimeout(1000);
   await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
   await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
   await page.getByRole('button', { name: /^sign in$/i }).click();
-  try {
-    await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
-  } catch {
-    const bodyText = await page.locator('body').innerText().catch(() => '(could not read body)');
-    console.log(`[signInOnce] still on /sign-in after 20s. Visible page text:\n${bodyText.slice(0, 1500)}`);
-    await context.close();
-    throw new Error('signInOnce: sign-in did not redirect — see the response/page-text logged above.');
-  }
-  authState = await context.storageState();
-  await context.close();
+  await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
+  await page.waitForLoadState('load');
+  await page.waitForTimeout(1000); // settle for the destination page's own hydration before the caller interacts
 }
-
-test.beforeAll(async ({ browser }) => {
-  if (EMAIL && PASSWORD && PAPERS.length) await signInOnce(browser);
-});
 
 /** media asset id -> first-seen order, populated from /v1/media/{id}/content requests. */
 function trackMediaRequests(page: Page) {
@@ -113,14 +98,13 @@ for (const paper of PAPERS) {
   for (const vp of VIEWPORTS) {
     test(`${paper.label} [${vp.name}] — auto-start, distinct sections, one-way, no replay`, async ({ browser }) => {
       test.setTimeout(120_000);
-      if (!authState) throw new Error('no authenticated session available (beforeAll sign-in failed) — see the earlier [signInOnce] log lines');
-      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, storageState: authState });
+      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
       const page = await context.newPage();
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
       const media = trackMediaRequests(page);
 
-      await page.goto(`${PROD_URL}/listening/paper/${encodeURIComponent(paper.paperId)}`, { waitUntil: 'domcontentloaded' });
+      await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeVisible({ timeout: 30_000 });
