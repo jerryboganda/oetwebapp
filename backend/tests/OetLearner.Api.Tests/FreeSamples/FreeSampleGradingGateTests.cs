@@ -165,6 +165,7 @@ public sealed class FreeSampleGradingGateTests
         await using var db = NewDb();
         await FreeSampleServiceTests.EnableAsync(db);
         var offered = await FreeSampleServiceTests.SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
+        await FreeSampleServiceTests.SeedLearnerAsync(db, "learner-zero", "medicine");
         var svc = BuildWritingEntitlement(db);
 
         var first = await svc.AuthorizeStartAsync("learner-zero", "ref-1", offered.ToString("D"), default);
@@ -185,6 +186,7 @@ public sealed class FreeSampleGradingGateTests
         await FreeSampleServiceTests.EnableAsync(db);
         var offered = await FreeSampleServiceTests.SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
         var other = await FreeSampleServiceTests.SeedScenarioAsync(db, "medicine", "Bravo", difficulty: 2);
+        await FreeSampleServiceTests.SeedLearnerAsync(db, "learner-zero", "medicine");
         var svc = BuildWritingEntitlement(db);
 
         var blocked = await svc.AuthorizeStartAsync("learner-zero", "ref-2", other.ToString("D"), default);

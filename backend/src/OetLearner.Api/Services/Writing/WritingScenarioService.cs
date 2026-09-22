@@ -80,6 +80,14 @@ public sealed class WritingScenarioService(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    // NOTE: ListAsync/GetAsync/PickRandomAsync below are the pre-V2 authoring
+    // surface — reached only internally by CreateAsync/UpdateAsync/ApproveAsync
+    // (admin content authoring; `userId` there is the AUTHOR, not a learner)
+    // and by PickRandomAsync itself. They are never exposed to a learner
+    // directly, so they deliberately do NOT apply the learner profession lock
+    // (handoff item 2) — that would break an admin's own read-after-write. The
+    // learner-reachable surface is the V2 adapters below
+    // (ListScenariosAsync/GetScenarioAsync/GetRandomScenarioAsync), which do.
     public async Task<IReadOnlyList<WritingScenarioView>> ListAsync(string userId, WritingScenarioFilter filter, CancellationToken ct)
     {
         _ = userId;
@@ -105,6 +113,15 @@ public sealed class WritingScenarioService(
             .ToListAsync(ct);
         return ToView(row, sentences);
     }
+
+    /// <summary>The caller's own registered profession, normalised (lower-case);
+    /// empty when the learner has none set (never leaks another profession's
+    /// content as a fallback).</summary>
+    private async Task<string> GetLearnerProfessionAsync(string userId, CancellationToken ct)
+        => (await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct) ?? string.Empty).Trim().ToLowerInvariant();
 
     public async Task<WritingScenarioView?> PickRandomAsync(string userId, WritingScenarioFilter filter, CancellationToken ct)
     {
@@ -425,10 +442,14 @@ public sealed class WritingScenarioService(
 
     public async Task<WritingScenarioListResponse> ListScenariosAsync(string userId, string? profession, string? letterType, int? difficulty, bool? isDiagnostic, string? search, int page, int pageSize, CancellationToken ct)
     {
+        _ = profession; // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): a client-supplied
+        // ?profession= used to be honoured as-is — always the caller's own now.
+        // Fail CLOSED: an empty ownProfession (no account profession set yet)
+        // must show nothing, never every profession's library.
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = db.WritingScenarios.AsNoTracking().Where(s => s.Status == "published");
-        if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(s => s.Profession.ToLower() == profession.ToLower());
+        var query = db.WritingScenarios.AsNoTracking().Where(s => s.Status == "published" && s.Profession.ToLower() == ownProfession);
         if (!string.IsNullOrWhiteSpace(letterType)) query = query.Where(s => s.LetterType == letterType);
         if (difficulty is { } diff) query = query.Where(s => s.Difficulty == diff);
         if (isDiagnostic == true) query = query.Where(s => s.IsDiagnostic);
@@ -447,12 +468,19 @@ public sealed class WritingScenarioService(
 
     public async Task<WritingScenarioResponse?> GetScenarioAsync(string userId, Guid id, CancellationToken ct)
     {
-        _ = userId;
         // Learner route only: a draft/archived task is invisible (404), same
         // as the library list. Admin reads use AdminGetScenarioAsync/GetAsync.
         var row = await db.WritingScenarios.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id && s.Status == "published", ct);
         if (row is null) return null;
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): direct-id reads
+        // (the task-screen deep link) had no profession check at all. Fail
+        // CLOSED: no account profession set yet also 404s, same as a mismatch.
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
+        if (!string.Equals(row.Profession, ownProfession, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
         var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
             .Where(s => s.ScenarioId == id)
             .OrderBy(s => s.Ordinal)
@@ -490,7 +518,15 @@ public sealed class WritingScenarioService(
 
     public async Task<WritingScenarioResponse?> GetRandomScenarioAsync(string userId, string? profession, string? letterType, CancellationToken ct)
     {
-        var view = await PickRandomAsync(userId, new WritingScenarioFilter(profession, letterType, null, null, null, 50), ct);
+        _ = profession; // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): a client-supplied
+        // ?profession= used to be honoured as-is — always the caller's own now.
+        // PickRandomAsync/ListAsync are the shared authoring surface and don't
+        // apply this lock themselves (see their own doc comment), so this V2
+        // learner endpoint applies it here instead. Fail CLOSED: no account
+        // profession set yet returns null, same as a mismatch.
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
+        if (string.IsNullOrWhiteSpace(ownProfession)) return null;
+        var view = await PickRandomAsync(userId, new WritingScenarioFilter(ownProfession, letterType, null, null, null, 50), ct);
         return view is null ? null : WritingV2ResponseMapper.ToResponse(view);
     }
 

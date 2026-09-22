@@ -18,7 +18,33 @@ public class WritingLearnerVisibilityTests
         await db.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<ApiException>(() =>
-            service.GetWritingTaskAsync("writing-1", CancellationToken.None));
+            service.GetWritingTaskAsync("learner-1", "writing-1", CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status404NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetWritingTaskAsync_requires_own_profession()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        db.ContentItems.Add(BuildWritingContent("writing-1", ContentStatus.Published));
+        db.Users.Add(new LearnerUser
+        {
+            Id = "learner-1",
+            DisplayName = "Learner",
+            Email = "learner-1@example.test",
+            ActiveProfessionId = "nursing",
+            AccountStatus = "active",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): the content is
+        // "medicine"; a "nursing" learner must 404, not read it.
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            service.GetWritingTaskAsync("learner-1", "writing-1", CancellationToken.None));
 
         Assert.Equal(StatusCodes.Status404NotFound, ex.StatusCode);
     }

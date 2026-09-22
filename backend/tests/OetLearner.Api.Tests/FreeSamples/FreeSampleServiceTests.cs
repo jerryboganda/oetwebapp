@@ -37,6 +37,25 @@ public sealed class FreeSampleServiceTests
         await db.SaveChangesAsync();
     }
 
+    /// <summary>22 Sep 2026 handoff (item 2): every offer is now scoped to the
+    /// caller's own registered profession, so every test below needs a real
+    /// LearnerUser row with a matching ActiveProfessionId.</summary>
+    internal static async Task SeedLearnerAsync(LearnerDbContext db, string userId, string profession)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = userId,
+            Email = $"{userId}@example.test",
+            ActiveProfessionId = profession,
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
     internal static async Task<Guid> SeedScenarioAsync(
         LearnerDbContext db, string profession, string title, int difficulty = 3,
         string status = "published", bool loadable = true)
@@ -203,13 +222,44 @@ public sealed class FreeSampleServiceTests
         await SeedScenarioAsync(db, "nursing", "Nursing task", loadable: false);                   // published but cannot render
         var dentistry = await SeedScenarioAsync(db, "dentistry", "Dental task");
         _ = hard;
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): each learner is
+        // scoped to their OWN registered profession, never every live pick at
+        // once — a medicine learner and a dentistry learner each see only theirs.
+        await SeedLearnerAsync(db, "u1", "medicine");
+        await SeedLearnerAsync(db, "u2", "dentistry");
+        var svc = new FreeSampleService(db);
 
-        var offers = await new FreeSampleService(db).ListAsync("u1", "writing", default);
+        var medicineOffers = await svc.ListAsync("u1", "writing", default);
+        var dentistryOffers = await svc.ListAsync("u2", "writing", default);
 
-        Assert.Equal(new[] { "dentistry", "medicine" }, offers.Select(o => o.ProfessionId).ToArray());
-        Assert.Equal(dentistry.ToString("D"), offers.Single(o => o.ProfessionId == "dentistry").ContentId);
-        Assert.Equal(easy.ToString("D"), offers.Single(o => o.ProfessionId == "medicine").ContentId);
-        Assert.All(offers, o => Assert.Equal(FreeSampleService.StateAvailable, o.State));
+        var medicineOffer = Assert.Single(medicineOffers);
+        Assert.Equal("medicine", medicineOffer.ProfessionId);
+        Assert.Equal(easy.ToString("D"), medicineOffer.ContentId);
+        Assert.Equal(FreeSampleService.StateAvailable, medicineOffer.State);
+
+        var dentistryOffer = Assert.Single(dentistryOffers);
+        Assert.Equal("dentistry", dentistryOffer.ProfessionId);
+        Assert.Equal(dentistry.ToString("D"), dentistryOffer.ContentId);
+        Assert.Equal(FreeSampleService.StateAvailable, dentistryOffer.State);
+    }
+
+    [Fact]
+    public async Task Writing_ALearnerNeverSeesOrCanClaimAnotherProfessionsSample_CriticalSecurityFix20260922()
+    {
+        await using var db = NewDb();
+        await EnableAsync(db);
+        var medicine = await SeedScenarioAsync(db, "medicine", "Alpha task", difficulty: 1);
+        var dentistry = await SeedScenarioAsync(db, "dentistry", "Dental task");
+        // "nursing" has no live Writing content of its own.
+        await SeedLearnerAsync(db, "u1", "nursing");
+        var svc = new FreeSampleService(db);
+
+        Assert.Empty(await svc.ListAsync("u1", "writing", default));
+        Assert.False(await svc.IsOfferedAsync("u1", "writing", medicine.ToString("D"), default));
+        Assert.False(await svc.IsOfferedAsync("u1", "writing", dentistry.ToString("D"), default));
+        Assert.False(await svc.TryClaimAsync("u1", "writing", medicine.ToString("D"), Guid.NewGuid().ToString("N"), default));
+        Assert.False(await svc.TryClaimAsync("u1", "writing", dentistry.ToString("D"), Guid.NewGuid().ToString("N"), default));
+        Assert.Empty(db.FreeSampleClaims);
     }
 
     [Fact]
@@ -221,6 +271,7 @@ public sealed class FreeSampleServiceTests
         var second = await SeedScenarioAsync(db, "medicine", "Bravo", difficulty: 2);
         var nursingId = await SeedScenarioAsync(db, "nursing", "Nurse", difficulty: 1);
         _ = nursingId;
+        await SeedLearnerAsync(db, "u1", "medicine");
         db.FreeSampleDesignations.Add(new FreeSampleDesignation
         {
             Id = "fsd-1", Subtest = "writing", Profession = "medicine", ContentId = second.ToString("D"), UpdatedAt = DateTimeOffset.UtcNow,
@@ -251,6 +302,7 @@ public sealed class FreeSampleServiceTests
         await EnableAsync(db);
         var picked = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
         var other = await SeedScenarioAsync(db, "medicine", "Bravo", difficulty: 2);
+        await SeedLearnerAsync(db, "u1", "medicine");
         var svc = new FreeSampleService(db);
 
         Assert.True(await svc.IsOfferedAsync("u1", "writing", picked.ToString("D"), default));
@@ -270,6 +322,7 @@ public sealed class FreeSampleServiceTests
         await EnableAsync(db);
         var scenario = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
         var content = scenario.ToString("D");
+        await SeedLearnerAsync(db, "u1", "medicine");
         var svc = new FreeSampleService(db);
 
         var first = await SeedSubmissionAsync(db, "u1", scenario, "grading");
@@ -307,6 +360,8 @@ public sealed class FreeSampleServiceTests
         await EnableAsync(db);
         var scenario = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
         var (_, card) = await SeedCardAsync(db, "medicine", cardNumber: 1);
+        await SeedLearnerAsync(db, "u1", "medicine");
+        await SeedLearnerAsync(db, "u2", "medicine");
         var svc = new FreeSampleService(db);
 
         Assert.True(await svc.TryClaimAsync("u1", "writing", scenario.ToString("D"), Guid.NewGuid().ToString("N"), default));
@@ -326,15 +381,44 @@ public sealed class FreeSampleServiceTests
         var (_, nurseCard) = await SeedCardAsync(db, "nursing", cardNumber: 5);
         await SeedCardAsync(db, "pharmacy", itemStatus: ContentStatus.Draft);               // shell not published: grading would fail
         await SeedCardAsync(db, "dentistry", cardStatus: ContentStatus.Draft);              // card not published
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): each learner is
+        // scoped to their OWN registered profession, never every live card at once.
+        await SeedLearnerAsync(db, "u1", "medicine");
+        await SeedLearnerAsync(db, "u2", "nursing");
         var svc = new FreeSampleService(db);
 
-        var offers = await svc.ListAsync("u1", "speaking", default);
+        var medicineOffers = await svc.ListAsync("u1", "speaking", default);
+        var nursingOffers = await svc.ListAsync("u2", "speaking", default);
 
-        Assert.Equal(new[] { "medicine", "nursing" }, offers.Select(o => o.ProfessionId).ToArray());
-        Assert.Equal(medCard, offers.Single(o => o.ProfessionId == "medicine").ContentId);
-        Assert.Equal(nurseCard, offers.Single(o => o.ProfessionId == "nursing").ContentId);
+        var medicineOffer = Assert.Single(medicineOffers);
+        Assert.Equal("medicine", medicineOffer.ProfessionId);
+        Assert.Equal(medCard, medicineOffer.ContentId);
+        var nursingOffer = Assert.Single(nursingOffers);
+        Assert.Equal("nursing", nursingOffer.ProfessionId);
+        Assert.Equal(nurseCard, nursingOffer.ContentId);
+
         Assert.True(await svc.IsOfferedAsync("u1", "speaking", medCard, default));
         Assert.True(await svc.IsOfferedAsync("u1", "speaking", medItem, default)); // the attempt API may pass either id
+    }
+
+    [Fact]
+    public async Task Speaking_ALearnerNeverSeesOrCanClaimAnotherProfessionsCard_CriticalSecurityFix20260922()
+    {
+        await using var db = NewDb();
+        await EnableAsync(db);
+        var (medItem, medCard) = await SeedCardAsync(db, "medicine", cardNumber: 1);
+        var (_, nurseCard) = await SeedCardAsync(db, "nursing", cardNumber: 5);
+        // "dentistry" has no live Speaking card of its own.
+        await SeedLearnerAsync(db, "u1", "dentistry");
+        var svc = new FreeSampleService(db);
+
+        Assert.Empty(await svc.ListAsync("u1", "speaking", default));
+        Assert.False(await svc.IsOfferedAsync("u1", "speaking", medCard, default));
+        Assert.False(await svc.IsOfferedAsync("u1", "speaking", medItem, default));
+        Assert.False(await svc.IsOfferedAsync("u1", "speaking", nurseCard, default));
+        Assert.False(await svc.TryClaimAsync("u1", "speaking", medCard, Guid.NewGuid().ToString("N"), default));
+        Assert.False(await svc.TryClaimAsync("u1", "speaking", nurseCard, Guid.NewGuid().ToString("N"), default));
+        Assert.Empty(db.FreeSampleClaims);
     }
 
     [Fact]
@@ -343,6 +427,7 @@ public sealed class FreeSampleServiceTests
         await using var db = NewDb();
         await EnableAsync(db);
         var (item, card) = await SeedCardAsync(db, "medicine", cardNumber: 1);
+        await SeedLearnerAsync(db, "u1", "medicine");
         var svc = new FreeSampleService(db);
 
         var first = await SeedAttemptAsync(db, "u1", item, AttemptState.InProgress);
@@ -371,6 +456,7 @@ public sealed class FreeSampleServiceTests
         await using var db = NewDb();
         await EnableAsync(db);
         var (item, card) = await SeedCardAsync(db, "medicine", cardNumber: 1);
+        await SeedLearnerAsync(db, "u1", "medicine");
         var svc = new FreeSampleService(db);
         var attempt = await SeedAttemptAsync(db, "u1", item, AttemptState.InProgress);
         await svc.TryClaimAsync("u1", "speaking", card, attempt, default);

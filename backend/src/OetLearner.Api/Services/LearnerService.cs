@@ -1929,7 +1929,7 @@ public partial class LearnerService(
         // Do not expose its raw-total or band fields through learner home.
         var profile = await EnsureLearnerProfileStateAsync(userId, cancellationToken);
         var examFamilyLabel = FormatExamFamilyLabel(profile.Goal.ExamFamilyCode);
-        var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
+        var tasks = await GetTasksBySubtestAsync(userId, "writing", cancellationToken);
         var attempts = await db.Attempts
             .AsNoTracking()
             .Where(x => x.UserId == userId && x.SubtestCode == "writing")
@@ -2046,12 +2046,15 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<List<object>> GetWritingTasksAsync(CancellationToken cancellationToken) => await GetTasksBySubtestAsync("writing", cancellationToken);
+    public async Task<List<object>> GetWritingTasksAsync(string userId, CancellationToken cancellationToken) => await GetTasksBySubtestAsync(userId, "writing", cancellationToken);
 
-    public async Task<object> GetWritingTaskAsync(string contentId, CancellationToken cancellationToken)
+    public async Task<object> GetWritingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
     {
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Writing task not found.");
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): this direct-route
+        // task preview had no profession check at all.
+        await RequireOwnProfessionAsync(userId, item.ProfessionId, cancellationToken);
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
         return Merge(new Dictionary<string, object?>
         {
@@ -3147,7 +3150,7 @@ public partial class LearnerService(
     public async Task<object> GetSpeakingHomeAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
-        var tasks = await GetTasksBySubtestAsync("speaking", cancellationToken);
+        var tasks = await GetTasksBySubtestAsync(userId, "speaking", cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "speaking").Select(x => x.Id).ToListAsync(cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
         var attempts = (await db.Attempts
@@ -3233,9 +3236,23 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<List<object>> GetSpeakingTasksAsync(CancellationToken cancellationToken) => await GetTasksBySubtestAsync("speaking", cancellationToken);
+    public async Task<List<object>> GetSpeakingTasksAsync(string userId, CancellationToken cancellationToken) => await GetTasksBySubtestAsync(userId, "speaking", cancellationToken);
 
-    public async Task<object> GetSpeakingTaskAsync(string contentId, CancellationToken cancellationToken)
+    /// <summary>
+    /// CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): this is the exact
+    /// code path the live role-card UI uses (fetchRoleCard -> GET
+    /// /v1/speaking/tasks/{contentId}) — previously had NO userId parameter
+    /// and therefore no profession check at all, so any authenticated learner
+    /// could read any OTHER profession's full role-play card (patient
+    /// name/age, background, tasks) by discovering or guessing a contentId or
+    /// RolePlayCard id. Mirrors the existing, correct pattern already used at
+    /// CreateAttemptAsync's profession-isolation block: a null
+    /// ContentItem.ProfessionId means "applies to all professions" and is
+    /// never blocked; otherwise it must match the caller's own
+    /// ActiveProfessionId or the request 404s exactly like "not found" (never
+    /// leaking that the content exists for someone else).
+    /// </summary>
+    public async Task<object> GetSpeakingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
     {
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published, cancellationToken);
         if (item is null)
@@ -3261,7 +3278,31 @@ public partial class LearnerService(
             throw ApiException.NotFound("content_not_found", "Speaking task not found.");
         }
 
+        await RequireOwnProfessionAsync(userId, item.ProfessionId, cancellationToken);
+
         return BuildLearnerSpeakingTaskPayload(item, await LoadRolePlayCardAsync(item.Id, cancellationToken));
+    }
+
+    /// <summary>
+    /// Shared profession-isolation check (handoff item 2): a null
+    /// <paramref name="contentProfessionId"/> means the item applies to every
+    /// profession and is never blocked. Otherwise it must equal the caller's
+    /// own <c>ActiveProfessionId</c> — mismatch or a learner with no profession
+    /// yet set both 404 as "not found", never revealing that the content
+    /// exists for a different profession.
+    /// </summary>
+    private async Task RequireOwnProfessionAsync(string userId, string? contentProfessionId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(contentProfessionId)) return;
+
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!string.Equals(contentProfessionId, learnerProfession, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        }
     }
 
     public async Task<object> CreateSpeakingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
@@ -3450,6 +3491,45 @@ public partial class LearnerService(
         }
 
         await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
+
+        return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+    }
+
+    /// <summary>
+    /// P0 (22 Sep 2026): the only server-side retry path for a Speaking
+    /// evaluation that failed for a transient reason (most commonly
+    /// <c>speaking_transcription_unavailable</c> — an AI-budget/provider
+    /// blip, not a bad recording). Before this existed,
+    /// <see cref="SubmitSpeakingAttemptAsync(string,string,string?,string?,CancellationToken)"/>'s
+    /// "already submitted" branch echoed the same stale Failed evaluation
+    /// back forever — a genuine dead end (spec: "a network failure must not
+    /// silently discard the attempt"). Deliberately a SEPARATE method from
+    /// SubmitSpeakingAttemptAsync (not a parameter on it) so an ordinary
+    /// accidental double-submit keeps its existing safe, idempotent behavior
+    /// (return the existing evaluation as-is) and only an explicit "Retry
+    /// grading" action re-queues. Requeuing creates a NEW Evaluation row
+    /// (fresh <c>LastTransitionAt</c>); every reader of "the current
+    /// evaluation for this attempt" already picks the latest by
+    /// <c>LastTransitionAt</c> (see <see cref="GetSpeakingProcessingAsync"/>),
+    /// so this needs no other wiring. The audio itself is never re-uploaded —
+    /// the same persisted recording is re-transcribed — so this cannot
+    /// double-charge (Speaking credits are taken once, at card reveal, not
+    /// here) and is safe to call as many times as the learner needs.
+    /// </summary>
+    public async Task<object> RetrySpeakingEvaluationAsync(string userId, string attemptId, CancellationToken cancellationToken)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+        var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var existing = await db.Evaluations
+            .Where(x => x.AttemptId == attemptId)
+            .OrderByDescending(x => x.LastTransitionAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is null || existing.State != AsyncState.Failed || !existing.Retryable)
+        {
+            throw ApiException.Conflict(
+                "speaking_evaluation_not_retryable",
+                "This Speaking attempt has no failed evaluation to retry.");
+        }
 
         return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
     }
@@ -3731,7 +3811,10 @@ public partial class LearnerService(
 
     public async Task<object> GetReadingHomeAsync(CancellationToken cancellationToken)
     {
-        var tasks = await GetTasksBySubtestAsync("reading", cancellationToken);
+        // Reading is all-professions (handoff item 2 covers Writing/Speaking
+        // only), so GetTasksBySubtestAsync never consults userId for this
+        // subtest — the empty string is unused.
+        var tasks = await GetTasksBySubtestAsync(string.Empty, "reading", cancellationToken);
         return new
         {
             featuredTasks = tasks,
@@ -3774,7 +3857,10 @@ public partial class LearnerService(
 
     public async Task<object> GetListeningHomeAsync(CancellationToken cancellationToken)
     {
-        var tasks = await GetTasksBySubtestAsync("listening", cancellationToken);
+        // Listening is all-professions (handoff item 2 covers Writing/Speaking
+        // only), so GetTasksBySubtestAsync never consults userId for this
+        // subtest — the empty string is unused.
+        var tasks = await GetTasksBySubtestAsync(string.Empty, "listening", cancellationToken);
         return new
         {
             featuredTasks = tasks,
@@ -7081,11 +7167,28 @@ public partial class LearnerService(
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ContentItemId == contentItemId, cancellationToken);
 
-    private async Task<List<object>> GetTasksBySubtestAsync(string subtest, CancellationToken cancellationToken)
+    private async Task<List<object>> GetTasksBySubtestAsync(string userId, string subtest, CancellationToken cancellationToken)
     {
+        // Handoff item 2 is scoped to Writing/Speaking content specifically —
+        // Reading and Listening papers stay all-professions (Free Mocks plan,
+        // unchanged here). Only filter the two subtests the handoff covers so
+        // GetReadingHomeAsync/GetListeningHomeAsync (which have no userId to
+        // give us) keep their existing, correct, unfiltered behaviour.
+        var isProfessionScoped = string.Equals(subtest, "writing", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase);
+        string? normalizedProfession = null;
+        if (isProfessionScoped)
+        {
+            var learnerProfession = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.ActiveProfessionId)
+                .FirstOrDefaultAsync(cancellationToken);
+            normalizedProfession = learnerProfession?.ToLower();
+        }
         var items = await db.ContentItems
             .AsNoTracking()
-            .Where(x => x.SubtestCode == subtest && x.Status == ContentStatus.Published)
+            .Where(x => x.SubtestCode == subtest && x.Status == ContentStatus.Published
+                && (!isProfessionScoped || x.ProfessionId == null || x.ProfessionId.ToLower() == normalizedProfession))
             .OrderBy(x => x.Title)
             .ToListAsync(cancellationToken);
         if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
@@ -7173,9 +7276,16 @@ public partial class LearnerService(
         // Free Mocks (owner 2026-09-22): the learner's ONE free AI-graded Speaking
         // sample. Decided here, server-side, from the profession's designated card
         // and the learner's once-only claim — never from the request. It must be
-        // known BEFORE the profession-isolation and credit gates below, because a
-        // learner may pick ANY profession's designated card (without changing
-        // their account profession) and may hold no credits at all.
+        // known BEFORE the credit gate below, because the free sample may hold no
+        // credits at all.
+        //
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): FreeSampleService
+        // itself now only ever offers the CALLER'S OWN registered profession's
+        // designated card (no cross-profession picker anywhere) — so IsOfferedAsync
+        // below already returns false for another profession's card, and the
+        // profession-isolation check right after this correctly still applies and
+        // 404s. There is no bypass to remove here; freeSample only ever fires for
+        // the learner's own profession.
         var freeSample = string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase)
             && await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
                 userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, cancellationToken);

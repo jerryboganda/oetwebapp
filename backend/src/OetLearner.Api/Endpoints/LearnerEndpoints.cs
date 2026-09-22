@@ -105,8 +105,8 @@ public static class LearnerEndpoints
                 reason = result.Reason,
             });
         });
-        writing.MapGet("/tasks", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTasksAsync(ct)));
-        writing.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTaskAsync(contentId, ct)));
+        writing.MapGet("/tasks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTasksAsync(http.UserId(), ct)));
+        writing.MapGet("/tasks/{contentId}", async (HttpContext http, string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTaskAsync(http.UserId(), contentId, ct)));
         writing.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWritingAttemptAsync(http.UserId(), request, ct)));
         writing.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingAttemptAsync(http.UserId(), attemptId, ct)));
         writing.MapGet("/attempts/{attemptId}/paper-assets", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingPaperAssetsAsync(http.UserId(), attemptId, ct)));
@@ -122,8 +122,8 @@ public static class LearnerEndpoints
 
         var speaking = v1.MapGroup("/speaking");
         speaking.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingHomeAsync(http.UserId(), ct)));
-        speaking.MapGet("/tasks", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTasksAsync(ct)));
-        speaking.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTaskAsync(contentId, ct)));
+        speaking.MapGet("/tasks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTasksAsync(http.UserId(), ct)));
+        speaking.MapGet("/tasks/{contentId}", async (HttpContext http, string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTaskAsync(http.UserId(), contentId, ct)));
         speaking.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateSpeakingAttemptAsync(http.UserId(), request, ct)));
         speaking.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingAttemptAsync(http.UserId(), attemptId, ct)));
         speaking.MapPost("/attempts/{attemptId}/audio/upload-session", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.CreateSpeakingUploadSessionAsync(http.UserId(), attemptId, contentId, mockSessionId, ct)));
@@ -131,6 +131,10 @@ public static class LearnerEndpoints
         speaking.MapPost("/attempts/{attemptId}/audio/complete", async (HttpContext http, string attemptId, UploadCompleteRequest request, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.CompleteSpeakingUploadAsync(http.UserId(), attemptId, request, contentId, mockSessionId, ct)));
         speaking.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatSpeakingAttemptAsync(http.UserId(), attemptId, request, ct)));
         speaking.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct, [FromQuery] string? contentId, [FromQuery] string? mockSessionId) => Results.Ok(await service.SubmitSpeakingAttemptAsync(http.UserId(), attemptId, contentId, mockSessionId, ct)));
+        // P0 (22 Sep 2026): re-run a failed evaluation (e.g. a transient
+        // AI-budget/provider blip) without re-recording. See
+        // LearnerService.RetrySpeakingEvaluationAsync's doc comment.
+        speaking.MapPost("/attempts/{attemptId}/retry-evaluation", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.RetrySpeakingEvaluationAsync(http.UserId(), attemptId, ct)));
         speaking.MapGet("/attempts/{attemptId}/processing", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingProcessingAsync(http.UserId(), attemptId, ct)));
         speaking.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
         speaking.MapGet("/evaluations/{evaluationId}/review", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingReviewAsync(http.UserId(), evaluationId, ct)));

@@ -70,11 +70,21 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             return [new FreeSampleOffer(claim.Profession, claim.ContentId, state)];
         }
 
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): previously
+        // returned EVERY profession's live pick to any unclaimed learner,
+        // and free-sample-launcher.tsx rendered them as a cross-profession
+        // picker. "No cross-profession picker at all — automatically use the
+        // learner's own registered profession." A learner whose profession
+        // has no live content yet correctly gets an empty list (the frontend
+        // shows a controlled "unavailable" message, never another
+        // profession's card).
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
+        if (string.IsNullOrWhiteSpace(ownProfession)) return [];
+
         var picks = await ResolvePicksAsync(subtest, ct);
-        return picks
-            .OrderBy(p => p.Key, StringComparer.Ordinal)
-            .Select(p => new FreeSampleOffer(p.Key, p.Value, StateAvailable))
-            .ToList();
+        return picks.TryGetValue(ownProfession, out var ownPick)
+            ? [new FreeSampleOffer(ownProfession, ownPick, StateAvailable)]
+            : [];
     }
 
     public async Task<bool> IsOfferedAsync(string userId, string subtest, string contentRef, CancellationToken ct)
@@ -91,6 +101,12 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             return claim.ContentId == content.ContentId
                 && await GetBoundStateAsync(claim, ct) != BoundState.Done;
         }
+
+        // Server-side enforcement (handoff item 2, "not just UI filtering"): a
+        // crafted request for another profession's contentRef is rejected here
+        // even if the client were compromised or the UI bug reappeared.
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
+        if (content.Profession != ownProfession) return false;
 
         var picks = await ResolvePicksAsync(subtest, ct);
         return picks.TryGetValue(content.Profession, out var pick) && pick == content.ContentId;
@@ -109,6 +125,11 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
         var claim = await GetClaimAsync(userId, subtest, ct);
         if (claim is not null) return await RebindAsync(claim, content, attemptId, ct);
+
+        // Same own-profession guard as IsOfferedAsync — belt-and-braces since
+        // this is the method that actually mints the claim.
+        var ownProfession = await GetLearnerProfessionAsync(userId, ct);
+        if (content.Profession != ownProfession) return false;
 
         var picks = await ResolvePicksAsync(subtest, ct);
         if (!picks.TryGetValue(content.Profession, out var pick) || pick != content.ContentId) return false;
@@ -151,6 +172,19 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
     // ── internals ────────────────────────────────────────────────────────────
 
+    /// <summary>The caller's own registered profession, normalised. Writing
+    /// content uses a wider 13-id vocabulary than the account's 7-id one; for
+    /// the 6 professions where they match 1:1 this resolves correctly, and for
+    /// the "other-allied-health" umbrella (which has no Writing/Speaking
+    /// content of its own today) it correctly resolves to a profession with no
+    /// live pick, producing an empty offer list rather than ever borrowing
+    /// another profession's sample.</summary>
+    private async Task<string> GetLearnerProfessionAsync(string userId, CancellationToken ct)
+        => NormalizeProfession(await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct));
+
     private enum BoundState { None, Active, Done, Dead }
 
     private sealed record ResolvedContent(string Profession, string ContentId);
@@ -185,12 +219,26 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
                 .Where(a => a.Id == claim.AttemptId)
                 .Select(a => (AttemptState?)a.State)
                 .FirstOrDefaultAsync(ct);
-            return state switch
+            if (state is null) return BoundState.Dead;
+            if (state is AttemptState.Failed or AttemptState.Abandoned) return BoundState.Dead;
+            if (state is AttemptState.InProgress) return BoundState.Active;
+
+            // P0 (22 Sep 2026): Attempt.State alone is not the truth. The
+            // evaluation pipeline sets Attempt.State = Submitted on BOTH a
+            // successful hand-off to grading AND a terminal transcription/
+            // budget failure (SpeakingEvaluationPipeline.CompleteEvaluationAsync)
+            // — only the linked Evaluation row's own State distinguishes them.
+            // Without this check, an AI-budget blip permanently burned the
+            // learner's one free Speaking sample with zero result produced.
+            var evaluationState = await db.Evaluations.AsNoTracking()
+                .Where(e => e.AttemptId == claim.AttemptId)
+                .OrderByDescending(e => e.LastTransitionAt)
+                .Select(e => (AsyncState?)e.State)
+                .FirstOrDefaultAsync(ct);
+            return evaluationState switch
             {
-                null => BoundState.Dead,
-                AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed => BoundState.Done,
-                AttemptState.Failed or AttemptState.Abandoned => BoundState.Dead,
-                _ => BoundState.Active,
+                AsyncState.Failed => BoundState.Dead,
+                _ => BoundState.Done,
             };
         }
 

@@ -33,11 +33,17 @@ public partial class LearnerService
     /// <summary>
     /// Returns the published role-play cards visible to a learner.
     /// FINAL 2026-09-06: server-side profession + primary-category filters
-    /// (Writing parity). An explicit <paramref name="professionId"/> selects
-    /// that profession from the shared Writing/Speaking master list; when
-    /// omitted, the caller's <see cref="LearnerUser.ActiveProfessionId"/> is
-    /// used. Universal-profession cards are always included. Difficulty was
-    /// removed: it is neither accepted nor affects results.
+    /// (Writing parity). Universal-profession cards are always included.
+    /// Difficulty was removed: it is neither accepted nor affects results.
+    ///
+    /// CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): <paramref
+    /// name="professionId"/> is accepted for API-shape compatibility but is
+    /// NO LONGER honoured as a scope override — it previously let any
+    /// learner list (and read the full non-interlocutor content of) any OTHER
+    /// profession's cards via <c>?professionId=medicine</c>. The list is
+    /// always scoped to the caller's own <see
+    /// cref="LearnerUser.ActiveProfessionId"/>; a learner may never widen
+    /// their own catalogue by request.
     /// </summary>
     public async Task<object> ListSpeakingRolePlayCardsForLearnerAsync(
         string userId,
@@ -45,10 +51,9 @@ public partial class LearnerService
         string? primaryCategory,
         CancellationToken ct)
     {
+        _ = professionId; // intentionally ignored — see security note above
         var user = await EnsureLearnerProfileAsync(userId, ct);
-        var activeProfession = (user.ActiveProfessionId ?? string.Empty).Trim().ToLowerInvariant();
-        var requestedProfession = (professionId ?? string.Empty).Trim().ToLowerInvariant();
-        var effectiveProfession = string.IsNullOrWhiteSpace(requestedProfession) ? activeProfession : requestedProfession;
+        var effectiveProfession = (user.ActiveProfessionId ?? string.Empty).Trim().ToLowerInvariant();
         var requestedCategory = (primaryCategory ?? string.Empty).Trim();
 
         // Load cards that match the effective profession or are flagged

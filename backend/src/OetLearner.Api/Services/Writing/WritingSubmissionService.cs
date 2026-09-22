@@ -64,8 +64,24 @@ public sealed class WritingSubmissionService(
     public async Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var scenarioExists = await db.WritingScenarios.AsNoTracking().AnyAsync(s => s.Id == request.ScenarioId, ct);
-        if (!scenarioExists)
+        var scenarioProfession = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == request.ScenarioId)
+            .Select(s => (string?)s.Profession)
+            .FirstOrDefaultAsync(ct);
+        if (scenarioProfession is null)
+        {
+            throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
+        }
+        // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): grading (and its
+        // credit/free-sample debit) had no profession check at all — a learner
+        // could submit, and be AI-graded and charged for, any OTHER
+        // profession's task by id. 404s the same as "not found" so a probe
+        // never learns the task exists for a different profession.
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
+        if (!string.Equals(scenarioProfession, learnerProfession, StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
         }

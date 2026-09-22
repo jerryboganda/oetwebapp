@@ -83,7 +83,22 @@ public class WritingScenarioListTests
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
-        return new LearnerDbContext(options);
+        var db = new LearnerDbContext(options);
+        // 22 Sep 2026 handoff (item 2): ListScenariosAsync is now locked to the
+        // caller's OWN registered profession — every test here is "medicine".
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = UserId,
+            DisplayName = UserId,
+            Email = $"{UserId}@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        db.SaveChanges();
+        return db;
     }
 
     private static WritingScenario Scenario(string title, string profession)
