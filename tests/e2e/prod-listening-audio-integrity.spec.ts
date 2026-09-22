@@ -24,7 +24,6 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
-const API_URL = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
 const EMAIL = process.env.PROD_LEARNER_EMAIL;
 const PASSWORD = process.env.PROD_LEARNER_PASSWORD;
 // One id for the whole file: the first sign-in bootstraps it as a trusted device, every later sign-in with the
@@ -46,26 +45,29 @@ const VIEWPORTS = [
 test.skip(!EMAIL || !PASSWORD, 'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD.');
 test.skip(PAPERS.length === 0, 'Set LISTENING_TARGET_PAPERS_JSON to a non-empty array of {paperId,label}.');
 
-test.describe.configure({ mode: 'serial' }); // one device id, sequential sign-ins avoid device/session churn
+// NOT `mode: 'serial'` — Playwright serial mode fail-fasts the whole file on one failure, which would skip
+// every other paper/viewport combo. `workers: 1` in the config already keeps runs sequential in time (the one
+// real constraint: concurrent sign-ins would fight over the account's single active session).
 
-async function seedAuth(page: Page) {
-  const resp = await page.request.post(`${API_URL}/v1/auth/sign-in`, {
-    data: { email: EMAIL, password: PASSWORD, rememberMe: true },
-    headers: { 'content-type': 'application/json', 'X-OET-Device-Id': DEVICE_ID },
-  });
-  if (!resp.ok()) throw new Error(`sign-in failed: ${resp.status()} ${await resp.text()}`);
-  const session = await resp.json();
-  await page.context().addCookies([
-    { name: 'oet_auth', value: '1', domain: new URL(PROD_URL).host, path: '/', httpOnly: false, secure: true, sameSite: 'Lax' },
-    { name: 'oet_device_id', value: DEVICE_ID, domain: `.${new URL(PROD_URL).host.replace(/^app\./, '')}`, path: '/', httpOnly: false, secure: true, sameSite: 'Lax' },
-  ]);
-  const snap = JSON.stringify({ accessTokenExpiresAt: session.accessTokenExpiresAt, refreshTokenExpiresAt: session.refreshTokenExpiresAt, currentUser: session.currentUser });
-  await page.context().addInitScript(([key, value, deviceKey, deviceId]) => {
-    try {
-      window.localStorage.setItem(key, value);
-      window.localStorage.setItem(deviceKey, deviceId);
-    } catch { /* ignore */ }
-  }, ['oet.auth.session.local', snap, 'oet_device_id', DEVICE_ID]);
+/**
+ * Real sign-in through the actual UI form (not a session-seeding shortcut — an earlier version of this spec
+ * tried to pre-seed cookies/localStorage to skip the form, but the SPA's boot check didn't recognize it and
+ * bounced to /sign-in anyway). `lib/device-id.ts` persists its id under localStorage key 'oet_device_id' and
+ * that is what `lib/auth-client.ts` sends as X-OET-Device-Id; pre-seeding it with an ALREADY-TRUSTED id (set up
+ * once via make-test-learner.mjs) means the real sign-in never hits the OTP/new-device gate.
+ */
+async function seedAuth(page: Page, targetPath: string) {
+  await page.addInitScript((deviceId) => {
+    try { window.localStorage.setItem('oet_device_id', deviceId); } catch { /* ignore */ }
+  }, DEVICE_ID);
+  await page.goto(`${PROD_URL}${targetPath}`, { waitUntil: 'domcontentloaded' });
+  const emailBox = page.getByRole('textbox', { name: /email address/i });
+  if (await emailBox.isVisible({ timeout: 10_000 }).catch(() => false)) {
+    await emailBox.fill(EMAIL!);
+    await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
+    await page.getByRole('button', { name: /^sign in$/i }).click();
+    await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
+  }
 }
 
 /** media asset id -> first-seen order, populated from /v1/media/{id}/content requests. */
@@ -88,8 +90,7 @@ for (const paper of PAPERS) {
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
       const media = trackMediaRequests(page);
 
-      await seedAuth(page);
-      await page.goto(`${PROD_URL}/listening/paper/${encodeURIComponent(paper.paperId)}`, { waitUntil: 'domcontentloaded' });
+      await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeVisible({ timeout: 30_000 });
