@@ -96,12 +96,16 @@ for (const paper of PAPERS) {
       const page = await context.newPage();
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+      const unexpected404s: string[] = [];
       page.on('response', (r) => {
         if (r.url().includes('/advance-section')) {
           r.text().then((body) => console.log(`[diag] POST .../advance-section -> ${r.status()}: ${body.slice(0, 500)}`)).catch(() => {});
         }
         if (r.status() === 404) {
           console.log(`[diag] 404: ${r.request().method()} ${r.url()}`);
+          // /v1/placement/status is an unrelated placement-nudge widget that 404s for this
+          // test-only account on every dashboard-shell page load — nothing to do with Listening audio.
+          if (!r.url().includes('/v1/placement/status')) unexpected404s.push(r.url());
         }
       });
 
@@ -176,8 +180,12 @@ for (const paper of PAPERS) {
       await expect(firstTab).not.toHaveAttribute('aria-current', 'step');
       await expect(page.locator('audio[controls]')).toHaveCount(0);
 
-      const badConsole = consoleErrors.filter((e) => !/favicon|ResizeObserver/i.test(e));
+      // "Failed to load resource" console errors are the generic Chromium echo of a failed network
+      // request and carry no URL — the unexpected404s check above (which does have the URL) is the
+      // precise version of this same signal, so exclude the redundant generic text here.
+      const badConsole = consoleErrors.filter((e) => !/favicon|ResizeObserver|Failed to load resource/i.test(e));
       expect(badConsole, `unexpected console errors: ${badConsole.join(' | ')}`).toEqual([]);
+      expect(unexpected404s, `unexpected 404s: ${unexpected404s.join(' | ')}`).toEqual([]);
 
       await context.close();
     });
