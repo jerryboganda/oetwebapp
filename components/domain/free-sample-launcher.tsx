@@ -22,7 +22,6 @@ export interface FreeSampleLauncherProps {
   title: string;
   description: string;
   badgeLabel?: string;
-  startLabel: string;
   usedLabel: string;
   className?: string;
 }
