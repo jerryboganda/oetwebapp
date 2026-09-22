@@ -5,6 +5,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
 using OetLearner.Api.Services.Writing.Configuration;
 using OetLearner.Api.Services.Writing.Events;
