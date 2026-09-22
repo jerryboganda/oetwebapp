@@ -151,7 +151,10 @@ public partial class LearnerService
         return new
         {
             rolePlayCards = summaries,
-            activeProfessionId = string.IsNullOrWhiteSpace(activeProfession) ? null : activeProfession,
+            // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): the list is
+            // always scoped to the account profession now (no more override),
+            // so "active" and "applied" are the same value.
+            activeProfessionId = string.IsNullOrWhiteSpace(effectiveProfession) ? null : effectiveProfession,
             // Server-derived count of the same filtered set that populates
             // the list — the client must display this, never compute its own.
             totalCount = summaries.Length,
