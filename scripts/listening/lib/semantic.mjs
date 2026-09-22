@@ -42,7 +42,12 @@ export const CUE = {
 export function findCue(segs, re, from = 0, to = Infinity) {
   return segs.find((s) => s.end > from && s.start < to && re.test(s.text)) ?? null;
 }
-const anyCue = (section) => new RegExp([CUE.extractTwo, section === 'C2' ? CUE.questionsC2 : CUE.questionsA2, CUE.intro].map((r) => r.source).join('|'), 'i');
+// "questions N to M" alone is NOT accepted as proof of an intact intro: it is the SECOND half of the two-sentence
+// cue ("You hear a X... For questions N to M, complete..."), so a boundary that clips the first half but keeps
+// the second still matches it (found on Atlas ST15 A2: cut mid-"You hear a urologist talking to a patient named
+// Mark Jenkins", leaving only "Jenkins. For questions 13 to 24..." at the head). The question range is checked
+// separately as `question_range` (informational) but never substitutes for the real cue.
+const anyCue = () => new RegExp([CUE.extractTwo, CUE.intro].map((r) => r.source).join('|'), 'i');
 
 // ── silence map helpers ──────────────────────────────────────────────────────
 /** Merge silences separated by a click-sized gap (<= maxGap s): one preparation pause is often split by a tiny blip. */
@@ -85,9 +90,15 @@ export function checkDestinationHead(section, segs, silences, sourcePrep = null)
   const prepPass = sourcePrep != null ? sourcePrep - 2.5 : section === 'C2' ? 75 : 24;
   const prepFail = sourcePrep != null ? sourcePrep * 0.75 : section === 'C2' ? 60 : 20;
   const out = [];
-  const cue = findCue(segs, anyCue(section), 0, 75);
+  const cue = findCue(segs, anyCue(), 0, 75);
   if (!cue) {
-    out.push(res('head_cue', 'fail', `no second-extract introduction in the first 75 s (leading silence ${leadingSilence(silences).toFixed(1)} s)`));
+    // The question-range mention alone ("questions 13 to 24") without the actual "you hear ..." clause is the
+    // signature of a boundary that clipped the first half of the intro (see anyCue's comment) — call that out
+    // specifically since "no cue at all" and "half the cue" need different fixes.
+    const rangeOnly = findCue(segs, section === 'C2' ? CUE.questionsC2 : CUE.questionsA2, 0, 75);
+    out.push(res('head_cue', 'fail', rangeOnly
+      ? `only the question-range mention ("...questions ${section === 'C2' ? '37 to 42' : '13 to 24'}...") is present at ${rangeOnly.start.toFixed(1)} s — the "you hear ..." introduction itself is missing, so the boundary likely clipped mid-sentence`
+      : `no second-extract introduction in the first 75 s (leading silence ${leadingSilence(silences).toFixed(1)} s)`));
     return out;
   }
   out.push(res('head_cue', cue.start <= 12 ? 'pass' : 'review', `second-extract introduction at ${cue.start.toFixed(1)} s`));

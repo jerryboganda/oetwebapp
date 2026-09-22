@@ -40,6 +40,17 @@ test('prep window is judged against the original recording; click-split pauses a
   assert.equal(level(checkDestinationHead('A2', segs, [{ start: 9, end: 24.4 }], 30.2), 'prep_window'), 'fail');
 });
 
+test('destination head: the question range ALONE ("...questions 13 to 24...") does not count as the cue', () => {
+  // Atlas ST15 A2: the boundary clipped mid-"You hear a urologist talking to a patient named Mark Jenkins",
+  // leaving only the surname + question range at the head — must fail, not pass on the range mention alone.
+  const r = checkDestinationHead('A2', [seg(0, 7, 'Jenkins. For questions 13 to 24 complete the notes with a word or short phrase.')], [{ start: 8, end: 38 }]);
+  assert.equal(level(r, 'head_cue'), 'fail');
+  assert.match(r.find((c) => c.id === 'head_cue').detail, /question-range mention/);
+  // but the range PLUS the real cue together still pass
+  const ok = checkDestinationHead('A2', [seg(0, 7, 'Extract two. Questions 13 to 24. You hear a urologist talking to a patient.')], [{ start: 8, end: 38 }]);
+  assert.equal(level(ok, 'head_cue'), 'pass');
+});
+
 test('destination head: Part C speaker-led intro ("you hear a NAME called X, ROLE, giving/discussing Y") is recognized', () => {
   const c1 = [seg(0, 5, 'You hear a clinical dietitian called Rebecca Hudson giving a presentation to a group of healthcare providers.')];
   assert.equal(level(checkDestinationHead('C2', c1, [{ start: 8, end: 98 }], 90), 'head_cue'), 'pass');
