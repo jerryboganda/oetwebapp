@@ -331,7 +331,7 @@ function bigramDice(a, b) {
 // The preparation window is the LONGEST silent gap between the Extract Two
 // cue and the clinical dialogue onset — announcers may speak several intro
 // sentences after the cue ("Questions 13 to 24, you hear…") before the pause.
-function prepWindowAfterCue(tokens, cue) {
+function prepWindowAfterCue(tokens, cue, windowDurationSec = null) {
   if (!cue) return null;
   const after = tokens.filter((t) => t.s >= cue.end - 0.05).sort((a, b) => a.s - b.s);
   if (after.length === 0) return { prepSec: null, note: 'no speech after cue inside window' };
@@ -341,7 +341,14 @@ function prepWindowAfterCue(tokens, cue) {
     const gap = after[i].s - after[i - 1].e;
     if (gap > bestGap) { bestGap = gap; dialogueStartsAt = after[i].s; }
   }
-  const out = { prepSec: Math.round(bestGap * 10) / 10, dialogueStartsAt: Math.round(dialogueStartsAt * 10) / 10 };
+  // Trailing silence counts: a 90s preparation extends past the head window,
+  // and the silence after the last transcribed word is still preparation.
+  if (windowDurationSec != null) {
+    const trailing = windowDurationSec - after[after.length - 1].e;
+    if (trailing > bestGap) { bestGap = trailing; dialogueStartsAt = null; }
+  }
+  const out = { prepSec: Math.round(bestGap * 10) / 10 };
+  if (dialogueStartsAt != null) out.dialogueStartsAt = Math.round(dialogueStartsAt * 10) / 10;
   if (bestGap <= 2) out.note = 'no significant pause after cue (dialogue follows immediately)';
   return out;
 }
@@ -567,7 +574,7 @@ async function verifyPaperLive(paper, { stateDir, useJev, useLocalStt, fixRoot, 
     const e = ev[code];
     if (e.headTokens === 0) { marks[code] = marks[code] ?? 'review'; reasons[code].push('head window has no transcribed speech (silence or STT empty)'); continue; }
     if (e.headCue) {
-      const prep = prepWindowAfterCue(windowTokens(wins[code].head), e.headCue);
+      const prep = prepWindowAfterCue(windowTokens(wins[code].head), e.headCue, HEAD_SEC);
       ev[code].prep = prep;
       if (prep?.prepSec != null && prep.prepSec < 8) {
         reasons[code].push(`preparation window too short after cue (${prep.prepSec}s)`);
