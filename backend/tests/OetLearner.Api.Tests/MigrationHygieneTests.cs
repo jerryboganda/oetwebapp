@@ -33,6 +33,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddReadingAttemptPartALockedAt), "20261209090000_AddReadingAttemptPartALockedAt")]
     [InlineData(typeof(FixZeroPlatformBudgetAndRetireMockFullGrade), "20261210090000_FixZeroPlatformBudgetAndRetireMockFullGrade")]
     [InlineData(typeof(PlacementAccommodations), "20270102090000_PlacementAccommodations")]
+    [InlineData(typeof(AddFreeSampleDesignationsAndClaims), "20270102090100_AddFreeSampleDesignationsAndClaims")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

@@ -133,10 +133,10 @@ public sealed class WritingRev8TaskLoadEligibilityTests
         var scenario = await SeedScenarioAsync(db);
 
         var first = await WritingScenarioEndpoints.CheckEligibilityAsync(
-            scenario.Id, LearnerContext(userId), scenarios, entitlement, CancellationToken.None);
+            scenario.Id, LearnerContext(userId), scenarios, entitlement, db, new FreeTierContentResolver(db), CancellationToken.None);
         // A refresh re-runs eligibility with the same reference: must dedupe.
         var retry = await WritingScenarioEndpoints.CheckEligibilityAsync(
-            scenario.Id, LearnerContext(userId), scenarios, entitlement, CancellationToken.None);
+            scenario.Id, LearnerContext(userId), scenarios, entitlement, db, new FreeTierContentResolver(db), CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(first).StatusCode);
         Assert.Equal(StatusCodes.Status200OK, Assert.IsAssignableFrom<IStatusCodeHttpResult>(retry).StatusCode);
@@ -171,7 +171,7 @@ public sealed class WritingRev8TaskLoadEligibilityTests
         var scenario = await SeedScenarioAsync(db, status: "draft");
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => WritingScenarioEndpoints.CheckEligibilityAsync(
-            scenario.Id, LearnerContext(userId), scenarios, entitlement, CancellationToken.None));
+            scenario.Id, LearnerContext(userId), scenarios, entitlement, db, new FreeTierContentResolver(db), CancellationToken.None));
 
         Assert.Equal(StatusCodes.Status409Conflict, ex.StatusCode);
         Assert.Equal("writing_task_unavailable", ex.ErrorCode);
@@ -193,7 +193,7 @@ public sealed class WritingRev8TaskLoadEligibilityTests
             sentenceCount: sentenceCount);
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => WritingScenarioEndpoints.CheckEligibilityAsync(
-            scenario.Id, LearnerContext(userId), scenarios, entitlement, CancellationToken.None));
+            scenario.Id, LearnerContext(userId), scenarios, entitlement, db, new FreeTierContentResolver(db), CancellationToken.None));
 
         Assert.Equal(StatusCodes.Status409Conflict, ex.StatusCode);
         Assert.Equal("writing_task_incomplete", ex.ErrorCode);
@@ -209,7 +209,7 @@ public sealed class WritingRev8TaskLoadEligibilityTests
         await GrantWritingCreditsAsync(credits, userId);
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => WritingScenarioEndpoints.CheckEligibilityAsync(
-            Guid.NewGuid(), LearnerContext(userId), scenarios, entitlement, CancellationToken.None));
+            Guid.NewGuid(), LearnerContext(userId), scenarios, entitlement, db, new FreeTierContentResolver(db), CancellationToken.None));
 
         Assert.Equal(StatusCodes.Status404NotFound, ex.StatusCode);
         Assert.Equal("writing_scenario_not_found", ex.ErrorCode);

@@ -262,22 +262,14 @@ export default function MockBookingsPage() {
                     >
                       <X className="h-4 w-4 mr-1" /> Cancel
                     </Button>
-                    {b.zoomJoinUrl ? (
-                      <a
-                        href={b.zoomJoinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover-primary"
+                    {b.tutorProfileId ? (
+                      <Link
+                        href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}
+                        className="inline-flex items-center rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
                       >
-                        Join room
-                      </a>
+                        Open LiveKit tutor room
+                      </Link>
                     ) : null}
-                    <Link
-                      href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}
-                      className="inline-flex items-center rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
-                    >
-                      Open speaking room
-                    </Link>
                   </div>
                 ) : null}
               </li>

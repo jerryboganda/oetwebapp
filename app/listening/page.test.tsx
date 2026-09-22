@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 const { mockGetListeningHome, mockStartListeningAttempt, mockUseAuth, mockUseListeningProfile, mockRouterReplace } = vi.hoisted(() => ({
   mockGetListeningHome: vi.fn(),
@@ -224,5 +224,90 @@ describe('Listening hub — available papers library (Reading parity)', () => {
     expect(card).not.toHaveTextContent('Full exam');
     expect(screen.getByText(/Questions 37–42 are unavailable in the supplied source/i)).toBeInTheDocument();
     expect(screen.getByText(/This paper is 36 items \(Parts A, B, and C extract 1 only\)/i)).toBeInTheDocument();
+  });
+});
+
+describe('Listening hub — FREE SAMPLE card (Free Mocks)', () => {
+  const FREE_SAMPLE_LINK = /free listening mock/i;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, loading: false });
+    mockUseListeningProfile.mockReturnValue({ profile: null, isLoading: false, error: null });
+  });
+
+  function freeSamplePaper(overrides?: Record<string, unknown>) {
+    return {
+      ...buildPaper({
+        id: 'atlas-st3',
+        title: 'Atlas Practice Series — Listening Sample Test 3',
+        slug: 'atlas-practice-series-listening-sample-test-03',
+        tagsCsv: 'listening,atlas-practice-series,free-sample',
+        route: '/listening/paper/atlas-st3',
+      }),
+      ...overrides,
+    } as ReturnType<typeof buildPaper>;
+  }
+
+  it('shows the card above the four practice cards, linking to the tagged paper', async () => {
+    mockGetListeningHome.mockResolvedValue(buildHome([freeSamplePaper()]));
+    render(<ListeningHome />);
+
+    const card = await screen.findByRole('link', { name: FREE_SAMPLE_LINK });
+    expect(card).toHaveAttribute('href', '/listening/paper/atlas-st3');
+    expect(card).toHaveTextContent(/free sample/i);
+    expect(card).toHaveTextContent('Try one complete OET Listening mock for free.');
+
+    const grid = screen.getByTestId('listening-hub-cards');
+    expect(card.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('is not a fifth grid entry — the 2026-05-27 four-card directive still holds', async () => {
+    mockGetListeningHome.mockResolvedValue(buildHome([freeSamplePaper()]));
+    render(<ListeningHome />);
+
+    await screen.findByRole('link', { name: FREE_SAMPLE_LINK });
+    const grid = screen.getByTestId('listening-hub-cards');
+    expect(within(grid).getAllByRole('link')).toHaveLength(4);
+    expect(within(grid).queryByRole('link', { name: FREE_SAMPLE_LINK })).not.toBeInTheDocument();
+  });
+
+  it('leaves the tagged paper in the Atlas library as normal', async () => {
+    mockGetListeningHome.mockResolvedValue(buildHome([freeSamplePaper()]));
+    render(<ListeningHome />);
+
+    const user = (await import('@testing-library/user-event')).default.setup();
+    await user.click(await screen.findByRole('button', { name: /atlas practice series/i }));
+    expect(await screen.findByText('Atlas Practice Series — Listening Sample Test 3')).toBeInTheDocument();
+  });
+
+  it('is hidden when no paper carries the free-sample tag', async () => {
+    mockGetListeningHome.mockResolvedValue(buildHome([buildPaper()]));
+    render(<ListeningHome />);
+
+    await screen.findByRole('button', { name: /atlas practice series/i });
+    expect(screen.queryByRole('link', { name: FREE_SAMPLE_LINK })).not.toBeInTheDocument();
+  });
+
+  it('resumes an open attempt on the free sample instead of starting fresh', async () => {
+    mockGetListeningHome.mockResolvedValue(
+      buildHome([
+        freeSamplePaper({
+          lastAttempt: {
+            attemptId: 'att-9',
+            status: 'in_progress',
+            startedAt: '2026-09-22T10:00:00Z',
+            submittedAt: null,
+            route: '/listening/paper/atlas-st3?attemptId=att-9',
+          },
+        }),
+      ]),
+    );
+    render(<ListeningHome />);
+
+    expect(await screen.findByRole('link', { name: FREE_SAMPLE_LINK })).toHaveAttribute(
+      'href',
+      '/listening/paper/atlas-st3?attemptId=att-9',
+    );
   });
 });

@@ -2,28 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
+import { ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
-import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
-import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
-import type { SpeakingTask } from '@/lib/mock-data';
+import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
-import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import {
   SPEAKING_ASSESSMENT_CRITERIA_HREF,
   SPEAKING_INTRO_QUESTIONS_HREF,
 } from '@/lib/speaking-candidate-resources';
-
-const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
 export default function SpeakingHome() {
   const router = useRouter();
@@ -32,6 +27,14 @@ export default function SpeakingHome() {
   const [home, setHome] = useState<SpeakingHome | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Live Tutor is entitlement-gated (FINAL 2026-09-06: eligible main course /
+  // package or the Speaking Crash Course = plan flag SpeakingAddonsEnabled).
+  // Fail OPEN while the snapshot is unknown so the card never flickers locked;
+  // the server still enforces the gate (403 live_tutor_not_eligible).
+  const identity = user?.userId ?? '';
+  const { data: entitlement } = useEntitlementSnapshot(identity, { enabled: Boolean(identity) });
+  const tutorEligible = entitlement ? entitlement.speakingAddonsEnabled === true : true;
 
   useEffect(() => {
     if (needsProfession) {
@@ -57,8 +60,11 @@ export default function SpeakingHome() {
   }
 
   const credits = home?.reviewCredits?.available ?? 0;
-  const featuredTasks = home?.featuredTasks ?? [];
-  const recommended = home?.recommendedRolePlay ?? null;
+  // Distinct cards on the platform (the recommended role play is also in the
+  // featured list) — shown in the hero; the cards themselves live in the library.
+  const practiceCardCount = new Set(
+    [home?.recommendedRolePlay?.id, ...(home?.featuredTasks ?? []).map((task) => task?.id)].filter(Boolean),
+  ).size;
 
   // Resume an in-progress role play — kept because it's necessary for progress
   // (backend surfaces pastAttempts[].state='in_progress'/'draft').
@@ -67,32 +73,13 @@ export default function SpeakingHome() {
     return state === 'in_progress' || state === 'in-progress' || state === 'draft';
   }) ?? null;
 
-  // Practice speaking cards available on the platform (AI Assessment). The
-  // recommended role play leads, then the rest of the featured library —
-  // deduped by id so nothing shows twice.
-  const practiceCards: SpeakingTask[] = (() => {
-    const seen = new Set<string>();
-    const list: SpeakingTask[] = [];
-    if (recommended?.id) {
-      list.push(recommended);
-      seen.add(recommended.id);
-    }
-    for (const task of featuredTasks) {
-      if (task?.id && !seen.has(task.id)) {
-        list.push(task);
-        seen.add(task.id);
-      }
-    }
-    return list;
-  })();
-
   const examCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'backend_task',
     accent: 'indigo',
     eyebrow: 'AI Assessment',
     eyebrowIcon: Mic,
-    title: 'Take a full two-card Speaking exam',
+    title: 'Full AI Speaking Mock',
     description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result.',
     metaItems: [
       { icon: Mic, label: 'Card A + Card B' },
@@ -101,6 +88,8 @@ export default function SpeakingHome() {
     primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
   };
 
+  // Book a Tutor stays visible for everyone; ineligible learners get an
+  // explanatory locked state instead of a dead-end booking page.
   const tutorCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'frontend_navigation',
@@ -108,12 +97,20 @@ export default function SpeakingHome() {
     eyebrow: 'Live Tutor',
     eyebrowIcon: Video,
     title: 'Book a tutor as your patient',
-    description: 'Prefer a human examiner? Book a 1-on-1 live speaking session with an OET tutor who plays the patient and gives you personalised feedback.',
+    description: tutorEligible
+      ? 'Prefer a human examiner? Book a 1-on-1 live speaking session with an OET tutor who plays the patient and gives you personalised feedback.'
+      : 'Live 1-on-1 tutor sessions are included with eligible course packages. See which courses include a tutor to play your patient.',
     metaItems: [
       { icon: Users, label: 'Live 1-on-1' },
       { icon: Clock, label: 'Scheduled session' },
     ],
-    primaryAction: { label: 'Book a Tutor', href: '/private-speaking' },
+    ...(tutorEligible
+      ? { primaryAction: { label: 'Book a Tutor', href: '/private-speaking' } }
+      : {
+          statusLabel: 'Eligible packages only',
+          primaryAction: { label: 'View eligible courses', href: '/catalog' },
+          secondaryAction: { label: 'My bookings', href: '/private-speaking', variant: 'secondary' as const },
+        }),
   };
 
   return (
@@ -127,7 +124,7 @@ export default function SpeakingHome() {
           description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
           highlights={[
             { icon: Star, label: 'AI credits', value: `${credits} available` },
-            { icon: Mic, label: 'Practice cards', value: practiceCards.length > 0 ? `${practiceCards.length} ready` : 'Browse library' },
+            { icon: Mic, label: 'Practice cards', value: practiceCardCount > 0 ? `${practiceCardCount} ready` : 'Browse library' },
             { icon: Video, label: 'Live tutoring', value: '1-on-1 booking' },
           ]}
         />
@@ -178,111 +175,72 @@ export default function SpeakingHome() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {/* 1 — Practice speaking cards (AI Assessment). FINAL 2026-09-06:
-            the library comes first so candidates browse/select cards before
-            committing AI credits. */}
-        <section>
+        {/* Start Speaking (Free Mocks proposal, 2026-09): the practice library is
+            a lightweight text link, then the free sample, then the SEPARATE full
+            two-card AI mock, then the gated tutor booking. The library is not
+            inlined here and never absorbs the full AI mock. */}
+        <section aria-label="Start Speaking" data-tour="speaking-hub" className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="AI Assessment"
-            title="Practise any speaking card on the platform"
-            description="Each role play is marked by AI against the OET Speaking criteria. Pick a card to start, or open the full library."
-            action={<Link href="/speaking/selection" className="text-sm font-bold text-primary hover:underline">View Full Library</Link>}
-            className="mb-4"
+            title="Start Speaking"
+            description="Browse every role-play card in the library, or take the full AI mock below."
+            action={
+              <Link
+                href="/speaking/selection"
+                data-testid="speaking-open-library"
+                className="text-sm font-bold text-primary hover:underline"
+              >
+                Open Practice Library
+              </Link>
+            }
           />
 
-          {practiceCards.length === 0 ? (
-            <LearnerEmptyState
-              compact
-              icon={Mic}
-              title="No practice cards yet"
-              description="Browse the full library to find speaking role plays once they are available on the platform."
-              primaryAction={{ label: 'Open Speaking Library', href: '/speaking/selection' }}
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              {practiceCards.map((task, index) => {
-                const taskId = task.id;
-                const durationLabel = createLearnerMetaLabel(task.duration, '20 mins');
-                const scenarioLabel = createLearnerMetaLabel(task.scenarioType || task.profession, 'Speaking scenario');
-                const focusLabel = createLearnerMetaLabel(task.criteriaFocus, 'speaking control');
-                const isRecommended = index === 0 && recommended?.id === taskId;
+          {/* Resume in-progress role play — necessary for progress; backend
+              surfaces pastAttempts[].state='in_progress'. */}
+          {resumeAttempt ? (
+            <MotionSection>
+              <LearnerSurfaceCard card={{
+                kind: 'task',
+                sourceType: 'backend_task',
+                accent: 'indigo',
+                eyebrow: 'Resume Attempt',
+                eyebrowIcon: RefreshCw,
+                title: 'Continue your in-progress role play',
+                description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
+                metaItems: [
+                  { icon: Clock, label: 'Paused' },
+                  { icon: RefreshCw, label: 'In progress' },
+                ],
+                primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
+                secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
+              }} />
+            </MotionSection>
+          ) : null}
 
-                return (
-                  <MotionItem key={taskId} delayIndex={index}>
-                    <Card className="border-border/70">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-3">
-                          <Mic className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="muted" size="sm">Speaking</Badge>
-                              {isRecommended ? (
-                                <Badge variant="success" size="sm">Recommended</Badge>
-                              ) : null}
-                            </div>
-                            <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
-                            <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
-                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                              <span>{scenarioLabel}</span>
-                              <span>{durationLabel}</span>
-                              <span className="inline-flex items-center gap-1 font-semibold">
-                                <Star className="h-3 w-3" aria-hidden />
-                                2 AI credits
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <Link
-                          href={`/speaking/roleplay/${encodeURIComponent(taskId)}`}
-                          className={primaryLinkClasses}
-                          onClick={() => {
-                            analytics.track('task_started', { taskId, subtest: 'speaking' });
-                          }}
-                        >
-                          Start Role Play
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </Card>
-                  </MotionItem>
-                );
-              })}
-            </div>
-          )}
-        </section>
+          {/* Free Mocks: ONE free AI-graded role-play card per learner, chosen by
+              profession (the account profession is never changed). Renders nothing
+              unless the server offers a sample. */}
+          <FreeSampleLauncher
+            subtest="speaking"
+            icon={Mic}
+            testId="speaking-free-mock-card"
+            title="Free Speaking Mock"
+            description="Try one AI-graded role play for free."
+            modalTitle="Choose your profession"
+            modalDescription="We will open the free role-play card for your profession. Your account profession will not change."
+            startLabel="Start free sample"
+            usedLabel="Free sample already used"
+            className=""
+          />
 
-        {/* Resume in-progress role play — necessary for progress; backend
-            surfaces pastAttempts[].state='in_progress'. */}
-        {resumeAttempt ? (
-          <MotionSection>
-            <LearnerSurfaceCard card={{
-              kind: 'task',
-              sourceType: 'backend_task',
-              accent: 'indigo',
-              eyebrow: 'Resume Attempt',
-              eyebrowIcon: RefreshCw,
-              title: 'Continue your in-progress role play',
-              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
-              metaItems: [
-                { icon: Clock, label: 'Paused' },
-                { icon: RefreshCw, label: 'In progress' },
-              ],
-              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
-              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
-            }} />
-          </MotionSection>
-        ) : null}
-
-        {/* 2 + 3 — AI Speaking exam + live tutor. Kept below the library:
-            the exam is the higher-commitment assessment mode and tutor
-            booking stays discoverable but entitlement-controlled. */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <MotionSection>
-            <LearnerSurfaceCard card={examCard} />
-          </MotionSection>
-          <MotionSection delayIndex={1}>
-            <LearnerSurfaceCard card={tutorCard} />
-          </MotionSection>
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <MotionSection>
+              <LearnerSurfaceCard card={examCard} />
+            </MotionSection>
+            <MotionSection delayIndex={1}>
+              <LearnerSurfaceCard card={tutorCard} />
+            </MotionSection>
+          </section>
         </section>
       </div>
     </LearnerDashboardShell>

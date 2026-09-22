@@ -108,12 +108,6 @@ export async function cancelPrivateSpeakingBooking(bookingId: string, reason?: s
   });
 }
 
-export async function fetchPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
-  return apiRequest<LiveClassJoinToken>(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/join-token`, {
-    method: 'POST',
-  });
-}
-
 export async function downloadPrivateSpeakingCalendarInvite(bookingId: string): Promise<Blob> {
   const path = `/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/calendar.ics`;
   const response = await fetchWithTimeout(resolveApiUrl(path), {
@@ -170,12 +164,6 @@ export async function cancelExpertPrivateSpeakingSession(bookingId: string, reas
 
 export async function markExpertPrivateSpeakingNoShow(bookingId: string): Promise<{ noShow: boolean }> {
   return apiRequest<{ noShow: boolean }>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/mark-no-show`, {
-    method: 'POST',
-  });
-}
-
-export async function fetchExpertPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
-  return apiRequest<LiveClassJoinToken>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/join-token`, {
     method: 'POST',
   });
 }
@@ -280,10 +268,6 @@ export async function cancelAdminPrivateSpeakingBooking(bookingId: string, reaso
 
 export async function completeAdminPrivateSpeakingBooking(bookingId: string) {
   return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/complete`, { method: 'POST' });
-}
-
-export async function retryAdminPrivateSpeakingZoom(bookingId: string) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/retry-zoom`, { method: 'POST' });
 }
 
 export async function adminOverridePrivateSpeakingRefund(

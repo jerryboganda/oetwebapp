@@ -139,6 +139,12 @@ public static class SpeakingLiveRoomEndpoints
                 new { errorCode = "invalid_state", message = ex.Message },
                 statusCode: StatusCodes.Status409Conflict);
         }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> IssueTokenAsync(
@@ -195,6 +201,12 @@ public static class SpeakingLiveRoomEndpoints
         {
             return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
         }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> StartRecordingAsync(
@@ -216,10 +228,10 @@ public static class SpeakingLiveRoomEndpoints
             {
                 return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
             }
-            if (!IsAssignedTutor(http.User, access.Session))
+            if (!IsRoomParticipantOrAdmin(http.User, access.Session))
             {
                 return Results.Json(
-                    new { errorCode = "forbidden", message = "Only the assigned tutor may start room recording." },
+                    new { errorCode = "forbidden", message = "Only a room participant may start room recording." },
                     statusCode: StatusCodes.Status403Forbidden);
             }
             var result = await service.StartRecordingAsync(id, ct);
@@ -232,6 +244,12 @@ public static class SpeakingLiveRoomEndpoints
         catch (SpeakingLiveRoomInvalidStateException ex)
         {
             return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
+        }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -267,6 +285,12 @@ public static class SpeakingLiveRoomEndpoints
         {
             return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
         }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> EndRoomAsync(
@@ -296,6 +320,12 @@ public static class SpeakingLiveRoomEndpoints
             return Results.Json(
                 new { errorCode = "forbidden", message = ex.Message },
                 statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -416,6 +446,12 @@ public static class SpeakingLiveRoomEndpoints
         {
             return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
         }
+        catch (LiveKitProviderUnavailableException ex)
+        {
+            return Results.Json(
+                new { errorCode = "live_provider_unavailable", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -517,21 +553,26 @@ public static class SpeakingLiveRoomEndpoints
                 ResponseJson = "{}",
                 CreatedAt = DateTimeOffset.UtcNow,
             });
-            try
-            {
-                await db.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateException)
-            {
-                return Results.Accepted(value: new { status = "duplicate" });
-            }
         }
 
         // SpeakingLiveRoomService.HandleWebhookAsync centralises the
         // dispatch by event type — recording_finished / egress_ended /
         // room_finished are all handled there. We keep this endpoint
         // thin to mirror the existing /v1/webhooks/livekit handler.
-        await service.HandleWebhookAsync(eventType, payload, ct);
+        try
+        {
+            await service.HandleWebhookAsync(eventType, payload, ct);
+            // Unknown rooms do not save inside the service. Persist the
+            // idempotency marker only after successful handling so a failed
+            // side effect remains retryable.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(webhookEventId))
+        {
+            // A concurrent delivery won the unique (scope, key) race. The
+            // winner owns the side effects; this delivery is acknowledged.
+            return Results.Accepted(value: new { status = "duplicate" });
+        }
 
         return Results.Ok(new { status = "ok" });
     }

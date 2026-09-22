@@ -74,8 +74,9 @@ public sealed record WritingEntitlement(
 /// <summary>
 /// Outcome of <see cref="IWritingEntitlementService.AuthorizeStartAsync"/>.
 /// <see cref="EntitlementSource"/> is one of "unlimited" | "free_tier" |
-/// "ai_package" | "none" (blocked). <see cref="Charged"/> is true only for the
-/// "ai_package" source — Unlimited and free-tier authorisations never deduct.
+/// "free_sample" | "ai_package" | "none" (blocked). <see cref="Charged"/> is true
+/// only for the "ai_package" source — Unlimited, free-tier and free-sample
+/// authorisations never deduct.
 /// </summary>
 public sealed record WritingStartAuthorization(
     bool Allowed,
@@ -140,7 +141,8 @@ public partial class LearnerService(
     IAssessmentMarkingPolicyService? markingPolicyService = null,
     IPaymentGatewayCatalog? paymentGatewayCatalog = null,
     global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null,
-    OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null)
+    OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null,
+    IFreeTierContentResolver? freeTierContentResolver = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
 
@@ -1402,7 +1404,7 @@ public partial class LearnerService(
             "reading" => $"/reading/paper/{Uri.EscapeDataString(contentId)}",
             "listening" => $"/listening/player/{Uri.EscapeDataString(contentId)}",
             "writing" => "/writing/practice/library",
-            "speaking" => $"/speaking/task/{Uri.EscapeDataString(contentId)}",
+            "speaking" => $"/speaking/roleplay/{Uri.EscapeDataString(contentId)}",
             _ => $"/{lower}"
         };
     }
@@ -3263,13 +3265,74 @@ public partial class LearnerService(
         return BuildLearnerSpeakingTaskPayload(item, await LoadRolePlayCardAsync(item.Id, cancellationToken));
     }
 
-    public async Task<object> CreateSpeakingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
-        => await CreateAttemptAsync(userId, request, "speaking", cancellationToken);
+    public async Task<object> GetLegacyFreeSpeakingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
+    {
+        var cardId = await db.RolePlayCards
+            .AsNoTracking()
+            .Where(card => card.Id == contentId || card.ContentItemId == contentId)
+            .Select(card => card.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            throw ApiException.NotFound("content_not_found", "Speaking task not found.");
+        }
+
+        await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+        return await GetSpeakingTaskAsync(contentId, cancellationToken);
+    }
+
+    public async Task<object> CreateSpeakingAttemptAsync(
+        string userId,
+        CreateAttemptRequest request,
+        CancellationToken cancellationToken)
+    {
+        var cardId = await db.RolePlayCards.AsNoTracking()
+            .Where(card => card.Id == request.ContentId || card.ContentItemId == request.ContentId)
+            .Select(card => card.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            throw ApiException.NotFound("speaking_task_not_found", "Speaking task not found.");
+        }
+
+        await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+        return await CreateAttemptAsync(userId, request, "speaking", cancellationToken);
+    }
 
     public async Task<object> GetSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+
+    private async Task EnsureLegacyFreeSpeakingAccessAsync(string userId, string cardId, CancellationToken cancellationToken)
+    {
+        if (await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
+            userId,
+            FreeSamples.FreeSampleService.Speaking,
+            cardId,
+            cancellationToken))
+        {
+            return;
+        }
+
+        var learnerBilling = await db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new { user.CurrentPlanId, user.ActiveProfessionId })
+            .FirstOrDefaultAsync(cancellationToken);
+        var isDesignatedFreeCard = learnerBilling is not null
+            && string.Equals(learnerBilling.CurrentPlanId, "free", StringComparison.OrdinalIgnoreCase)
+            && freeTierContentResolver is not null
+            && await freeTierContentResolver.IsFeaturedSpeakingCardAsync(
+                learnerBilling.ActiveProfessionId,
+                cardId,
+                cancellationToken);
+        if (!isDesignatedFreeCard)
+        {
+            throw ApiException.Conflict(
+                "live_voice_required",
+                "Published Speaking cards use native realtime live voice. The legacy recorder is reserved for the designated free Speaking card.");
+        }
     }
 
     public async Task<object> CreateSpeakingUploadSessionAsync(
@@ -7169,10 +7232,40 @@ public partial class LearnerService(
             throw ApiException.Conflict("content_not_available", "This practice content is not currently available.");
         }
 
+        // Free Mocks (owner 2026-09-22): the learner's ONE free AI-graded Speaking
+        // sample. Decided here, server-side, from the profession's designated card
+        // and the learner's once-only claim — never from the request. It must be
+        // known BEFORE the profession-isolation and credit gates below, because a
+        // learner may pick ANY profession's designated card (without changing
+        // their account profession) and may hold no credits at all.
+        var freeSample = string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase)
+            && await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
+                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, cancellationToken);
+        if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var cardId = await db.RolePlayCards
+                .AsNoTracking()
+                .Where(card => card.Id == request.ContentId || card.ContentItemId == resolvedContentId)
+                .Select(card => card.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(cardId))
+            {
+                throw ApiException.Conflict(
+                    "live_voice_required",
+                    "Published Speaking cards use native realtime live voice. The legacy recorder is reserved for the designated free Speaking card.");
+            }
+
+            await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+            if (!freeSample)
+            {
+                await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+            }
+        }
+
         // Master Catalogue §5 profession isolation: a candidate must never open
         // another profession's content through a direct URL/API call. A null
         // ContentItem.ProfessionId means the item applies to all professions.
-        if (!string.IsNullOrWhiteSpace(contentForAttempt.ProfessionId))
+        if (!freeSample && !string.IsNullOrWhiteSpace(contentForAttempt.ProfessionId))
         {
             var learnerProfession = await db.Users.AsNoTracking()
                 .Where(u => u.Id == userId)
@@ -7187,8 +7280,10 @@ public partial class LearnerService(
         // Master Catalogue §5 authorization model: starting a graded Writing or
         // Speaking activity requires an applicable balance (dedicated pool,
         // Flexible W/S, or Shared at the subtest rate) or an active unlimited
-        // entitlement. The actual debit still happens once, downstream.
-        if ((subtest is "writing" or "speaking") && aiPackageCreditService is not null)
+        // entitlement. NOTE: this is a read-only pre-check — for a single-card
+        // Speaking attempt no debit happens downstream today (verified 2026-09-22),
+        // so this is the only credit gate on that path.
+        if (!freeSample && (subtest is "writing" or "speaking") && aiPackageCreditService is not null)
         {
             var eligible = await aiPackageCreditService.CheckGradingCreditAsync(userId, subtest, 1, cancellationToken);
             if (!eligible.Debited && !eligible.Bypassed)
@@ -7266,9 +7361,16 @@ public partial class LearnerService(
                     markingPolicyErrorCode = markingPolicy.ErrorCode,
                 })
         };
+        if (freeSample
+            && !await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, attempt.Id, cancellationToken))
+        {
+            // Lost the once-only race (second tab) or the sample was spent meanwhile.
+            throw ApiException.Conflict("free_sample_unavailable", "Your free Speaking sample is no longer available.");
+        }
         db.Attempts.Add(attempt);
         await LearnerWorkflowCoordinator.AttachAttemptToDiagnosticAsync(db, attempt, cancellationToken);
-        await RecordEventAsync(userId, "task_started", new { attemptId = attempt.Id, contentId = attempt.ContentId, subtest = attempt.SubtestCode, mode = attempt.Mode, context = attempt.Context }, cancellationToken);
+        await RecordEventAsync(userId, "task_started", new { attemptId = attempt.Id, contentId = attempt.ContentId, subtest = attempt.SubtestCode, mode = attempt.Mode, context = attempt.Context, freeSample }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (markingPolicy is not null)
         {
@@ -7280,7 +7382,10 @@ public partial class LearnerService(
             var conversionResolver = scoreConversionService ?? new AssessmentScoreConversionService(db);
             await conversionResolver.MarkUsedAsync(conversionAtStart.TableId, cancellationToken);
         }
-        return await GetAttemptAsync(attempt.Id, cancellationToken);
+        var created = await GetAttemptAsync(attempt.Id, cancellationToken);
+        return freeSample
+            ? MergeWritingAttemptWithFeedback(created, ContentEntitlementService.FreeSampleFeedback)
+            : created;
     }
 
     private async Task<object> GetAttemptAsync(string attemptId, CancellationToken cancellationToken)
@@ -8525,7 +8630,7 @@ public partial class LearnerService(
         return item.SubtestCode.ToLowerInvariant() switch
         {
             "writing" => "/writing/practice/library",
-            "speaking" => $"/speaking/task/{Uri.EscapeDataString(item.ContentId)}",
+            "speaking" => $"/speaking/roleplay/{Uri.EscapeDataString(item.ContentId)}",
             "reading" => "/reading",
             "listening" => $"/listening/player/{Uri.EscapeDataString(item.ContentId)}",
             _ => $"/{item.SubtestCode.ToLowerInvariant()}"

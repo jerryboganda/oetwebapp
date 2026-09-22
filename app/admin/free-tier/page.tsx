@@ -41,6 +41,23 @@ interface FeatureFlag {
   updatedAt: string;
 }
 
+interface FreeTierProfession {
+  professionId: string;
+  professionLabel: string;
+  writingItems: Array<{ id: string; title: string; letterType: string; difficulty: number }>;
+  selectedWritingScenarioId: string | null;
+  resolvedWritingScenarioId: string | null;
+  speakingItems: Array<{ id: string; title: string; category: string | null }>;
+  selectedSpeakingCardId: string | null;
+  resolvedSpeakingCardId: string | null;
+}
+
+interface FreeTierContentResponse {
+  configId: string;
+  updatedAt: string;
+  professions: FreeTierProfession[];
+}
+
 /* ── api helper ───────────────────────────────── */
 const apiRequest = apiClient.request;
 
@@ -72,6 +89,9 @@ export default function FreeTierStrategyPage() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [freeContent, setFreeContent] = useState<FreeTierContentResponse | null>(null);
+  const [freeContentLoading, setFreeContentLoading] = useState(true);
+  const [freeContentSaving, setFreeContentSaving] = useState(false);
 
   /* tier limits (local editable state) */
   const [tierLimits, setTierLimits] = useState<Record<string, { freeLimit: number; premiumLimit: number }>>({});
@@ -97,6 +117,13 @@ export default function FreeTierStrategyPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    apiRequest<FreeTierContentResponse>('/v1/admin/free-tier/content')
+      .then(setFreeContent)
+      .catch(() => setFreeContent(null))
+      .finally(() => setFreeContentLoading(false));
+  }, []);
+
   /* toggle flag on/off */
   const toggleFlag = async (flag: FeatureFlag) => {
     setToggling(flag.id);
@@ -118,6 +145,44 @@ export default function FreeTierStrategyPage() {
       });
       setFlags(prev => prev.map(f => f.id === flagId ? { ...f, rolloutPercentage: pct } : f));
     } catch { /* */ }
+  };
+
+  const updateFeaturedSelection = (
+    professionId: string,
+    kind: 'writing' | 'speaking',
+    value: string,
+  ) => {
+    setFreeContent(previous => previous ? {
+      ...previous,
+      professions: previous.professions.map(profession => profession.professionId === professionId
+        ? kind === 'writing'
+          ? { ...profession, selectedWritingScenarioId: value || null }
+          : { ...profession, selectedSpeakingCardId: value || null }
+        : profession),
+    } : previous);
+  };
+
+  const saveFeaturedContent = async () => {
+    if (!freeContent) return;
+    setFreeContentSaving(true);
+    try {
+      const saved = await apiRequest<FreeTierContentResponse>('/v1/admin/free-tier/content', {
+        method: 'PUT',
+        body: JSON.stringify({
+          writingScenarioByProfession: Object.fromEntries(
+            freeContent.professions.map(profession => [profession.professionId, profession.selectedWritingScenarioId]),
+          ),
+          speakingCardByProfession: Object.fromEntries(
+            freeContent.professions.map(profession => [profession.professionId, profession.selectedSpeakingCardId]),
+          ),
+        }),
+      });
+      setFreeContent(saved);
+    } catch {
+      // The shared admin API surface owns controlled error presentation.
+    } finally {
+      setFreeContentSaving(false);
+    }
   };
 
   /* filter + search */
@@ -192,8 +257,8 @@ export default function FreeTierStrategyPage() {
           <Card surface="tinted-warning">
             <CardContent className="p-4 pt-4 text-sm text-admin-fg-default">
               Tier-limit editing is read-only until a backend persistence endpoint
-              is available. Feature flag toggles and rollout percentages still
-              save through the existing admin flag API.
+              is available. Feature flag toggles, rollout percentages, and the
+              featured free-content selectors below use persisted admin APIs.
             </CardContent>
           </Card>
 
@@ -243,15 +308,80 @@ export default function FreeTierStrategyPage() {
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
             <p className="text-xs text-admin-fg-muted">
               Changes are applied in real-time for toggles and rollout. Tier
-              limits are read-only until backend support ships.
+              limits remain read-only; featured free content saves above.
             </p>
-            <Button variant="primary" disabled>
-              Backend endpoint required
+            <Button variant="secondary" onClick={saveFeaturedContent} disabled={!freeContent || freeContentSaving}>
+              {freeContentSaving ? 'Saving…' : 'Save featured content'}
             </Button>
           </div>
         </div>
       }
     >
+      <Card className="m-4 mb-0">
+        <CardContent className="space-y-4 p-4 pt-4">
+          <div>
+            <h2 className="text-sm font-semibold text-admin-fg-strong">Featured free activities</h2>
+            <p className="mt-1 text-xs text-admin-fg-muted">
+              Choose one published Writing case note and one published Speaking card per profession.
+              Auto fallback uses the first eligible item when left blank.
+            </p>
+          </div>
+          {freeContentLoading ? (
+            <Skeleton className="h-32" variant="bare" />
+          ) : !freeContent || freeContent.professions.length === 0 ? (
+            <p className="text-sm text-admin-fg-muted">No active professions or eligible published activities are available.</p>
+          ) : (
+            <div className="space-y-3">
+              {freeContent.professions.map(profession => (
+                <div key={profession.professionId} className="grid gap-3 rounded-admin-sm border border-admin-border p-3 lg:grid-cols-2">
+                  <div className="lg:col-span-2">
+                    <p className="text-sm font-medium text-admin-fg-strong">{profession.professionLabel}</p>
+                    <p className="text-[11px] uppercase tracking-wider text-admin-fg-muted">{profession.professionId}</p>
+                  </div>
+                  <label className="text-xs text-admin-fg-muted">
+                    Free Writing case note
+                    <select
+                      value={profession.selectedWritingScenarioId ?? ''}
+                      onChange={event => updateFeaturedSelection(profession.professionId, 'writing', event.target.value)}
+                      className="mt-1 w-full rounded-admin-sm border border-admin-border bg-admin-bg-subtle px-2 py-2 text-sm text-admin-fg-default"
+                    >
+                      <option value="">Auto: first eligible published item</option>
+                      {profession.writingItems.map(item => (
+                        <option key={item.id} value={item.id}>{item.title}</option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-[11px] text-admin-fg-muted">
+                      Resolved: {profession.writingItems.find(item => item.id === profession.resolvedWritingScenarioId)?.title ?? 'None'}
+                    </span>
+                  </label>
+                  <label className="text-xs text-admin-fg-muted">
+                    Free Speaking card
+                    <select
+                      value={profession.selectedSpeakingCardId ?? ''}
+                      onChange={event => updateFeaturedSelection(profession.professionId, 'speaking', event.target.value)}
+                      className="mt-1 w-full rounded-admin-sm border border-admin-border bg-admin-bg-subtle px-2 py-2 text-sm text-admin-fg-default"
+                    >
+                      <option value="">Auto: first eligible published item</option>
+                      {profession.speakingItems.map(item => (
+                        <option key={item.id} value={item.id}>{item.title}</option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-[11px] text-admin-fg-muted">
+                      Resolved: {profession.speakingItems.find(item => item.id === profession.resolvedSpeakingCardId)?.title ?? 'None'}
+                    </span>
+                  </label>
+                </div>
+              ))}
+              <div className="flex justify-end">
+                <Button variant="primary" onClick={saveFeaturedContent} disabled={freeContentSaving}>
+                  {freeContentSaving ? 'Saving…' : 'Save featured content'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* flags list */}
       {filtered.length === 0 ? (
         <EmptyState

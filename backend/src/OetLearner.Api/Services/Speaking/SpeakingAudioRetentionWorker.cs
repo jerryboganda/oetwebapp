@@ -82,7 +82,81 @@ public sealed class SpeakingAudioRetentionWorker(
             logger.LogError(ex, "SpeakingRecording retention sweep failed");
         }
 
+        try
+        {
+            await SweepLiveVoiceTurnsOnceAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Live voice transcript retention sweep failed");
+        }
+
         return clearedAttempts;
+    }
+
+    public async Task<int> SweepLiveVoiceTurnsOnceAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<LiveVoiceOptions>>().Value;
+        if (options.RetentionDays <= 0)
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var cutoff = now - TimeSpan.FromDays(options.RetentionDays);
+        var due = await db.SpeakingPatientTurns
+            .Where(turn => turn.CreatedAt < cutoff
+                && (turn.Role == "realtime_turn"
+                    || turn.Role == "live_voice_session"
+                    || turn.Role == "jev_advisory"))
+            .OrderBy(turn => turn.CreatedAt)
+            .Take(BatchSize)
+            .ToListAsync(ct);
+        if (due.Count == 0)
+        {
+            return 0;
+        }
+
+        var sessionIds = due
+            .Select(turn => turn.SessionId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        foreach (var turn in due)
+        {
+            turn.Text = string.Empty;
+            turn.ResponseJson = "{\"retention\":\"expired\"}";
+        }
+
+        var sessions = await db.SpeakingSessions
+            .Where(session => sessionIds.Contains(session.Id))
+            .ToListAsync(ct);
+        foreach (var session in sessions)
+        {
+            session.ConversationSummaryText = null;
+            session.UpdatedAt = now;
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = "system",
+            ActorName = "SpeakingAudioRetentionWorker",
+            Action = "LiveVoiceTranscriptExpiredByRetention",
+            ResourceType = "SpeakingPatientTurn",
+            ResourceId = sessionIds[0],
+            Details = JsonSerializer.Serialize(new
+            {
+                count = due.Count,
+                sessionCount = sessionIds.Length,
+                retentionDays = options.RetentionDays,
+                cutoff,
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+        return due.Count;
     }
 
     /// <summary>Legacy sweep over <see cref="Attempt.AudioObjectKey"/>.

@@ -31,13 +31,14 @@ namespace OetLearner.Api.Services.Speaking;
 /// enough (~60 LoC) that depending on an unmaintained community NuGet
 /// would add more risk than it removes. REST endpoints we hit
 /// (<c>/twirp/livekit.RoomService/CreateRoom</c> and
-/// <c>/twirp/livekit.Egress/StartRoomCompositeEgress</c>) are stable
-/// Twirp endpoints documented at https://docs.livekit.io/realtime/server/.
+/// <c>/twirp/livekit.Egress/StartEgress</c>) are Twirp endpoints documented
+/// at https://docs.livekit.io/reference/other/egress/api/.
 /// </summary>
 public sealed class LiveKitCloudGateway : ILiveKitGateway
 {
     private const string CreateRoomPath = "/twirp/livekit.RoomService/CreateRoom";
-    private const string StartEgressPath = "/twirp/livekit.Egress/StartRoomCompositeEgress";
+    private const string DeleteRoomPath = "/twirp/livekit.RoomService/DeleteRoom";
+    private const string StartEgressPath = "/twirp/livekit.Egress/StartEgress";
     private const string StopEgressPath = "/twirp/livekit.Egress/StopEgress";
     private const string HttpClientName = "LiveKitCloud";
 
@@ -79,7 +80,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         // disconnects before LiveKit auto-ends the room.
         var request = new CreateRoomRequest(
             Name: roomName,
-            EmptyTimeout: 60,
+            EmptyTimeout: 1800,
             DepartureTimeout: 30,
             MaxParticipants: 8,
             Metadata: JsonSerializer.Serialize(new
@@ -153,10 +154,9 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         //
         // The capability split is encoded by the caller via
         // LiveKitTokenCapabilities; here we translate it into LiveKit's
-        // grant schema. We treat "CanPublishVideo == true" as the tutor
-        // signal (only tutor + assigned interlocutors publish video in
-        // the OET Speaking flow), and use it to opt-into roomAdmin.
-        var isTutor = caps.CanPublishVideo;
+        // grant schema. Room administration is explicit because learners
+        // also publish camera video.
+        var isTutor = caps.CanManageRoom;
         var grant = new LiveKitVideoGrant
         {
             Room = roomName,
@@ -165,12 +165,12 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
             CanPublish = caps.CanPublishAudio || caps.CanPublishVideo,
             CanSubscribe = caps.CanSubscribe,
             CanPublishData = true,
-            // For learners we restrict source list to mic only; tutors
-            // get full mic + cam + screenshare. LiveKit honours this
+            // Learners get mic + camera; tutors additionally get screenshare.
+            // LiveKit honours this
             // list when CanPublishSources is non-empty.
             CanPublishSources = isTutor
                 ? new[] { "microphone", "camera", "screen_share", "screen_share_audio" }
-                : new[] { "microphone" },
+                : new[] { "microphone", "camera" },
         };
 
         var now = _timeProvider.GetUtcNow();
@@ -229,19 +229,16 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         var opts = _options.Value;
         EnsureConfigured(opts);
 
-        // outputUrl format expectation: "s3://bucket-name/key.mp4". We
-        // map this into a LiveKit S3Upload + EncodedFileOutput pair.
-        // If the format is anything else (e.g. plain https URL) we fall
-        // through to a direct file output — LiveKit treats this as a
-        // local path on the egress worker, useful for self-hosted.
-        var fileOutput = BuildFileOutput(outputUrl, opts);
+        // outputUrl format expectation: "s3://bucket-name/key.mp4". The
+        // current StartEgress API keeps storage at request level and the
+        // file output only carries the path and format.
+        var target = BuildEgressTarget(outputUrl, opts);
 
         var request = new StartEgressRequest(
             RoomName: roomName,
-            Layout: "grid",
-            AudioOnly: false,
-            VideoOnly: false,
-            File: fileOutput);
+            Template: new LiveKitTemplateSource { Layout = "grid" },
+            Outputs: [new LiveKitEgressOutput { File = target.File }],
+            Storage: target.Storage);
 
         var httpClient = _httpClientFactory.CreateClient(HttpClientName);
         var http = await PrepareClientAsync(httpClient, opts);
@@ -291,7 +288,11 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
 
         try
         {
-            using var response = await http.PostAsJsonAsync(StopEgressPath, new { egressId }, JsonOpts, ct);
+            using var response = await http.PostAsJsonAsync(
+                StopEgressPath,
+                new { egress_id = egressId },
+                JsonOpts,
+                ct);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
@@ -309,6 +310,45 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
                 "LiveKitCloudGateway.StopEgress transport_error egressId={EgressId}",
                 egressId);
             return false;
+        }
+    }
+
+    public async Task DeleteRoomAsync(string roomName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(roomName)) throw new ArgumentException("roomName required", nameof(roomName));
+
+        var opts = _options.Value;
+        EnsureConfigured(opts);
+        var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        var http = await PrepareClientAsync(httpClient, opts);
+
+        try
+        {
+            using var response = await http.PostAsJsonAsync(
+                DeleteRoomPath,
+                new { room = roomName },
+                JsonOpts,
+                ct);
+            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning(
+                "LiveKitCloudGateway.DeleteRoom non_success room={RoomName} status={Status} body={Body}",
+                roomName,
+                (int)response.StatusCode,
+                body);
+            throw new InvalidOperationException(
+                $"LiveKit DeleteRoom failed: HTTP {(int)response.StatusCode}.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex,
+                "LiveKitCloudGateway.DeleteRoom transport_error room={RoomName}",
+                roomName);
+            throw new InvalidOperationException("LiveKit DeleteRoom transport error.", ex);
         }
     }
 
@@ -493,7 +533,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         return wssUrl;
     }
 
-    private static LiveKitFileOutput BuildFileOutput(string outputUrl, LiveKitOptions opts)
+    private static LiveKitEgressTarget BuildEgressTarget(string outputUrl, LiveKitOptions opts)
     {
         // s3://bucket/key.mp4 → S3 upload block
         if (outputUrl.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
@@ -503,25 +543,36 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
             var bucket = slash > 0 ? rest.Substring(0, slash) : rest;
             var filepath = slash > 0 ? rest.Substring(slash + 1) : Path.GetFileName(rest);
 
-            return new LiveKitFileOutput
+            return new LiveKitEgressTarget
             {
-                Filepath = filepath,
-                FileType = "MP4",
-                S3 = new LiveKitS3Upload
+                File = new LiveKitFileOutput
                 {
-                    Bucket = bucket,
-                    // Region + credentials are configured server-side on
-                    // the LiveKit Cloud project; we leave them empty so
-                    // the provider falls back to its environment.
+                    Filepath = filepath,
+                    FileType = "MP4",
+                },
+                Storage = new LiveKitStorageConfig
+                {
+                    S3 = new LiveKitS3Upload
+                    {
+                        Bucket = bucket,
+                        Region = opts.EgressBucketRegion,
+                        AccessKey = opts.EgressAccessKey,
+                        Secret = opts.EgressSecret,
+                        Endpoint = opts.EgressEndpoint,
+                        ForcePathStyle = opts.EgressForcePathStyle ? true : null,
+                    },
                 },
             };
         }
 
         // Default: local-disk path (self-hosted / Docker dev clusters)
-        return new LiveKitFileOutput
+        return new LiveKitEgressTarget
         {
-            Filepath = outputUrl,
-            FileType = "MP4",
+            File = new LiveKitFileOutput
+            {
+                Filepath = outputUrl,
+                FileType = "MP4",
+            },
         };
     }
 
@@ -537,49 +588,93 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
             throw new InvalidOperationException(
                 "LiveKit ApiSecret is not configured. Set LiveKit:ApiSecret in configuration.");
         }
+        if (string.IsNullOrWhiteSpace(opts.WebhookSigningSecret))
+        {
+            throw new InvalidOperationException(
+                "LiveKit WebhookSigningSecret is not configured. Set LiveKit:WebhookSigningSecret in configuration.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // Request / response shapes (Twirp wire format — camelCase JSON)
+    // Request / response shapes. JsonPropertyName uses the canonical
+    // protobuf JSON field names shown in the LiveKit API documentation.
     // ─────────────────────────────────────────────────────────────────
 
     private sealed record CreateRoomRequest(
-        string Name,
-        int EmptyTimeout,
-        int DepartureTimeout,
-        int MaxParticipants,
-        string Metadata);
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("empty_timeout")] int EmptyTimeout,
+        [property: JsonPropertyName("departure_timeout")] int DepartureTimeout,
+        [property: JsonPropertyName("max_participants")] int MaxParticipants,
+        [property: JsonPropertyName("metadata")] string Metadata);
 
     private sealed record CreateRoomResponse(
-        string Sid,
-        string Name,
-        DateTimeOffset? CreationTime);
+        [property: JsonPropertyName("sid")] string Sid,
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("creation_time")] long? CreationTime);
 
     private sealed record StartEgressRequest(
-        string RoomName,
-        string Layout,
-        bool AudioOnly,
-        bool VideoOnly,
-        LiveKitFileOutput? File);
+        [property: JsonPropertyName("room_name")] string RoomName,
+        [property: JsonPropertyName("template")] LiveKitTemplateSource Template,
+        [property: JsonPropertyName("outputs")] LiveKitEgressOutput[] Outputs,
+        [property: JsonPropertyName("storage")] LiveKitStorageConfig? Storage);
+
+    private sealed class LiveKitTemplateSource
+    {
+        [JsonPropertyName("layout")]
+        public string Layout { get; set; } = string.Empty;
+    }
+
+    private sealed class LiveKitEgressOutput
+    {
+        [JsonPropertyName("file")]
+        public LiveKitFileOutput File { get; set; } = new();
+    }
+
+    private sealed class LiveKitEgressTarget
+    {
+        public LiveKitFileOutput File { get; set; } = new();
+        public LiveKitStorageConfig? Storage { get; set; }
+    }
+
+    private sealed class LiveKitStorageConfig
+    {
+        [JsonPropertyName("s3")]
+        public LiveKitS3Upload? S3 { get; set; }
+    }
 
     private sealed record EgressInfoResponse(
-        [property: JsonPropertyName("egressId")] string EgressId,
-        [property: JsonPropertyName("roomId")] string? RoomId,
+        [property: JsonPropertyName("egress_id")] string EgressId,
+        [property: JsonPropertyName("room_id")] string? RoomId,
         [property: JsonPropertyName("status")] string? Status);
 
     private sealed class LiveKitFileOutput
     {
+        [JsonPropertyName("filepath")]
         public string Filepath { get; set; } = string.Empty;
+
+        [JsonPropertyName("file_type")]
         public string FileType { get; set; } = "MP4";
-        public LiveKitS3Upload? S3 { get; set; }
     }
 
     private sealed class LiveKitS3Upload
     {
+        [JsonPropertyName("bucket")]
         public string Bucket { get; set; } = string.Empty;
+
+        [JsonPropertyName("region")]
         public string? Region { get; set; }
+
+        [JsonPropertyName("access_key")]
         public string? AccessKey { get; set; }
+
+        [JsonPropertyName("secret")]
         public string? Secret { get; set; }
+
+        [JsonPropertyName("endpoint")]
+        public string? Endpoint { get; set; }
+
+        [JsonPropertyName("force_path_style")]
+        public bool? ForcePathStyle { get; set; }
     }
 
     /// <summary>

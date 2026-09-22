@@ -7,7 +7,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
   FileText, Edit3, ChevronUp, ChevronDown,
-  Wifi, WifiOff, User, ShieldCheck, Loader2, Play, Pause,
+  User, ShieldCheck, Loader2, Play, Pause,
   Scissors,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
@@ -28,10 +28,10 @@ import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-pr
 import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
 import { deriveDeliveryMode, deliveryModeLabel } from '@/lib/mocks/delivery-mode';
+import { getFreeSpeakingCard } from '@/lib/api/speaking-role-play-cards';
 
 // --- Types ---
 type TaskMode = 'self' | 'exam';
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 
 function LiveSpeakingTaskContent() {
@@ -44,6 +44,7 @@ function LiveSpeakingTaskContent() {
   const rawId = params?.id;
   const id = typeof rawId === 'string' ? rawId : '';
   const requestedMode = searchParams?.get('mode');
+  const requestedFree = searchParams?.get('free') === '1';
   // Generic mocks use mockAttemptId/mockSectionId; the two-role-play Speaking
   // mock orchestrator binds directly to its paired attempt/session ids.
   const mockAttemptId = searchParams?.get('mockAttemptId') ?? undefined;
@@ -61,6 +62,8 @@ function LiveSpeakingTaskContent() {
   // --- Card State ---
   const [card, setCard] = useState<RoleCard | null>(null);
   const [cardLoading, setCardLoading] = useState(true);
+  const [freeAccessKnown, setFreeAccessKnown] = useState(!requestedFree);
+  const [freeAccessGranted, setFreeAccessGranted] = useState(false);
   const roleplayTimeSeconds = card?.roleplayTimeSeconds ?? 300;
   const roleplayTimeLabel = `${Math.round(roleplayTimeSeconds / 60)} min`;
 
@@ -76,10 +79,40 @@ function LiveSpeakingTaskContent() {
       .finally(() => setCardLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!requestedFree || !id) {
+      setFreeAccessKnown(true);
+      setFreeAccessGranted(false);
+      return;
+    }
+
+    let active = true;
+    setFreeAccessKnown(false);
+    getFreeSpeakingCard()
+      .then((freeCard) => {
+        if (!active) return;
+        setFreeAccessGranted(freeCard.cardId === id);
+        setFreeAccessKnown(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFreeAccessGranted(false);
+        setFreeAccessKnown(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, requestedFree]);
+
+  useEffect(() => {
+    if (!id || requestedFree || !freeAccessKnown || freeAccessGranted) return;
+    router.replace(`/speaking/roleplay/${encodeURIComponent(id)}`);
+  }, [freeAccessGranted, freeAccessKnown, id, requestedFree, router]);
+
   // --- State ---
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const recordingStateRef = useRef<RecordingState>('idle');
-  const [connectionStatus] = useState<ConnectionStatus>('connected');
   const [showRoleCard, setShowRoleCard] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -637,11 +670,21 @@ function LiveSpeakingTaskContent() {
             rawScoreMax: null,
             scaledScore: null,
             grade: null,
-            evidence: { source: 'speaking_player', sessionId: submissionId, awaitingTutorReview: true },
+            evidence: {
+              source: 'speaking_player',
+              sessionId: submissionId,
+              awaitingAiAssessment: requestedFree,
+              awaitingTutorReview: !requestedFree,
+            },
           });
         } catch (mockErr) {
           // Do not lose the learner's submission on mock-write failure.
           console.warn('Could not mark mock speaking section complete', mockErr);
+        }
+        if (requestedFree) {
+          setShowSubmitConfirm(false);
+          router.replace(`/speaking/results/${submissionId}`);
+          return;
         }
         const mockUrl = `/mocks/player/${mockAttemptId}`;
         setShowSubmitConfirm(false);
@@ -693,7 +736,27 @@ function LiveSpeakingTaskContent() {
     confirmSubmitRef.current = () => { void confirmSubmit(); };
   });
 
-  if (cardLoading) {
+  if (!requestedFree) {
+    return (
+      <AppShell pageTitle="Speaking" workspaceRole="learner">
+        <div className="flex min-h-[420px] items-center justify-center text-sm text-muted">
+          Opening the native realtime Speaking voice session...
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (freeAccessKnown && !freeAccessGranted) {
+    return (
+      <AppShell pageTitle="Speaking" workspaceRole="learner">
+        <div className="flex min-h-[420px] items-center justify-center text-sm text-muted">
+          This recorder is available only for the designated free Speaking card. Returning to Speaking...
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (cardLoading || !freeAccessKnown) {
     return (
       <AppShell pageTitle="Speaking Task" workspaceRole="learner" distractionFree className="px-3 sm:px-4 lg:px-6">
         <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-border/80 bg-surface shadow-sm">
@@ -734,11 +797,9 @@ function LiveSpeakingTaskContent() {
           ) : null}
           <div className="hidden h-4 w-px bg-border sm:block" />
           <div className="hidden sm:flex items-center gap-2 text-muted">
-            {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-success" /> : 
-             connectionStatus === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin text-info" /> :
-             <WifiOff className="w-4 h-4 text-danger" />}
+            <ShieldCheck className="w-4 h-4 text-success" />
             <span className="text-[10px] font-bold uppercase tracking-wider">
-              {connectionStatus === 'connected' ? 'Live' : connectionStatus === 'connecting' ? 'Connecting' : 'Disconnected'}
+              Recorder ready
             </span>
           </div>
         </div>
@@ -930,10 +991,8 @@ function LiveSpeakingTaskContent() {
             <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
           </button>
           
-          {/* Wave 5: deep-link into the AI-patient Conversation module
-              for unlimited self-practice. Hidden in exam mode where
-              learners must complete the timed simulation. */}
-          {mode === 'self' && id && (
+          {/* The designated free card is recorder-only. */}
+          {mode === 'self' && id && !requestedFree && (
             <>
               <div className="w-px h-6 bg-border/60 mx-1" />
               <SpeakingSelfPracticeButton taskId={id} label="AI patient" />

@@ -15,6 +15,7 @@ import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-she
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { CreditsGuideButton } from '@/components/domain';
+import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { analytics } from '@/lib/analytics';
 
@@ -111,6 +112,22 @@ export default function WritingHome() {
             eyebrow={t('writing.hub.start.eyebrow')}
             title={t('writing.hub.start.title')}
             description={t('writing.hub.start.description')}
+          />
+          {/* Free Mocks: the FIRST action under Start Writing — one free AI-graded
+              letter per learner; asks for the profession before opening it. Renders
+              nothing unless the server offers a sample. */}
+          <FreeSampleLauncher
+            subtest="writing"
+            icon={PenTool}
+            testId="writing-free-mock-card"
+            title={t('writing.hub.freeSample.title')}
+            description={t('writing.hub.freeSample.description')}
+            badgeLabel={t('writing.hub.freeSample.badge')}
+            modalTitle={t('writing.hub.freeSample.modalTitle')}
+            modalDescription={t('writing.hub.freeSample.modalDescription')}
+            startLabel={t('writing.hub.freeSample.startCta')}
+            usedLabel={t('writing.hub.freeSample.used')}
+            className=""
           />
           <ul className="grid gap-4 sm:grid-cols-2">
             {START_CARDS.map((card) => (

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import '@livekit/components-styles';
 
 export const metadata: Metadata = {
   title: 'OET Speaking',

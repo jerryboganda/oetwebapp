@@ -4,14 +4,12 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download, ShoppingBag, Globe } from 'lucide-react';
-import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { Modal } from '@/components/ui/modal';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import {
-  type LiveClassJoinToken,
   fetchPrivateSpeakingConfig,
   fetchPrivateSpeakingTutors,
   fetchAllPrivateSpeakingSlots,
@@ -19,7 +17,6 @@ import {
   reschedulePrivateSpeakingBooking,
   fetchLearnerPrivateSpeakingBookings,
   cancelPrivateSpeakingBooking,
-  fetchPrivateSpeakingJoinToken,
   downloadPrivateSpeakingCalendarInvite,
   fetchMyEntitlementSnapshot,
   ratePrivateSpeakingSession,
@@ -27,7 +24,6 @@ import {
   type PaymentCaptureResult,
 } from '@/lib/api';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
-import { safeZoomUrl } from '@/lib/zoom-url';
 import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
 
@@ -54,8 +50,7 @@ type Booking = {
   status: string; sessionStartUtc: string; durationMinutes: number;
   tutorTimezone: string; learnerTimezone: string;
   priceMinorUnits: number; currency: string;
-  paymentStatus: string; zoomStatus: string;
-  zoomJoinUrl: string | null; zoomMeetingPassword: string | null;
+  paymentStatus: string;
   entitlementConsumed?: boolean;
   entitlementRestoredAt?: string | null;
   rescheduledFromBookingId?: string | null;
@@ -91,24 +86,17 @@ const RESCHEDULE_POLICY_TEXT =
   'You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.';
 
 // Statuses that count as an upcoming/active booking (PDF §11).
-const UPCOMING_STATUSES = new Set(['Confirmed', 'ZoomCreated', 'PendingPayment', 'InProgress', 'Reserved']);
+const UPCOMING_STATUSES = new Set(['Confirmed', 'PendingPayment', 'InProgress', 'Reserved']);
 
 function isUpcomingBooking(booking: Booking): boolean {
   const inFuture = new Date(booking.sessionStartUtc).getTime() > Date.now();
   return UPCOMING_STATUSES.has(booking.status) && inFuture;
 }
 
-type ActiveMeeting = {
-  token: LiveClassJoinToken;
-  title: string;
-  startsAt: string;
-};
-
 const STATUS_COLORS: Record<string, string> = {
   Reserved: 'bg-warning/10 text-warning',
   PendingPayment: 'bg-warning/10 text-warning',
   Confirmed: 'bg-info/10 text-info',
-  ZoomCreated: 'bg-success/10 text-success',
   InProgress: 'bg-primary/10 text-primary',
   Completed: 'bg-success/10 text-success',
   Cancelled: 'bg-danger/10 text-danger',
@@ -122,7 +110,6 @@ const FRIENDLY_STATUS: Record<string, string> = {
   Reserved: 'Reserved',
   PendingPayment: 'Awaiting Payment',
   Confirmed: 'Confirmed',
-  ZoomCreated: 'Ready',
   InProgress: 'In Progress',
   Completed: 'Completed',
   Cancelled: 'Cancelled',
@@ -228,7 +215,6 @@ export default function PrivateSpeakingPage() {
   // (plan flag SpeakingAddonsEnabled, resolved server-side) may book.
   const [liveTutorEligible, setLiveTutorEligible] = useState<boolean | null>(null);
   const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
-  const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
@@ -421,37 +407,14 @@ export default function PrivateSpeakingPage() {
     }
   }
 
-  // Speaking module rebuild (2026-06-11): start (or resume) the two-card exam
-  // for an exam-format booking. The tutor plays the patient on the same call.
-  async function handleStartExam(booking: Booking) {
+  async function handleJoin(booking: Booking) {
+    setJoiningBookingId(booking.id);
     setError(null);
     try {
       const exam = await createSpeakingExamFromBooking(booking.id);
       window.location.href = `/speaking/exam/${exam.examId}`;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not start the exam.');
-    }
-  }
-
-  async function handleJoin(booking: Booking) {
-    setJoiningBookingId(booking.id);
-    setError(null);
-    try {
-      const token = await fetchPrivateSpeakingJoinToken(booking.id);
-      if (token.sdkKey && token.signature) {
-        setActiveMeeting({ token, title: booking.tutorName ?? 'Private Speaking Session', startsAt: booking.sessionStartUtc });
-        return;
-      }
-
-      const joinUrl = safeZoomUrl(token.joinUrl);
-      if (joinUrl) {
-        window.open(joinUrl, '_blank', 'noopener,noreferrer');
-        return;
-      }
-
-      setError('Zoom details are not ready for this session yet.');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the Zoom room.');
+      setError(err instanceof Error ? err.message : 'Could not prepare the LiveKit tutor room.');
     } finally {
       setJoiningBookingId(null);
     }
@@ -535,31 +498,22 @@ export default function PrivateSpeakingPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {(booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
+            {(booking.status === 'Confirmed' || booking.status === 'InProgress') && (
               <button onClick={() => handleJoin(booking)} disabled={!joinOpen || joiningBookingId === booking.id}
                 title={joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join' : 'Join soon'}
+                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join LiveKit' : 'Join soon'}
               </button>
             )}
 
-            {/* Exam-format bookings: open the two-card exam runner (tutor is the patient). */}
-            {booking.sessionFormat === 'exam' && (booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
-              <button onClick={() => handleStartExam(booking)} disabled={!joinOpen}
-                title={joinOpen ? undefined : `The exam opens ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                <Mic className="w-3.5 h-3.5" /> Start exam
-              </button>
-            )}
-
-            {config?.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+            {config?.allowReschedule && booking.status === 'Confirmed' && (
               <button onClick={() => startReschedule(booking)}
                 className="text-xs text-primary hover:text-primary font-medium">
                 Reschedule
               </button>
             )}
 
-            {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+            {booking.status === 'Confirmed' && (
               <button onClick={() => handleDownloadInvite(booking.id)}
                 className="flex items-center gap-1 text-xs text-muted hover:text-navy font-medium">
                 <Download className="w-3.5 h-3.5" /> Calendar
@@ -567,7 +521,7 @@ export default function PrivateSpeakingPage() {
             )}
 
             {/* Cancel button — opens the policy confirmation modal (PDF §12). */}
-            {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+            {booking.status === 'Confirmed' && (
               <button onClick={() => setCancelConfirm(booking)}
                 className="text-xs text-danger hover:text-danger font-medium">
                 Cancel
@@ -626,32 +580,12 @@ export default function PrivateSpeakingPage() {
     );
   }
 
-  if (activeMeeting && activeMeeting.token.sdkKey && activeMeeting.token.signature) {
-    return (
-      <LearnerDashboardShell>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Private Speaking</p>
-              <h1 className="text-xl font-semibold text-navy">{activeMeeting.title}</h1>
-              <p className="text-sm text-muted">{formatDate(activeMeeting.startsAt)}</p>
-            </div>
-            <button type="button" onClick={() => setActiveMeeting(null)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy">
-              Close meeting
-            </button>
-          </div>
-          <ZoomMeetingEmbed joinToken={activeMeeting.token} onLeave={() => setActiveMeeting(null)} />
-        </div>
-      </LearnerDashboardShell>
-    );
-  }
-
   return (
     <LearnerDashboardShell>
       <div className="flex items-center justify-between mb-6">
         <LearnerPageHero
           title="Private Speaking Sessions"
-          description="Use your included private speaking sessions for 1-on-1 Zoom practice with expert OET tutors"
+          description="Use your included private speaking sessions for one-to-one realtime practice with expert OET tutors"
           icon={Mic}
         />
       </div>

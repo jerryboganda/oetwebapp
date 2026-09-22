@@ -28,6 +28,38 @@ Every Speaking-module env key, grouped by subsystem. Defaults are listed; requir
 | `OPENAI__APIKEY` | optional | — | OpenAI / OpenAI-compatible key (fallback when Anthropic unavailable). |
 | `OPENAI__APIBASE` | optional | `https://api.openai.com/v1` | Override for compatible vendors (Groq, Together, Mistral La Plateforme, NVIDIA NIM, etc.). |
 
+## Native realtime Speaking voice
+
+Speaking role-play cards use native full-duplex voice only. The API keys stay
+server-side. The configured model must pass the live provider probe before the
+browser is allowed to request microphone access.
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `LIVEVOICE__PRIMARYPROVIDER` | yes | `openai` | `openai` or `gemini`; a session uses one disclosed provider. |
+| `LIVEVOICE__OPENAIAPIKEY` | yes for OpenAI | — | Server-only OpenAI Realtime credential. |
+| `LIVEVOICE__OPENAIBASEURL` | yes for OpenAI | `https://api.openai.com/v1/live/sessions` | OpenAI Realtime session broker endpoint. |
+| `LIVEVOICE__OPENAIMODELSBASEURL` | yes for OpenAI | `https://api.openai.com/v1/models` | Model catalog endpoint used by the live account probe. |
+| `LIVEVOICE__OPENAIMODEL` | yes for OpenAI | `gpt-live-1` | Lowest-latency production model enabled on the account, verified by the probe. |
+| `LIVEVOICE__GEMINIAPIKEY` | yes for Gemini | — | Server-only Gemini Live credential. |
+| `LIVEVOICE__GEMINIBASEURL` | yes for Gemini | `https://generativelanguage.googleapis.com/v1beta/auth_tokens` | Constrained ephemeral-token endpoint. |
+| `LIVEVOICE__GEMINIMODELSBASEURL` | yes for Gemini | `https://generativelanguage.googleapis.com/v1beta/models` | Model catalog endpoint used by the live account probe. |
+| `LIVEVOICE__GEMINIMODEL` | yes for Gemini | `models/gemini-3.8-live` | Gemini Live model enabled on the account. |
+| `LIVEVOICE__GEMINIWEBSOCKETBASEURL` | yes for Gemini | constrained Live WebSocket | Browser WebSocket endpoint used with the short-lived token. |
+| `LIVEVOICE__RETENTIONDAYS` | optional | `30` | Bounded retention for live voice transcript and connection audit data. |
+
+## TypeSafe SystemOne / Jev
+
+Jev validates generated role-player projections and receives non-blocking
+conversation advisories. It never generates speech, replaces the live voice
+provider, or blocks an active turn.
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `TYPESAFE__ENABLED` | yes for generated-content readiness | `true` | Master TypeSafe switch. |
+| `TYPESAFE__APIKEY` | yes when enabled | — | Server-only TypeSafe credential. |
+| `TYPESAFE__CONVERSATIONADVISORYENABLED` | optional | `true` | Enables asynchronous Jev turn advisories. |
+
 ## ElevenLabs — TTS
 
 | Key | Required | Default | Description |
@@ -38,7 +70,9 @@ Every Speaking-module env key, grouped by subsystem. Defaults are listed; requir
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `WHISPER__APIKEY` | optional | — | Often reuses `OPENAI__APIKEY`. Used by `WhisperPronunciationAsrProvider` and `SpeakingTranscriptionPipeline`. |
+| `SPEAKING__WHISPER__APIKEY` | optional fallback | — | Server-only fallback for recorded Speaking grading. The preferred credential is the admin `whisper-asr` provider registry row. |
+| `SPEAKING__WHISPER__BASEURL` | optional | `https://api.openai.com/v1` | OpenAI-compatible Whisper base URL. |
+| `SPEAKING__WHISPER__MODEL` | optional | `whisper-1` | Whisper transcription model. |
 
 ## AWS S3 — Egress + Archive
 

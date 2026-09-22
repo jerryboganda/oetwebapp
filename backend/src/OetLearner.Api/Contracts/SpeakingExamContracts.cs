@@ -39,7 +39,8 @@ public record SpeakingExamClock(
 /// transition endpoints. The learner-safe candidate card is included only for
 /// the prep/active phases of the current card; intro and completed phases
 /// carry a null card. `CurrentSessionId` is the child SpeakingSession the
-/// frontend hands to ConversationHub for the AI patient.</summary>
+/// frontend hands to the native realtime voice control plane for the AI
+/// patient, or to the LiveKit room for a human tutor.</summary>
 public record SpeakingExamDetail(
     string ExamId,
     string Mode,
@@ -51,7 +52,8 @@ public record SpeakingExamDetail(
     SpeakingExamClock Clock,
     DateTimeOffset? CompletedAt,
     string? MockAttemptId,
-    string? MockSectionId);
+    string? MockSectionId,
+    string? LiveRoomId = null);
 
 /// <summary>One card's result inside the exam report.</summary>
 public record SpeakingExamCardResult(
@@ -96,4 +98,6 @@ public record SpeakingExamTutorView(
     string ProfessionId,
     string? BookingId,
     SpeakingExamClock Clock,
-    IReadOnlyList<SpeakingExamRoleplayerCard> Cards);
+    IReadOnlyList<SpeakingExamRoleplayerCard> Cards,
+    string? CurrentCardId = null,
+    string? LiveRoomId = null);

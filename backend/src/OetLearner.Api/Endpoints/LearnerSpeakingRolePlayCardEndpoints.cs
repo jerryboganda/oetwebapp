@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.FreeSamples;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -40,6 +43,49 @@ public static class LearnerSpeakingRolePlayCardEndpoints
             [FromQuery] string? primaryCategory) =>
             Results.Ok(await service.ListSpeakingRolePlayCardsForLearnerAsync(
                 LearnerId(http), professionId, primaryCategory, ct)));
+
+        group.MapGet("/free", async (
+            LearnerService service,
+            LearnerDbContext db,
+            IFreeSampleService freeSamples,
+            HttpContext http,
+            CancellationToken ct,
+            [FromQuery] string? cardId) =>
+        {
+            var userId = LearnerId(http);
+            var requestedCardId = cardId?.Trim();
+            if (string.IsNullOrWhiteSpace(requestedCardId))
+            {
+                var offers = await freeSamples.ListAsync(userId, FreeSampleService.Speaking, ct);
+                var profession = await db.Users.AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => user.ActiveProfessionId)
+                    .FirstOrDefaultAsync(ct);
+                var normalizedProfession = FreeSampleService.NormalizeProfession(profession);
+                requestedCardId = offers.FirstOrDefault(offer => offer.ProfessionId == normalizedProfession)?.ContentId
+                    ?? offers.FirstOrDefault()?.ContentId;
+            }
+
+            if (string.IsNullOrWhiteSpace(requestedCardId)
+                || !await freeSamples.IsOfferedAsync(userId, FreeSampleService.Speaking, requestedCardId, ct))
+            {
+                throw ApiException.Conflict(
+                    "free_sample_unavailable",
+                    "No eligible free Speaking card is available for this learner.");
+            }
+
+            var resolvedCardId = await db.RolePlayCards.AsNoTracking()
+                .Where(card => card.Id == requestedCardId || card.ContentItemId == requestedCardId)
+                .Select(card => card.Id)
+                .FirstOrDefaultAsync(ct);
+            if (string.IsNullOrWhiteSpace(resolvedCardId))
+            {
+                throw ApiException.NotFound("role_play_card_not_found", "That role-play card does not exist.");
+            }
+
+            return Results.Ok(await service.GetSpeakingRolePlayCardForLearnerAsync(userId, resolvedCardId, ct, allowFreeSample: true));
+        })
+        .WithName("GetFreeSpeakingCard");
 
         group.MapGet("/{id}", async (
             string id,

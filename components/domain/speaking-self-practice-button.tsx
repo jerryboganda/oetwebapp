@@ -1,23 +1,12 @@
 'use client';
 
-// Wave 5 of docs/SPEAKING-MODULE-PLAN.md - shared "Practise this
-// scenario with the AI patient" button. Used on both the speaking task
-// page and the results page so a learner can deep-link straight into
-// the Conversation module after attempting (or while preparing for) a
-// speaking role-play. The handler delegates to the backend
-// `/v1/speaking/tasks/{id}/self-practice` endpoint which itself routes
-// through `ConversationService.CreateSessionAsync` (no new AI provider).
+// Shared entry point for the native realtime AI Speaking role-play. It is
+// intentionally a route-only affordance so it cannot revive the old text
+// ConversationHub self-practice path.
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { startSpeakingSelfPracticeSession } from '@/lib/api';
-import { showCreditFeedback } from '@/lib/credit-feedback';
-import {
-  InsufficientCreditsModal,
-  isInsufficientCreditsError,
-  readInsufficientCreditsMessage,
-} from '@/components/domain/InsufficientCreditsModal';
 
 export interface SpeakingSelfPracticeButtonProps {
   taskId: string;
@@ -33,27 +22,15 @@ export function SpeakingSelfPracticeButton({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
 
   const onClick = useCallback(async () => {
     if (!taskId || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await startSpeakingSelfPracticeSession(taskId);
-      showCreditFeedback(result.feedbackMessage);
-      router.push(result.redirectPath);
+      router.push(`/speaking/roleplay/${encodeURIComponent(taskId)}`);
     } catch (err) {
-      // A 402 here means the SpeakingOnlyCredits/FlexibleCredits wallet is
-      // out of credits (debited at session-start, before the AI patient
-      // conversation is created) — show the shared blocking modal instead
-      // of the generic inline error.
-      if (isInsufficientCreditsError(err)) {
-        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
-        setBusy(false);
-        return;
-      }
-      const message = err instanceof Error ? err.message : 'Could not start AI patient session.';
+      const message = err instanceof Error ? err.message : 'Could not open the live voice role-play.';
       setError(message);
       setBusy(false);
     }
@@ -69,11 +46,6 @@ export function SpeakingSelfPracticeButton({
           {error}
         </p>
       ) : null}
-      <InsufficientCreditsModal
-        open={insufficientCreditsMessage !== null}
-        message={insufficientCreditsMessage ?? ''}
-        onClose={() => setInsufficientCreditsMessage(null)}
-      />
     </div>
   );
 }

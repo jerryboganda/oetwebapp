@@ -1855,6 +1855,19 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateFreeTierConfigAsync(http.AdminId(), http.AdminName(), request, ct)))
             .WithAdminWrite("AdminBillingCatalogWrite");
 
+        admin.MapGet("/free-tier/content", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetFreeTierContentAsync(ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPut("/free-tier/content", async (
+            HttpContext http,
+            AdminFreeTierContentSelectionUpdateRequest request,
+            AdminService service,
+            CancellationToken ct)
+            => Results.Ok(await service.UpdateFreeTierContentAsync(
+                http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         admin.MapGet("/free-tier/usage-stats", async (AdminService service, CancellationToken ct,
             int? page, int? pageSize)
             => Results.Ok(await service.GetFreeTierUsageStatsAsync(page ?? 1, pageSize ?? 20, ct)))

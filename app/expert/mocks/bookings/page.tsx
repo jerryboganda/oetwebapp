@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, CheckCircle2, ClipboardList, ExternalLink, Sparkles, Video } from 'lucide-react';
+import { CalendarClock, CheckCircle2, ClipboardList, Sparkles, Video } from 'lucide-react';
 import {
   ExpertRouteHero,
   ExpertRouteSectionHeader,
@@ -13,7 +13,6 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchExpertMockBookings } from '@/lib/api';
 import type { MockBooking } from '@/lib/mock-data';
-import { safeZoomUrl } from '@/lib/zoom-url';
 
 function isOpenBooking(booking: MockBooking): boolean {
   return booking.status !== 'completed' && booking.status !== 'cancelled';
@@ -69,7 +68,7 @@ export default function ExpertMockBookingsPage() {
           <ExpertRouteSectionHeader
             eyebrow="Live mocks"
             title="Scheduled mock sessions"
-            description="Open the in-app room to run the session state machine; the Zoom link opens the external meeting."
+            description="Open the canonical realtime LiveKit room for the tutor-controlled Speaking exam."
             action={<CalendarClock className="h-5 w-5 text-muted" aria-hidden="true" />}
           />
 
@@ -79,7 +78,6 @@ export default function ExpertMockBookingsPage() {
           {!loading ? (
             <div className="grid gap-4">
               {items.map((booking) => {
-                const zoomUrl = safeZoomUrl(booking.zoomJoinUrl ?? booking.joinUrl ?? null);
                 return (
                   <article key={booking.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -93,21 +91,13 @@ export default function ExpertMockBookingsPage() {
                         <p className="mt-1 text-xs text-muted">Learner: candidate card only / Tutor: interlocutor card visible</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/expert/speaking-room/${encodeURIComponent(booking.id)}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
-                        >
-                          <Video className="h-4 w-4" aria-hidden /> Open room
-                        </Link>
-                        {zoomUrl ? (
-                          <a
-                            href={zoomUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-navy transition-colors hover:bg-primary/5"
+                        {booking.tutorProfileId ? (
+                          <Link
+                            href={`/expert/speaking-room/${encodeURIComponent(booking.id)}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
                           >
-                            <ExternalLink className="h-4 w-4" aria-hidden /> Zoom link
-                          </a>
+                            <Video className="h-4 w-4" aria-hidden /> Open LiveKit room
+                          </Link>
                         ) : null}
                       </div>
                     </div>

@@ -1,268 +1,95 @@
 'use client';
 
-/**
- * Phase 3 — learner-side LiveKit room shell (plan C.3).
- *
- * Wraps a single `LiveKitRoom` instance and renders a learner-friendly
- * 2-tile video layout:
- *   • Large tile  → tutor video + audio
- *   • Small tile  → own self-view (muted to avoid feedback)
- * The learner is never shown the interlocutor script — that lives in
- * `TutorCuePanel`, gated by tutor role.
- *
- * NOTE: `@livekit/components-react` is not installed yet. This file
- * lazy-imports the package at runtime so a missing dependency yields
- * a clean placeholder instead of a build failure. Once the package is
- * added (`pnpm add @livekit/components-react @livekit/components-styles
- * livekit-client`), the placeholder branch is never taken.
- *
- * TODO(P3-infra): install @livekit/components-react and remove the
- * `unknownLiveKit` fallback below.
- */
-import { useEffect, useState, type ReactNode } from 'react';
-import { Loader2, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { LiveKitRoom, RoomAudioRenderer, VideoTrack, useLocalParticipant, useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { LiveRoomRealtimeProvider } from './LiveRoomRealtime';
 
 export interface LearnerLiveRoomShellProps {
-  /** LiveKit signalling URL (wss://...). */
+  liveRoomId: string;
   livekitWssUrl: string;
-  /** Short-lived LiveKit JWT minted by `issueLiveRoomToken`. */
   token: string;
-  /** Invoked when the learner clicks "End session". */
   onEnd: () => void;
-  /** Optional className for the outer container. */
   className?: string;
-  /** Optional slot rendered above the controls (e.g. captions). */
   children?: ReactNode;
 }
 
-type LiveKitModule = typeof import('@livekit/components-react');
-
 export function LearnerLiveRoomShell({
+  liveRoomId,
   livekitWssUrl,
   token,
   onEnd,
   className,
   children,
 }: LearnerLiveRoomShellProps) {
-  const [livekit, setLivekit] = useState<LiveKitModule | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Dynamic import — keeps the dep optional until @livekit/components-react
-    // is installed. turbopackIgnore prevents the bundler resolving the absent
-    // module at build time; the runtime import rejects and .catch() renders
-    // LiveRoomPlaceholder via setUnavailable(true).
-    // TODO(P3-infra): replace with a top-level static import once installed.
-    import(/* turbopackIgnore: true */ '@livekit/components-react')
-      .then((mod) => {
-        if (!cancelled) setLivekit(mod as LiveKitModule);
-      })
-      .catch(() => {
-        if (!cancelled) setUnavailable(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (unavailable) {
-    return (
-      <LiveRoomPlaceholder
-        className={className}
-        role="learner"
-        onEnd={onEnd}
-        livekitWssUrl={livekitWssUrl}
-        tokenPresent={Boolean(token)}
-      />
-    );
-  }
-
-  if (!livekit) {
-    return (
-      <div
-        className={cn(
-          'flex h-full min-h-[420px] items-center justify-center rounded-2xl border border-border bg-muted',
-          className,
-        )}
-      >
-        <span className="inline-flex items-center gap-2 text-sm text-muted">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to live room…
-        </span>
-      </div>
-    );
-  }
-
-  const {
-    LiveKitRoom,
-    RoomAudioRenderer,
-    useTracks,
-    VideoTrack,
-    useLocalParticipant,
-  } = livekit;
-
-  // Inner consumer that has access to LiveKit context. We can't reach
-  // hooks until we're inside <LiveKitRoom>, so split the rendering.
-  function RoomInterior() {
-    // Both `useTracks` and `useLocalParticipant` are LiveKit hooks; the
-    // module type narrows them at runtime above.
-    const tracks = (useTracks as unknown as (sources: Array<unknown>) => Array<{
-      participant: { identity: string; isLocal: boolean };
-      publication?: { kind: string };
-      source?: string;
-    }>)([
-      // Subscribe to camera + microphone published by all participants.
-      // We rely on string literals because the type imports are dynamic.
-      'camera',
-      'microphone',
-    ]);
-    const local = (useLocalParticipant as unknown as () => {
-      localParticipant: {
-        isMicrophoneEnabled: boolean;
-        isCameraEnabled: boolean;
-        setMicrophoneEnabled: (on: boolean) => Promise<unknown>;
-        setCameraEnabled: (on: boolean) => Promise<unknown>;
-      };
-    })();
-
-    const remoteCamera = tracks.find(
-      (t) => !t.participant.isLocal && t.source === 'camera',
-    );
-    const localCamera = tracks.find(
-      (t) => t.participant.isLocal && t.source === 'camera',
-    );
-
-    const micOn = local.localParticipant.isMicrophoneEnabled;
-    const camOn = local.localParticipant.isCameraEnabled;
-
-    return (
-      <div className="relative h-full w-full overflow-hidden rounded-2xl bg-background-dark">
-        {/* Large tile — tutor */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          {remoteCamera ? (
-            <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" />
-          ) : (
-            <div className="text-sm text-white/70">Waiting for your tutor to join…</div>
-          )}
-        </div>
-
-        {/* Small tile — self-view (muted) */}
-        <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-navy shadow-lg sm:h-40 sm:w-56">
-          {localCamera ? (
-            <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-white/50">
-              Camera off
-            </div>
-          )}
-        </div>
-
-        {/* Captions / extra slot */}
-        {children ? (
-          <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-navy/60 px-4 py-2 text-sm text-white backdrop-blur">
-            {children}
-          </div>
-        ) : null}
-
-        {/* Controls */}
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/60 px-3 py-2 backdrop-blur">
-          <Button
-            type="button"
-            variant={micOn ? 'ghost' : 'destructive'}
-            size="sm"
-            onClick={() => void local.localParticipant.setMicrophoneEnabled(!micOn)}
-            aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
-            className={cn('rounded-full', micOn && 'text-white hover:bg-white/10')}
-          >
-            {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant={camOn ? 'ghost' : 'destructive'}
-            size="sm"
-            onClick={() => void local.localParticipant.setCameraEnabled(!camOn)}
-            aria-label={camOn ? 'Turn camera off' : 'Turn camera on'}
-            className={cn('rounded-full', camOn && 'text-white hover:bg-white/10')}
-          >
-            {camOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={onEnd}
-            className="rounded-full"
-            data-testid="live-room-end"
-          >
-            <PhoneOff className="mr-2 h-4 w-4" /> End session
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={cn('relative h-full min-h-[480px] w-full', className)}>
-      <LiveKitRoom
-        token={token}
-        serverUrl={livekitWssUrl}
-        connect
-        video
-        audio
-        data-lk-theme="default"
-        onDisconnected={onEnd}
-        className="h-full w-full"
-      >
-        <RoomInterior />
-        <RoomAudioRenderer />
-      </LiveKitRoom>
-    </div>
+    <LiveRoomRealtimeProvider liveRoomId={liveRoomId}>
+      <div className={cn('relative h-full min-h-[480px] w-full', className)}>
+        <LiveKitRoom
+          token={token}
+          serverUrl={livekitWssUrl}
+          connect
+          video
+          audio
+          data-lk-theme="default"
+          className="h-full w-full"
+        >
+          <LearnerRoomInterior onEnd={onEnd}>{children}</LearnerRoomInterior>
+          <RoomAudioRenderer />
+        </LiveKitRoom>
+      </div>
+    </LiveRoomRealtimeProvider>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Placeholder shown when @livekit/components-react isn't installed
-// ─────────────────────────────────────────────────────────────────────────────
+function LearnerRoomInterior({ onEnd, children }: { onEnd: () => void; children?: ReactNode }) {
+  const tracks = useTracks([
+    { source: Track.Source.Camera, withPlaceholder: false },
+    { source: Track.Source.Microphone, withPlaceholder: false },
+  ]);
+  const { localParticipant } = useLocalParticipant();
+  const remoteCamera = tracks.find((track) => !track.participant.isLocal && track.source === Track.Source.Camera);
+  const localCamera = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.Camera);
+  const micOn = localParticipant.isMicrophoneEnabled;
+  const camOn = localParticipant.isCameraEnabled;
 
-interface LiveRoomPlaceholderProps {
-  className?: string;
-  role: 'learner' | 'tutor';
-  onEnd: () => void;
-  livekitWssUrl: string;
-  tokenPresent: boolean;
-}
-
-export function LiveRoomPlaceholder({
-  className,
-  role,
-  onEnd,
-  livekitWssUrl,
-  tokenPresent,
-}: LiveRoomPlaceholderProps) {
   return (
-    <div
-      className={cn(
-        'flex h-full min-h-[420px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6 text-center',
-        className,
-      )}
-      data-testid="livekit-placeholder"
-    >
-      <h3 className="text-lg font-semibold text-amber-900">
-        Live video temporarily unavailable
-      </h3>
-      <p className="max-w-md text-sm text-amber-800">
-        The LiveKit client package isn&apos;t installed in this build. Booking
-        details have been preserved. Please refresh once the room is ready,
-        or end this session.
-      </p>
-      <code className="rounded bg-surface/60 px-2 py-1 text-xs text-amber-700">
-        role={role} · server={livekitWssUrl} · token={tokenPresent ? 'present' : 'missing'}
-      </code>
-      <Button type="button" variant="destructive" onClick={onEnd}>
-        <PhoneOff className="mr-2 h-4 w-4" /> End session
-      </Button>
+    <div className="relative h-full w-full overflow-hidden rounded-2xl bg-background-dark">
+      <div className="absolute inset-0 flex items-center justify-center">
+        {remoteCamera ? <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" /> : <div className="text-sm text-white/70">Waiting for your tutor to join…</div>}
+      </div>
+      <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-navy shadow-lg sm:h-40 sm:w-56">
+        {localCamera ? <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-white/50">Camera off</div>}
+      </div>
+      {children ? <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-navy/60 px-4 py-2 text-sm text-white backdrop-blur">{children}</div> : null}
+      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/60 px-3 py-2 backdrop-blur">
+        <Button
+          type="button"
+          variant={micOn ? 'ghost' : 'destructive'}
+          size="sm"
+          onClick={() => void localParticipant.setMicrophoneEnabled(!micOn)}
+          aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
+          className={cn('rounded-full', micOn && 'text-white hover:bg-white/10')}
+        >
+          {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant={camOn ? 'ghost' : 'destructive'}
+          size="sm"
+          onClick={() => void localParticipant.setCameraEnabled(!camOn)}
+          aria-label={camOn ? 'Turn camera off' : 'Turn camera on'}
+          className={cn('rounded-full', camOn && 'text-white hover:bg-white/10')}
+        >
+          {camOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+        </Button>
+        <Button type="button" variant="destructive" size="sm" onClick={onEnd} className="rounded-full" data-testid="live-room-end">
+          <PhoneOff className="mr-2 h-4 w-4" /> End session
+        </Button>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Coins,
+  Gift,
   Headphones,
   Mic,
   PenLine,
@@ -101,6 +102,14 @@ const ROWS: CreditRow[] = [
     cost: '1 mock credit',
     detail:
       'A full mock uses one Mock credit. Writing & Speaking in a mock are marked by a real tutor, so they don’t use your AI credits.',
+  },
+  {
+    icon: Gift,
+    accent: 'violet',
+    name: 'Free sample',
+    cost: 'No credits',
+    detail:
+      'Look for the FREE SAMPLE card: one free Listening paper, one free Reading paper, plus one AI-graded Writing letter and one AI-graded Speaking card. Free samples never use your credits.',
   },
 ];
 

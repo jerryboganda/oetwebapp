@@ -32,16 +32,38 @@ public sealed class SpeakingEvaluationPipeline(
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var existingTranscript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
-        if (existingTranscript.Count > 0)
+        if (existingTranscript.Count > 0 && !IsMockTranscript(attempt, existingTranscript))
         {
             MarkTranscriptionProvenance(attempt, provider: "existing", mock: false);
             return;
         }
 
-        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
-        var transcript = BuildMockDevelopmentTranscript(attempt, content);
+        if (attemptTranscriptionProvider is null
+            || string.Equals(attemptTranscriptionProvider.ProviderCode, "mock", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(attemptTranscriptionProvider.ProviderCode, "unavailable", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "A production Speaking transcription provider is required before recorded Speaking audio can be graded.");
+        }
+        if (string.IsNullOrWhiteSpace(attempt.AudioObjectKey))
+        {
+            throw new InvalidOperationException(
+                "The Speaking recording has no stored audio object for transcription.");
+        }
+
+        var result = await attemptTranscriptionProvider.TranscribeAsync(
+            attempt.AudioObjectKey,
+            "en",
+            cancellationToken);
+        var transcript = ConvertProviderTranscript(result);
+        if (transcript.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "The Speaking transcription provider returned no usable transcript segments.");
+        }
+
         attempt.TranscriptJson = JsonSupport.Serialize(transcript);
-        MarkTranscriptionProvenance(attempt, provider: "mock-dev", mock: true);
+        MarkTranscriptionProvenance(attempt, result.Provider, mock: false);
     }
 
     public async Task CompleteEvaluationAsync(BackgroundJobItem job, CancellationToken cancellationToken)
@@ -53,9 +75,20 @@ public sealed class SpeakingEvaluationPipeline(
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
 
         var transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
-        if (transcript.Count == 0)
+        if (transcript.Count == 0 || IsMockTranscript(attempt, transcript))
         {
-            await CompleteTranscriptionAsync(job, cancellationToken);
+            try
+            {
+                await CompleteTranscriptionAsync(job, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex,
+                    "Speaking transcription unavailable for attempt {AttemptId}; grading will remain retryable.",
+                    attempt.Id);
+                MarkTranscriptionUnavailable(attempt, evaluation);
+                return;
+            }
             transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
         }
 
@@ -185,6 +218,17 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
     }
 
+    private static void MarkTranscriptionUnavailable(Attempt attempt, Evaluation evaluation)
+    {
+        attempt.State = AttemptState.Submitted;
+        evaluation.State = AsyncState.Failed;
+        evaluation.StatusReasonCode = "speaking_transcription_unavailable";
+        evaluation.StatusMessage = "We couldn't process your recording right now. Please try submitting again shortly.";
+        evaluation.Retryable = true;
+        evaluation.RetryAfterMs = 60_000;
+        evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Maps a canonical <see cref="SpeakingAiAssessmentProjection"/>
     /// onto the legacy <see cref="Evaluation"/>/<see cref="Attempt"/> columns
     /// so <c>GetSpeakingEvaluationSummaryAsync</c> (the endpoint the
@@ -247,26 +291,44 @@ public sealed class SpeakingEvaluationPipeline(
             cancellationToken);
     }
 
-    private static List<SpeakingTranscriptLine> BuildMockDevelopmentTranscript(Attempt attempt, ContentItem? content)
+    private static List<SpeakingTranscriptLine> ConvertProviderTranscript(
+        SpeakingTranscriptionProviderResult result)
     {
-        var durationSeconds = ReadDurationSeconds(attempt.AudioMetadataJson);
-        var title = content?.Title ?? "speaking role play";
-        var setting = ReadString(content?.DetailJson, "setting") ?? "clinical setting";
-        var end = Math.Max(6, Math.Min(durationSeconds ?? 18, 45));
+        using var document = JsonDocument.Parse(result.SegmentsJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("The Speaking transcription provider returned an invalid segment list.");
+        }
 
-        return
-        [
-            new SpeakingTranscriptLine
+        var transcript = new List<SpeakingTranscriptLine>();
+        var index = 0;
+        foreach (var segment in document.RootElement.EnumerateArray())
+        {
+            if (segment.ValueKind != JsonValueKind.Object) continue;
+            var text = ReadJsonString(segment, "text")?.Trim();
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            var startMs = ReadJsonInt(segment, "startMs") ?? 0;
+            var endMs = ReadJsonInt(segment, "endMs") ?? startMs;
+            transcript.Add(new SpeakingTranscriptLine
             {
-                Id = "t1",
-                Speaker = "candidate",
-                Text = $"Mock development ASR transcript for {title} in a {setting}. Configure a production ASR provider before using transcript text as final learner evidence.",
-                StartTime = 0,
-                EndTime = end,
+                Id = $"t{++index}",
+                Speaker = ReadJsonString(segment, "speaker") ?? "candidate",
+                Text = text,
+                StartTime = Math.Max(0, startMs) / 1000d,
+                EndTime = Math.Max(Math.Max(0, endMs), Math.Max(0, startMs)) / 1000d,
                 Markers = []
-            }
-        ];
+            });
+        }
+
+        return transcript;
     }
+
+    private static bool IsMockTranscript(
+        Attempt attempt,
+        IReadOnlyList<SpeakingTranscriptLine> transcript)
+        => string.Equals(ReadTranscriptionProvider(attempt.AnalysisJson), "mock-dev", StringComparison.OrdinalIgnoreCase)
+            || transcript.Any(line => line.Text.Contains("Mock development ASR transcript", StringComparison.OrdinalIgnoreCase));
 
     private void MarkTranscriptionProvenance(Attempt attempt, string provider, bool mock)
     {

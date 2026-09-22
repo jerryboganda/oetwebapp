@@ -151,6 +151,13 @@ public partial class AdminService
         script.AllowsSecondVisit = allowsSecondVisit;
         script.SecondVisitIndicator = secondVisitIndicator;
         script.SecondVisitCarryFactsJson = JsonSerializer.Serialize(secondVisitCarryFacts);
+        script.ContentOrigin = "authored";
+        script.SourceDigest = null;
+        script.Generator = null;
+        script.GeneratorModel = null;
+        script.JevValidationStatus = null;
+        script.NeedsOwnerInput = false;
+        script.GeneratedAt = null;
         script.UpdatedAt = now;
 
         // Touch the parent card so list views resort by latest activity.

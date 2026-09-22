@@ -8,7 +8,8 @@ namespace OetLearner.Api.Domain;
 // `SpeakingSession` is the unified attempt object for both delivery modes
 // described in the plan:
 //
-//   * `ai_self_practice` / `ai_exam` — AI patient via `ConversationHub`
+//   * `ai_self_practice` / `ai_exam` — AI patient via the native realtime
+//     voice control plane
 //   * `live_tutor`                    — human tutor via LiveKit room
 //
 // Each session links to (1) an underlying `Attempt` so the legacy speaking

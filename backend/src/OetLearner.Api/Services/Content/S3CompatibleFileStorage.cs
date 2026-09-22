@@ -115,8 +115,8 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 
     public async Task<FileStorageReadResult> OpenReadWithMetadataAsync(string key, CancellationToken ct)
     {
-        ValidateKey(key);
-        var req = new GetObjectRequest { BucketName = Bucket, Key = key };
+        var location = ResolveLocation(key);
+        var req = new GetObjectRequest { BucketName = location.Bucket, Key = location.Key };
         try
         {
             var response = await _client.GetObjectAsync(req, ct);
@@ -133,10 +133,11 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     public Uri? ResolveReadUrl(string key, TimeSpan ttl)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
+        var location = ResolveLocation(key);
         var req = new GetPreSignedUrlRequest
         {
-            BucketName = Bucket,
-            Key        = key,
+            BucketName = location.Bucket,
+            Key        = location.Key,
             Verb       = HttpVerb.GET,
             Expires    = DateTime.UtcNow.Add(ttl),
         };
@@ -150,10 +151,10 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 
     public async Task<bool> ExistsAsync(string key, CancellationToken ct)
     {
-        ValidateKey(key);
+        var location = ResolveLocation(key);
         try
         {
-            var req = new GetObjectMetadataRequest { BucketName = Bucket, Key = key };
+            var req = new GetObjectMetadataRequest { BucketName = location.Bucket, Key = location.Key };
             await _client.GetObjectMetadataAsync(req, ct);
             return true;
         }
@@ -189,8 +190,8 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 
     public async Task<long> LengthAsync(string key, CancellationToken ct)
     {
-        ValidateKey(key);
-        var req = new GetObjectMetadataRequest { BucketName = Bucket, Key = key };
+        var location = ResolveLocation(key);
+        var req = new GetObjectMetadataRequest { BucketName = location.Bucket, Key = location.Key };
         var meta = await _client.GetObjectMetadataAsync(req, ct);
         return meta.ContentLength;
     }
@@ -201,10 +202,10 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 
     public async Task<bool> DeleteAsync(string key, CancellationToken ct)
     {
-        ValidateKey(key);
+        var location = ResolveLocation(key);
         if (!await ExistsAsync(key, ct)) return false;
 
-        var req = new DeleteObjectRequest { BucketName = Bucket, Key = key };
+        var req = new DeleteObjectRequest { BucketName = location.Bucket, Key = location.Key };
         await _client.DeleteObjectAsync(req, ct);
         return true;
     }
@@ -325,6 +326,25 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("Storage key is required.");
+    }
+
+    private (string Bucket, string Key) ResolveLocation(string key)
+    {
+        ValidateKey(key);
+        if (!Uri.TryCreate(key, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, "s3", StringComparison.OrdinalIgnoreCase))
+        {
+            return (Bucket, key);
+        }
+
+        var bucket = uri.Host;
+        var objectKey = uri.AbsolutePath.TrimStart('/');
+        if (string.IsNullOrWhiteSpace(bucket) || string.IsNullOrWhiteSpace(objectKey))
+        {
+            throw new InvalidOperationException("S3 storage locations must include a bucket and object key.");
+        }
+
+        return (bucket, objectKey);
     }
 
     public ValueTask DisposeAsync()

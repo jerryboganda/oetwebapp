@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 
-const { mockTrack } = vi.hoisted(() => ({
+const { mockTrack, mockListFreeSamples } = vi.hoisted(() => ({
   mockTrack: vi.fn(),
+  mockListFreeSamples: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -19,6 +20,12 @@ vi.mock('@/components/layout/learner-dashboard-shell', () => ({
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: { activeProfessionId: 'medicine' } }),
+}));
+
+vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples: mockListFreeSamples }));
+
 vi.mock('@/components/domain/learner-skill-switcher', () => ({
   LearnerSkillSwitcher: () => <div data-testid="skill-switcher" />,
 }));
@@ -28,6 +35,32 @@ import WritingHome from './page';
 describe('Writing landing page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // No free sample on offer by default: the launcher renders nothing.
+    mockListFreeSamples.mockResolvedValue([]);
+  });
+
+  it('shows the Free Writing Mock as the FIRST action under Start Writing, above the practice library', async () => {
+    mockListFreeSamples.mockResolvedValue([
+      { professionId: 'medicine', contentId: 'w-med', state: 'available', route: '/writing/practice/session/w-med' },
+    ]);
+    render(<WritingHome />);
+
+    const card = await screen.findByTestId('writing-free-mock-card');
+    expect(card).toHaveTextContent('writing.hub.freeSample.title');
+    expect(card).toHaveTextContent('writing.hub.freeSample.badge');
+    expect(mockListFreeSamples).toHaveBeenCalledWith('writing');
+
+    const practice = screen.getByRole('link', { name: /writing\.hub\.cards\.practice\.cta/ });
+    const submissions = screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ });
+    expect(card.compareDocumentPosition(practice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(submissions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('hides the free card when the server offers no sample (Practice Library and Past Submissions unchanged)', async () => {
+    render(<WritingHome />);
+
+    await screen.findByRole('link', { name: /writing\.hub\.cards\.practice\.cta/ });
+    expect(screen.queryByTestId('writing-free-mock-card')).toBeNull();
   });
 
   it('routes to the V2 writing flows', () => {

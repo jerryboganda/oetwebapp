@@ -21,6 +21,20 @@ public class FreeTierConfig
     // Default = 1 distinct session per rolling 7 days for free tier.
     public int MaxSpeakingMockSets { get; set; } = 1;
 
+    /// <summary>
+    /// JSON object keyed by canonical profession id. Values are the selected
+    /// published Writing scenario ids. An empty or stale value resolves to the
+    /// first eligible published scenario for that profession.
+    /// </summary>
+    public string FreeWritingScenarioByProfessionJson { get; set; } = "{}";
+
+    /// <summary>
+    /// JSON object keyed by canonical profession id. Values are the selected
+    /// published Speaking role-play card ids. An empty or stale value resolves
+    /// to the first eligible published card for that profession.
+    /// </summary>
+    public string FreeSpeakingCardByProfessionJson { get; set; } = "{}";
+
     public int TrialDurationDays { get; set; } = 7;
 
     public bool ShowUpgradePrompts { get; set; } = true;

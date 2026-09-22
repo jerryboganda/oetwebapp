@@ -6,6 +6,27 @@
 import { apiRequest, asArray, asRecord, toStringArray, type ApiRecord } from './client';
 import type { MockBooking, MockDeliveryMode, MockSpeakingContent } from '../mock-data';
 
+export interface MockSpeakingExamResponse extends ApiRecord {
+  examId: string;
+}
+
+async function readSpeakingExamResponse(path: string): Promise<MockSpeakingExamResponse> {
+  const response = await apiRequest<ApiRecord>(path, { method: 'POST' });
+  const examId = typeof response.examId === 'string' ? response.examId : '';
+  if (!examId) {
+    throw new Error('The Speaking exam could not be created.');
+  }
+  return { ...response, examId };
+}
+
+export function createMockSpeakingExam(bookingId: string): Promise<MockSpeakingExamResponse> {
+  return readSpeakingExamResponse(`/v1/mocks/bookings/${encodeURIComponent(bookingId)}/speaking-exam`);
+}
+
+export function createExpertMockSpeakingExam(bookingId: string): Promise<MockSpeakingExamResponse> {
+  return readSpeakingExamResponse(`/v1/expert/mocks/bookings/${encodeURIComponent(bookingId)}/speaking-exam`);
+}
+
 export const MOCK_DELIVERY_MODES: ReadonlySet<MockDeliveryMode> = new Set<MockDeliveryMode>([
   'computer', 'paper', 'oet_home',
 ]);

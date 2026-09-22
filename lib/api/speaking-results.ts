@@ -224,9 +224,48 @@ function mapRoleCardPayload(item: ApiRecord): RoleCard {
   };
 }
 
-export async function fetchRoleCard(taskId: string): Promise<RoleCard> {
-  const item = await apiRequest<ApiRecord>(`/v1/speaking/tasks/${taskId}`);
-  return mapRoleCardPayload(item);
+export async function fetchRoleCard(taskId: string, options?: { freeSample?: boolean }): Promise<RoleCard> {
+  const endpoint = options?.freeSample
+    ? `/v1/speaking/role-play-cards/free?cardId=${encodeURIComponent(taskId)}`
+    : `/v1/speaking/role-play-cards/${encodeURIComponent(taskId)}`;
+  const item = await apiRequest<ApiRecord>(endpoint);
+  const tasks = toStringArray(item.tasks);
+  const patientName = typeof item.patientName === 'string' ? item.patientName.trim() : '';
+  const patientAge = typeof item.patientAge === 'string' ? item.patientAge.trim() : '';
+  const patientRole = typeof item.interlocutorRole === 'string' && item.interlocutorRole.trim()
+    ? item.interlocutorRole.trim()
+    : 'Patient';
+  const patient = [patientName, patientAge ? `age ${patientAge}` : ''].filter(Boolean).join(', ') || patientRole;
+  const background = typeof item.background === 'string' ? item.background : '';
+  const candidateRole = typeof item.candidateRole === 'string' ? item.candidateRole : undefined;
+  const setting = typeof item.setting === 'string' ? item.setting : undefined;
+  return {
+    id: String(item.cardId ?? taskId),
+    title: String(item.scenarioTitle ?? 'Speaking role play'),
+    profession: item.professionId ? titleCase(String(item.professionId)) : 'Healthcare professional',
+    setting: setting ?? 'Clinical setting',
+    patient,
+    brief: background || tasks.join(' '),
+    tasks,
+    background,
+    candidateCard: {
+      role: candidateRole,
+      candidateRole,
+      setting,
+      patient,
+      patientRole,
+      brief: background || undefined,
+      background,
+      tasks,
+    },
+    prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
+    roleplayTimeSeconds: typeof item.rolePlayTimeSeconds === 'number' ? item.rolePlayTimeSeconds : undefined,
+    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
+    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
+    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
+    criteriaFocus: toStringArray(item.criteriaFocus),
+    disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
+  };
 }
 
 export async function fetchSpeakingResult(resultId: string): Promise<SpeakingResult> {
@@ -420,4 +459,3 @@ export async function submitSpeakingRecording(
   cacheSet(evaluationCacheKey('speaking', taskId), evaluationId);
   return { uploadUrl: upload.uploadUrl, submissionId: evaluationId };
 }
-

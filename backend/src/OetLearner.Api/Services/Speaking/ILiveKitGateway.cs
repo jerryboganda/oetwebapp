@@ -4,11 +4,9 @@ namespace OetLearner.Api.Services.Speaking;
 /// Abstraction over the LiveKit (or compatible) realtime gateway used by
 /// Phase 3 of the OET Speaking module to host live-tutor rooms.
 ///
-/// The real implementation is intentionally NOT shipped in this commit —
-/// only the stub at <see cref="LiveKitGatewayStub"/>. A subsequent change
-/// swaps in the LiveKit SDK without touching any of the call-sites
-/// (<see cref="SpeakingLiveRoomService"/>, the LiveKit webhook endpoint,
-/// or the SignalR hub).
+/// Production uses <see cref="LiveKitCloudGateway"/>. The stub is limited
+/// to development and test environments, while an unconfigured production
+/// deployment fails closed through <see cref="LiveKitProviderUnavailable"/>.
 /// </summary>
 public interface ILiveKitGateway
 {
@@ -37,6 +35,10 @@ public interface ILiveKitGateway
     /// provider confirms the egress is no longer running.</summary>
     Task<bool> StopEgressAsync(string egressId, CancellationToken ct);
 
+    /// <summary>Close and remove a provider room after the persisted room
+    /// reaches its terminal state.</summary>
+    Task DeleteRoomAsync(string roomName, CancellationToken ct);
+
     /// <summary>Verify the signature attached to an inbound webhook
     /// payload. Implementations MUST use a constant-time comparison.
     /// Returns <c>false</c> when the signature is missing, malformed, or
@@ -53,4 +55,8 @@ public sealed record LiveKitRoomCreationResult(string RoomSid, string WssUrl);
 /// access token. The backend computes these from the room role
 /// (Learner / Tutor / Observer) so the provider cannot be tricked into
 /// publishing media on behalf of an observer.</summary>
-public sealed record LiveKitTokenCapabilities(bool CanPublishAudio, bool CanPublishVideo, bool CanSubscribe);
+public sealed record LiveKitTokenCapabilities(
+    bool CanPublishAudio,
+    bool CanPublishVideo,
+    bool CanSubscribe,
+    bool CanManageRoom = false);

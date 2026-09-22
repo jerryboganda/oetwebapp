@@ -18,10 +18,8 @@ namespace OetLearner.Api.Configuration;
 ///      for 7 days.
 ///   4. Flip globally.
 ///
-/// TODO Agent I: register in Program.cs via
-/// <c>builder.Services.Configure&lt;FeatureFlagOptions&gt;(builder.Configuration.GetSection("Features"));</c>
-/// once the orchestrator can land the DI line. This file is intentionally
-/// the only production source the test/runbook phase touches.
+/// The binding is registered in <c>Program.cs</c>; production must explicitly
+/// opt in with <c>Features__SpeakingV2=true</c>.
 /// </summary>
 public sealed class FeatureFlagOptions
 {
@@ -32,10 +30,10 @@ public sealed class FeatureFlagOptions
 
     /// <summary>
     /// Master gate for the Phase 1–11 Speaking module rebuild. When
-    /// <c>false</c>, every new Speaking surface (warm-up, AI patient turn
-    /// loop, dual scoring UI, calibration drift dashboard, admin analytics
-    /// speaking sub-page) hides itself, and the legacy
-    /// <c>app/speaking/task/[id]</c> flow keeps serving the previous UX.
+    /// <c>false</c>, every new Speaking surface (warm-up, native realtime AI
+    /// voice, dual scoring UI, calibration drift dashboard, admin analytics
+    /// speaking sub-page) hides itself. The existing recorder remains only
+    /// for the explicitly free Speaking card flow.
     /// </summary>
     public bool SpeakingV2 { get; set; } = false;
 

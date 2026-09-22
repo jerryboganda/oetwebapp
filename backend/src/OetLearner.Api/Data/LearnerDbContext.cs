@@ -507,6 +507,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<Attempt>().HasIndex(x => new { x.UserId, x.SubtestCode, x.State });
         modelBuilder.Entity<Attempt>().HasIndex(x => x.ContentId);
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.AttemptId, x.State });
+        modelBuilder.Entity<FreeTierConfig>(entity =>
+        {
+            entity.Property(x => x.FreeWritingScenarioByProfessionJson)
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+            entity.Property(x => x.FreeSpeakingCardByProfessionJson)
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+        });
         // Worker polls for pending evaluations without filtering by attempt.
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.State, x.LastTransitionAt });
         modelBuilder.Entity<ReviewRequest>().HasIndex(x => new { x.AttemptId, x.State });
@@ -1511,6 +1520,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W11 — encrypted raw provider payloads with retention.
         OnModelCreatingAiRawResponses(modelBuilder);
 
+        // Free Mocks — per-profession free-sample designation + once-only claim.
+        OnModelCreatingFreeSamples(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1713,6 +1725,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiRawResponses.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiRawResponses(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.FreeSamples.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingFreeSamples(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

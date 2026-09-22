@@ -1,10 +1,16 @@
-const { mockEnsureFreshAccessToken, mockFetchWithTimeout } = vi.hoisted(() => ({
+const { mockEnsureFreshAccessToken, mockFetchWithTimeout, mockAnnounceCreditUsage } = vi.hoisted(() => ({
   mockEnsureFreshAccessToken: vi.fn(),
   mockFetchWithTimeout: vi.fn(),
+  mockAnnounceCreditUsage: vi.fn(),
 }));
 
 vi.mock('./auth-client', () => ({
   ensureFreshAccessToken: mockEnsureFreshAccessToken,
+}));
+
+vi.mock('@/lib/credit-feedback', () => ({
+  announceCreditUsage: mockAnnounceCreditUsage,
+  refreshCreditCards: vi.fn(),
 }));
 
 vi.mock('./env', () => ({
@@ -15,6 +21,7 @@ vi.mock('./network/fetch-with-timeout', () => ({
   fetchWithTimeout: mockFetchWithTimeout,
 }));
 
+import { FREE_SAMPLE_FEEDBACK } from './free-sample';
 import { getListeningSession, startListeningAttempt, startListeningPartPracticeAttempt } from './listening-api';
 
 function jsonResponse(body: unknown) {
@@ -49,6 +56,27 @@ describe('listening-api', () => {
       mode: 'practice',
       pathwayStage: 'foundation_partA',
     });
+  });
+
+  it('announces the credit usage after an ordinary attempt start', async () => {
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({ attemptId: 'attempt-1', feedbackMessage: '1 Listening Credit used.' }),
+    );
+
+    await startListeningAttempt('paper-1', 'exam');
+
+    await vi.waitFor(() => expect(mockAnnounceCreditUsage).toHaveBeenCalledWith('listening'));
+  });
+
+  it('does not announce credit usage for the free sample (no debit, stale ledger row)', async () => {
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({ attemptId: 'attempt-1', feedbackMessage: FREE_SAMPLE_FEEDBACK }),
+    );
+
+    await startListeningAttempt('paper-1', 'exam');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockAnnounceCreditUsage).not.toHaveBeenCalled();
   });
 
   it('omits pathwayStage from attempt starts when no scope is supplied', async () => {
