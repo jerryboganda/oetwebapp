@@ -13,7 +13,7 @@ Every Speaking-module env key, grouped by subsystem. Defaults are listed; requir
 | `LIVEKIT__WEBHOOKSIGNINGSECRET` | yes (cloud) | — | HMAC secret for webhook verification. |
 | `LIVEKIT__EGRESSBUCKET` | yes (cloud) | — | S3 bucket for egress output. |
 | `LIVEKIT__DEFAULTMAXDURATIONSECONDS` | optional | `1800` | Auto-end ceiling per room (seconds). |
-| `LIVEKIT__EGRESSENABLED` | optional | `true` | Track-composite recording on/off. |
+| `LIVEKIT__EGRESSENABLED` | optional | `true` | Audio-only mixed-room recording on/off. |
 
 ## Anthropic — Default Speaking AI Provider
 

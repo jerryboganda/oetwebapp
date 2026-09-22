@@ -229,14 +229,15 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         var opts = _options.Value;
         EnsureConfigured(opts);
 
-        // outputUrl format expectation: "s3://bucket-name/key.mp4". The
+        // outputUrl format expectation: "s3://bucket-name/key.mp4" (audio only). The
         // current StartEgress API keeps storage at request level and the
         // file output only carries the path and format.
         var target = BuildEgressTarget(outputUrl, opts);
 
+        // Keep layout and custom_base_url unset: either forces LiveKit's video pipeline.
         var request = new StartEgressRequest(
             RoomName: roomName,
-            Template: new LiveKitTemplateSource { Layout = "grid" },
+            Template: new LiveKitTemplateSource { AudioOnly = true },
             Outputs: [new LiveKitEgressOutput { File = target.File }],
             Storage: target.Storage);
 
@@ -620,8 +621,8 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
 
     private sealed class LiveKitTemplateSource
     {
-        [JsonPropertyName("layout")]
-        public string Layout { get; set; } = string.Empty;
+        [JsonPropertyName("audio_only")]
+        public bool AudioOnly { get; set; }
     }
 
     private sealed class LiveKitEgressOutput
