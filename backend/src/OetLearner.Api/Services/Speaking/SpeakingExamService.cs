@@ -154,6 +154,13 @@ public sealed class SpeakingExamService(
             throw ApiException.NotFound("private_speaking_booking_not_found",
                 "That booking does not exist.");
         }
+        if (booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+            or PrivateSpeakingBookingStatus.ZoomCreated
+            or PrivateSpeakingBookingStatus.InProgress))
+        {
+            throw ApiException.Conflict("private_speaking_booking_not_active",
+                "The live-tutor booking is not ready for a Speaking exam.");
+        }
 
         var now = DateTimeOffset.UtcNow;
 
@@ -163,6 +170,12 @@ public sealed class SpeakingExamService(
             var existing = await db.SpeakingExamSessions.FirstOrDefaultAsync(e => e.Id == booking.ExamSessionId, ct);
             if (existing is not null)
             {
+                if (existing.Mode == SpeakingExamMode.LiveTutor && string.IsNullOrWhiteSpace(existing.SessionAId))
+                {
+                    existing.SessionAId = await CreateChildSessionAsync(existing, existing.CardAId, "a", now, ct);
+                    existing.UpdatedAt = now;
+                    await db.SaveChangesAsync(ct);
+                }
                 var changed = await AdvanceAsync(existing, now, ct);
                 if (changed) { existing.UpdatedAt = now; await db.SaveChangesAsync(ct); }
                 return await ProjectAsync(existing, now, ct);
@@ -191,6 +204,7 @@ public sealed class SpeakingExamService(
             UpdatedAt = now,
         };
         db.SpeakingExamSessions.Add(exam);
+        exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
 
         booking.ExamSessionId = exam.Id;
         booking.SessionFormat = "exam";
@@ -200,10 +214,37 @@ public sealed class SpeakingExamService(
         return await ProjectAsync(exam, now, ct);
     }
 
+    public async Task<SpeakingExamDetail> CreateExamForTutorFromBookingAsync(
+        string expertUserId, string bookingId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expertUserId))
+        {
+            throw ApiException.Unauthorized("speaking_exam_unauthenticated",
+                "You must be signed in to join a live-tutor Speaking exam.");
+        }
+
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct)
+            ?? throw ApiException.NotFound("private_speaking_booking_not_found",
+                "That booking does not exist.");
+        if (!string.Equals(booking.TutorProfile?.ExpertUserId, expertUserId, StringComparison.Ordinal))
+        {
+            throw ApiException.NotFound("private_speaking_booking_not_found",
+                "That booking does not exist.");
+        }
+
+        return await CreateExamForBookingAsync(booking.LearnerUserId, bookingId, ct);
+    }
+
     /// <summary>Tutor-only view of a live-tutor exam: both roleplayer (patient)
     /// cards + the current phase clock. Authorisation (expert role) is enforced
     /// at the endpoint; this method does not apply the learner IDOR guard.</summary>
-    public async Task<SpeakingExamTutorView> GetExamForTutorAsync(string examId, CancellationToken ct)
+    public async Task<SpeakingExamTutorView> GetExamForTutorAsync(
+        string examId,
+        CancellationToken ct,
+        string? expertUserId = null)
     {
         if (string.IsNullOrWhiteSpace(examId))
         {
@@ -211,6 +252,21 @@ public sealed class SpeakingExamService(
         }
         var exam = await db.SpeakingExamSessions.FirstOrDefaultAsync(e => e.Id == examId, ct)
             ?? throw ApiException.NotFound("speaking_exam_not_found", "That Speaking exam does not exist.");
+
+        if (!string.IsNullOrWhiteSpace(expertUserId))
+        {
+            var assigned = await db.PrivateSpeakingBookings
+                .Include(b => b.TutorProfile)
+                .AnyAsync(b => b.Id == exam.BookingId
+                    && b.TutorProfile != null
+                    && b.TutorProfile.ExpertUserId == expertUserId, ct);
+            if (!assigned)
+            {
+                throw ApiException.Forbidden(
+                    "speaking_exam_tutor_forbidden",
+                    "You are not the assigned tutor for this Speaking exam.");
+            }
+        }
 
         var now = DateTimeOffset.UtcNow;
         var changed = await AdvanceAsync(exam, now, ct);
@@ -223,6 +279,22 @@ public sealed class SpeakingExamService(
         };
 
         var detail = await ProjectAsync(exam, now, ct);
+        var currentCardId = exam.State switch
+        {
+            SpeakingExamState.PrepA or SpeakingExamState.ActiveA => exam.CardAId,
+            SpeakingExamState.PrepB or SpeakingExamState.ActiveB => exam.CardBId,
+            _ => null,
+        };
+        var liveRoomId = currentCardId is null
+                ? null
+            : await db.SpeakingLiveRooms.AsNoTracking()
+                .Where(r => r.State == SpeakingLiveRoomState.Active
+                    && r.SpeakingSessionId == (exam.State is SpeakingExamState.PrepA or SpeakingExamState.ActiveA
+                        ? exam.SessionAId
+                        : exam.SessionBId))
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => r.Id)
+                .FirstOrDefaultAsync(ct);
         return new SpeakingExamTutorView(
             ExamId: exam.Id,
             Mode: SpeakingExamModes.ToCode(exam.Mode),
@@ -231,7 +303,9 @@ public sealed class SpeakingExamService(
             ProfessionId: exam.ProfessionId,
             BookingId: exam.BookingId,
             Clock: detail.Clock,
-            Cards: cards);
+            Cards: cards,
+            CurrentCardId: currentCardId,
+            LiveRoomId: liveRoomId);
     }
 
     private async Task<SpeakingExamRoleplayerCard> BuildRoleplayerCardAsync(
@@ -280,7 +354,27 @@ public sealed class SpeakingExamService(
         exam.IntroEndedAt = now;
         exam.PrepAStartedAt = now;
         exam.State = SpeakingExamState.PrepA;
-        exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+        if (string.IsNullOrWhiteSpace(exam.SessionAId))
+        {
+            exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+        }
+        else
+        {
+            var existingCard = await db.SpeakingSessions
+                .FirstOrDefaultAsync(s => s.Id == exam.SessionAId, ct);
+            if (existingCard is null)
+            {
+                exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+            }
+            else
+            {
+                existingCard.State = SpeakingSessionState.Prep;
+                existingCard.PrepStartedAt = now;
+                existingCard.RolePlayStartedAt = null;
+                existingCard.EndedAt = null;
+                existingCard.UpdatedAt = now;
+            }
+        }
         await DebitCardAsync(exam, "a", ct);
         exam.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
@@ -700,6 +794,9 @@ public sealed class SpeakingExamService(
             ExamSlot = slot,
             Mode = sessionMode,
             State = SpeakingSessionState.Prep,
+            InterlocutorActorId = sessionMode == SpeakingSessionMode.LiveTutor
+                ? await ResolveTutorActorIdAsync(exam.BookingId, ct)
+                : null,
             AttemptId = attemptId,
             PrepStartedAt = now,
             RulebookVersion = exam.RulebookVersion,
@@ -711,6 +808,20 @@ public sealed class SpeakingExamService(
         await snapshotService.CaptureAtRevealAsync(exam, childSession, card, now, ct);
 
         return sessionId;
+    }
+
+    private async Task<string?> ResolveTutorActorIdAsync(string? bookingId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(bookingId)) return null;
+
+        return await db.PrivateSpeakingBookings
+            .Where(b => b.Id == bookingId)
+            .Join(
+                db.PrivateSpeakingTutorProfiles,
+                booking => booking.TutorProfileId,
+                profile => profile.Id,
+                (_, profile) => profile.ExpertUserId)
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task MarkChildActiveAsync(string? sessionId, DateTimeOffset now, CancellationToken ct)
@@ -943,6 +1054,14 @@ public sealed class SpeakingExamService(
             Clock: new SpeakingExamClock(stage, now, stageStart, stageEnds, secondsRemaining, expired),
             CompletedAt: exam.CompletedAt,
             MockAttemptId: exam.MockAttemptId,
-            MockSectionId: exam.MockSectionId);
+            MockSectionId: exam.MockSectionId,
+            LiveRoomId: currentSessionId is null
+                ? null
+                : await db.SpeakingLiveRooms.AsNoTracking()
+                    .Where(r => r.State == SpeakingLiveRoomState.Active
+                        && r.SpeakingSessionId == currentSessionId)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Select(r => r.Id)
+                    .FirstOrDefaultAsync(ct));
     }
 }

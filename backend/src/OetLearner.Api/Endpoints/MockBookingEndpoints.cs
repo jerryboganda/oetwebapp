@@ -52,6 +52,17 @@ public static class MockBookingEndpoints
             });
         });
 
+        group.MapPost("/bookings/{bookingId}/speaking-exam", async (
+            HttpContext http,
+            string bookingId,
+            MockSpeakingLiveTutorService liveTutorService,
+            CancellationToken ct) =>
+        {
+            var exam = await liveTutorService.CreateLearnerExamAsync(
+                UserId(http), bookingId, ct);
+            return Results.Ok(exam);
+        });
+
         group.MapGet("/availability", async (
             HttpContext http,
             string? date,
@@ -272,7 +283,7 @@ public static class MockBookingEndpoints
             PrivateSpeakingService speakingService,
             IAiPackageCreditService aiPackageCreditService,
             IMockEntitlementService mockEntitlementService,
-            ZoomMeetingService zoomService,
+            MockSpeakingLiveTutorService liveTutorService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -388,16 +399,6 @@ public static class MockBookingEndpoints
                 return Results.Ok(cached);
             }
 
-            // Live tutor sessions need a working Zoom integration up front —
-            // general Full Mock bookings don't, they just queue the
-            // out-of-band MockBookingZoomCreate job below regardless.
-            if (!string.IsNullOrWhiteSpace(body.TutorProfileId) && !await zoomService.IsEnabledAsync(ct))
-            {
-                throw ApiException.Conflict(
-                    "zoom_unavailable",
-                    "Live tutor bookings are temporarily unavailable until the required Zoom integration is configured.");
-            }
-
             // Slot collision check — any non-cancelled booking whose span overlaps
             // this mock's span blocks creation. Matches /availability exactly, so
             // a slot shown as free cannot be rejected here (and vice versa).
@@ -474,14 +475,21 @@ public static class MockBookingEndpoints
                 ConsentToRecording = body.ConsentToRecording ?? false,
                 DeliveryMode = MockDeliveryModes.Computer,
                 LiveRoomState = MockLiveRoomStates.Waiting,
-                ZoomStatus = MockBookingZoomStatuses.Pending,
+                ZoomStatus = string.IsNullOrWhiteSpace(body.TutorProfileId)
+                    ? MockBookingZoomStatuses.Pending
+                    : null,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
             db.MockBookings.Add(booking);
-            // Real Zoom meeting is provisioned out-of-band; commits atomically
-            // with the booking row.
-            MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
+            if (tutor is not null)
+            {
+                await liveTutorService.EnsureCanonicalBookingAsync(booking, bundle, tutor, ct);
+            }
+            else
+            {
+                MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
+            }
 
             db.AuditEvents.Add(new AuditEvent
             {
@@ -543,6 +551,7 @@ public static class MockBookingEndpoints
             MockBookingRescheduleBody body,
             LearnerDbContext db,
             PrivateSpeakingService speakingService,
+            MockSpeakingLiveTutorService liveTutorService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -635,9 +644,9 @@ public static class MockBookingEndpoints
             booking.RescheduleCount++;
             booking.UpdatedAt = now;
 
-            // The Zoom meeting carries the old start time — re-provision (the
-            // job deletes the stale meeting before creating the new one).
-            if (booking.ZoomStatus is not null)
+            await liveTutorService.SyncRescheduleAsync(booking, ct);
+
+            if (string.IsNullOrWhiteSpace(booking.TutorProfileId) && booking.ZoomStatus is not null)
             {
                 booking.ZoomStatus = MockBookingZoomStatuses.Pending;
                 MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
@@ -676,6 +685,7 @@ public static class MockBookingEndpoints
             string bookingId,
             LearnerDbContext db,
             MockBookingZoomProvisioner zoomProvisioner,
+            MockSpeakingLiveTutorService liveTutorService,
             IAiPackageCreditService aiPackageCreditService,
             IMockEntitlementService mockEntitlementService,
             CancellationToken ct) =>
@@ -764,12 +774,27 @@ public static class MockBookingEndpoints
                 cancelledAt = booking.CancelledAt,
             };
 
+            if (!string.IsNullOrWhiteSpace(booking.TutorProfileId))
+            {
+                await liveTutorService.SyncCancellationAsync(booking, userId, ct);
+            }
+
             booking.Status = MockBookingStatuses.Cancelled;
             booking.CancelledAt = now;
             booking.UpdatedAt = now;
 
-            // Best-effort: a Zoom outage must never block a cancellation.
-            await zoomProvisioner.DeleteZoomMeetingBestEffortAsync(booking, ct);
+            if (string.IsNullOrWhiteSpace(booking.TutorProfileId))
+            {
+                await zoomProvisioner.DeleteZoomMeetingBestEffortAsync(booking, ct);
+            }
+            else
+            {
+                booking.ZoomStatus = null;
+                booking.ZoomMeetingId = null;
+                booking.ZoomJoinUrl = null;
+                booking.ZoomStartUrl = null;
+                booking.ZoomMeetingPassword = null;
+            }
 
             var after = new
             {

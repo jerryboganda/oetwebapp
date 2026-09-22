@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -28,8 +29,18 @@ public static class ExpertEndpoints
         // exam — both roleplayer (patient) cards + current phase, so the human
         // can role-play and follow the timed two-card structure.
         expert.MapGet("/speaking/exams/{examId}", async (
-            string examId, OetLearner.Api.Services.Speaking.SpeakingExamService exams, CancellationToken ct)
-            => Results.Ok(await exams.GetExamForTutorAsync(examId, ct)));
+            HttpContext http,
+            string examId,
+            OetLearner.Api.Services.Speaking.SpeakingExamService exams,
+            CancellationToken ct)
+            => Results.Ok(await exams.GetExamForTutorAsync(examId, ct, http.ExpertId())));
+
+        expert.MapPost("/speaking/exams/from-booking/{bookingId}", async (
+            HttpContext http,
+            string bookingId,
+            OetLearner.Api.Services.Speaking.SpeakingExamService exams,
+            CancellationToken ct)
+            => Results.Ok(await exams.CreateExamForTutorFromBookingAsync(http.ExpertId(), bookingId, ct)));
 
         // Onboarding wizard (welcome → profile → qualifications → schedule → rates → review)
         expert.MapGet("/onboarding/status", async (HttpContext http, ExpertOnboardingService onboarding, CancellationToken ct)
@@ -217,6 +228,13 @@ public static class ExpertEndpoints
 
         expert.MapGet("/mocks/bookings/{bookingId}", async (string bookingId, HttpContext http, MockBookingService bookings, CancellationToken ct)
             => Results.Ok(await bookings.GetForExpertAsync(http.ExpertId(), isAdmin: false, bookingId, ct)));
+
+        expert.MapPost("/mocks/bookings/{bookingId}/speaking-exam", async (
+            string bookingId,
+            HttpContext http,
+            MockSpeakingLiveTutorService liveTutorService,
+            CancellationToken ct) =>
+            Results.Ok(await liveTutorService.CreateTutorExamAsync(http.ExpertId(), bookingId, ct)));
 
         expert.MapPost("/mocks/bookings/{bookingId}/live-room/transition", async (
             string bookingId,

@@ -42,19 +42,31 @@ public sealed class LiveKitOptions
 
     /// <summary>Destination bucket for egress recordings (e.g. an
     /// S3-compatible URL like <c>s3://oet-speaking-recordings</c>).
-    /// When empty, egress writes to the LiveKit default storage backend.
-    /// The full output path emitted to LiveKit is
+    /// Production requires this when egress is enabled. The full output
+    /// path emitted to LiveKit is
     /// <c>{EgressBucket}/oet-speaking/{RoomName}.mp4</c>.</summary>
     public string EgressBucket { get; set; } = string.Empty;
 
-    /// <summary>Optional region for the egress S3 bucket. When empty,
-    /// the LiveKit Cloud project's default region credentials apply.</summary>
+    /// <summary>Optional region for the egress S3 bucket.</summary>
     public string EgressBucketRegion { get; set; } = string.Empty;
+
+    /// <summary>Server-side S3 credentials used by LiveKit Egress.</summary>
+    public string EgressAccessKey { get; set; } = string.Empty;
+    public string EgressSecret { get; set; } = string.Empty;
+
+    /// <summary>Optional S3-compatible endpoint for the egress bucket.</summary>
+    public string EgressEndpoint { get; set; } = string.Empty;
+    public bool EgressForcePathStyle { get; set; }
 
     /// <summary>True when the provider is configured for live calls.
     /// False short-circuits room provisioning to the stub gateway, which
     /// returns synthetic identifiers.</summary>
     public bool IsEnabled => !string.Equals(Provider, "disabled", StringComparison.OrdinalIgnoreCase)
         && !string.IsNullOrWhiteSpace(ApiKey)
-        && !string.IsNullOrWhiteSpace(ApiSecret);
+        && !string.IsNullOrWhiteSpace(ApiSecret)
+        && !string.IsNullOrWhiteSpace(WebhookSigningSecret)
+        && (!EgressEnabled
+            || (!string.IsNullOrWhiteSpace(EgressBucket)
+                && !string.IsNullOrWhiteSpace(EgressAccessKey)
+                && !string.IsNullOrWhiteSpace(EgressSecret)));
 }

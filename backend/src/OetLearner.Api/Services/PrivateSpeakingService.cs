@@ -13,7 +13,6 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
-using OetLearner.Api.Services.Speaking;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
@@ -728,7 +727,7 @@ public sealed class PrivateSpeakingService(
             await AuditAsync(paidBooking.Id, learnerUserId, "learner", "booking_pending_payment",
                 $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, PayPal order: {intent.GatewayTransactionId}, Price minor units: {priceMinorUnits}", ct);
 
-            // No Zoom/calendar/notification jobs yet — those run on payment confirmation
+            // Calendar and notification jobs run on payment confirmation.
             // (ConfirmBookingPaymentAsync), exactly as the Stripe pending-payment path does.
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -791,7 +790,7 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, learnerUserId, "learner", "booking_reserved",
             $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, Entitlement subscription: {subscription.Id}, Catalog price minor units: {priceMinorUnits}", ct);
 
-        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: true);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
@@ -806,7 +805,8 @@ public sealed class PrivateSpeakingService(
     }
 
     /// <summary>
-    /// Handle successful payment webhook - confirm booking, create Zoom meeting, send notifications.
+    /// Handle successful payment webhook, confirm the booking, and queue
+    /// LiveKit-aware notifications and calendar synchronization.
     /// Idempotent: safe to call multiple times for the same booking.
     /// </summary>
     public async Task<bool> ConfirmBookingPaymentAsync(
@@ -855,19 +855,13 @@ public sealed class PrivateSpeakingService(
                 original.UpdatedAt = nowReschedule;
                 await db.SaveChangesAsync(ct);
 
-                if (original.ZoomMeetingId.HasValue)
-                {
-                    try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
-                    catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled-original booking", original.ZoomMeetingId); }
-                }
-
                 QueueCalendarSyncJob(original.Id);
                 await db.SaveChangesAsync(ct);
             }
 
         }
 
-        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: true);
         await db.SaveChangesAsync(ct);
 
         return true;
@@ -943,73 +937,13 @@ public sealed class PrivateSpeakingService(
         await db.SaveChangesAsync(ct);
     }
 
-    // ── Zoom Meeting Creation ───────────────────────────────────────────
+    // ── Retired provider job compatibility ──────────────────────────────
 
     public async Task CreateZoomMeetingForBookingAsync(string bookingId, CancellationToken ct)
     {
-        var booking = await db.PrivateSpeakingBookings
-            .Include(b => b.TutorProfile)
-            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
-
-        if (booking is null || booking.Status != PrivateSpeakingBookingStatus.Confirmed)
-        {
-            logger.LogWarning("Cannot create Zoom for booking {BookingId}: not found or wrong status", bookingId);
-            return;
-        }
-
-        if (booking.ZoomStatus == PrivateSpeakingZoomStatus.Created)
-            return; // Idempotent
-
-        booking.ZoomStatus = PrivateSpeakingZoomStatus.Creating;
-        booking.UpdatedAt = timeProvider.GetUtcNow();
-        await db.SaveChangesAsync(ct);
-
-        try
-        {
-            var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
-            var result = await zoomService.CreateMeetingAsync(
-                topic: $"OET Private Speaking Session with {tutorName}",
-                startTime: booking.SessionStartUtc,
-                durationMinutes: booking.DurationMinutes,
-                timezone: booking.TutorTimezone,
-                ct);
-
-            booking.ZoomMeetingId = result.MeetingId;
-            booking.ZoomJoinUrl = result.JoinUrl;
-            booking.ZoomStartUrl = result.StartUrl;
-            booking.ZoomMeetingPassword = result.Password;
-            booking.ZoomStatus = PrivateSpeakingZoomStatus.Created;
-            booking.Status = PrivateSpeakingBookingStatus.ZoomCreated;
-            booking.UpdatedAt = timeProvider.GetUtcNow();
-            await db.SaveChangesAsync(ct);
-
-            await AuditAsync(booking.Id, "system", "system", "zoom_created",
-                $"Meeting ID: {result.MeetingId}", ct);
-
-            QueueBookingConfirmationJob(booking.Id);
-            QueueCalendarSyncJob(booking.Id);
-            await db.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            booking.ZoomStatus = PrivateSpeakingZoomStatus.Failed;
-            booking.ZoomError = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
-            booking.ZoomRetryCount++;
-            booking.UpdatedAt = timeProvider.GetUtcNow();
-            if (booking.ZoomRetryCount >= 3)
-            {
-                booking.Status = PrivateSpeakingBookingStatus.Failed;
-                await RestoreSpeakingEntitlementAsync(booking, "zoom_creation_failed", ct);
-                QueueCalendarSyncJob(booking.Id);
-            }
-            await db.SaveChangesAsync(ct);
-
-            logger.LogError(ex, "Failed to create Zoom meeting for booking {BookingId}", bookingId);
-            await AuditAsync(booking.Id, "system", "system", "zoom_failed", ex.Message, ct);
-
-            if (booking.ZoomRetryCount < 3)
-                throw; // Let background job retry
-        }
+        logger.LogWarning(
+            "Ignoring legacy Zoom provisioning request for private Speaking booking {BookingId}; LiveKit is authoritative",
+            bookingId);
     }
 
     // ── Notifications ───────────────────────────────────────────────────
@@ -1021,11 +955,10 @@ public sealed class PrivateSpeakingService(
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
 
         if (booking is null
-            || booking.Status != PrivateSpeakingBookingStatus.ZoomCreated
-            || booking.ZoomStatus != PrivateSpeakingZoomStatus.Created
-            || string.IsNullOrWhiteSpace(booking.ZoomJoinUrl))
+            || booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+                or PrivateSpeakingBookingStatus.ZoomCreated
+                or PrivateSpeakingBookingStatus.InProgress))
         {
-            // A confirmation is valid only after Zoom provisioning succeeds.
             return;
         }
 
@@ -1044,8 +977,7 @@ public sealed class PrivateSpeakingService(
                 ["tutorName"] = tutorName,
                 ["sessionTime"] = sessionTime,
                 ["duration"] = booking.DurationMinutes.ToString(),
-                ["bookingId"] = booking.Id,
-                ["zoomJoinUrl"] = booking.ZoomJoinUrl
+                ["bookingId"] = booking.Id
             },
             ct);
 
@@ -1062,8 +994,7 @@ public sealed class PrivateSpeakingService(
                 {
                     ["sessionTime"] = sessionTime,
                     ["duration"] = booking.DurationMinutes.ToString(),
-                    ["bookingId"] = booking.Id,
-                    ["zoomStartUrl"] = booking.ZoomStartUrl
+                    ["bookingId"] = booking.Id
                 },
                 ct);
         }
@@ -1100,12 +1031,10 @@ public sealed class PrivateSpeakingService(
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
 
         if (booking is null
-            || booking.Status != PrivateSpeakingBookingStatus.ZoomCreated
-            || booking.ZoomStatus != PrivateSpeakingZoomStatus.Created
-            || string.IsNullOrWhiteSpace(booking.ZoomJoinUrl))
+            || booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+                or PrivateSpeakingBookingStatus.ZoomCreated
+                or PrivateSpeakingBookingStatus.InProgress))
         {
-            // Never send a reschedule confirmation before the replacement Zoom
-            // room and learner join URL are ready.
             return;
         }
 
@@ -1126,8 +1055,7 @@ public sealed class PrivateSpeakingService(
                 // The current workflow has no reschedule penalty. Keep the
                 // contract stable for older notification templates without
                 // exposing a legacy penalty amount.
-                ["penalty"] = string.Empty,
-                ["zoomJoinUrl"] = booking.ZoomJoinUrl
+                ["penalty"] = string.Empty
             },
             ct);
 
@@ -1143,8 +1071,7 @@ public sealed class PrivateSpeakingService(
                 new Dictionary<string, object?>
                 {
                     ["sessionTime"] = sessionTime,
-                    ["bookingId"] = booking.Id,
-                    ["zoomStartUrl"] = booking.ZoomStartUrl
+                    ["bookingId"] = booking.Id
                 },
                 ct);
         }
@@ -1180,8 +1107,6 @@ public sealed class PrivateSpeakingService(
             .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
                 || b.Status == PrivateSpeakingBookingStatus.ZoomCreated)
                 && b.SessionStartUtc > now
-                && b.ZoomStatus == PrivateSpeakingZoomStatus.Created
-                && b.ZoomJoinUrl != null
                 && b.SessionStartUtc <= now.AddMinutes(maxOffset + 5))
             .ToListAsync(ct);
 
@@ -1223,8 +1148,7 @@ public sealed class PrivateSpeakingService(
                         ["tutorName"] = tutorName,
                         ["sessionTime"] = sessionTime,
                         ["timeUntil"] = timeUntil,
-                        ["bookingId"] = booking.Id,
-                        ["zoomJoinUrl"] = booking.ZoomJoinUrl
+                        ["bookingId"] = booking.Id
                     },
                     ct);
 
@@ -1331,7 +1255,7 @@ public sealed class PrivateSpeakingService(
     /// T5 (PDF §3.3.6/§13) — automatic no-show sweep. Finds bookings whose session
     /// has ended (start + duration + <see cref="NoShowGraceMinutes"/> grace is in the
     /// past), are still in an "expected to run" state (Confirmed/ZoomCreated/InProgress),
-    /// and where the learner's attendance was never verified by the Zoom attendance
+    /// and where the learner's attendance was never verified by the LiveKit presence
     /// webhook (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> == false), and
     /// marks each as a no-show via <see cref="MarkNoShowAsync"/> (which also emits the
     /// learner + tutor no-show notifications). Each booking is processed in its own
@@ -1376,142 +1300,65 @@ public sealed class PrivateSpeakingService(
         }
     }
 
-    // ── Zoom Attendance Webhook ─────────────────────────────────────────
-
-    /// <summary>
-    /// T5 (PDF §3.3.6/§13) — apply a Zoom meeting webhook event to a Private
-    /// Speaking booking's attendance fields. Invoked from the shared Zoom webhook
-    /// receiver (<c>LiveClassService.HandleZoomWebhookAsync</c>), which has already
-    /// verified the signature, handled the <c>endpoint.url_validation</c> handshake,
-    /// and deduped the delivery — so this method only mutates booking state.
-    ///
-    /// <para><b>Attendance-matching rule (documented so the no-show sweep is
-    /// unambiguous):</b> a booking is treated as "attended"
-    /// (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> = true) only when a
-    /// <c>meeting.participant_joined</c> event arrives whose participant email
-    /// matches the booking learner's email (case-insensitive). Any join still
-    /// stamps <see cref="PrivateSpeakingBooking.AttendanceJoinedAt"/> as a
-    /// diagnostic fallback, but a host/unknown/email-less join never flips
-    /// <c>AttendanceVerified</c>. The sweep keys exclusively off
-    /// <c>AttendanceVerified</c>, so only a verified learner join prevents a
-    /// no-show. <see cref="PrivateSpeakingBooking.AttendanceLeftAt"/> is recorded
-    /// only for the matched learner.</para>
-    /// </summary>
+    // Compatibility reader for pre-LiveKit webhook retries. No production
+    // endpoint dispatches private-speaking attendance through this method.
     public async Task ApplyZoomAttendanceWebhookAsync(string eventType, JsonElement root, CancellationToken ct)
     {
-        if (eventType is not ("meeting.participant_joined" or "meeting.participant_left"))
-        {
-            // meeting.ended and all other events are no-ops here — the sweep, not
-            // the meeting-ended signal, decides no-shows.
-            return;
-        }
-
-        if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object
-            || !payload.TryGetProperty("object", out var meetingObject) || meetingObject.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
+        if (eventType is not ("meeting.participant_joined" or "meeting.participant_left")) return;
+        if (!root.TryGetProperty("payload", out var payload)
+            || !payload.TryGetProperty("object", out var meetingObject)) return;
 
         var meetingId = TryReadMeetingId(meetingObject);
         if (meetingId is null) return;
 
         var booking = await db.PrivateSpeakingBookings
-            .FirstOrDefaultAsync(b => b.ZoomMeetingId == meetingId.Value, ct);
+            .FirstOrDefaultAsync(item => item.ZoomMeetingId == meetingId.Value, ct);
         if (booking is null) return;
 
-        var (participantEmail, eventTime) = ReadZoomParticipant(
-            meetingObject,
-            timeField: eventType == "meeting.participant_joined" ? "join_time" : "leave_time");
-
+        var participant = meetingObject.TryGetProperty("participant", out var participantValue)
+            ? participantValue
+            : default;
+        var participantEmail = ReadJsonString(participant, "user_email")
+            ?? ReadJsonString(participant, "email");
         var learnerEmail = await db.Users.AsNoTracking()
-            .Where(u => u.Id == booking.LearnerUserId)
-            .Select(u => u.Email)
+            .Where(user => user.Id == booking.LearnerUserId)
+            .Select(user => user.Email)
             .FirstOrDefaultAsync(ct);
         var isLearner = !string.IsNullOrWhiteSpace(participantEmail)
-            && !string.IsNullOrWhiteSpace(learnerEmail)
             && string.Equals(participantEmail, learnerEmail, StringComparison.OrdinalIgnoreCase);
 
-        var changed = false;
+        var now = timeProvider.GetUtcNow();
         if (eventType == "meeting.participant_joined")
         {
-            // Diagnostic fallback: first observed join wins, regardless of who joined.
-            if (booking.AttendanceJoinedAt is null)
-            {
-                booking.AttendanceJoinedAt = eventTime;
-                changed = true;
-            }
-            // Verified attendance requires a learner-email match.
-            if (isLearner && !booking.AttendanceVerified)
-            {
-                booking.AttendanceVerified = true;
-                changed = true;
-            }
+            booking.AttendanceJoinedAt ??= now;
+            if (isLearner) booking.AttendanceVerified = true;
         }
         else if (isLearner)
         {
-            // Only record the learner's leave time.
-            booking.AttendanceLeftAt = eventTime;
-            changed = true;
+            booking.AttendanceLeftAt = now;
         }
 
-        if (changed)
-        {
-            booking.UpdatedAt = timeProvider.GetUtcNow();
-            await db.SaveChangesAsync(ct);
-            logger.LogInformation(
-                "Zoom {EventType} applied to Private Speaking booking {BookingId} (verified={Verified})",
-                eventType, booking.Id, booking.AttendanceVerified);
-        }
+        booking.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Read the Zoom meeting id (sent as a numeric string or number under <c>payload.object.id</c>).</summary>
     private static long? TryReadMeetingId(JsonElement meetingObject)
     {
-        if (!meetingObject.TryGetProperty("id", out var idProp)) return null;
-        return idProp.ValueKind switch
+        if (!meetingObject.TryGetProperty("id", out var id)) return null;
+        return id.ValueKind switch
         {
-            JsonValueKind.String => long.TryParse(idProp.GetString(), out var s) ? s : null,
-            JsonValueKind.Number => idProp.TryGetInt64(out var n) ? n : null,
-            _ => null
+            JsonValueKind.String => long.TryParse(id.GetString(), out var value) ? value : null,
+            JsonValueKind.Number => id.TryGetInt64(out var value) ? value : null,
+            _ => null,
         };
     }
 
-    /// <summary>
-    /// Extract the participant email + event timestamp from <c>payload.object.participant</c>.
-    /// Zoom uses <c>user_email</c> for the participant address (matching the Live Class
-    /// receiver). Falls back to <c>email</c>. The timestamp falls back to "now" when Zoom
-    /// omits or sends an unparseable join/leave time.
-    /// </summary>
-    private (string? Email, DateTimeOffset Timestamp) ReadZoomParticipant(JsonElement meetingObject, string timeField)
-    {
-        string? email = null;
-        var timestamp = timeProvider.GetUtcNow();
-
-        if (meetingObject.TryGetProperty("participant", out var participant)
-            && participant.ValueKind == JsonValueKind.Object)
-        {
-            email = ReadJsonString(participant, "user_email") ?? ReadJsonString(participant, "email");
-            var rawTime = ReadJsonString(participant, timeField);
-            if (!string.IsNullOrWhiteSpace(rawTime)
-                && DateTimeOffset.TryParse(
-                    rawTime,
-                    CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
-                    out var parsed))
-            {
-                timestamp = parsed;
-            }
-        }
-
-        return (email, timestamp);
-    }
-
-    private static string? ReadJsonString(JsonElement el, string name)
-    {
-        if (el.ValueKind != JsonValueKind.Object) return null;
-        if (!el.TryGetProperty(name, out var prop)) return null;
-        return prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
-    }
+    private static string? ReadJsonString(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(name, out var value)
+            && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     // ── Cancellation ────────────────────────────────────────────────────
 
@@ -1615,13 +1462,6 @@ public sealed class PrivateSpeakingService(
             booking.Id, actorId, actorRole, "booking_cancelled",
             string.IsNullOrWhiteSpace(reason) ? refundDetail : $"{reason} | {refundDetail}",
             ct);
-
-        // Delete Zoom meeting if it exists
-        if (booking.ZoomMeetingId.HasValue)
-        {
-            try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId}", booking.ZoomMeetingId); }
-        }
 
         QueueCalendarSyncJob(booking.Id);
         await db.SaveChangesAsync(ct);
@@ -1817,15 +1657,9 @@ public sealed class PrivateSpeakingService(
             await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", freeReplacement.Id, ct);
             await AuditAsync(freeReplacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
             QueueCalendarSyncJob(original.Id);
-            QueueBookingPostCommitJobs(freeReplacement.Id, includeCalendarSync: false);
+            QueueBookingPostCommitJobs(freeReplacement.Id, includeCalendarSync: true);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-
-            if (original.ZoomMeetingId.HasValue)
-            {
-                try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
-                catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
-            }
 
         return new BookingCheckoutResult(
             true,
@@ -1883,49 +1717,6 @@ public sealed class PrivateSpeakingService(
 
         var bookings = await query.ToListAsync(ct);
         return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
-    }
-
-    public async Task<LiveClassJoinTokenResponse> CreateLearnerJoinTokenAsync(
-        string bookingId,
-        string learnerUserId,
-        CancellationToken ct)
-    {
-        var booking = await db.PrivateSpeakingBookings
-            .AsNoTracking()
-            .Include(item => item.TutorProfile)
-            .FirstOrDefaultAsync(item => item.Id == bookingId && item.LearnerUserId == learnerUserId, ct)
-            ?? throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
-
-        ValidateJoinWindow(booking, role: "learner");
-
-        var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == learnerUserId, ct)
-            ?? throw ApiException.NotFound("learner_not_found", "Learner profile not found.");
-
-        return await CreateJoinTokenAsync(booking, learner.DisplayName, learner.Email, role: 0, ct);
-    }
-
-    public async Task<LiveClassJoinTokenResponse> CreateExpertJoinTokenAsync(
-        string bookingId,
-        string expertUserId,
-        CancellationToken ct)
-    {
-        var booking = await db.PrivateSpeakingBookings
-            .AsNoTracking()
-            .Include(item => item.TutorProfile)
-            .FirstOrDefaultAsync(item => item.Id == bookingId, ct)
-            ?? throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
-
-        if (booking.TutorProfile?.ExpertUserId != expertUserId)
-        {
-            throw ApiException.Forbidden("private_speaking_not_assigned", "This private speaking session is assigned to another tutor.");
-        }
-
-        ValidateJoinWindow(booking, role: "expert");
-
-        var expert = await db.ExpertUsers.AsNoTracking().FirstOrDefaultAsync(user => user.Id == expertUserId, ct)
-            ?? throw ApiException.NotFound("expert_not_found", "Expert profile not found.");
-
-        return await CreateJoinTokenAsync(booking, expert.DisplayName, expert.Email, role: 1, ct);
     }
 
     public async Task<PrivateSpeakingCalendarInvite> BuildCalendarInviteAsync(
@@ -2071,9 +1862,8 @@ public sealed class PrivateSpeakingService(
     /// <summary>
     /// Admin edits booking metadata only: scheduling time, duration, profession
     /// track, tutor notes. Only non-null fields are applied. This does NOT change
-    /// Status or payment state and does NOT re-sync Zoom — even if
-    /// <paramref name="sessionStartUtc"/> changes (use
-    /// <see cref="AdminManualRescheduleAsync"/> for a move that recreates Zoom).
+    /// Status or payment state. LiveKit room provisioning is owned by the
+    /// speaking-room lifecycle worker.
     /// </summary>
     public async Task<PrivateSpeakingBooking?> AdminEditBookingAsync(
         string bookingId, string adminId,
@@ -2143,11 +1933,6 @@ public sealed class PrivateSpeakingService(
 
         if (scheduleChanged || durationChanged)
         {
-            if (booking.ZoomMeetingId.HasValue)
-            {
-                try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
-                catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for admin booking edit", booking.ZoomMeetingId); }
-            }
             booking.ZoomMeetingId = null;
             booking.ZoomJoinUrl = null;
             booking.ZoomStartUrl = null;
@@ -2227,11 +2012,9 @@ public sealed class PrivateSpeakingService(
 
     /// <summary>
     /// Admin moves a booking to a new time IN-PLACE, subject to future,
-    /// advance-window, and canonical tutor-calendar availability checks. Any existing Zoom meeting is deleted, then the booking
-    /// is reset to Confirmed/ZoomStatus=Pending and a Zoom-create job is re-queued
-    /// so a fresh room is provisioned at the new time. Rejects terminal-state
-    /// bookings. zoomService is only invoked when an old <see cref="PrivateSpeakingBooking.ZoomMeetingId"/>
-    /// is present.
+    /// advance-window, and canonical tutor-calendar availability checks. The
+    /// booking remains Confirmed and its LiveKit room is provisioned by the
+    /// speaking-room lifecycle worker. Rejects terminal-state bookings.
     /// </summary>
     public async Task<(bool Success, string? Error)> AdminManualRescheduleAsync(
         string bookingId, string adminId,
@@ -2262,14 +2045,8 @@ public sealed class PrivateSpeakingService(
         booking.SessionStartUtc = newSessionStartUtc;
         booking.UpdatedAt = now;
 
-        // Tear down any existing Zoom room — it points at the old time.
-        if (booking.ZoomMeetingId.HasValue)
-        {
-            try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for admin-rescheduled booking", booking.ZoomMeetingId); }
-        }
-
-        // Reset Zoom state + Confirmed so the slot is recreated at the new time.
+        // Clear legacy provider fields. LiveKit rooms are linked through the
+        // speaking exam session and are provisioned by the lifecycle worker.
         booking.ZoomMeetingId = null;
         booking.ZoomJoinUrl = null;
         booking.ZoomStartUrl = null;
@@ -2282,7 +2059,7 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, adminId, "admin", "admin_manual_reschedule",
             $"New start: {newSessionStartUtc:O}, Reason: {reason ?? "admin_manual_reschedule"}", ct);
 
-        // Re-queue Zoom creation (+confirmation) and calendar sync at the new time.
+        // Re-queue booking notification and calendar sync at the new time.
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
         QueueCalendarSyncJob(booking.Id);
         await db.SaveChangesAsync(ct);
@@ -2591,18 +2368,7 @@ public sealed class PrivateSpeakingService(
 
     private void QueueBookingPostCommitJobs(string bookingId, bool includeCalendarSync)
     {
-        var now = timeProvider.GetUtcNow();
-        db.BackgroundJobs.Add(new BackgroundJobItem
-        {
-            Id = $"bgj-{Guid.NewGuid():N}",
-            Type = JobType.PrivateSpeakingZoomCreate,
-            ResourceId = bookingId,
-            State = AsyncState.Queued,
-            AvailableAt = now,
-            CreatedAt = now,
-            LastTransitionAt = now
-        });
-
+        QueueBookingConfirmationJob(bookingId);
         if (includeCalendarSync)
         {
             QueueCalendarSyncJob(bookingId);
@@ -2638,101 +2404,6 @@ public sealed class PrivateSpeakingService(
             LastTransitionAt = now
         });
     }
-
-    private void ValidateJoinWindow(PrivateSpeakingBooking booking, string role)
-    {
-        if (booking.Status is not (PrivateSpeakingBookingStatus.ZoomCreated or PrivateSpeakingBookingStatus.InProgress))
-        {
-            throw ApiException.Conflict("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
-        }
-
-        if (booking.ZoomMeetingId is null)
-        {
-            throw ApiException.ServiceUnavailable("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
-        }
-
-        var now = timeProvider.GetUtcNow();
-        var opensAt = booking.SessionStartUtc.AddMinutes(-30);
-        var closesAt = booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).AddMinutes(15);
-        if (now < opensAt || now > closesAt)
-        {
-            var accessLabel = role == "expert" ? "host access" : "joins";
-            throw ApiException.Conflict("private_speaking_join_window_closed", $"Private speaking {accessLabel} open 30 minutes before start and close 15 minutes after the scheduled end.");
-        }
-    }
-
-    private async Task<LiveClassJoinTokenResponse> CreateJoinTokenAsync(
-        PrivateSpeakingBooking booking,
-        string displayName,
-        string? email,
-        int role,
-        CancellationToken ct)
-    {
-        var meetingNumber = booking.ZoomMeetingId?.ToString(CultureInfo.InvariantCulture)
-            ?? throw ApiException.ServiceUnavailable("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
-        var now = timeProvider.GetUtcNow();
-        var expiresAt = Min(now.AddHours(2), booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).AddMinutes(15));
-        var signature = await zoomService.GenerateMeetingSdkSignatureAsync(meetingNumber, role, expiresAt, ct);
-        var sdkKey = await zoomService.GetMeetingSdkKeyAsync(ct);
-
-        string? zak = null;
-        if (role == 1)
-        {
-            var hostZoomUserId = await ResolveHostZoomUserIdAsync(booking, ct);
-            if (!string.IsNullOrWhiteSpace(hostZoomUserId))
-            {
-                try
-                {
-                    zak = await zoomService.GetZakTokenAsync(hostZoomUserId, ct);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to fetch private speaking ZAK token for booking {BookingId}", booking.Id);
-                }
-            }
-        }
-
-        return new LiveClassJoinTokenResponse(
-            "zoom",
-            sdkKey,
-            signature,
-            meetingNumber,
-            displayName,
-            email,
-            role,
-            booking.ZoomMeetingPassword,
-            zak,
-            role == 0 ? booking.ZoomJoinUrl : booking.ZoomStartUrl,
-            expiresAt);
-    }
-
-    private async Task<string?> ResolveHostZoomUserIdAsync(PrivateSpeakingBooking booking, CancellationToken ct)
-    {
-        var expertUserId = booking.TutorProfile?.ExpertUserId;
-        if (string.IsNullOrWhiteSpace(expertUserId))
-        {
-            expertUserId = await db.PrivateSpeakingTutorProfiles
-                .AsNoTracking()
-                .Where(item => item.Id == booking.TutorProfileId)
-                .Select(item => item.ExpertUserId)
-                .FirstOrDefaultAsync(ct);
-        }
-
-        if (string.IsNullOrWhiteSpace(expertUserId))
-        {
-            return null;
-        }
-
-        var zoomUserId = await db.Tutors
-            .AsNoTracking()
-            .Where(tutor => tutor.UserId == expertUserId && tutor.IsActive)
-            .Select(tutor => tutor.ZoomUserId)
-            .FirstOrDefaultAsync(ct);
-        return string.IsNullOrWhiteSpace(zoomUserId) ? null : zoomUserId;
-    }
-
-    private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
-        => left <= right ? left : right;
 
     /// <summary>
     /// Whether two instants fall on the same calendar day when projected into the

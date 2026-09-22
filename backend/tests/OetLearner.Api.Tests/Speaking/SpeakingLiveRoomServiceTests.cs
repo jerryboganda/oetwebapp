@@ -235,6 +235,9 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
         public Task<bool> StopEgressAsync(string egressId, CancellationToken ct)
             => Task.FromResult(true);
 
+        public Task DeleteRoomAsync(string roomName, CancellationToken ct)
+            => Task.CompletedTask;
+
         public bool VerifyWebhookSignature(string payload, string signature) => true;
     }
 }

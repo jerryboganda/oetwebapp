@@ -103,6 +103,8 @@ public sealed class MockBookingRecordingService
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
         if (booking.UserId != userId)
             throw ApiException.Forbidden("forbidden", "You cannot record on this booking.");
+        if (!string.IsNullOrWhiteSpace(booking.TutorProfileId))
+            throw ApiException.Conflict("livekit_required", "Tutor Speaking bookings use the LiveKit room recording lifecycle.");
         if (!booking.ConsentToRecording)
             throw ApiException.Validation("consent_required", "Recording consent has not been granted for this booking.");
         if (booking.RecordingFinalizedAt is not null)
@@ -259,6 +261,8 @@ public sealed class MockBookingRecordingService
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
         if (booking.UserId != userId)
             throw ApiException.Forbidden("forbidden", "You cannot finalise this booking's recording.");
+        if (!string.IsNullOrWhiteSpace(booking.TutorProfileId))
+            throw ApiException.Conflict("livekit_required", "Tutor Speaking bookings use the LiveKit room recording lifecycle.");
         if (!booking.ConsentToRecording)
             throw ApiException.Validation("consent_required", "Recording consent has not been granted for this booking.");
         if (booking.RecordingFinalizedAt is not null)

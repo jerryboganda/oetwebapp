@@ -22,7 +22,9 @@ import {
 } from '@/lib/api/speaking-sessions';
 import {
   createLiveRoom,
+  endLiveRoom,
   issueLiveRoomToken,
+  startRecording,
   type CreateLiveRoomResponse,
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
@@ -40,6 +42,7 @@ export default function SpeakingSessionLiveTutorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [recordingReady, setRecordingReady] = useState(false);
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
   const joinedAtRef = useRef<number | null>(null);
@@ -67,10 +70,6 @@ export default function SpeakingSessionLiveTutorPage() {
         const r = await createLiveRoom({ speakingSessionId: sessionId });
         if (cancelled) return;
         setRoom(r);
-
-        const token = await issueLiveRoomToken(r.liveRoomId, 'learner');
-        if (cancelled) return;
-        setTokenInfo(token);
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -91,6 +90,55 @@ export default function SpeakingSessionLiveTutorPage() {
   }, [router, sessionId]);
 
   useEffect(() => {
+    if (!consentAccepted || !room || tokenInfo) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await issueLiveRoomToken(room.liveRoomId, 'learner');
+        if (cancelled) return;
+        setTokenInfo(token);
+      } catch (err) {
+        if (cancelled) return;
+        setError(
+          err instanceof ApiError
+            ? err.userMessage
+            : err instanceof Error
+              ? err.message
+              : 'Could not join the live tutor room.',
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [consentAccepted, room, tokenInfo]);
+
+  useEffect(() => {
+    if (!consentAccepted || !room || recordingReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await startRecording(room.liveRoomId);
+        if (!cancelled) setRecordingReady(true);
+      } catch (err) {
+        if (cancelled) return;
+        setError(
+          err instanceof ApiError
+            ? err.userMessage
+            : err instanceof Error
+              ? err.message
+              : 'Could not start the LiveKit recording.',
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [consentAccepted, recordingReady, room]);
+
+  useEffect(() => {
     if (!session || !room || !tokenInfo || !consentAccepted || trackedJoinRef.current) return;
     trackedJoinRef.current = true;
     joinedAtRef.current = Date.now();
@@ -105,6 +153,11 @@ export default function SpeakingSessionLiveTutorPage() {
     endedRef.current = true;
     setEnding(true);
     try {
+      if (room) {
+        await endLiveRoom(room.liveRoomId).catch((roomError) => {
+          console.warn('[live-tutor] endLiveRoom failed:', roomError);
+        });
+      }
       await endSpeakingSession(session.sessionId);
       // WS4 (§14.2) — commit the recorded role-play for marking. Best-effort;
       // the backend gate stamps `submittedAt` only when a recording exists.
@@ -128,7 +181,7 @@ export default function SpeakingSessionLiveTutorPage() {
     } finally {
       router.push(`/speaking/sessions/${session.sessionId}/results`);
     }
-  }, [room?.liveRoomId, router, session]);
+  }, [room, router, session]);
 
   if (loading) {
     return (
@@ -189,8 +242,9 @@ export default function SpeakingSessionLiveTutorPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_minmax(260px,340px)]">
         {/* Video shell */}
         <div className="min-h-[480px]">
-          {consentAccepted && room && tokenInfo ? (
+          {consentAccepted && room && tokenInfo && recordingReady ? (
             <LearnerLiveRoomShell
+              liveRoomId={room.liveRoomId}
               livekitWssUrl={room.livekitWssUrl}
               token={tokenInfo.token}
               onEnd={() => void handleEnd()}
@@ -199,7 +253,7 @@ export default function SpeakingSessionLiveTutorPage() {
             <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
               <span className="inline-flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                {consentAccepted ? 'Setting up the room...' : 'Waiting for consent...'}
+                {consentAccepted ? 'Starting the LiveKit recording...' : 'Waiting for consent...'}
               </span>
             </div>
           )}

@@ -141,7 +141,8 @@ public partial class LearnerService(
     IAssessmentMarkingPolicyService? markingPolicyService = null,
     IPaymentGatewayCatalog? paymentGatewayCatalog = null,
     global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null,
-    OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null)
+    OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null,
+    IFreeTierContentResolver? freeTierContentResolver = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
 
@@ -1403,7 +1404,7 @@ public partial class LearnerService(
             "reading" => $"/reading/paper/{Uri.EscapeDataString(contentId)}",
             "listening" => $"/listening/player/{Uri.EscapeDataString(contentId)}",
             "writing" => "/writing/practice/library",
-            "speaking" => $"/speaking/task/{Uri.EscapeDataString(contentId)}",
+            "speaking" => $"/speaking/roleplay/{Uri.EscapeDataString(contentId)}",
             _ => $"/{lower}"
         };
     }
@@ -3264,13 +3265,74 @@ public partial class LearnerService(
         return BuildLearnerSpeakingTaskPayload(item, await LoadRolePlayCardAsync(item.Id, cancellationToken));
     }
 
-    public async Task<object> CreateSpeakingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
-        => await CreateAttemptAsync(userId, request, "speaking", cancellationToken);
+    public async Task<object> GetLegacyFreeSpeakingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
+    {
+        var cardId = await db.RolePlayCards
+            .AsNoTracking()
+            .Where(card => card.Id == contentId || card.ContentItemId == contentId)
+            .Select(card => card.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            throw ApiException.NotFound("content_not_found", "Speaking task not found.");
+        }
+
+        await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+        return await GetSpeakingTaskAsync(contentId, cancellationToken);
+    }
+
+    public async Task<object> CreateSpeakingAttemptAsync(
+        string userId,
+        CreateAttemptRequest request,
+        CancellationToken cancellationToken)
+    {
+        var cardId = await db.RolePlayCards.AsNoTracking()
+            .Where(card => card.Id == request.ContentId || card.ContentItemId == request.ContentId)
+            .Select(card => card.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            throw ApiException.NotFound("speaking_task_not_found", "Speaking task not found.");
+        }
+
+        await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+        return await CreateAttemptAsync(userId, request, "speaking", cancellationToken);
+    }
 
     public async Task<object> GetSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+
+    private async Task EnsureLegacyFreeSpeakingAccessAsync(string userId, string cardId, CancellationToken cancellationToken)
+    {
+        if (await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
+            userId,
+            FreeSamples.FreeSampleService.Speaking,
+            cardId,
+            cancellationToken))
+        {
+            return;
+        }
+
+        var learnerBilling = await db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new { user.CurrentPlanId, user.ActiveProfessionId })
+            .FirstOrDefaultAsync(cancellationToken);
+        var isDesignatedFreeCard = learnerBilling is not null
+            && string.Equals(learnerBilling.CurrentPlanId, "free", StringComparison.OrdinalIgnoreCase)
+            && freeTierContentResolver is not null
+            && await freeTierContentResolver.IsFeaturedSpeakingCardAsync(
+                learnerBilling.ActiveProfessionId,
+                cardId,
+                cancellationToken);
+        if (!isDesignatedFreeCard)
+        {
+            throw ApiException.Conflict(
+                "live_voice_required",
+                "Published Speaking cards use native realtime live voice. The legacy recorder is reserved for the designated free Speaking card.");
+        }
     }
 
     public async Task<object> CreateSpeakingUploadSessionAsync(
@@ -7179,6 +7241,26 @@ public partial class LearnerService(
         var freeSample = string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase)
             && await new FreeSamples.FreeSampleService(db).IsOfferedAsync(
                 userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, cancellationToken);
+        if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var cardId = await db.RolePlayCards
+                .AsNoTracking()
+                .Where(card => card.Id == request.ContentId || card.ContentItemId == resolvedContentId)
+                .Select(card => card.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(cardId))
+            {
+                throw ApiException.Conflict(
+                    "live_voice_required",
+                    "Published Speaking cards use native realtime live voice. The legacy recorder is reserved for the designated free Speaking card.");
+            }
+
+            await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+            if (!freeSample)
+            {
+                await EnsureLegacyFreeSpeakingAccessAsync(userId, cardId, cancellationToken);
+            }
+        }
 
         // Master Catalogue §5 profession isolation: a candidate must never open
         // another profession's content through a direct URL/API call. A null
@@ -8548,7 +8630,7 @@ public partial class LearnerService(
         return item.SubtestCode.ToLowerInvariant() switch
         {
             "writing" => "/writing/practice/library",
-            "speaking" => $"/speaking/task/{Uri.EscapeDataString(item.ContentId)}",
+            "speaking" => $"/speaking/roleplay/{Uri.EscapeDataString(item.ContentId)}",
             "reading" => "/reading",
             "listening" => $"/listening/player/{Uri.EscapeDataString(item.ContentId)}",
             _ => $"/{item.SubtestCode.ToLowerInvariant()}"

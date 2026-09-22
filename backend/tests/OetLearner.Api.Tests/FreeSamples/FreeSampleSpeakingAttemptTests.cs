@@ -189,9 +189,9 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         var nurseLearner = await SeedLearnerAsync(activeProfessionId: "nursing");
 
         var noCredits = await Assert.ThrowsAsync<ApiException>(() => StartAsync(medLearner, otherMed));
-        Assert.Equal("no_ai_package_credits", noCredits.ErrorCode);
+        Assert.Equal("live_voice_required", noCredits.ErrorCode);
         var wrongProfession = await Assert.ThrowsAsync<ApiException>(() => StartAsync(nurseLearner, otherMed));
-        Assert.Equal("content_not_found", wrongProfession.ErrorCode);
+        Assert.Equal("live_voice_required", wrongProfession.ErrorCode);
         Assert.Empty(_db.FreeSampleClaims);
     }
 
@@ -203,7 +203,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
 
-        Assert.Equal("no_ai_package_credits", ex.ErrorCode);
+        Assert.Equal("live_voice_required", ex.ErrorCode);
         Assert.Empty(_db.FreeSampleClaims);
     }
 
@@ -219,7 +219,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         await _db.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
-        Assert.Equal("no_ai_package_credits", ex.ErrorCode);
+        Assert.Equal("live_voice_required", ex.ErrorCode);
     }
 
     [Fact]

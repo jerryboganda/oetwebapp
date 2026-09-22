@@ -227,6 +227,13 @@ public sealed class MockBookingService
         var booking = await _db.MockBookings.Include(x => x.MockBundle).FirstOrDefaultAsync(x => x.Id == bookingId, ct)
             ?? throw ApiException.NotFound("booking_not_found", "Booking not found.");
 
+        if (!string.IsNullOrWhiteSpace(booking.TutorProfileId))
+        {
+            throw ApiException.Conflict(
+                "livekit_required",
+                "Tutor Speaking bookings use the canonical LiveKit room lifecycle.");
+        }
+
         var isAssignedExpert = booking.AssignedTutorId == actorId || booking.AssignedInterlocutorId == actorId;
         var isOwnerLearner = booking.UserId == actorId;
         if (!isAdmin && !isOwnerLearner && !isAssignedExpert)

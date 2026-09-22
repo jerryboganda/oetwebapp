@@ -84,6 +84,9 @@
     "@capacitor/status-bar": "^7.0.0",
     "@capawesome/capacitor-app-update": "^7.2.0",
     "@hookform/resolvers": "^5.2.1",
+    "@livekit/components-react": "^2.9.24",
+    "@livekit/components-styles": "^1.2.0",
+    "livekit-client": "^2.22.3",
     "@microsoft/signalr": "^10.0.0",
     "@next/env": "^16.2.6",
     "@paypal/react-paypal-js": "^10.0.0",
@@ -158,6 +161,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
+    "@types/dom-mediacapture-record": "^1.0.22",
     "@capacitor/android": "^7.0.0",
     "@capacitor/cli": "^7.0.0",
     "@capacitor/ios": "^7.0.0",

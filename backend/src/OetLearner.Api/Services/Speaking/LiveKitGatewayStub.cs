@@ -8,8 +8,7 @@ using OetLearner.Api.Configuration;
 namespace OetLearner.Api.Services.Speaking;
 
 /// <summary>
-/// Placeholder <see cref="ILiveKitGateway"/> implementation used until the
-/// real LiveKit SDK is wired in.
+/// Development and test implementation of <see cref="ILiveKitGateway"/>.
 ///
 /// Behaviour:
 /// <list type="bullet">
@@ -102,6 +101,12 @@ public sealed class LiveKitGatewayStub : ILiveKitGateway
     {
         _logger.LogInformation("LiveKitGatewayStub.StopEgress egressId={EgressId}", egressId);
         return Task.FromResult(true);
+    }
+
+    public Task DeleteRoomAsync(string roomName, CancellationToken ct)
+    {
+        _logger.LogInformation("LiveKitGatewayStub.DeleteRoom room={RoomName}", roomName);
+        return Task.CompletedTask;
     }
 
     /// <summary>

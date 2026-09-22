@@ -444,6 +444,25 @@ public class InterlocutorScript
     /// <summary>JSON array of fact keys approved for the explicit second visit.</summary>
     public string SecondVisitCarryFactsJson { get; set; } = "[]";
 
+    [MaxLength(32)]
+    public string ContentOrigin { get; set; } = "authored";
+
+    [MaxLength(128)]
+    public string? SourceDigest { get; set; }
+
+    [MaxLength(64)]
+    public string? Generator { get; set; }
+
+    [MaxLength(128)]
+    public string? GeneratorModel { get; set; }
+
+    [MaxLength(32)]
+    public string? JevValidationStatus { get; set; }
+
+    public bool NeedsOwnerInput { get; set; }
+
+    public DateTimeOffset? GeneratedAt { get; set; }
+
     [MaxLength(64)]
     public string? CreatedByUserId { get; set; }
 

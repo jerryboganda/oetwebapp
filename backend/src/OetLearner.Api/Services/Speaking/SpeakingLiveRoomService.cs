@@ -87,6 +87,14 @@ public sealed class SpeakingLiveRoomService
                 $"Speaking session '{speakingSessionId}' is in state {session.State} and cannot create a live room.");
         }
 
+        var bookingId = string.IsNullOrWhiteSpace(session.ExamSessionId)
+            ? null
+            : await _db.SpeakingExamSessions
+                .AsNoTracking()
+                .Where(exam => exam.Id == session.ExamSessionId)
+                .Select(exam => exam.BookingId)
+                .FirstOrDefaultAsync(ct);
+
         // If a room already exists for this session (idempotent retry of
         // the same "Start session" tap), return the existing identifiers
         // rather than provisioning a duplicate.
@@ -94,6 +102,12 @@ public sealed class SpeakingLiveRoomService
             .FirstOrDefaultAsync(r => r.SpeakingSessionId == speakingSessionId, ct);
         if (existing is not null)
         {
+            if (string.IsNullOrWhiteSpace(existing.BookingId) && !string.IsNullOrWhiteSpace(bookingId))
+            {
+                existing.BookingId = bookingId;
+                existing.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
             _logger.LogInformation(
                 "SpeakingLiveRoomService.CreateRoom returning_existing roomId={LiveRoomId} sessionId={SessionId}",
                 existing.Id,
@@ -116,13 +130,14 @@ public sealed class SpeakingLiveRoomService
         {
             Id = liveRoomId,
             SpeakingSessionId = speakingSessionId,
+            BookingId = bookingId,
             Provider = "livekit",
             RoomName = roomName,
             LearnerIdentity = learnerIdentity,
             TutorIdentity = tutorIdentity,
             LiveKitRoomSid = creation.RoomSid,
             ScheduledStartUtc = session.RolePlayStartedAt ?? now,
-            ActualStartUtc = now,
+            ActualStartUtc = null,
             State = SpeakingLiveRoomState.Active,
             MaxDurationSeconds = maxDuration,
             RecordingEnabled = _options.Value.EgressEnabled,
@@ -136,7 +151,44 @@ public sealed class SpeakingLiveRoomService
         session.LiveRoomId = liveRoomId;
         session.UpdatedAt = now;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            var persisted = false;
+            try
+            {
+                persisted = await _db.SpeakingLiveRooms
+                    .AsNoTracking()
+                    .AnyAsync(r => r.Id == liveRoomId, CancellationToken.None);
+            }
+            catch (Exception probeException)
+            {
+                _logger.LogWarning(
+                    probeException,
+                    "SpeakingLiveRoomService.CreateRoom could not verify persistence after failure roomId={LiveRoomId}",
+                    liveRoomId);
+            }
+
+            if (!persisted)
+            {
+                try
+                {
+                    await _gateway.DeleteRoomAsync(roomName, CancellationToken.None);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logger.LogWarning(
+                        cleanupException,
+                        "SpeakingLiveRoomService.CreateRoom provider cleanup failed roomName={RoomName}",
+                        roomName);
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation(
             "SpeakingLiveRoomService.CreateRoom created roomId={LiveRoomId} sessionId={SessionId} sid={Sid}",
@@ -217,16 +269,20 @@ public sealed class SpeakingLiveRoomService
                 break;
         }
 
+        await EnsureParticipantConsentAsync(userId, role, ct);
+
         var capabilities = role switch
         {
             SpeakingLiveRoomTokenRole.Learner => new LiveKitTokenCapabilities(
                 CanPublishAudio: true,
-                CanPublishVideo: false,
-                CanSubscribe: true),
+                CanPublishVideo: true,
+                CanSubscribe: true,
+                CanManageRoom: false),
             SpeakingLiveRoomTokenRole.Tutor => new LiveKitTokenCapabilities(
                 CanPublishAudio: true,
                 CanPublishVideo: true,
-                CanSubscribe: true),
+                CanSubscribe: true,
+                CanManageRoom: true),
             SpeakingLiveRoomTokenRole.Observer => new LiveKitTokenCapabilities(
                 CanPublishAudio: false,
                 CanPublishVideo: false,
@@ -238,6 +294,20 @@ public sealed class SpeakingLiveRoomService
         var token = await _gateway.MintAccessTokenAsync(room.RoomName, expectedIdentity, capabilities, ttl, ct);
 
         var now = DateTimeOffset.UtcNow;
+        room.ActualStartUtc ??= now;
+        if (!string.IsNullOrWhiteSpace(room.BookingId))
+        {
+            var booking = await _db.PrivateSpeakingBookings
+                .FirstOrDefaultAsync(item => item.Id == room.BookingId, ct);
+            if (booking is not null
+                && booking.Status is (PrivateSpeakingBookingStatus.Confirmed
+                    or PrivateSpeakingBookingStatus.ZoomCreated))
+            {
+                booking.Status = PrivateSpeakingBookingStatus.InProgress;
+                booking.UpdatedAt = now;
+            }
+            await SyncMockBookingStateAsync(room.BookingId, MockBookingStatuses.InProgress, MockLiveRoomStates.InProgress, now, ct);
+        }
         var record = new SpeakingLiveRoomToken
         {
             Id = $"lvrt_{Guid.NewGuid():N}",
@@ -262,6 +332,44 @@ public sealed class SpeakingLiveRoomService
             Token: token,
             ExpiresAt: record.ExpiresAt,
             Capabilities: capabilities);
+    }
+
+    private async Task EnsureParticipantConsentAsync(
+        string userId,
+        SpeakingLiveRoomTokenRole role,
+        CancellationToken ct)
+    {
+        if (role == SpeakingLiveRoomTokenRole.Observer)
+        {
+            return;
+        }
+
+        var currentRecordingVersion = _complianceOptions.Value.CurrentConsentVersion;
+        var currentLiveVideoVersion = _complianceOptions.Value.CurrentLiveVideoConsentVersion;
+        var required = new[]
+        {
+            (SpeakingComplianceConsentTypes.Recording, currentRecordingVersion),
+            (SpeakingComplianceConsentTypes.TutorReview, currentRecordingVersion),
+            (SpeakingComplianceConsentTypes.Retention, currentRecordingVersion),
+            (SpeakingComplianceConsentTypes.LiveVideoWithTutor, currentLiveVideoVersion),
+        };
+
+        foreach (var (consentType, consentVersion) in required)
+        {
+            var accepted = await _db.SpeakingComplianceConsents
+                .AsNoTracking()
+                .AnyAsync(consent => consent.UserId == userId
+                    && consent.RevokedAt == null
+                    && consent.ConsentType == consentType
+                    && consent.ConsentVersion == consentVersion, ct);
+            if (accepted)
+            {
+                continue;
+            }
+
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"The {role.ToString().ToLowerInvariant()} must accept current live-room consent before joining.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -297,6 +405,7 @@ public sealed class SpeakingLiveRoomService
         }
 
         var learnerId = session.UserId;
+        room.ActualStartUtc ??= DateTimeOffset.UtcNow;
 
         var recordingConsentVersion = _complianceOptions.Value.CurrentConsentVersion;
         var liveVideoConsentVersion = _complianceOptions.Value.CurrentLiveVideoConsentVersion;
@@ -328,14 +437,53 @@ public sealed class SpeakingLiveRoomService
         var bucket = _options.Value.EgressBucket;
         var outputUrl = string.IsNullOrWhiteSpace(bucket)
             ? $"livekit://egress/{room.RoomName}.mp4"
-            : $"{bucket.TrimEnd('/')}/oet-speaking/{room.RoomName}.mp4";
+            : $"{(bucket.StartsWith("s3://", StringComparison.OrdinalIgnoreCase) ? bucket.TrimEnd('/') : $"s3://{bucket.TrimEnd('/')}")}/oet-speaking/{room.RoomName}.mp4";
 
         var egressId = await _gateway.StartEgressAsync(room.RoomName, outputUrl, ct);
 
         room.EgressId = egressId;
         room.EgressOutputUrl = outputUrl;
         room.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            string? persistedEgressId = null;
+            try
+            {
+                persistedEgressId = await _db.SpeakingLiveRooms
+                    .AsNoTracking()
+                    .Where(r => r.Id == room.Id)
+                    .Select(r => r.EgressId)
+                    .FirstOrDefaultAsync(CancellationToken.None);
+            }
+            catch (Exception probeException)
+            {
+                _logger.LogWarning(
+                    probeException,
+                    "SpeakingLiveRoomService.StartRecording could not verify persistence after failure roomId={LiveRoomId}",
+                    liveRoomId);
+            }
+
+            if (string.IsNullOrWhiteSpace(persistedEgressId))
+            {
+                try
+                {
+                    await _gateway.StopEgressAsync(egressId, CancellationToken.None);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logger.LogWarning(
+                        cleanupException,
+                        "SpeakingLiveRoomService.StartRecording provider cleanup failed egressId={EgressId}",
+                        egressId);
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation(
             "SpeakingLiveRoomService.StartRecording started roomId={LiveRoomId} egressId={EgressId}",
@@ -383,22 +531,8 @@ public sealed class SpeakingLiveRoomService
     // (ScheduledStartAt - 5min) via a background job, and torn down at
     // (ScheduledStartAt + DefaultMaxDurationSeconds).
     //
-    // The codebase currently has Mock Speaking running through
-    // ConversationHub for AI mode and SpeakingLiveRoomService for
-    // human-tutor mode, but no Hangfire/IHostedService binding has yet
-    // been wired for booking-driven provisioning of Speaking-specific
-    // live rooms (most Mock Speaking flows are tutor-initiated from
-    // the queue, where the room is created lazily by the learner's
-    // first request via CreateRoomForSessionAsync). The method below
-    // provides a stable seam either a hosted-service tick or a future
-    // Hangfire job can call without further refactoring.
-    //
-    // TODO(P6-followup): once the dedicated Speaking booking flow lands
-    //   (separate from the generic MockBooking pipeline), schedule
-    //   ProvisionForBookingAsync from a hosted background timer or
-    //   Hangfire recurring job that scans for bookings whose
-    //   ScheduledStartAt is within the next 5 minutes and whose
-    //   SubtestCode == "speaking".
+    // The hosted lifecycle worker calls this method shortly before the
+    // scheduled booking and on every retry until the room is available.
     // ─────────────────────────────────────────────────────────────────
 
     public async Task<SpeakingLiveRoomCreationResult?> ProvisionForBookingAsync(
@@ -411,11 +545,45 @@ public sealed class SpeakingLiveRoomService
         if (string.IsNullOrWhiteSpace(learnerUserId)) throw new ArgumentException("learnerUserId required", nameof(learnerUserId));
         if (string.IsNullOrWhiteSpace(speakingSessionId)) throw new ArgumentException("speakingSessionId required", nameof(speakingSessionId));
 
+        var booking = await _db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct)
+            ?? throw new SpeakingLiveRoomNotFoundException($"Booking '{bookingId}' was not found.");
+        if (!string.Equals(booking.LearnerUserId, learnerUserId, StringComparison.Ordinal))
+        {
+            throw new SpeakingLiveRoomForbiddenException(
+                $"Booking '{bookingId}' does not belong to learner '{learnerUserId}'.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var maxDurationSeconds = Math.Max(60, booking.DurationMinutes * 60);
+
         // Skip if a room already exists for this booking (idempotent).
         var existing = await _db.SpeakingLiveRooms
             .FirstOrDefaultAsync(r => r.BookingId == bookingId, ct);
         if (existing is not null)
         {
+            existing.ScheduledStartUtc = booking.SessionStartUtc;
+            existing.MaxDurationSeconds = maxDurationSeconds;
+            existing.UpdatedAt = now;
+            if (now >= booking.SessionStartUtc
+                && now < booking.SessionStartUtc.AddMinutes(Math.Max(1, booking.DurationMinutes))
+                && (booking.Status is PrivateSpeakingBookingStatus.Confirmed or PrivateSpeakingBookingStatus.ZoomCreated))
+            {
+                booking.Status = PrivateSpeakingBookingStatus.InProgress;
+                booking.UpdatedAt = now;
+                await SyncMockBookingStateAsync(booking.Id, MockBookingStatuses.InProgress, MockLiveRoomStates.InProgress, now, ct);
+                _db.PrivateSpeakingAuditLogs.Add(new PrivateSpeakingAuditLog
+                {
+                    Id = $"psaudit_{Guid.NewGuid():N}",
+                    BookingId = booking.Id,
+                    ActorId = "system",
+                    ActorRole = "system",
+                    Action = "livekit_room_join_window_started",
+                    Details = JsonSerializer.Serialize(new { roomId = existing.Id, roomName = existing.RoomName }),
+                    CreatedAt = now,
+                });
+            }
+            await _db.SaveChangesAsync(ct);
             return new SpeakingLiveRoomCreationResult(existing.Id, _options.Value.WssUrl, existing.RoomName);
         }
 
@@ -425,7 +593,27 @@ public sealed class SpeakingLiveRoomService
         // tick can find rooms it provisioned.
         var room = await _db.SpeakingLiveRooms.FirstAsync(r => r.Id == result.LiveRoomId, ct);
         room.BookingId = bookingId;
-        room.UpdatedAt = DateTimeOffset.UtcNow;
+        room.ScheduledStartUtc = booking.SessionStartUtc;
+        room.MaxDurationSeconds = maxDurationSeconds;
+        room.UpdatedAt = now;
+        if (now >= booking.SessionStartUtc
+            && now < booking.SessionStartUtc.AddMinutes(Math.Max(1, booking.DurationMinutes))
+            && (booking.Status is PrivateSpeakingBookingStatus.Confirmed or PrivateSpeakingBookingStatus.ZoomCreated))
+        {
+            booking.Status = PrivateSpeakingBookingStatus.InProgress;
+            booking.UpdatedAt = now;
+            await SyncMockBookingStateAsync(booking.Id, MockBookingStatuses.InProgress, MockLiveRoomStates.InProgress, now, ct);
+            _db.PrivateSpeakingAuditLogs.Add(new PrivateSpeakingAuditLog
+            {
+                Id = $"psaudit_{Guid.NewGuid():N}",
+                BookingId = booking.Id,
+                ActorId = "system",
+                ActorRole = "system",
+                Action = "livekit_room_provisioned",
+                Details = JsonSerializer.Serialize(new { roomId = room.Id, roomName = room.RoomName }),
+                CreatedAt = now,
+            });
+        }
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -437,25 +625,21 @@ public sealed class SpeakingLiveRoomService
     }
 
     /// <summary>
-    /// Tear-down hook for rooms that have outlived
-    /// <see cref="LiveKitOptions.DefaultMaxDurationSeconds"/>. A future
-    /// hosted-service tick can call this against rooms whose
-    /// <c>ActualStartUtc + MaxDurationSeconds &lt; now</c> to enforce
-    /// the cap. Today the LiveKit Cloud egress timeout handles this
-    /// server-side, but we expose the seam so the platform can degrade
-    /// gracefully if the provider misses the deadline.
+    /// Tears down rooms that have outlived their scheduled or actual
+    /// start plus the configured duration cap. The hosted lifecycle worker
+    /// calls this on every sweep so provider cleanup and session completion
+    /// remain idempotent.
     /// </summary>
     public async Task TearDownExpiredRoomsAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var candidates = await _db.SpeakingLiveRooms
-            .Where(r => r.State == SpeakingLiveRoomState.Active
-                && r.ActualStartUtc.HasValue)
+            .Where(r => r.State == SpeakingLiveRoomState.Active)
             .ToListAsync(ct);
 
         foreach (var room in candidates)
         {
-            var cap = room.ActualStartUtc!.Value.AddSeconds(room.MaxDurationSeconds);
+            var cap = (room.ActualStartUtc ?? room.ScheduledStartUtc).AddSeconds(room.MaxDurationSeconds);
             if (now < cap) continue;
 
             _logger.LogInformation(
@@ -464,9 +648,47 @@ public sealed class SpeakingLiveRoomService
                 room.ActualStartUtc,
                 cap);
 
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(room.EgressId))
+                {
+                    await _gateway.StopEgressAsync(room.EgressId, ct);
+                }
+                await _gateway.DeleteRoomAsync(room.RoomName, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "SpeakingLiveRoomService.TearDownExpired provider_cleanup_failed roomId={LiveRoomId}",
+                    room.Id);
+                continue;
+            }
+
             room.State = SpeakingLiveRoomState.Ended;
             room.ActualEndUtc = now;
             room.UpdatedAt = now;
+            var session = await _db.SpeakingSessions
+                .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct);
+            if (session is not null && session.State != SpeakingSessionState.Finished)
+            {
+                session.State = SpeakingSessionState.Finished;
+                session.EndedAt ??= now;
+                session.UpdatedAt = now;
+            }
+            if (!string.IsNullOrWhiteSpace(room.BookingId))
+            {
+                var booking = await _db.PrivateSpeakingBookings
+                    .FirstOrDefaultAsync(b => b.Id == room.BookingId, ct);
+                if (booking is not null
+                    && booking.Status == PrivateSpeakingBookingStatus.InProgress
+                    && booking.AttendanceVerified)
+                {
+                    booking.Status = PrivateSpeakingBookingStatus.Completed;
+                    booking.CompletedAt ??= now;
+                    booking.UpdatedAt = now;
+                    await SyncMockBookingStateAsync(booking.Id, MockBookingStatuses.Completed, MockLiveRoomStates.Completed, now, ct);
+                }
+            }
         }
 
         if (candidates.Count > 0)
@@ -505,6 +727,11 @@ public sealed class SpeakingLiveRoomService
         }
 
         var endedAt = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(room.EgressId))
+        {
+            await _gateway.StopEgressAsync(room.EgressId, ct);
+        }
+        await _gateway.DeleteRoomAsync(room.RoomName, ct);
         room.State = SpeakingLiveRoomState.Ended;
         room.ActualEndUtc = endedAt;
         room.UpdatedAt = endedAt;
@@ -519,12 +746,58 @@ public sealed class SpeakingLiveRoomService
                 session.ElapsedSeconds = (int)Math.Max(0, (endedAt - session.RolePlayStartedAt.Value).TotalSeconds);
             }
         }
+        if (!string.IsNullOrWhiteSpace(room.BookingId))
+        {
+            var booking = await _db.PrivateSpeakingBookings
+                .FirstOrDefaultAsync(b => b.Id == room.BookingId, ct);
+        if (booking is not null
+            && booking.AttendanceVerified
+            && (booking.Status is PrivateSpeakingBookingStatus.Confirmed
+                or PrivateSpeakingBookingStatus.ZoomCreated
+                or PrivateSpeakingBookingStatus.InProgress))
+            {
+                booking.Status = PrivateSpeakingBookingStatus.Completed;
+                booking.CompletedAt ??= endedAt;
+                booking.UpdatedAt = endedAt;
+                await SyncMockBookingStateAsync(booking.Id, MockBookingStatuses.Completed, MockLiveRoomStates.Completed, endedAt, ct);
+                _db.PrivateSpeakingAuditLogs.Add(new PrivateSpeakingAuditLog
+                {
+                    Id = $"psaudit_{Guid.NewGuid():N}",
+                    BookingId = booking.Id,
+                    ActorId = userId,
+                    ActorRole = isAssignedTutor ? "tutor" : "learner",
+                    Action = "livekit_room_completed",
+                    Details = JsonSerializer.Serialize(new { roomId = room.Id, endedAt }),
+                    CreatedAt = endedAt,
+                });
+            }
+        }
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "SpeakingLiveRoomService.EndRoom roomId={LiveRoomId} endedBy={UserId}",
             liveRoomId,
             userId);
+    }
+
+    private async Task SyncMockBookingStateAsync(
+        string bookingId,
+        string status,
+        string liveRoomState,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var booking = await _db.MockBookings
+            .FirstOrDefaultAsync(item => item.Id == bookingId, ct);
+        if (booking is null) return;
+
+        booking.Status = status;
+        booking.LiveRoomState = liveRoomState;
+        booking.UpdatedAt = now;
+        if (status == MockBookingStatuses.Completed)
+        {
+            booking.CompletedAt ??= now;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -590,12 +863,14 @@ public sealed class SpeakingLiveRoomService
                 case "egress_ended":
                     await HandleRecordingFinishedAsync(room, doc.RootElement, ct);
                     break;
+                case "participant_joined":
+                    await HandleParticipantPresenceAsync(room, doc.RootElement, joined: true, ct);
+                    break;
+                case "participant_left":
+                    await HandleParticipantPresenceAsync(room, doc.RootElement, joined: false, ct);
+                    break;
                 case "room_finished":
-                    if (room.State != SpeakingLiveRoomState.Ended)
-                    {
-                        room.State = SpeakingLiveRoomState.Ended;
-                        room.ActualEndUtc ??= DateTimeOffset.UtcNow;
-                    }
+                    await HandleProviderRoomFinishedAsync(room, ct);
                     break;
             }
 
@@ -610,27 +885,44 @@ public sealed class SpeakingLiveRoomService
 
     private async Task HandleRecordingFinishedAsync(SpeakingLiveRoom room, JsonElement payload, CancellationToken ct)
     {
-        var egressId = TryGetString(payload, "egressId")
-            ?? TryGetString(payload, "egress_id")
+        var egressInfo = TryGetObject(payload, "egressInfo", "egress_info") ?? payload;
+        var fileResult = TryGetFirstObject(egressInfo, "fileResults", "file_results");
+
+        var egressId = TryGetString(egressInfo, "egressId", "egress_id")
             ?? room.EgressId;
 
-        var outputUrl = TryGetString(payload, "outputUrl")
-            ?? TryGetString(payload, "output_url")
+        var outputUrl = TryGetString(fileResult, "location", "outputUrl", "output_url")
+            ?? TryGetString(egressInfo, "outputUrl", "output_url")
             ?? room.EgressOutputUrl
             ?? string.Empty;
 
-        var durationSeconds = TryGetInt32(payload, "durationSeconds")
-            ?? TryGetInt32(payload, "duration_seconds")
-            ?? 0;
+        var durationNanoseconds = TryGetInt64(fileResult, "duration");
+        var durationSeconds = durationNanoseconds is > 0
+            ? (int)Math.Clamp(Math.Round(durationNanoseconds.Value / 1_000_000_000d), 0, int.MaxValue)
+            : TryGetInt32(egressInfo, "durationSeconds", "duration_seconds") ?? 0;
 
-        var sizeBytes = TryGetInt64(payload, "sizeBytes")
-            ?? TryGetInt64(payload, "size_bytes")
+        var sizeBytes = TryGetInt64(fileResult, "size", "sizeBytes", "size_bytes")
+            ?? TryGetInt64(egressInfo, "sizeBytes", "size_bytes")
             ?? 0L;
 
-        // Reuse the existing MediaAsset pipeline: create a placeholder
-        // row that the SpeakingAudioRetentionWorker / playback flow can
-        // resolve. A follow-up job downloads the actual blob into the
-        // platform storage backend.
+        var effectiveEgressId = egressId ?? room.EgressId;
+        if (!string.IsNullOrWhiteSpace(effectiveEgressId)
+            && await _db.SpeakingRecordings.AsNoTracking().AnyAsync(
+                recording => recording.SpeakingSessionId == room.SpeakingSessionId
+                    && recording.Source == SpeakingRecordingSource.LiveKitEgress
+                    && recording.EgressTrackId == effectiveEgressId,
+                ct))
+        {
+            _logger.LogInformation(
+                "SpeakingLiveRoomService.HandleWebhook duplicate_recording roomId={LiveRoomId} egressId={EgressId}",
+                room.Id,
+                effectiveEgressId);
+            return;
+        }
+
+        // Reuse the existing MediaAsset pipeline. The readiness worker marks
+        // this row playable only after the configured storage provider can
+        // see the object written by LiveKit Egress.
         var now = DateTimeOffset.UtcNow;
         var mediaAssetId = $"masset_{Guid.NewGuid():N}";
         _db.MediaAssets.Add(new MediaAsset
@@ -660,7 +952,7 @@ public sealed class SpeakingLiveRoomService
             MimeType = "video/mp4",
             ConsentVersion = room.RecordingConsentVersion,
             IsArchived = false,
-            EgressTrackId = egressId,
+            EgressTrackId = effectiveEgressId,
             CreatedAt = now,
         });
 
@@ -669,6 +961,67 @@ public sealed class SpeakingLiveRoomService
             room.Id,
             egressId,
             durationSeconds);
+    }
+
+    private async Task HandleParticipantPresenceAsync(
+        SpeakingLiveRoom room,
+        JsonElement payload,
+        bool joined,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(room.BookingId)) return;
+
+        var participant = TryGetObject(payload, "participant");
+        var identity = TryGetString(participant, "identity");
+        if (!string.Equals(identity, room.LearnerIdentity, StringComparison.Ordinal)) return;
+
+        var booking = await _db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(item => item.Id == room.BookingId, ct);
+        if (booking is null) return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (joined)
+        {
+            booking.AttendanceJoinedAt ??= now;
+            booking.AttendanceVerified = true;
+        }
+        else
+        {
+            booking.AttendanceLeftAt = now;
+        }
+        booking.UpdatedAt = now;
+    }
+
+    private async Task HandleProviderRoomFinishedAsync(
+        SpeakingLiveRoom room,
+        CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        room.State = SpeakingLiveRoomState.Ended;
+        room.ActualEndUtc ??= now;
+
+        var session = await _db.SpeakingSessions
+            .FirstOrDefaultAsync(item => item.Id == room.SpeakingSessionId, ct);
+        if (session is not null && session.State != SpeakingSessionState.Finished)
+        {
+            session.State = SpeakingSessionState.Finished;
+            session.EndedAt ??= now;
+            session.UpdatedAt = now;
+        }
+
+        if (string.IsNullOrWhiteSpace(room.BookingId)) return;
+
+        var booking = await _db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(item => item.Id == room.BookingId, ct);
+        if (booking is null || !booking.AttendanceVerified) return;
+        if (booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+            or PrivateSpeakingBookingStatus.ZoomCreated
+            or PrivateSpeakingBookingStatus.InProgress)) return;
+
+        booking.Status = PrivateSpeakingBookingStatus.Completed;
+        booking.CompletedAt ??= now;
+        booking.UpdatedAt = now;
+        await SyncMockBookingStateAsync(booking.Id, MockBookingStatuses.Completed, MockLiveRoomStates.Completed, now, ct);
     }
 
     private void AppendWebhookEvent(SpeakingLiveRoom room, string eventType, string payload)
@@ -719,29 +1072,81 @@ public sealed class SpeakingLiveRoomService
             }
         }
 
-        return TryGetString(payload, "roomName")
-            ?? TryGetString(payload, "room_name");
+        var roomName = TryGetString(payload, "roomName", "room_name");
+        if (!string.IsNullOrWhiteSpace(roomName)) return roomName;
+
+        var egressInfo = TryGetObject(payload, "egressInfo", "egress_info");
+        return TryGetString(egressInfo, "roomName", "room_name");
     }
 
-    private static string? TryGetString(JsonElement el, string name)
+    private static JsonElement? TryGetObject(JsonElement el, params string[] names)
     {
         if (el.ValueKind != JsonValueKind.Object) return null;
-        if (!el.TryGetProperty(name, out var prop)) return null;
-        return prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
+        foreach (var name in names)
+        {
+            if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Object)
+            {
+                return prop;
+            }
+        }
+        return null;
     }
 
-    private static int? TryGetInt32(JsonElement el, string name)
+    private static JsonElement? TryGetFirstObject(JsonElement el, params string[] names)
     {
         if (el.ValueKind != JsonValueKind.Object) return null;
-        if (!el.TryGetProperty(name, out var prop)) return null;
-        return prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var v) ? v : null;
+        foreach (var name in names)
+        {
+            if (!el.TryGetProperty(name, out var prop) || prop.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in prop.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object) return item;
+            }
+        }
+        return null;
     }
 
-    private static long? TryGetInt64(JsonElement el, string name)
+    private static string? TryGetString(JsonElement? el, params string[] names)
     {
-        if (el.ValueKind != JsonValueKind.Object) return null;
-        if (!el.TryGetProperty(name, out var prop)) return null;
-        return prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out var v) ? v : null;
+        if (el is null || el.Value.ValueKind != JsonValueKind.Object) return null;
+        foreach (var name in names)
+        {
+            if (el.Value.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                return prop.GetString();
+            }
+        }
+        return null;
+    }
+
+    private static int? TryGetInt32(JsonElement? el, params string[] names)
+    {
+        var value = TryGetInt64(el, names);
+        if (value is null || value.Value < int.MinValue || value.Value > int.MaxValue)
+        {
+            return null;
+        }
+
+        return (int)value.Value;
+    }
+
+    private static long? TryGetInt64(JsonElement? el, params string[] names)
+    {
+        if (el is null || el.Value.ValueKind != JsonValueKind.Object) return null;
+        foreach (var name in names)
+        {
+            if (el.Value.TryGetProperty(name, out var prop)
+                && prop.ValueKind == JsonValueKind.Number
+                && prop.TryGetInt64(out var value))
+            {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static bool IsTerminalSessionState(SpeakingSessionState state) =>

@@ -472,7 +472,10 @@ public partial class AdminService
         // Publish gate — see EvaluatePublishGate. A card that is missing its
         // interlocutor script, its background, or its task bullets is not
         // usable by a learner, so refuse to publish it.
-        var blocker = EvaluatePublishGate(card, script is not null);
+        var scriptReady = script is not null
+            && (!string.Equals(script.ContentOrigin, "live_voice_projection", StringComparison.OrdinalIgnoreCase)
+                || !script.NeedsOwnerInput);
+        var blocker = EvaluatePublishGate(card, scriptReady);
         if (blocker is not null)
         {
             throw ApiException.Validation(blocker.Value.Code, blocker.Value.Message);

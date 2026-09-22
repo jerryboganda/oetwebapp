@@ -20,11 +20,11 @@ namespace OetLearner.Api.Hubs;
 
 // Phase 2 (F) + Phase 3 + Phase 4 of the OET Speaking module roadmap.
 //
-// Extension hook that lets the typed Speaking session client (created
-// via `POST /v1/speaking/sessions`) bootstrap an AI patient conversation
-// from the existing ConversationHub plumbing.
+// Legacy compatibility surface retained for old clients. Typed Speaking
+// sessions are rejected by the entry points below and must use the native
+// LiveVoiceService control plane instead.
 //
-// Phase 4 broadens the surface to include:
+// Historical implementation details retained for data migration only:
 //   * A distinct warm-up persona prompt (no clinical script — friendly
 //     identity-check questions) plus a server-driven warm-up question
 //     pool (`SpeakingWarmUpSeed.GetQuestions`).
@@ -36,12 +36,9 @@ namespace OetLearner.Api.Hubs;
 //     `Task.Delay` fires that emit `TimeNearlyUp` at `T-30s` and `TimeUp`
 //     at `T-0s`, auto-ending the session and triggering AI assessment.
 //
-// Start semantics (owner rule 2026-07-03): the warm-up interlocutor
-// speaks first (as in the real OET exam); the role-play CANDIDATE opens
-// the consultation — StartSpeakingRoleplay only signals readiness and
-// the patient stays silent until spoken to. The bridge is the SignalR
-// group `speaking-session:{sessionId}` which the frontend subscribes to
-// for patient utterances + cues.
+// No active learner route may use this SignalR voice path. The bridge is
+// intentionally fail-closed so it cannot become a silent text, mock, or
+// batch fallback for native realtime sessions.
 public partial class ConversationHub
 {
     private const string SpeakingRoleplayGroupPrefix = "speaking-session:";
@@ -102,6 +99,8 @@ public partial class ConversationHub
                 "That Speaking session does not exist.");
             return;
         }
+
+        if (await RejectLegacySpeakingVoicePathAsync(session)) return;
 
         if (session.State != SpeakingSessionState.WarmUp
             && session.State != SpeakingSessionState.Prep
@@ -229,20 +228,8 @@ public partial class ConversationHub
     // ════════════════════════════════════════════════════════════════════
     // WS2 — HEADLINE realtime AI role-player turn loop.
     //
-    // The student talks to a realtime AI that listens (speech-to-text),
-    // interprets, and replies *in character* as the patient/relative per
-    // the hidden interlocutor card. This is the loop that turns the
-    // "seed an opening line" bridge above into a genuine back-and-forth
-    // conversation:
-    //
-    //   learner audio (or text) ──▶ STT (Conversation ASR, mock-fallback)
-    //                          ──▶ grounded in-character LLM reply
-    //                              (IConversationAiOrchestrator → gateway,
-    //                               mock-fallback when no API key)
-    //                          ──▶ TTS (Conversation TTS, mock-fallback)
-    //                          ──▶ persist both turns into the session
-    //                              transcript (SpeakingTranscript)
-    //                          ──▶ stream caption + patient utterance back.
+    // Historical turn-loop implementation. Typed Speaking sessions are
+    // rejected before this code can run.
     //
     // CANDIDATE-SAFETY INVARIANT: the hidden `InterlocutorScript` / role
     // card never leaves the server. Only the AI's spoken reply text and a
@@ -300,11 +287,12 @@ public partial class ConversationHub
             .FirstOrDefaultAsync(x => x.Id == speakingSessionId, ct);
         if (session is null
             || !string.Equals(session.UserId, userId, StringComparison.Ordinal)
-            || session.State != SpeakingSessionState.Active
-            || session.Mode == SpeakingSessionMode.LiveTutor)
+            || session.State != SpeakingSessionState.Active)
         {
             return;
         }
+
+        if (await RejectLegacySpeakingVoicePathAsync(session)) return;
 
         var transcript = await db.SpeakingTranscripts
             .Where(x => x.SpeakingSessionId == speakingSessionId && x.IsLatest)
@@ -378,6 +366,19 @@ public partial class ConversationHub
         }
     }
 
+    private async Task<bool> RejectLegacySpeakingVoicePathAsync(SpeakingSession session)
+    {
+        var message = session.Mode == SpeakingSessionMode.LiveTutor
+            ? "Human Speaking sessions use the LiveKit tutor room."
+            : "AI Speaking sessions use the native realtime voice agent.";
+        await Clients.Caller.SendAsync(
+            "SpeakingRoleplayError",
+            "LIVE_VOICE_REQUIRED",
+            message,
+            Context.ConnectionAborted);
+        return true;
+    }
+
     private static bool TryReserveSilencePrompt(string speakingSessionId, DateTimeOffset now)
     {
         while (true)
@@ -429,6 +430,8 @@ public partial class ConversationHub
                 "That Speaking session does not exist.");
             return;
         }
+
+        if (await RejectLegacySpeakingVoicePathAsync(session)) return;
 
         if (string.IsNullOrWhiteSpace(clientTurnId) && !string.IsNullOrWhiteSpace(turnMetaJson))
         {
@@ -953,6 +956,7 @@ public partial class ConversationHub
         {
             return;
         }
+        if (await RejectLegacySpeakingVoicePathAsync(session)) return;
         if (session.State != SpeakingSessionState.Active)
         {
             return;
@@ -1103,13 +1107,8 @@ public partial class ConversationHub
     }
 
     /// <summary>
-    /// Synthesises spoken audio for one AI utterance (opening line or reply)
-    /// via the configured ElevenLabs voice and persists it, returning the
-    /// authorised media URL the learner client fetches (with a bearer token)
-    /// and plays. Returns <c>null</c> when TTS is disabled/unconfigured or the
-    /// synthesis fails — the caller then falls back to text-only, and the
-    /// frontend surfaces a "voice unavailable" hint. Passing an empty voice id
-    /// lets the provider resolve the configured default (the Adam Stone voice).
+    /// Historical TTS helper retained for old data paths. It is not reachable
+    /// from a typed Speaking session, whose provider stream is native realtime.
     /// </summary>
     private async Task<string?> TrySynthesizeReplyAudioAsync(
         IServiceProvider sp, string text, CancellationToken ct)

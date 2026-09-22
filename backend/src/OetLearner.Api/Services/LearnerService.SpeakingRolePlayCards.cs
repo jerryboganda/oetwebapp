@@ -178,7 +178,8 @@ public partial class LearnerService
     public async Task<object> GetSpeakingRolePlayCardForLearnerAsync(
         string userId,
         string cardId,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool allowFreeSample = false)
     {
         if (string.IsNullOrWhiteSpace(cardId))
         {
@@ -236,7 +237,8 @@ public partial class LearnerService
         var cardProfession = (record.Card.ProfessionId ?? string.Empty).Trim().ToLowerInvariant();
         var appliesToAllProfessions = record.ContentItemProfessionId is null;
 
-        if (!appliesToAllProfessions
+        if (!allowFreeSample
+            && !appliesToAllProfessions
             && !string.IsNullOrEmpty(activeProfession)
             && !string.Equals(cardProfession, activeProfession, StringComparison.Ordinal))
         {

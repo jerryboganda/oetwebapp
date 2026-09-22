@@ -172,15 +172,15 @@ public static class PrivateSpeakingEndpoints
                 : Results.BadRequest(new { error = result.Error });
         });
 
-        learner.MapPost("/bookings/{bookingId}/join-token", async (
-            HttpContext http,
-            string bookingId,
-            PrivateSpeakingService svc,
-            CancellationToken ct) =>
-        {
-            var token = await svc.CreateLearnerJoinTokenAsync(bookingId, http.UserId(), ct);
-            return Results.Ok(token);
-        });
+        learner.MapPost("/bookings/{bookingId}/join-token", (
+            string bookingId) => Results.Json(
+                new
+                {
+                    code = "livekit_required",
+                    message = "Private Speaking uses the canonical LiveKit room. Use the Speaking exam entry point.",
+                    bookingId,
+                },
+                statusCode: StatusCodes.Status410Gone));
 
         learner.MapGet("/bookings/{bookingId}/calendar.ics", async (
             HttpContext http,
@@ -305,15 +305,15 @@ public static class PrivateSpeakingEndpoints
                 : Results.BadRequest(new { error });
         });
 
-        expert.MapPost("/sessions/{bookingId}/join-token", async (
-            HttpContext http,
-            string bookingId,
-            PrivateSpeakingService svc,
-            CancellationToken ct) =>
-        {
-            var token = await svc.CreateExpertJoinTokenAsync(bookingId, http.UserId(), ct);
-            return Results.Ok(token);
-        });
+        expert.MapPost("/sessions/{bookingId}/join-token", (
+            string bookingId) => Results.Json(
+                new
+                {
+                    code = "livekit_required",
+                    message = "Private Speaking uses the canonical LiveKit room. Use the Speaking exam entry point.",
+                    bookingId,
+                },
+                statusCode: StatusCodes.Status410Gone));
 
         expert.MapGet("/sessions/{bookingId}/calendar.ics", async (
             HttpContext http,
@@ -801,18 +801,14 @@ public static class PrivateSpeakingEndpoints
         }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/retry-zoom", async (
-            string bookingId, PrivateSpeakingService svc, CancellationToken ct) =>
-        {
-            try
-            {
-                await svc.CreateZoomMeetingForBookingAsync(bookingId, ct);
-                return Results.Ok(new { retried = true });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).WithAdminWrite("AdminReviewOps");
+            string bookingId) => Results.Json(
+                new
+                {
+                    code = "livekit_authoritative",
+                    message = "Zoom provisioning is retired for Private Speaking. LiveKit room lifecycle is authoritative.",
+                    bookingId,
+                },
+                statusCode: StatusCodes.Status410Gone)).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/override-refund", async (
             HttpContext http,
@@ -874,6 +870,11 @@ public static class PrivateSpeakingEndpoints
 
     // ── Response Mappers ────────────────────────────────────────────────
 
+    private static string PresentBookingStatus(PrivateSpeakingBookingStatus status)
+        => status is PrivateSpeakingBookingStatus.ZoomPending or PrivateSpeakingBookingStatus.ZoomCreated
+            ? nameof(PrivateSpeakingBookingStatus.Confirmed)
+            : status.ToString();
+
     private static object MapLearnerBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
 
     private static object MapExpertBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
@@ -884,7 +885,7 @@ public static class PrivateSpeakingEndpoints
         b.LearnerUserId,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
-        b.Status,
+        status = PresentBookingStatus(b.Status),
         b.SessionStartUtc,
         b.DurationMinutes,
         b.TutorTimezone,
@@ -896,7 +897,6 @@ public static class PrivateSpeakingEndpoints
         b.RefundIssued,
         b.RefundAmountMinorUnits,
         b.PenaltyAmountMinorUnits,
-        b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
         b.RescheduledFromBookingId,
@@ -911,7 +911,7 @@ public static class PrivateSpeakingEndpoints
         b.LearnerUserId,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
-        b.Status,
+        status = PresentBookingStatus(b.Status),
         b.SessionStartUtc,
         b.DurationMinutes,
         b.TutorTimezone,
@@ -923,7 +923,6 @@ public static class PrivateSpeakingEndpoints
         b.RefundIssued,
         b.RefundAmountMinorUnits,
         b.PenaltyAmountMinorUnits,
-        b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
         b.RescheduledFromBookingId,
@@ -940,7 +939,7 @@ public static class PrivateSpeakingEndpoints
         b.Id,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
-        b.Status,
+        status = PresentBookingStatus(b.Status),
         b.SessionStartUtc,
         b.DurationMinutes,
         b.TutorTimezone,
@@ -953,7 +952,6 @@ public static class PrivateSpeakingEndpoints
         b.RefundIssued,
         b.RefundAmountMinorUnits,
         b.PenaltyAmountMinorUnits,
-        b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
         b.EntitlementRestorationReason,
@@ -976,7 +974,7 @@ public static class PrivateSpeakingEndpoints
         b.Id,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
-        b.Status,
+        status = PresentBookingStatus(b.Status),
         b.SessionStartUtc,
         b.DurationMinutes,
         b.TutorTimezone,
@@ -989,7 +987,6 @@ public static class PrivateSpeakingEndpoints
         b.RefundIssued,
         b.RefundAmountMinorUnits,
         b.PenaltyAmountMinorUnits,
-        b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
         b.EntitlementRestorationReason,
@@ -1013,7 +1010,7 @@ public static class PrivateSpeakingEndpoints
         b.LearnerUserId,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
-        b.Status,
+        status = PresentBookingStatus(b.Status),
         b.SessionStartUtc,
         b.DurationMinutes,
         b.TutorTimezone,
@@ -1027,10 +1024,6 @@ public static class PrivateSpeakingEndpoints
         b.RefundAmountMinorUnits,
         b.PenaltyAmountMinorUnits,
         b.StripeRefundId,
-        b.ZoomStatus,
-        b.ZoomJoinUrl,
-        b.ZoomStartUrl,
-        b.ZoomMeetingPassword,
         b.EntitlementSubscriptionId,
         b.EntitlementConsumed,
         b.EntitlementConsumedAt,

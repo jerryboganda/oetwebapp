@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, CheckCircle2, CreditCard, ListChecks, Video, Pencil, CalendarClock, Banknote, UserX, Download } from 'lucide-react';
+import { Users, Calendar, BarChart3, Settings, Plus, Trash2, X, CheckCircle2, CreditCard, ListChecks, Pencil, CalendarClock, Banknote, UserX, Download } from 'lucide-react';
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -26,7 +26,6 @@ import {
   fetchAdminPrivateSpeakingBookings,
   cancelAdminPrivateSpeakingBooking,
   completeAdminPrivateSpeakingBooking,
-  retryAdminPrivateSpeakingZoom,
   adminOverridePrivateSpeakingRefund,
   adminManualReschedulePrivateSpeaking,
   adminEditPrivateSpeakingBooking,
@@ -68,7 +67,7 @@ type AdminBooking = {
   learnerUserId: string; status: string; sessionStartUtc: string;
   durationMinutes: number; priceMinorUnits: number; currency: string;
   professionTrack?: string | null;
-  paymentStatus: string; zoomStatus: string; createdAt: string;
+  paymentStatus: string; createdAt: string;
   refundIssued?: boolean; refundAmountMinorUnits?: number | null;
   penaltyAmountMinorUnits?: number | null;
   entitlementConsumed?: boolean; entitlementRestoredAt?: string | null;
@@ -84,7 +83,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 // Matches PrivateSpeakingBookingStatus on the backend.
 const BOOKING_STATUS_FILTERS = [
-  'Reserved', 'PendingPayment', 'Confirmed', 'ZoomPending', 'ZoomCreated',
+  'Reserved', 'PendingPayment', 'Confirmed',
   'InProgress', 'Completed', 'Cancelled', 'Refunded', 'NoShow', 'Expired', 'Failed',
 ] as const;
 
@@ -433,7 +432,6 @@ export default function AdminPrivateSpeakingPage() {
             <KpiTile label="Total Bookings" value={String(stats.totalBookings)} icon={<ListChecks className="h-4 w-4" />} size="sm" />
             <KpiTile label="Confirmed" value={String(stats.confirmedBookings)} icon={<CheckCircle2 className="h-4 w-4" />} size="sm" />
             <KpiTile label="Payment Failures" value={String(stats.failedPayments)} icon={<CreditCard className="h-4 w-4" />} tone={stats.failedPayments > 0 ? 'warning' : 'default'} size="sm" />
-            <KpiTile label="Zoom Failures" value={String(stats.zoomFailures)} icon={<Video className="h-4 w-4" />} tone={stats.zoomFailures > 0 ? 'warning' : 'default'} size="sm" />
           </div>
         </>
       )}
@@ -740,7 +738,6 @@ export default function AdminPrivateSpeakingPage() {
                     <th scope="col" className="pb-2 pr-3">Refund</th>
                     <th scope="col" className="pb-2 pr-3">Penalty</th>
                     <th scope="col" className="pb-2 pr-3">Entitlement</th>
-                    <th scope="col" className="pb-2 pr-3">Zoom</th>
                     <th scope="col" className="pb-2 pr-3">Calendar</th>
                     <th scope="col" className="pb-2">Actions</th>
                   </tr>
@@ -775,11 +772,10 @@ export default function AdminPrivateSpeakingPage() {
                       <td className="py-2 pr-3 text-xs">
                         {b.entitlementConsumed ? (b.entitlementRestoredAt ? 'Restored' : 'Consumed') : 'Legacy payment'}
                       </td>
-                      <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '-'}</td>
                       <td className="py-2 pr-3 text-xs">{b.googleCalendarSyncStatus ?? '-'}</td>
                       <td className="py-2">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
+                          {b.status === 'Confirmed' && (
                             <>
                               <Button size="sm" variant="outline" onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}>Complete</Button>
                               <Button size="sm" variant="destructive" onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}>Cancel</Button>
@@ -787,11 +783,6 @@ export default function AdminPrivateSpeakingPage() {
                                 <UserX className="w-3 h-3 mr-1" /> No-show
                               </Button>
                             </>
-                          )}
-                          {b.zoomStatus === 'Failed' && (
-                            <Button size="sm" variant="ghost" onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}>
-                              <RefreshCw className="w-3 h-3 mr-1" /> Retry Zoom
-                            </Button>
                           )}
                           <Button size="sm" variant="ghost" onClick={() => openEditModal(b)}>
                             <Pencil className="w-3 h-3 mr-1" /> Edit

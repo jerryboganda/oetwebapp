@@ -482,6 +482,12 @@ export async function listLearnerRolePlayCards(
   );
 }
 
+/** Returns the server-resolved one free Speaking card for the learner's profession. */
+export async function getFreeSpeakingCard(cardId?: string): Promise<RolePlayCardLearnerDetail> {
+  const query = cardId ? `?cardId=${encodeURIComponent(cardId)}` : '';
+  return apiRequest<RolePlayCardLearnerDetail>(`/v1/speaking/role-play-cards/free${query}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 11 (G.11) — AI-assisted draft
 // ─────────────────────────────────────────────────────────────────────────────

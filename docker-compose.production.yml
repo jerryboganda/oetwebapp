@@ -83,6 +83,43 @@ x-learner-api-slot: &learner-api-slot
     Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
     Sentry__Dsn: ${SENTRY_DSN}
     Features__EnableSwagger: ${ENABLE_SWAGGER:-false}
+    Features__SpeakingV2: ${FEATURES__SPEAKINGV2:-false}
+    TypeSafe__Enabled: ${TYPESAFE__ENABLED:-false}
+    TypeSafe__ApiKey: ${TYPESAFE__APIKEY:-}
+    TypeSafe__Model: ${TYPESAFE__MODEL:-jev-1.13.0}
+    TypeSafe__BaseUrl: ${TYPESAFE__BASEURL:-https://api.typesafe.ai}
+    TypeSafe__ConversationAdvisoryEnabled: ${TYPESAFE__CONVERSATIONADVISORYENABLED:-false}
+    TypeSafe__TimeoutSeconds: ${TYPESAFE__TIMEOUTSECONDS:-10}
+    TypeSafe__MaxRetries: ${TYPESAFE__MAXRETRIES:-2}
+    Speaking__Whisper__ApiKey: ${SPEAKING__WHISPER__APIKEY:-}
+    Speaking__Whisper__BaseUrl: ${SPEAKING__WHISPER__BASEURL:-https://api.openai.com/v1}
+    Speaking__Whisper__Model: ${SPEAKING__WHISPER__MODEL:-whisper-1}
+    LiveVoice__PrimaryProvider: ${LIVEVOICE__PRIMARYPROVIDER:-openai}
+    LiveVoice__OpenAiApiKey: ${LIVEVOICE__OPENAIAPIKEY:-}
+    LiveVoice__OpenAiBaseUrl: ${LIVEVOICE__OPENAIBASEURL:-https://api.openai.com/v1/live/sessions}
+    LiveVoice__OpenAiModelsBaseUrl: ${LIVEVOICE__OPENAIMODELSBASEURL:-https://api.openai.com/v1/models}
+    LiveVoice__OpenAiModel: ${LIVEVOICE__OPENAIMODEL:-gpt-live-1}
+    LiveVoice__GeminiApiKey: ${LIVEVOICE__GEMINIAPIKEY:-}
+    LiveVoice__GeminiBaseUrl: ${LIVEVOICE__GEMINIBASEURL:-https://generativelanguage.googleapis.com/v1beta/auth_tokens}
+    LiveVoice__GeminiModelsBaseUrl: ${LIVEVOICE__GEMINIMODELSBASEURL:-https://generativelanguage.googleapis.com/v1beta/models}
+    LiveVoice__GeminiWebSocketBaseUrl: ${LIVEVOICE__GEMINIWEBSOCKETBASEURL:-wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained}
+    LiveVoice__GeminiModel: ${LIVEVOICE__GEMINIMODEL:-models/gemini-3.8-live}
+    LiveVoice__GeminiTokenLifetimeSeconds: ${LIVEVOICE__GEMINITOKENLIFETIMESECONDS:-90}
+    LiveVoice__GeminiNewSessionLifetimeSeconds: ${LIVEVOICE__GEMININEWSESSIONLIFETIMESECONDS:-60}
+    LiveVoice__RetentionDays: ${LIVEVOICE__RETENTIONDAYS:-30}
+    LiveKit__Provider: ${LIVEKIT__PROVIDER:-disabled}
+    LiveKit__ApiKey: ${LIVEKIT__APIKEY:-}
+    LiveKit__ApiSecret: ${LIVEKIT__APISECRET:-}
+    LiveKit__WssUrl: ${LIVEKIT__WSSURL:-wss://example.livekit.cloud}
+    LiveKit__WebhookSigningSecret: ${LIVEKIT__WEBHOOKSIGNINGSECRET:-}
+    LiveKit__DefaultMaxDurationSeconds: ${LIVEKIT__DEFAULTMAXDURATIONSECONDS:-1800}
+    LiveKit__EgressEnabled: ${LIVEKIT__EGRESSENABLED:-false}
+    LiveKit__EgressBucket: ${LIVEKIT__EGRESSBUCKET:-}
+    LiveKit__EgressBucketRegion: ${LIVEKIT__EGRESSBUCKETREGION:-}
+    LiveKit__EgressAccessKey: ${LIVEKIT__EGRESSACCESSKEY:-}
+    LiveKit__EgressSecret: ${LIVEKIT__EGRESSSECRET:-}
+    LiveKit__EgressEndpoint: ${LIVEKIT__EGRESSENDPOINT:-}
+    LiveKit__EgressForcePathStyle: ${LIVEKIT__EGRESSFORCEPATHSTYLE:-false}
     # Grounded AI and server-authoritative speech providers. These map the
     # uppercase .env.production keys validated by validate-production-env.sh
     # into the .NET configuration shape consumed by startup fail-fast checks.

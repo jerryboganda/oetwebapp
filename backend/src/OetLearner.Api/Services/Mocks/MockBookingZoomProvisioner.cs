@@ -30,14 +30,16 @@ public static class MockBookingPresentation
         => $"/mocks/speaking-room/{Uri.EscapeDataString(booking.Id)}";
 
     public static string? LearnerZoomJoinUrl(MockBooking booking)
-        => booking.ZoomStatus == MockBookingZoomStatuses.Created
+        => string.IsNullOrWhiteSpace(booking.TutorProfileId)
+           && booking.ZoomStatus == MockBookingZoomStatuses.Created
            && booking.ZoomJoinUrl is not null
            && booking.ZoomJoinUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             ? booking.ZoomJoinUrl
             : null;
 
     public static string? ExpertZoomStartUrl(MockBooking booking)
-        => booking.ZoomStatus == MockBookingZoomStatuses.Created
+        => string.IsNullOrWhiteSpace(booking.TutorProfileId)
+           && booking.ZoomStatus == MockBookingZoomStatuses.Created
            && booking.ZoomStartUrl is not null
            && booking.ZoomStartUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             ? booking.ZoomStartUrl
@@ -86,6 +88,19 @@ public sealed class MockBookingZoomProvisioner(
         if (booking is null)
         {
             logger.LogWarning("Cannot create Zoom meeting for mock booking {BookingId}: not found", bookingId);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(booking.TutorProfileId))
+        {
+            booking.ZoomStatus = null;
+            booking.ZoomMeetingId = null;
+            booking.ZoomJoinUrl = null;
+            booking.ZoomStartUrl = null;
+            booking.ZoomMeetingPassword = null;
+            booking.ZoomError = null;
+            booking.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
             return;
         }
 

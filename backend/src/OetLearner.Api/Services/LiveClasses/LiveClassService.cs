@@ -21,8 +21,7 @@ public sealed class LiveClassService(
     IFileStorage fileStorage,
     TimeProvider timeProvider,
     ILogger<LiveClassService> logger,
-    IClassNotificationService? classNotifications = null,
-    PrivateSpeakingService? privateSpeakingService = null)
+    IClassNotificationService? classNotifications = null)
 {
     // Wave A3 reminder cascade. Order matters: scheduling code iterates the array and
     // de-dupes per enrollment by (lead → resourceId), so changing the order would
@@ -1773,15 +1772,6 @@ public sealed class LiveClassService(
         if (!meetingId.HasValue)
         {
             return;
-        }
-
-        // T5 — the same Zoom app posts every meeting event to this single webhook,
-        // so dispatch participant join/left to Private Speaking attendance tracking
-        // too. It no-ops unless the meeting belongs to a Private Speaking booking,
-        // so a Live Class meeting is unaffected (and vice-versa).
-        if (privateSpeakingService is not null)
-        {
-            await privateSpeakingService.ApplyZoomAttendanceWebhookAsync(eventType, root, ct);
         }
 
         var session = await db.LiveClassSessions.FirstOrDefaultAsync(item => item.ZoomMeetingId == meetingId.Value, ct);

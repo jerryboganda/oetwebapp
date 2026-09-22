@@ -95,8 +95,11 @@ public static class LiveKitWebhookEndpoint
             return Results.BadRequest(new { errorCode = "invalid_json", message = "Webhook payload is not valid JSON." });
         }
 
-        // Idempotency dedupe: providers retry on transient errors, so a
-        // unique (Scope, Key) on IdempotencyRecord prevents double-processing.
+        // Keep the idempotency marker and provider side effects in one
+        // transaction. Writing the marker before handling the event would
+        // permanently acknowledge a retry when the recording side effect
+        // failed halfway through.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         if (!string.IsNullOrWhiteSpace(webhookEventId))
         {
             var existing = await db.IdempotencyRecords.AsNoTracking()
@@ -107,7 +110,12 @@ public static class LiveKitWebhookEndpoint
             {
                 return Results.Accepted(value: new { status = "duplicate" });
             }
+        }
 
+        await service.HandleWebhookAsync(eventType, payload, ct);
+
+        if (!string.IsNullOrWhiteSpace(webhookEventId))
+        {
             db.IdempotencyRecords.Add(new IdempotencyRecord
             {
                 Id = $"livekit_{Guid.NewGuid():N}",
@@ -122,12 +130,15 @@ public static class LiveKitWebhookEndpoint
             }
             catch (DbUpdateException)
             {
-                // Concurrent dedupe write — treat as duplicate.
+                // Concurrent dedupe write. The transaction rolls back this
+                // delivery's side effects and the winning delivery remains
+                // authoritative.
+                await transaction.RollbackAsync(CancellationToken.None);
                 return Results.Accepted(value: new { status = "duplicate" });
             }
         }
 
-        await service.HandleWebhookAsync(eventType, payload, ct);
+        await transaction.CommitAsync(ct);
 
         return Results.Ok(new { status = "ok" });
     }

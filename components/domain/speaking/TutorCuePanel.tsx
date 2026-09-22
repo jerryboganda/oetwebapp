@@ -8,14 +8,8 @@
  * since interlocutor data is admin/tutor-only. If the request returns 403,
  * we render an authorisation hint instead of leaking any tutor copy.
  *
- * Cue dispatch broadcasts a hub method `BroadcastCue` over the
- * `SpeakingLiveRoomHub` (`/v1/conversations/hub` - TODO: confirm path
- * with P3 hub agent). When the hub client isn't reachable we fall
- * back to local optimistic state and log a warning so the tutor still
- * gets visual feedback.
- *
- * TODO(P3-hub): once `SpeakingLiveRoomHub` is wired, swap the lazy
- * import below for a typed shared bridge in `lib/conversation-speaking-bridge.ts`.
+ * Cue dispatch uses the metadata hub layered over the same LiveKit room.
+ * Hidden cue text stays tutor-only. The hub receives only the cue index.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -37,51 +31,21 @@ import {
   type InterlocutorScriptDetail,
   type ResistanceLevelCode,
 } from '@/lib/api/speaking-role-play-cards';
+import { useLiveRoomRealtime } from './LiveRoomRealtime';
 
 const DEFAULT_ROLE_PLAY_SECONDS = 5 * 60;
 
 export interface TutorCuePanelProps {
   /** Role-play card identifier - pulled from the parent session. */
   cardId: string;
+  /** Live room identifier used by the metadata hub. */
+  liveRoomId: string;
   /** Optional fixed timer length. Defaults to 5 minutes (300 s). */
   rolePlayDurationSeconds?: number;
   /** Fired when the 5-minute timer hits 00:00. */
   onTimerComplete?: () => void;
   /** Optional class for the outer panel. */
   className?: string;
-}
-
-interface CueBroadcaster {
-  invoke: (cardId: string, cueLabel: string, cueIndex: number) => Promise<void>;
-}
-
-async function loadCueBroadcaster(): Promise<CueBroadcaster | null> {
-  try {
-    const { HubConnectionBuilder, LogLevel } = await import('@microsoft/signalr');
-    const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-    const connection = new HubConnectionBuilder()
-      .withUrl('/api/backend/v1/conversations/hub', {
-        accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
-      })
-      .configureLogging(LogLevel.None)
-      .build();
-    await connection.start();
-    return {
-      invoke: async (cardId, label, index) => {
-        try {
-          await connection.invoke('BroadcastCue', cardId, label, index);
-        } catch (err) {
-          // Don't kill the panel for transient hub issues - the tutor
-          // still sees the local "delivered" state.
-
-          console.warn('[TutorCuePanel] BroadcastCue failed:', err);
-        }
-      },
-    };
-  } catch {
-    // SignalR or hub method not available - degrade gracefully.
-    return null;
-  }
 }
 
 function formatMmSs(secondsLeft: number): string {
@@ -121,6 +85,7 @@ function describeResistance(level: ResistanceLevelCode | string | undefined): {
 
 export function TutorCuePanel({
   cardId,
+  liveRoomId,
   rolePlayDurationSeconds = DEFAULT_ROLE_PLAY_SECONDS,
   onTimerComplete,
   className,
@@ -133,9 +98,9 @@ export function TutorCuePanel({
   const [hiddenOpen, setHiddenOpen] = useState(false);
   const [deliveredCues, setDeliveredCues] = useState<Set<number>>(new Set());
   const [secondsLeft, setSecondsLeft] = useState<number>(rolePlayDurationSeconds);
-  const broadcasterRef = useRef<CueBroadcaster | null>(null);
   const timerCompletedRef = useRef(false);
   const onTimerCompleteRef = useRef(onTimerComplete);
+  const realtime = useLiveRoomRealtime();
 
   useEffect(() => {
     onTimerCompleteRef.current = onTimerComplete;
@@ -172,17 +137,6 @@ export function TutorCuePanel({
     };
   }, [cardId]);
 
-  // -- Lazy-load cue broadcaster ---------------------------------------------
-  useEffect(() => {
-    let cancelled = false;
-    loadCueBroadcaster().then((b) => {
-      if (!cancelled) broadcasterRef.current = b;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // -- 5-minute timer ---------------------------------------------------------
   useEffect(() => {
     window.queueMicrotask(() => setSecondsLeft(Math.max(0, Math.floor(rolePlayDurationSeconds))));
@@ -204,19 +158,22 @@ export function TutorCuePanel({
   }, [rolePlayDurationSeconds]);
 
   const handleDispatchCue = useCallback(
-    async (index: number, text: string) => {
-      setDeliveredCues((prev) => {
-        const next = new Set(prev);
-        next.add(index);
-        return next;
-      });
+    async (index: number) => {
       try {
-        await broadcasterRef.current?.invoke(cardId, text, index);
+        if (realtime.liveRoomId !== liveRoomId) {
+          throw new Error('live_room_mismatch');
+        }
+        await realtime.broadcastCue(String(index));
+        setDeliveredCues((prev) => {
+          const next = new Set(prev);
+          next.add(index);
+          return next;
+        });
       } catch {
-        /* swallowed in loader */
+        console.warn('[TutorCuePanel] BroadcastCue failed.');
       }
     },
-    [cardId],
+    [liveRoomId, realtime],
   );
 
   const cues = useMemo(() => {
@@ -325,12 +282,14 @@ export function TutorCuePanel({
                   <li key={cue.index}>
                     <button
                       type="button"
-                      onClick={() => void handleDispatchCue(cue.index, cue.text)}
+                      onClick={() => void handleDispatchCue(cue.index)}
+                      disabled={!realtime.connected}
+                      title={realtime.connected ? 'Broadcast this cue to the live room.' : 'Connecting the live-room cue channel…'}
                       className={cn(
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
                           ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary hover:text-white',
+                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
                     >

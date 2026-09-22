@@ -507,6 +507,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<Attempt>().HasIndex(x => new { x.UserId, x.SubtestCode, x.State });
         modelBuilder.Entity<Attempt>().HasIndex(x => x.ContentId);
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.AttemptId, x.State });
+        modelBuilder.Entity<FreeTierConfig>(entity =>
+        {
+            entity.Property(x => x.FreeWritingScenarioByProfessionJson)
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+            entity.Property(x => x.FreeSpeakingCardByProfessionJson)
+                .HasColumnType("jsonb")
+                .HasDefaultValue("{}");
+        });
         // Worker polls for pending evaluations without filtering by attempt.
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.State, x.LastTransitionAt });
         modelBuilder.Entity<ReviewRequest>().HasIndex(x => new { x.AttemptId, x.State });
