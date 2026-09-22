@@ -823,7 +823,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.Conflict(
                 "writing_assessment_profession_unsupported",
                 $"No supported Writing profession pack is available for '{preflight.Profession}'.");
-        var patientAge = WritingPatientAgeExtractor.Extract(preflight.CaseNotesSnapshot);
+        var patientAge = WritingScenarioSourceExceptions.PatientAge(submission.ScenarioId, preflight.CaseNotesSnapshot);
         var ruleFindings = ruleEngine.Evaluate(new WritingLintInput(
             LetterText: submission.LetterContent,
             LetterType: preflight.LetterType,
@@ -834,7 +834,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
             Profession: profession,
             // Owner decision (19 Sep 2026): a candidate is not penalised for omitting the letter date
             // when the task's source gives no day-level date to put in it.
-            DateAnchor: WritingRuleEngine.ClassifyDateAnchor(preflight.TodayDate, preflight.CaseNotesSnapshot, preflight.TaskSnapshot)));
+            DateAnchor: WritingScenarioSourceExceptions.DateAnchor(submission.ScenarioId, preflight.TodayDate, preflight.CaseNotesSnapshot, preflight.TaskSnapshot),
+            PatientAgeContradicted: WritingScenarioSourceExceptions.PatientAgeContradicted(submission.ScenarioId)));
         ruleFindings = ruleFindings
             .Concat(ToReportFindings(aiFindings, ruleFindings, submission.LetterContent ?? string.Empty))
             .ToList();

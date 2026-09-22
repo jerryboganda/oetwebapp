@@ -374,7 +374,10 @@ public sealed record WritingLintInput(
     // case notes or TodayDate in; the caller classifies it once (WritingRuleEngine.ClassifyDateAnchor)
     // and passes the answer. Unknown (the default) keeps every existing behaviour, so a caller that
     // does not know can never accidentally switch the date requirement off.
-    LetterDateAnchor DateAnchor = LetterDateAnchor.Unknown);
+    LetterDateAnchor DateAnchor = LetterDateAnchor.Unknown,
+    // Owner decision (22 Sep 2026): the source states two different ages for the patient with no DOB
+    // to settle it (WritingScenarioSourceExceptions), so no Re: line age may be demanded.
+    bool PatientAgeContradicted = false);
 
 /// <summary>
 /// What date evidence a scenario's source provides. Governs whether a letter date is required,

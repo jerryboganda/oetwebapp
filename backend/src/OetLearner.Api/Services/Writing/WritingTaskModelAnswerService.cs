@@ -1249,7 +1249,7 @@ public sealed class WritingTaskModelAnswerService(
         var grounding = WritingModelAnswerGroundingValidator.Validate(letterText, facts);
         var caseNotesAll = string.Join("\n", facts);
 
-        var patientAge = WritingPatientAgeExtractor.Extract(caseNotesAll);
+        var patientAge = WritingScenarioSourceExceptions.PatientAge(scenario.Id, caseNotesAll);
         // Owner Clarifications Addendum (14 Sep 2026): the gate validates
         // against the SOURCE, not only the letter — the canonical case notes
         // prove the letter date (letter_date_unsupported) and the exact task
@@ -1270,7 +1270,8 @@ public sealed class WritingTaskModelAnswerService(
             IsModelAnswer: true,
             // Owner decision (19 Sep 2026): with no day-level date in the source the letter date is
             // omitted (or "Month YYYY" when only a month is given), never invented.
-            DateAnchor: WritingRuleEngine.ClassifyDateAnchor(scenario.TodayDate, caseNotesAll, scenario.TaskPromptMarkdown))));
+            DateAnchor: WritingScenarioSourceExceptions.DateAnchor(scenario.Id, scenario.TodayDate, caseNotesAll, scenario.TaskPromptMarkdown),
+            PatientAgeContradicted: WritingScenarioSourceExceptions.PatientAgeContradicted(scenario.Id))));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(
             f.RuleId, f.Severity.ToString().ToLowerInvariant(), f.Message, f.Quote, f.FixSuggestion)).ToList();
 
