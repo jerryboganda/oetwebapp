@@ -64,24 +64,30 @@ async function signInOnce(browser: Browser) {
   await page.addInitScript((deviceId) => {
     try { window.localStorage.setItem('oet_device_id', deviceId); } catch { /* ignore */ }
   }, DEVICE_ID);
-  for (let attempt = 0; attempt < 4; attempt++) {
-    await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
-    await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
-    await page.getByRole('button', { name: /^sign in$/i }).click();
-    try {
-      await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
-      authState = await context.storageState();
-      await context.close();
-      return;
-    } catch {
-      // AuthBruteforce is 10/min; back off well past a full window before retrying.
-      console.log(`[signInOnce] sign-in did not redirect (attempt ${attempt + 1}/4) — possible rate limit, waiting 65s`);
-      await page.waitForTimeout(65_000);
+
+  // Diagnostic instrumentation: log the ACTUAL sign-in network response and any visible page error, instead of
+  // inferring failure only from "the URL never changed". One attempt only — a real cause needs seeing, not hiding
+  // behind more retries.
+  page.on('response', (r) => {
+    if (r.url().includes('/v1/auth/sign-in')) {
+      r.text().then((body) => console.log(`[signInOnce] POST /v1/auth/sign-in -> ${r.status()}: ${body.slice(0, 300)}`)).catch(() => {});
     }
+  });
+
+  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('textbox', { name: /email address/i }).fill(EMAIL!);
+  await page.getByRole('textbox', { name: /^password$/i }).fill(PASSWORD!);
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  try {
+    await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 });
+  } catch {
+    const bodyText = await page.locator('body').innerText().catch(() => '(could not read body)');
+    console.log(`[signInOnce] still on /sign-in after 20s. Visible page text:\n${bodyText.slice(0, 1500)}`);
+    await context.close();
+    throw new Error('signInOnce: sign-in did not redirect — see the response/page-text logged above.');
   }
+  authState = await context.storageState();
   await context.close();
-  throw new Error('signInOnce: sign-in never redirected away from /sign-in after 4 attempts.');
 }
 
 test.beforeAll(async ({ browser }) => {
