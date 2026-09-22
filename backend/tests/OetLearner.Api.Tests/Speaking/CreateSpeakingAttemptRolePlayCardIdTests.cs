@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Tests.FreeSamples;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -24,6 +25,13 @@ namespace OetLearner.Api.Tests.Speaking;
 /// used for card previews) resolves to the canonical ContentItem.Id, which
 /// is what gets stored on the Attempt and used for downstream binding
 /// checks (CreateSpeakingUploadSessionAsync -> EnsureSpeakingAttemptBindingAsync).
+///
+/// 22 Sep 2026 live-voice rewrite: CreateSpeakingAttemptAsync now also runs
+/// EnsureLegacyFreeSpeakingAccessAsync FIRST — the legacy record-upload-grade
+/// pipeline these tests exercise is reserved for the designated free Speaking
+/// sample. Every seeded card below is made the free sample via an explicit
+/// FreeSampleDesignation (not auto-pick, to avoid depending on seed-call
+/// ordering) so attempt creation reaches the id-resolution logic under test.
 /// </summary>
 public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
 {
@@ -31,7 +39,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
     private LearnerService _learnerService = default!;
     private string _storageRoot = default!;
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase($"speaking-attempt-cardid-{Guid.NewGuid():N}")
@@ -71,7 +79,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
             notifications: null!, walletService, paymentGateways,
             disputeService: null!, billingOptions, storageOptions);
 
-        return Task.CompletedTask;
+        await FreeSampleServiceTests.EnableAsync(_db);
     }
 
     public Task DisposeAsync()
@@ -90,6 +98,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
     {
         var userId = await SeedLearnerAsync("medicine");
         var (contentItemId, rolePlayCardId) = await SeedCardAsync(profession: "medicine");
+        await MakeFreeAsync("medicine", rolePlayCardId);
 
         var result = await _learnerService.CreateSpeakingAttemptAsync(
             userId,
@@ -106,7 +115,8 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
     public async Task CreateSpeakingAttempt_WithContentItemId_StillWorksDirectly()
     {
         var userId = await SeedLearnerAsync("medicine");
-        var (contentItemId, _) = await SeedCardAsync(profession: "medicine");
+        var (contentItemId, rolePlayCardId) = await SeedCardAsync(profession: "medicine");
+        await MakeFreeAsync("medicine", rolePlayCardId);
 
         var result = await _learnerService.CreateSpeakingAttemptAsync(
             userId,
@@ -128,7 +138,10 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
             userId,
             new CreateAttemptRequest("rpc-does-not-exist", Context: null, Mode: "self", DeviceType: null, ParentAttemptId: null),
             CancellationToken.None));
-        Assert.Equal("content_not_found", ex.ErrorCode);
+        // 22 Sep 2026 live-voice rewrite: CreateSpeakingAttemptAsync now does
+        // its own upfront RolePlayCard lookup (needed for the free-sample
+        // gate) and throws its own error code for a genuinely unknown id.
+        Assert.Equal("speaking_task_not_found", ex.ErrorCode);
     }
 
     [Fact]
@@ -136,6 +149,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
     {
         var userId = await SeedLearnerAsync("medicine");
         var (_, rolePlayCardId) = await SeedCardAsync(profession: "medicine");
+        await MakeFreeAsync("medicine", rolePlayCardId);
 
         var created = await _learnerService.CreateSpeakingAttemptAsync(
             userId,
@@ -157,6 +171,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
         var userId = await SeedLearnerAsync("medicine");
         var (_, rolePlayCardId) = await SeedCardAsync(profession: "medicine");
         var (_, otherCardId) = await SeedCardAsync(profession: "medicine");
+        await MakeFreeAsync("medicine", rolePlayCardId);
 
         var created = await _learnerService.CreateSpeakingAttemptAsync(
             userId,
@@ -170,6 +185,22 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>Makes <paramref name="cardId"/> the designated free Speaking
+    /// sample for <paramref name="profession"/> — an explicit designation
+    /// (not auto-pick) so it doesn't depend on seed-call ordering.</summary>
+    private async Task MakeFreeAsync(string profession, string cardId)
+    {
+        _db.FreeSampleDesignations.Add(new FreeSampleDesignation
+        {
+            Id = $"fsd-{Guid.NewGuid():N}",
+            Subtest = "speaking",
+            Profession = profession,
+            ContentId = cardId,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+    }
 
     private static string ExtractAttemptId(object result)
     {

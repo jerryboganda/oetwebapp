@@ -732,6 +732,14 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         // card is curated for tutors/admins only. Mirroring the Reading
         // CorrectAnswerJson pattern, the learner-facing payload must never
         // contain `interlocutorCard` at any nesting level.
+        //
+        // 22 Sep 2026 live-voice rewrite: the single-task read this pins
+        // (GET /v1/speaking/tasks/st-001 -> GetLegacyFreeSpeakingTaskAsync)
+        // now also requires the card to be the designated free Speaking
+        // sample. st-001 is nursing's only live RolePlayCard, so enabling the
+        // flag auto-picks it free — scoped to this test, not the shared
+        // helper, so other tests in this file keep the flag off.
+        await _factory.EnsureFreeSamplesEnabledAsync();
         using var client = await CreateClientForUserAsync("speaking-projection");
 
         var listResponse = await client.GetAsync("/v1/speaking/tasks");

@@ -209,6 +209,12 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         // balance is < 1. A fresh learner profile has no AI credits, so grant
         // some up front or the queued evaluation lands in Failed, never Completed.
         await _factory.EnsureAiCreditsAsync("audio-owner");
+        // The legacy record-upload-grade pipeline this test exercises (binary
+        // storage, expert streaming) is now reserved for the designated free
+        // Speaking sample (22 Sep 2026 live-voice rewrite) — every other card
+        // requires the native live-voice flow instead. st-001 is nursing's
+        // only live RolePlayCard, so enabling the flag auto-picks it free.
+        await _factory.EnsureFreeSamplesEnabledAsync();
         var attemptId = await CreateSpeakingAttemptAsync(learner, "practice");
 
         var uploadSessionResponse = await learner.PostAsync($"/v1/speaking/attempts/{attemptId}/audio/upload-session", content: null);

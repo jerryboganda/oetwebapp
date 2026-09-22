@@ -200,7 +200,11 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         // so learner home deliberately exposes no raw-total/band evaluation
         // summary (see GetWritingHomeAsync): latestEvaluation is null by design.
         Assert.Equal(JsonValueKind.Null, json.GetProperty("latestEvaluation").ValueKind);
-        Assert.True(_sql.Commands.Count <= 5, DumpCommands());
+        // 22 Sep 2026 handoff (item 2): GetTasksBySubtestAsync now looks up
+        // the caller's own profession to scope the Writing/Speaking task list
+        // — one more constant-cost query, not an N+1, so the ceiling moves by
+        // exactly one rather than being removed.
+        Assert.True(_sql.Commands.Count <= 6, DumpCommands());
         Assert.Single(_sql.Commands.Where(command =>
             command.Contains("Evaluations", StringComparison.OrdinalIgnoreCase)));
         Assert.Contains(_sql.Commands, command =>

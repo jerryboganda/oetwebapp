@@ -177,9 +177,14 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
         var learner = await SeedLearnerAsync(activeProfessionId: "nursing", exhaustedCredits: false);
 
+        // The live-voice rewrite (22 Sep 2026) added its own gate
+        // (EnsureLegacyFreeSpeakingAccessAsync) that now runs BEFORE the
+        // profession-isolation check below it — it also correctly refuses
+        // (a non-designated card is never free), just with its own error
+        // code, since this learner has no live-voice entitlement either.
         var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
 
-        Assert.Equal("content_not_found", ex.ErrorCode);
+        Assert.Equal("live_voice_required", ex.ErrorCode);
         Assert.Empty(_db.FreeSampleClaims);
     }
 
@@ -192,7 +197,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
 
-        Assert.Equal("content_not_found", ex.ErrorCode);
+        Assert.Equal("live_voice_required", ex.ErrorCode);
         Assert.Empty(_db.FreeSampleClaims);
     }
 
