@@ -448,7 +448,7 @@ async function phasePlan() {
     const manifest = existsSync(join(dir, 'windows', 'manifest.tsv'))
       ? Object.fromEntries(readFileSync(join(dir, 'windows', 'manifest.tsv'), 'utf-8').split(/\r?\n/).filter(Boolean).map((l) => l.split('\t')).map(([n, o]) => [n.replace(/\.mp3$/, ''), Number(o)]))
       : {};
-    for (const { id } of PAIRS) {
+    for (const { src, dst, id } of PAIRS) {
       if (ONLY_PAIR && id !== ONLY_PAIR) continue;
       const pairAssets = assets.pairs[id];
       if (!pairAssets) continue;
