@@ -1,9 +1,11 @@
 # Watch Build & Deploy for a SHA, dump failed logs, verify live health.
 # Does not invent code fixes. Non-zero exit means the agent must fix and push again
 # WITHOUT waiting for the owner.
-# The repo stays PRIVATE at all times (owner directive 2026-09-20). This script
-# never makes it public; CI runs on the private self-hosted runner
-# (docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md, repo variable CI_RUNS_ON).
+# Flip public, run on GitHub-hosted Actions, flip back private once verified live
+# (owner directive 2026-09-22, HARD ENFORCED — see AGENTS.md "GitHub Actions on a
+# public-when-working repo"). -SkipPublic/-SkipPrivateFlip exist for a caller that
+# is already managing visibility itself (e.g. coordinating with another agent
+# session sharing the same public window) — do not pass them by default.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1
@@ -35,9 +37,6 @@ function Invoke-GhJson {
 
 function Set-RepoVisibility {
     param([ValidateSet('public', 'private')][string]$Visibility)
-    if ($Visibility -eq 'public') {
-        throw "Refusing to make $Repo public: the owner keeps it PRIVATE at all times (directive 2026-09-20). Run CI on the private self-hosted runner instead (docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md)."
-    }
     Write-Output "VISIBILITY -> $Visibility"
     & gh repo edit $Repo --visibility $Visibility --accept-visibility-change-consequences
     if ($LASTEXITCODE -ne 0) {
@@ -56,8 +55,9 @@ $Sha = $resolved
 
 Write-Output "SHIP-WATCH repo=$Repo sha=$Sha workflow=$Workflow"
 
-# -SkipPublic is retained for compatibility with old invocations and is now a no-op:
-# this script never makes the repository public.
+if (-not $SkipPublic) {
+    Set-RepoVisibility -Visibility public
+}
 
 $deadline = [DateTime]::UtcNow.AddSeconds($WaitForRunSeconds)
 $runId = $null
@@ -88,7 +88,7 @@ do {
 
 if (-not $runId) {
     Write-Output 'SHIP-WATCH_NO_RUN'
-    Write-Output 'NEXT: dump `gh run list`, confirm the private runner is online (gh api repos/<owner>/<repo>/actions/runners) and CI_RUNS_ON is set, then retry this watcher. Do not tell the owner the deploy is done.'
+    Write-Output 'NEXT: dump `gh run list`, confirm the repo is public (gh repo view --json visibility), then retry this watcher. Do not tell the owner the deploy is done.'
     exit 2
 }
 
@@ -121,7 +121,7 @@ if ($conclusion -ne 'success') {
     Write-Output '----- FAILED LOGS -----'
     & gh run view $runId --repo $Repo --log-failed
     Write-Output '----- END FAILED LOGS -----'
-    Write-Output 'NEXT: the repo stays PRIVATE; fix the compile/parse error from the logs, run `pnpm run ship:gate`, commit, push origin/main (no force), rerun this watcher. Do not wait for the owner.'
+    Write-Output 'NEXT: keep the repo public, fix the compile/parse error from the logs, run `pnpm run ship:gate`, commit, push origin/main (no force), rerun this watcher. Do not wait for the owner.'
     exit 1
 }
 

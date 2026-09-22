@@ -152,6 +152,9 @@ describe('writing task wire mapping', () => {
     const [task] = await fetchPlacementWritingTasks('ses_1');
 
     expect(task).toMatchObject({ taskId: 'WRT-B1B2-1', minutes: 7, minWords: 40 });
+    // The countdown timer uses this raw value (extra time already applied
+    // server-side) — the rounded `minutes` field is for display only.
+    expect(task.timeLimitSeconds).toBe(420);
   });
 
   it('never shows a 0-minute hint for a very short limit', async () => {

@@ -115,6 +115,9 @@ export interface PlacementWritingTask {
   prompt: string;
   minWords?: number;
   minutes?: number;
+  /** Authoritative duration for the countdown (extra time already applied
+   *  server-side); `minutes` is the same value rounded, for display only. */
+  timeLimitSeconds?: number;
 }
 
 export interface PlacementSkillResult {
@@ -443,6 +446,7 @@ export async function fetchPlacementWritingTasks(sessionId: string): Promise<Pla
       prompt: String(task.prompt ?? ''),
       minWords: firstNumber(guidance?.min, task.min_words),
       minutes: limitSeconds !== undefined ? Math.max(1, Math.round(limitSeconds / 60)) : firstNumber(task.minutes),
+      timeLimitSeconds: limitSeconds,
     };
   });
 }

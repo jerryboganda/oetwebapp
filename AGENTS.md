@@ -17,10 +17,11 @@ Standing owner directive for **every** development/debugging task. Overrides any
 
 1. Do the task properly (correctness/root-cause still matter).
 2. Run `pnpm run ship:gate` (seconds). That is the required pre-push check. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. Do not block on flaky CI (QA Smoke is chronically red — ignore it). Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
-3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit → `git push origin main` (never `--force`). **The repo stays PRIVATE at all times — never flip it public, even temporarily (owner directive 2026-09-20).** CI and deploy run on the private self-hosted runner (see "GitHub Actions on a private repo" below).
+3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit → **flip the repo public** (`gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`) → `git push origin main` (never `--force`). See "GitHub Actions on a public-when-working repo" below — this order is HARD ENFORCED, no bargains, no mistakes.
 4. **Watch** `Build & Deploy (web + API)` for this SHA until it **finishes**: `pnpm run ship:watch` or `powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1`. Do not report done after push.
-5. If that run fails: dump `--log-failed`, fix the compile/parse error, run `pnpm run ship:gate`, commit, push again, watch again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing (the repo remains private).
+5. If that run fails: dump `--log-failed`, fix the compile/parse error, run `pnpm run ship:gate`, commit, push again, watch again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing.
 6. After this SHA's Build & Deploy succeeds, confirm live: `https://app.oetwithdrhesham.co.uk/api/health`, `https://api.oetwithdrhesham.co.uk/health/ready`, `/health/live`, and VPS image tags contain this SHA. Then 2–3 lines of what shipped.
+7. Once verified live, and there is no other active work needing the repo public (check with any other agent session before flipping), **flip the repo back to PRIVATE**: `gh repo edit jerryboganda/oetwebapp --visibility private --accept-visibility-change-consequences`.
 
 Only skip the auto-push if the user explicitly says "don't push" for that task. Never skip the watch after a push you did make.
 
@@ -75,11 +76,14 @@ runners, background processes, subagents). The policy applies based on *where th
 physically executes*, not which tool launched it. **Subagents inherit this policy** — delegation is
 not an exception.
 
-**One documented exception (owner directive 2026-09-20):** the private self-hosted GitHub Actions
-runner (dedicated WSL2 distro `oet-ci`; `docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md`) is an *authorized
-Actions execution environment*, not a hidden local path — it exists only because hosted runners are
-billing-blocked for the private repo. Workflows still run as Actions (logs, statuses, artifacts); do
-not run builds/tests directly in that distro or on the workstation outside a workflow.
+**Two authorized execution paths, per "GitHub Actions on a public-when-working repo" below:** the
+default is GitHub-hosted runners, which requires the repo to be flipped public first (compulsory
+step 3 of the Ship-It Workflow above). The private self-hosted runner (dedicated WSL2 distro
+`oet-ci`; `docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md`) is a second, optional Actions execution
+environment for when the repo must stay private for a stretch (e.g. mid-review-sensitive work) —
+use it only when explicitly told to keep the repo private for that task. Either way workflows still
+run as Actions (logs, statuses, artifacts); do not run builds/tests directly in that distro or on
+the workstation outside a workflow.
 
 **Never claim** something compiled, built, passed tests, passed lint, passed typecheck or passed E2E
 unless a real GitHub Actions run supports it. Quote the workflow, run, job and step. Fabricated CI
@@ -122,24 +126,35 @@ booklet; 20/6/16 = 42; `texts: []`; `correctAnswerJson` from the printed
 key only; publish live on `https://api.oetwithdrhesham.co.uk`; same five
 book folders on `/reading/exam` and `/reading/parts/a|b|c`.
 
-## GitHub Actions on a private repo — COMPULSORY (owner directive 2026-09-20; replaces the old "flip public" ritual)
+## GitHub Actions on a public-when-working repo — COMPULSORY (owner directive 2026-09-22; HARD ENFORCED, no bargains, no mistakes)
 
-**The repository is PRIVATE at all times. Never make it public, not even temporarily, and never
-run `gh repo edit ... --visibility public`.** The owner does not want source code exposed to enable
-Actions runners.
+**Flip the repo public, then use GitHub Actions. This is the standing rule, not a fallback.**
+GitHub-hosted runners are refused on a private repo on this account (billing / spending limit — jobs
+fail in seconds with `steps=0`; you will see this annotation and it does NOT mean go tell the owner
+to fix Billing & plans — it means flip the repo public yourself, right now, no asking first):
 
-GitHub-hosted runners are refused for private repos on this account (billing / spending limit — jobs
-fail in seconds with `steps=0`; confirm with the check-run annotation). Actions therefore runs on a
-**private self-hosted runner** selected by the repository variable `CI_RUNS_ON` (`oet-private`):
+1. `gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`
+2. Push / dispatch / rerun the workflow. Hosted runners pick it up immediately — no `CI_RUNS_ON`
+   needed; if it's set, `gh variable delete CI_RUNS_ON` first so jobs don't try the private runner.
+3. Let the run finish. A full QA Smoke (13 e2e shards + backend + frontend, parallel on hosted
+   infra) takes roughly an hour — do not flip back private before it completes.
+4. Once the work that needed the repo public is verified done (deploy confirmed live, or the PR you
+   pushed for is merged/closed), **flip back to PRIVATE**:
+   `gh repo edit jerryboganda/oetwebapp --visibility private --accept-visibility-change-consequences`.
+   Check with any other agent session first (`gh repo view --json visibility` before every push is
+   not enough by itself — another session may be mid-run on the same public window; message it).
 
-- Workflows use `runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}`; deleting the variable returns
-  to GitHub-hosted runners once billing is fixed.
-- Runner operations, hardening, start/stop, and teardown: `docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md`.
-- If a job sits `queued`, the runner is probably stopped:
-  `gh api repos/jerryboganda/oetwebapp/actions/runners --jq '.runners[] | "\(.name) \(.status)"'`.
-- Never register a self-hosted runner on a public repository.
-- Run **one repo's** CI at a time on the shared runner host (fixed Postgres port 5432).
-- Docker compose files exist for deployment/packaging, not as a required local validation path.
+Never leave the repo public indefinitely once the work is done, and never leave it private and stuck
+waiting on hosted Actions — those are the two mistakes this rule exists to prevent.
+
+**Private self-hosted runner (optional, only when explicitly told to keep the repo private for a
+task):** a dedicated WSL2 distro `oet-ci` running the `oet-ci-oet` runner, selected by the repo
+variable `CI_RUNS_ON=oet-private`. Runner operations, hardening, start/stop, and teardown:
+`docs/PRIVATE-CI-SELF-HOSTED-RUNNER.md`. If a job sits `queued` on this path, the runner is probably
+stopped: `gh api repos/jerryboganda/oetwebapp/actions/runners --jq '.runners[] | "\(.name) \(.status)"'`.
+Never register a self-hosted runner on a public repository. Run **one repo's** CI at a time on the
+shared runner host (fixed Postgres port 5432). Docker compose files exist for deployment/packaging,
+not as a required local validation path.
 
 See `.github/instructions/validation.instructions.md` for the full command ladder.
 
