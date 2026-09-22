@@ -6,9 +6,11 @@ using OetLearner.Api.Data;
 
 namespace OetLearner.Api.Data.Migrations
 {
-    // HAND-AUTHORED (repo convention): contains ONLY the new objects; the model
-    // snapshot is left as-is. Raw idempotent SQL so a dev database that was
-    // created with EnsureCreated does not fail with "already exists".
+    // HAND-AUTHORED (repo convention): contains ONLY the new objects. Raw
+    // idempotent SQL so a dev database that was created with EnsureCreated
+    // does not fail with "already exists". The ModelSnapshot IS updated (see
+    // PlacementAccommodations, 20270102090000) so `dotnet ef migrations
+    // has-pending-model-changes` stays clean.
     // Free Mocks (owner 2026-09-22): per-profession free-sample designation and
     // the per-learner once-only claim (UNIQUE(UserId, Subtest)).
     // Same-day second migration (+0100): 20270102090000 was independently taken

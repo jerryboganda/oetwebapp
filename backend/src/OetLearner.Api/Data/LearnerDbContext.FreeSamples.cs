@@ -5,7 +5,7 @@ namespace OetLearner.Api.Data;
 
 // Free Mocks (2026-09-22): per-profession free-sample designation + the
 // per-learner once-only claim. Hand-authored migration
-// 20270102090000_AddFreeSampleDesignationsAndClaims (snapshot left as-is).
+// 20270102090100_AddFreeSampleDesignationsAndClaims (ModelSnapshot updated).
 public partial class LearnerDbContext
 {
     public DbSet<FreeSampleDesignation> FreeSampleDesignations => Set<FreeSampleDesignation>();
