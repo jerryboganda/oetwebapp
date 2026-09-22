@@ -50,9 +50,9 @@ public sealed class LiveTutorRoomLifecycleWorker(
         var now = clock.GetUtcNow();
 
         var bookings = await db.PrivateSpeakingBookings
-            .Where(b => (b.Status is PrivateSpeakingBookingStatus.Confirmed
-                    or PrivateSpeakingBookingStatus.ZoomCreated
-                    or PrivateSpeakingBookingStatus.InProgress)
+            .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
+                    || b.Status == PrivateSpeakingBookingStatus.ZoomCreated
+                    || b.Status == PrivateSpeakingBookingStatus.InProgress)
                 && b.SessionStartUtc >= now - ProvisionLookback
                 && b.SessionStartUtc <= now + ProvisionLookahead)
             .OrderBy(b => b.SessionStartUtc)

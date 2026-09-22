@@ -14,6 +14,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services;
 

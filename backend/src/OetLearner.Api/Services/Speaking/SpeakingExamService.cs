@@ -285,13 +285,14 @@ public sealed class SpeakingExamService(
             SpeakingExamState.PrepB or SpeakingExamState.ActiveB => exam.CardBId,
             _ => null,
         };
+        var currentSessionId = exam.State is SpeakingExamState.PrepA or SpeakingExamState.ActiveA
+            ? exam.SessionAId
+            : exam.SessionBId;
         var liveRoomId = currentCardId is null
                 ? null
             : await db.SpeakingLiveRooms.AsNoTracking()
                 .Where(r => r.State == SpeakingLiveRoomState.Active
-                    && r.SpeakingSessionId == (exam.State is SpeakingExamState.PrepA or SpeakingExamState.ActiveA
-                        ? exam.SessionAId
-                        : exam.SessionBId))
+                    && r.SpeakingSessionId == currentSessionId)
                 .OrderByDescending(r => r.CreatedAt)
                 .Select(r => r.Id)
                 .FirstOrDefaultAsync(ct);

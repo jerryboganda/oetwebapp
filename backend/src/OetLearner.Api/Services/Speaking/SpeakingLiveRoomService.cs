@@ -1066,9 +1066,9 @@ public sealed class SpeakingLiveRoomService
                 return room.GetString();
             }
 
-            if (room.ValueKind == JsonValueKind.Object && room.TryGetProperty("name", out var roomName))
+            if (room.ValueKind == JsonValueKind.Object && room.TryGetProperty("name", out var nestedRoomName))
             {
-                return roomName.GetString();
+                return nestedRoomName.GetString();
             }
         }
 
