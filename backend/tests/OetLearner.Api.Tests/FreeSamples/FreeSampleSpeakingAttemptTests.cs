@@ -14,11 +14,15 @@ namespace OetLearner.Api.Tests.FreeSamples;
 
 /// <summary>
 /// Free Mocks — starting a single-card Speaking attempt. The learner's ONE free
-/// AI-graded sample is the profession's designated card: it starts for a learner
-/// who has no credits left and whose ACCOUNT profession is different (or unset),
-/// binds the once-only claim, and changes nothing else — every other card, a
-/// spent sample, and the dark-launch-off state keep the profession-isolation and
-/// credit gates exactly as before.
+/// AI-graded sample is the OWN profession's designated card: it starts for a
+/// learner who has no credits left, binds the once-only claim, and changes
+/// nothing else — every other card, a spent sample, another profession's
+/// designated card, and the dark-launch-off state keep the profession-isolation
+/// and credit gates exactly as before.
+///
+/// CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): there is no longer a
+/// cross-profession free-sample picker — a learner may only ever get the free
+/// sample of their OWN registered profession, server-enforced.
 /// </summary>
 public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
 {
@@ -145,11 +149,11 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheDesignatedCard_StartsFree_ForAnExhaustedLearnerOnAnotherProfession_AndBindsTheClaim()
+    public async Task TheDesignatedCard_StartsFree_ForAnExhaustedLearnerOfTheSameProfession_AndBindsTheClaim()
     {
         await FreeSampleServiceTests.EnableAsync(_db);
         var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
-        var learner = await SeedLearnerAsync(activeProfessionId: "nursing");
+        var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
 
         var result = await StartAsync(learner, medCard);
 
@@ -163,20 +167,38 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         // which the client decodes back to the exact FREE_SAMPLE_FEEDBACK string.
         using var payload = JsonDocument.Parse(JsonSerializer.Serialize(result));
         Assert.Equal(ContentEntitlementService.FreeSampleFeedback, payload.RootElement.GetProperty("feedbackMessage").GetString());
-        // The learner's ACCOUNT profession is never touched.
-        Assert.Equal("nursing", (await _db.Users.SingleAsync(u => u.Id == learner)).ActiveProfessionId);
+        Assert.Equal("medicine", (await _db.Users.SingleAsync(u => u.Id == learner)).ActiveProfessionId);
     }
 
     [Fact]
-    public async Task TheDesignatedCard_AlsoWorksForALearnerWithNoAccountProfession()
+    public async Task TheDesignatedCard_IsNotFree_ForALearnerOfAnotherProfession_CriticalSecurityFix20260922()
     {
         await FreeSampleServiceTests.EnableAsync(_db);
         var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
-        var learner = await SeedLearnerAsync(activeProfessionId: null);
+        var learner = await SeedLearnerAsync(activeProfessionId: "nursing", exhaustedCredits: false);
 
-        var attemptId = AttemptIdOf(await StartAsync(learner, medCard));
+        // The live-voice rewrite (22 Sep 2026) added its own gate
+        // (EnsureLegacyFreeSpeakingAccessAsync) that now runs BEFORE the
+        // profession-isolation check below it — it also correctly refuses
+        // (a non-designated card is never free), just with its own error
+        // code, since this learner has no live-voice entitlement either.
+        var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
 
-        Assert.True(await new FreeSampleService(_db).IsFreeAttemptAsync(learner, "speaking", attemptId, default));
+        Assert.Equal("live_voice_required", ex.ErrorCode);
+        Assert.Empty(_db.FreeSampleClaims);
+    }
+
+    [Fact]
+    public async Task TheDesignatedCard_IsNotFree_ForALearnerWithNoAccountProfession_CriticalSecurityFix20260922()
+    {
+        await FreeSampleServiceTests.EnableAsync(_db);
+        var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
+        var learner = await SeedLearnerAsync(activeProfessionId: null, exhaustedCredits: false);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
+
+        Assert.Equal("live_voice_required", ex.ErrorCode);
+        Assert.Empty(_db.FreeSampleClaims);
     }
 
     [Fact]
@@ -227,7 +249,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
     {
         await FreeSampleServiceTests.EnableAsync(_db);
         var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
-        var learner = await SeedLearnerAsync(activeProfessionId: "nursing");
+        var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
 
         var first = AttemptIdOf(await StartAsync(learner, medCard));
         var again = AttemptIdOf(await StartAsync(learner, medCard));

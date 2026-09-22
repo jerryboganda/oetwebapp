@@ -31,14 +31,21 @@ public sealed class PrivateSpeakingEndpointProjectionTests
     }
 
     [Fact]
-    public void AdminBookingDetail_RetainsOperationalZoomFields()
+    public void AdminBookingDetail_NoLongerExposesRetiredZoomFields()
     {
+        // Zoom provisioning is retired for Private Speaking (LiveKit rewrite,
+        // commit 74fdadd80): no booking is ever stamped with real Zoom
+        // URLs/password again, so the admin projection dropped these columns
+        // rather than keep permanently-null legacy fields. Operational access
+        // now goes through the LiveKit room lifecycle (LiveTutorRoomLifecycleWorker
+        // / SpeakingLiveRoomService), not this endpoint.
         var booking = NewBooking();
 
         var adminProjection = InvokeMapper("MapAdminBookingDetailResponse", booking);
 
-        Assert.Contains("ZoomStartUrl", ProjectionPropertyNames(adminProjection));
-        Assert.Contains("ZoomMeetingPassword", ProjectionPropertyNames(adminProjection));
+        Assert.DoesNotContain("ZoomStartUrl", ProjectionPropertyNames(adminProjection));
+        Assert.DoesNotContain("ZoomMeetingPassword", ProjectionPropertyNames(adminProjection));
+        Assert.DoesNotContain("ZoomJoinUrl", ProjectionPropertyNames(adminProjection));
     }
 
     private static PrivateSpeakingBooking NewBooking()

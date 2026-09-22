@@ -198,13 +198,15 @@ public sealed class PrivateSpeakingAdminActionsTests
     }
 
     [Fact]
-    public async Task AdminManualReschedule_MovesSessionAndResetsZoomForRecreation()
+    public async Task AdminManualReschedule_MovesSessionAndClearsLegacyZoomFields()
     {
         await using var db = CreateDb();
         var stripe = new FakeStripeService();
-        // No ZoomMeetingId is set on the booking, so zoomService is never touched
-        // (passed null! by CreateService) — the reset + recreate path runs without
-        // an old meeting to delete.
+        // zoomService is passed null! by CreateService — AdminManualRescheduleAsync
+        // no longer touches Zoom at all (retired by the LiveKit rewrite, commit
+        // 74fdadd80); it only clears the legacy columns and re-queues booking
+        // confirmation + calendar sync. LiveTutorRoomLifecycleWorker owns
+        // provisioning the LiveKit room for the new time.
         var service = CreateService(db, stripe);
 
         var booking = SeedConfirmedBooking(db, Now.AddHours(48), b =>
@@ -228,10 +230,14 @@ public sealed class PrivateSpeakingAdminActionsTests
         Assert.Equal(PrivateSpeakingZoomStatus.Pending, saved.ZoomStatus);
         Assert.Null(saved.ZoomMeetingId);
 
-        // A Zoom-create background job was queued for recreation at the new time.
-        var zoomJobQueued = await db.BackgroundJobs.AnyAsync(j =>
-            j.Type == JobType.PrivateSpeakingZoomCreate && j.ResourceId == booking.Id);
-        Assert.True(zoomJobQueued);
+        // Booking confirmation + calendar sync are re-queued at the new time;
+        // Zoom is never queued (retired — LiveKit provisions lazily instead).
+        Assert.False(await db.BackgroundJobs.AnyAsync(j =>
+            j.Type == JobType.PrivateSpeakingZoomCreate && j.ResourceId == booking.Id));
+        Assert.True(await db.BackgroundJobs.AnyAsync(j =>
+            j.Type == JobType.PrivateSpeakingBookingConfirmation && j.ResourceId == booking.Id));
+        Assert.True(await db.BackgroundJobs.AnyAsync(j =>
+            j.Type == JobType.PrivateSpeakingCalendarSync && j.ResourceId == booking.Id));
     }
 
     [Fact]

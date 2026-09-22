@@ -115,6 +115,22 @@ public sealed class WritingRev8TaskLoadEligibilityTests
         return scenario;
     }
 
+    private static async Task SeedLearnerAsync(LearnerDbContext db, string userId, string profession)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = userId,
+            Email = $"{userId}@example.test",
+            ActiveProfessionId = profession,
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
     private static HttpContext LearnerContext(string userId)
         => new DefaultHttpContext
         {
@@ -222,6 +238,9 @@ public sealed class WritingRev8TaskLoadEligibilityTests
         await using var db = NewContext();
         var (scenarios, _, _) = BuildServices(db);
         var scenario = await SeedScenarioAsync(db);
+        // 22 Sep 2026 handoff (item 2): GetScenarioAsync is now locked to the
+        // caller's own registered profession — this scenario is "Nursing".
+        await SeedLearnerAsync(db, "learner_task_screen", "nursing");
 
         var response = await scenarios.GetScenarioAsync("learner_task_screen", scenario.Id, CancellationToken.None);
 

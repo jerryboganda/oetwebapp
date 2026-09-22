@@ -97,15 +97,23 @@ public sealed class LearnerRolePlayCardListTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task List_ExplicitProfessionId_OverridesTheLearnersActiveProfession()
+    public async Task List_ExplicitProfessionId_DoesNotWidenScope_CriticalSecurityFix20260922()
     {
+        // SUPERSEDES the pre-handoff behavior this test used to pin (a learner
+        // could pass ?professionId=medicine to list ANOTHER profession's full
+        // card catalogue). The 22 Sep 2026 handoff (item 2) requires the list
+        // is always scoped to the caller's OWN registered profession; the
+        // parameter is accepted for API-shape compatibility only and ignored.
         await SeedLearnerAsync("learner-2", activeProfessionId: "nursing");
         await SeedCardAsync(profession: "medicine", contentProfession: "medicine", status: ContentStatus.Published, title: "Medicine card");
+        await SeedCardAsync(profession: "nursing", contentProfession: "nursing", status: ContentStatus.Published, title: "Nursing card");
 
         var result = await _learnerService.ListSpeakingRolePlayCardsForLearnerAsync(
             "learner-2", professionId: "medicine", primaryCategory: null, CancellationToken.None);
 
-        Assert.Contains("Medicine card", Titles(result));
+        var titles = Titles(result);
+        Assert.DoesNotContain("Medicine card", titles);
+        Assert.Contains("Nursing card", titles);
     }
 
     [Fact]

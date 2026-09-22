@@ -47,10 +47,14 @@ public sealed class StripeWebhookPrivateSpeakingTests
             .Where(job => job.ResourceId == "psb-completed-1")
             .Select(job => job.Type)
             .ToArrayAsync();
-        Assert.Contains(JobType.PrivateSpeakingZoomCreate, jobTypes);
-        // Confirmation is intentionally deferred until the Zoom-create job has
-        // successfully stamped the booking with a real learner join URL.
-        Assert.DoesNotContain(JobType.PrivateSpeakingBookingConfirmation, jobTypes);
+        // Zoom provisioning is retired for Private Speaking (LiveKit rewrite,
+        // commit 74fdadd80): LiveTutorRoomLifecycleWorker provisions the
+        // LiveKit room lazily near session time instead, so confirmation and
+        // calendar sync are queued immediately on payment — no longer
+        // deferred behind a Zoom-create job.
+        Assert.DoesNotContain(JobType.PrivateSpeakingZoomCreate, jobTypes);
+        Assert.Contains(JobType.PrivateSpeakingBookingConfirmation, jobTypes);
+        Assert.Contains(JobType.PrivateSpeakingCalendarSync, jobTypes);
     }
 
     [Fact]

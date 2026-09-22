@@ -8,6 +8,7 @@ import {
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
+import { RecordingConsentGate } from '@/components/domain/speaking/RecordingConsentGate';
 import { Timer } from '@/components/ui/timer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,8 +20,6 @@ import { createSpeakingSession } from '@/lib/api/speaking-sessions';
 import { getFreeSpeakingCard } from '@/lib/api/speaking-role-play-cards';
 import type { RoleCard } from '@/lib/mock-data';
 
-type TaskMode = 'self' | 'exam';
-
 export default function RoleCardPreview() {
   const params = useParams();
   const router = useRouter();
@@ -31,18 +30,15 @@ export default function RoleCardPreview() {
 
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState(() => (
-    typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? ''
-  ));
-  const [selectedMode, setSelectedMode] = useState<TaskMode>('self');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [isFreeCard, setIsFreeCard] = useState(false);
   const [freeCardKnown, setFreeCardKnown] = useState(!requestedFreeCard);
+  // 22 Sep 2026 handoff (item 5): the prep countdown only starts once the
+  // learner has consented to recording — the whole page is gated behind
+  // RecordingConsentGate below, and this state (like the Timer it drives)
+  // only ever mounts once that gate has opened.
   const [prepRunning, setPrepRunning] = useState(true);
-  const [layLanguagePlan, setLayLanguagePlan] = useState(() => (
-    typeof window === 'undefined' ? '' : window.localStorage.getItem(`speaking-prep:${id}:lay-language-plan`) ?? ''
-  ));
   const prepTimeSeconds = card?.prepTimeSeconds ?? 180;
   const roleplayTimeSeconds = card?.roleplayTimeSeconds ?? 300;
 
@@ -77,14 +73,6 @@ export default function RoleCardPreview() {
     return () => { active = false; };
   }, [id, requestedFreeCard]);
 
-  useEffect(() => {
-    window.localStorage.setItem(`speaking-prep:${id}:notes`, notes);
-  }, [id, notes]);
-
-  useEffect(() => {
-    window.localStorage.setItem(`speaking-prep:${id}:lay-language-plan`, layLanguagePlan);
-  }, [id, layLanguagePlan]);
-
   const handleStartTask = async () => {
     if (starting) return;
     if (requestedFreeCard && !freeCardKnown) return;
@@ -94,7 +82,7 @@ export default function RoleCardPreview() {
     }
     setStarting(true);
     setStartError(null);
-    analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: selectedMode });
+    analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: 'self' });
     if (isFreeCard) {
       router.push(`/speaking/task/${encodeURIComponent(id)}?mode=self&free=1`);
       return;
@@ -102,7 +90,7 @@ export default function RoleCardPreview() {
     try {
       const session = await createSpeakingSession({
         rolePlayCardId: id,
-        mode: selectedMode === 'exam' ? 'ai_exam' : 'ai_self_practice',
+        mode: 'ai_self_practice',
         consentVersion: 'recording.v1',
       });
       router.push(`/speaking/sessions/${encodeURIComponent(session.sessionId)}/warmup`);
@@ -138,6 +126,10 @@ export default function RoleCardPreview() {
   }
 
   return (
+    // 22 Sep 2026 handoff (item 5): consent must be collected BEFORE the prep
+    // timer starts. The shell (and the countdown Timer it carries in
+    // navActions) only mounts once RecordingConsentGate has accepted consent.
+    <RecordingConsentGate sessionMode="ai">
     <LearnerDashboardShell
       pageTitle={card.title}
       navActions={
@@ -159,7 +151,7 @@ export default function RoleCardPreview() {
           title={card.title}
           description={isFreeCard
             ? 'Use the existing Speaking recorder for this designated free card. Record, submit, and receive real AI grading without spending a credit.'
-            : 'Use the preparation window to read the card, plan your opening, and choose a live voice practice mode before the session starts.'}
+            : 'Use the preparation window to read the card and plan your opening before the session starts.'}
           highlights={[
             { icon: User, label: 'Role', value: card.profession },
             { icon: ShieldCheck, label: 'Prep timer', value: prepRunning ? `${Math.round(prepTimeSeconds / 60)} min running` : 'Finished' },
@@ -190,12 +182,8 @@ export default function RoleCardPreview() {
               role={card.profession}
               setting={card.setting}
               patient={card.patient}
-              task={card.brief}
               background={card.background}
               tasks={card.tasks}
-              patientEmotion={card.patientEmotion}
-              communicationGoal={card.communicationGoal}
-              clinicalTopic={card.clinicalTopic}
               prepTimeSeconds={prepTimeSeconds}
               roleplayTimeSeconds={roleplayTimeSeconds}
               disclaimer={card.disclaimer}
@@ -253,40 +241,11 @@ export default function RoleCardPreview() {
             title={isFreeCard ? 'Plan, then use the free recorder' : 'Plan, then enter live voice'}
             description={isFreeCard
               ? 'This designated free card uses the existing recorder and the normal real-audio grading pipeline.'
-              : 'Self-practice mode lets you review the transcript afterwards. Simulation mode follows strict exam timing.'}
+              : 'Native realtime voice practice — review the transcript afterwards.'}
             className="mb-4"
           />
 
           <div className="flex-1 flex flex-col gap-6">
-            <Card className="flex-1 flex flex-col overflow-hidden">
-              <div className="bg-background-light px-4 py-2 border-b border-border flex items-center justify-between">
-                <span className="text-xs font-bold text-muted uppercase">Scratchpad</span>
-                <span className="text-xs text-muted">Local only</span>
-              </div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Jot down your opening, key points, patient concern, and final safety-netting..."
-                className="flex-1 p-4 text-sm text-navy resize-none focus:outline-none leading-relaxed placeholder:text-muted"
-              />
-            </Card>
-
-            <Card className="p-5">
-              <label htmlFor="lay-language-plan" className="text-xs font-bold text-muted uppercase tracking-widest">
-                Lay-language plan
-              </label>
-              <p className="mt-1 text-sm leading-relaxed text-muted">
-                Convert clinical terms into patient-friendly language before you start.
-              </p>
-              <textarea
-                id="lay-language-plan"
-                value={layLanguagePlan}
-                onChange={(e) => setLayLanguagePlan(e.target.value)}
-                placeholder="Example: 'bronchodilator' -> 'medicine that opens the airways'..."
-                className="mt-3 min-h-28 w-full rounded-2xl border border-border bg-background-light p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </Card>
-
             <Card className="p-6 space-y-6">
               {isFreeCard ? (
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
@@ -296,38 +255,18 @@ export default function RoleCardPreview() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {([
-                      { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-primary', bg: 'bg-primary/10' },
-                      { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-warning/10' },
-                    ] as const).map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => setSelectedMode(m.id)}
-                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-                          selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover'
-                        }`}
-                      >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.bg}`}>
-                          <m.icon className={`w-4 h-4 ${m.color}`} />
-                        </div>
-                        <span className={`text-xs font-bold ${selectedMode === m.id ? 'text-primary' : 'text-muted'}`}>
-                          {m.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-primary">Guided Self-Practice</h4>
+                  <p className="mt-2 text-sm leading-relaxed text-navy">
+                    Native realtime voice practice with a live AI patient, plus transcript review after the task.
+                  </p>
                 </div>
               )}
 
               <InlineAlert variant="info">
                 {isFreeCard
                   ? 'The designated free card uses the existing recorder. Record, submit, then receive real AI grading with no credit charge.'
-                  : selectedMode === 'self'
-                  ? 'Use native realtime voice practice with a live AI patient and transcript review after the task.'
-                  : `Strict exam conditions with a native realtime AI patient. ${Math.round(roleplayTimeSeconds / 60)}-minute timer with no feedback and no pause.`}
+                  : 'Use native realtime voice practice with a live AI patient and transcript review after the task.'}
               </InlineAlert>
 
               {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
@@ -346,5 +285,6 @@ export default function RoleCardPreview() {
         </div>
       </div>
     </LearnerDashboardShell>
+    </RecordingConsentGate>
   );
 }

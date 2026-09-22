@@ -114,8 +114,9 @@ export default function WritingHome() {
             description={t('writing.hub.start.description')}
           />
           {/* Free Mocks: the FIRST action under Start Writing — one free AI-graded
-              letter per learner; asks for the profession before opening it. Renders
-              nothing unless the server offers a sample. */}
+              letter per learner, for the learner's own profession (22 Sep 2026
+              handoff: no cross-profession picker). Renders nothing unless the
+              server offers a sample. */}
           <FreeSampleLauncher
             subtest="writing"
             icon={PenTool}
@@ -123,9 +124,6 @@ export default function WritingHome() {
             title={t('writing.hub.freeSample.title')}
             description={t('writing.hub.freeSample.description')}
             badgeLabel={t('writing.hub.freeSample.badge')}
-            modalTitle={t('writing.hub.freeSample.modalTitle')}
-            modalDescription={t('writing.hub.freeSample.modalDescription')}
-            startLabel={t('writing.hub.freeSample.startCta')}
             usedLabel={t('writing.hub.freeSample.used')}
             className=""
           />

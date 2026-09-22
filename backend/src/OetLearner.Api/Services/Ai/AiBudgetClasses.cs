@@ -132,7 +132,17 @@ public static class AiBudgetClasses
             || string.Equals(code, AiFeatureCodes.ListeningPartAScore, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.ConversationEvaluation, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.WritingDrillGradeV1, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, AiFeatureCodes.WritingAppealV1, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(code, AiFeatureCodes.WritingAppealV1, StringComparison.OrdinalIgnoreCase)
+            // P0 (22 Sep 2026): a failed transcription is a failed grade — the
+            // Speaking pipeline cannot grade what it cannot transcribe. Also
+            // gets ScoringCritical's borrow-from-Interactive-then-Admin
+            // headroom, so a busy Interactive month never permanently strands
+            // every learner's Speaking submission the way a shared $10/month
+            // Interactive-only bucket did (verified live: class_budget_exhausted
+            // on OpenAiWhisperSpeakingProvider.TranscribeAsync for 3+ real
+            // attempts on 2026-09-22, root-caused to this exact
+            // misclassification).
+            || string.Equals(code, AiFeatureCodes.SttSpeakingTranscribe, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -156,6 +166,20 @@ public static class AiBudgetClasses
             || string.Equals(code, AiFeatureCodes.AdminListeningSkillTag, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.AdminListeningTranscriptSegment, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase)
+            // P0 (22 Sep 2026): mirrors the SAME fix already made in
+            // Services/Rulebook/AiFeaturePolicyRegistry.cs's ClassOverrides for
+            // this exact feature/reason ("carries the writing. prefix so it
+            // fell through to the InteractiveLearning default ... this is
+            // content authoring, not learner interaction") — that registry
+            // governs provider/feature-policy selection; THIS method governs
+            // budget reservation (AiBudgetService.ReserveForCallAsync calls
+            // ClassForFeature directly, never the registry) and was never
+            // given the matching fix, so the two classifications silently
+            // drifted apart. $80+/month of admin batch content authoring was
+            // sharing (and exhausting) Speaking/Writing learners' $10/month
+            // Interactive bucket as a result. Keep both overrides in sync if
+            // either changes.
+            || string.Equals(code, AiFeatureCodes.WritingModelAnswerPregenerate, StringComparison.OrdinalIgnoreCase)
             // Owner directive 2026-09-23: the expert assistant serves staff
             // experts/tutors, not students — admin-side, budget-exempt.
             || string.Equals(code, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase))

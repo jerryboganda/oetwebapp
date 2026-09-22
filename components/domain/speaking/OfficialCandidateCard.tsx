@@ -1,13 +1,15 @@
 'use client';
 
 /**
- * Speaking module rebuild (2026-06-11 spec).
+ * Speaking module rebuild (2026-06-11 spec; row order fixed 22 Sep 2026
+ * handoff item 2 — Profession/Setting/Background/Tasks everywhere).
  *
  * The official OET-style CANDIDATE (doctor) card the student sees. Layout
  * mirrors the real OET role-play card:
  *   ┌───────────────────────────────────────────────┐
- *   │ CANDIDATE CARD NO. 2                  MEDICINE │  ← dark header bar
+ *   │ CANDIDATE CARD NO. 2                           │  ← dark header bar
  *   ├───────────────────────────────────────────────┤
+ *   │ PROFESSION Medicine                             │
  *   │ SETTING    General Practice                    │
  *   │ DOCTOR     You have just examined …            │
  *   │ TASK       • Take a brief history …            │
@@ -64,12 +66,13 @@ export function OfficialCandidateCard({ card, cardNumber, className }: OfficialC
         <h3 className="text-sm font-bold uppercase tracking-wide">
           Candidate Card{number != null ? ` No. ${number}` : ''}
         </h3>
-        <span className="text-xs font-semibold uppercase tracking-widest text-slate-200">
-          {titleCaseProfession(card.professionId)}
-        </span>
       </header>
 
       <div className="divide-y divide-slate-200">
+        <Row label="Profession">
+          <p className="text-sm">{titleCaseProfession(card.professionId)}</p>
+        </Row>
+
         <Row label="Setting">
           <p className="text-sm">{card.setting}</p>
         </Row>

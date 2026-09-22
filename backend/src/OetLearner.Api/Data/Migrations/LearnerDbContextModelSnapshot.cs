@@ -9912,11 +9912,13 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("FreeSpeakingCardByProfessionJson")
+                        .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasDefaultValue("{}");
 
                     b.Property<string>("FreeWritingScenarioByProfessionJson")
+                        .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasDefaultValue("{}");

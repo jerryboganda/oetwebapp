@@ -821,12 +821,8 @@ export default function SpeakingReviewWorkspace() {
                     role={reviewDetail.roleCard.role}
                     setting={reviewDetail.roleCard.setting}
                     patient={reviewDetail.roleCard.patient}
-                    task={reviewDetail.roleCard.task}
                     background={reviewDetail.roleCard.background}
                     tasks={reviewDetail.roleCard.tasks}
-                    patientEmotion={reviewDetail.roleCard.patientEmotion}
-                    communicationGoal={reviewDetail.roleCard.communicationGoal}
-                    clinicalTopic={reviewDetail.roleCard.clinicalTopic}
                     prepTimeSeconds={reviewDetail.roleCard.prepTimeSeconds}
                     roleplayTimeSeconds={reviewDetail.roleCard.roleplayTimeSeconds}
                     disclaimer={reviewDetail.roleCard.disclaimer}

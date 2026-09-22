@@ -6,7 +6,9 @@ const { mockTrack, mockListFreeSamples } = vi.hoisted(() => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
+  default: ({ children, href, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children: React.ReactNode; href?: string }) => (
+    <a href={href} {...rest}>{children}</a>
+  ),
 }));
 
 vi.mock('next/navigation', () => ({

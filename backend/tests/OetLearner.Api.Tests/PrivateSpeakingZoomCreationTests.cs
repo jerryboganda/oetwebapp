@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
@@ -10,74 +8,72 @@ using OetLearner.Api.Services;
 namespace OetLearner.Api.Tests;
 
 /// <summary>
-/// PrivateSpeakingService.CreateZoomMeetingForBookingAsync — the actual
-/// meeting-creation job body for paid tutor bookings. Previously only the
-/// job-enqueue side was tested; this exercises the real create path against a
-/// mocked Zoom HTTP API: booking stamped with meeting id/URLs/password,
-/// status advanced to ZoomCreated, calendar sync queued, audit written, and
-/// the failure path incrementing ZoomRetryCount and rethrowing for retry.
+/// PrivateSpeakingService.CreateZoomMeetingForBookingAsync — retired by the
+/// LiveKit rewrite (commit 74fdadd80, "complete native live voice and tutor
+/// rooms"). Zoom is no longer provisioned for Private Speaking bookings;
+/// LiveKit rooms are provisioned lazily near session time by
+/// LiveTutorRoomLifecycleWorker instead (see PrivateSpeakingEndpoints'
+/// retired /retry-zoom and /join-token routes, both now 410 Gone). The
+/// method survives only as an inert compatibility shim so that a
+/// PrivateSpeakingZoomCreate job already queued before the cutover doesn't
+/// crash the background job processor on redeploy. These tests pin that
+/// contract: the shim never calls Zoom, never throws, and never mutates the
+/// booking.
 /// </summary>
 public sealed class PrivateSpeakingZoomCreationTests
 {
     private const string BookingId = "ps-zoom-create-booking";
 
     [Fact]
-    public async Task CreateZoomMeeting_StampsBookingAndQueuesFollowUpJobs()
+    public async Task CreateZoomMeeting_LegacyJobIsANoOp()
     {
         await using var db = NewDb();
         SeedConfirmedBooking(db);
         await db.SaveChangesAsync();
 
-        var service = CreateService(db, ZoomApiHandler());
+        // Throws if ever called — proves the retired job body never reaches
+        // the Zoom API.
+        var handler = new RecordingHandler((_, _) => throw new InvalidOperationException("should not be called"));
+        var service = CreateService(db, handler);
 
         await service.CreateZoomMeetingForBookingAsync(BookingId, CancellationToken.None);
 
-        var booking = await db.PrivateSpeakingBookings.SingleAsync(b => b.Id == BookingId);
-        Assert.Equal(PrivateSpeakingBookingStatus.ZoomCreated, booking.Status);
-        Assert.Equal(PrivateSpeakingZoomStatus.Created, booking.ZoomStatus);
-        Assert.Equal(123456789, booking.ZoomMeetingId);
-        Assert.Equal("https://zoom.test/j/123456789", booking.ZoomJoinUrl);
-        Assert.Equal("https://zoom.test/s/123456789?zak=host", booking.ZoomStartUrl);
-        Assert.Equal("pw123", booking.ZoomMeetingPassword);
+        Assert.Empty(handler.Requests);
 
-        Assert.True(await db.PrivateSpeakingAuditLogs.AnyAsync(a =>
-            a.BookingId == BookingId && a.Action == "zoom_created"));
-        Assert.True(await db.BackgroundJobs.AnyAsync(j =>
-            j.Type == JobType.PrivateSpeakingCalendarSync && j.ResourceId == BookingId));
-        Assert.True(await db.BackgroundJobs.AnyAsync(j =>
-            j.Type == JobType.PrivateSpeakingBookingConfirmation && j.ResourceId == BookingId));
+        var booking = await db.PrivateSpeakingBookings.SingleAsync(b => b.Id == BookingId);
+        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, booking.Status);
+        Assert.Equal(PrivateSpeakingZoomStatus.Pending, booking.ZoomStatus);
+        Assert.Null(booking.ZoomMeetingId);
+        Assert.False(await db.PrivateSpeakingAuditLogs.AnyAsync(a => a.BookingId == BookingId));
+        Assert.False(await db.BackgroundJobs.AnyAsync(j => j.ResourceId == BookingId));
     }
 
     [Fact]
-    public async Task CreateZoomMeeting_MarksFailedAndRethrowsForRetry()
+    public async Task CreateZoomMeeting_DoesNotThrowOrRetryForAPreviouslyFailedBooking()
     {
         await using var db = NewDb();
-        SeedConfirmedBooking(db);
+        SeedConfirmedBooking(db, b =>
+        {
+            b.ZoomStatus = PrivateSpeakingZoomStatus.Failed;
+            b.ZoomRetryCount = 1;
+            b.ZoomError = "pre-cutover failure";
+        });
         await db.SaveChangesAsync();
 
-        var handler = new RecordingHandler((request, _) =>
-        {
-            if (request.RequestUri!.AbsoluteUri.Contains("/oauth/token", StringComparison.OrdinalIgnoreCase))
-            {
-                return Task.FromResult(JsonResponse("{\"access_token\":\"server-token\",\"token_type\":\"bearer\",\"expires_in\":3600}"));
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
-            {
-                Content = new StringContent("{\"code\":200,\"message\":\"boom\"}", Encoding.UTF8, "application/json"),
-            });
-        });
+        var handler = new RecordingHandler((_, _) => throw new InvalidOperationException("should not be called"));
         var service = CreateService(db, handler);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CreateZoomMeetingForBookingAsync(BookingId, CancellationToken.None));
+        // A PrivateSpeakingZoomCreate job queued (and already retried once)
+        // before the LiveKit cutover must complete quietly on redeploy —
+        // not throw and not touch Zoom — otherwise the background job
+        // processor would retry it forever.
+        await service.CreateZoomMeetingForBookingAsync(BookingId, CancellationToken.None);
+
+        Assert.Empty(handler.Requests);
 
         var booking = await db.PrivateSpeakingBookings.SingleAsync(b => b.Id == BookingId);
         Assert.Equal(PrivateSpeakingZoomStatus.Failed, booking.ZoomStatus);
         Assert.Equal(1, booking.ZoomRetryCount);
-        Assert.False(string.IsNullOrEmpty(booking.ZoomError));
-        // Not terminal yet — the background job retries up to 3 times.
-        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, booking.Status);
     }
 
     [Fact]
@@ -157,24 +153,6 @@ public sealed class PrivateSpeakingZoomCreationTests
             platformLinks: null!,
             timeProvider: TimeProvider.System,
             logger: NullLogger<PrivateSpeakingService>.Instance);
-
-    private static RecordingHandler ZoomApiHandler() => new((request, _) =>
-    {
-        if (request.RequestUri!.AbsoluteUri.Contains("/oauth/token", StringComparison.OrdinalIgnoreCase))
-        {
-            return Task.FromResult(JsonResponse("{\"access_token\":\"server-token\",\"token_type\":\"bearer\",\"expires_in\":3600}"));
-        }
-
-        return Task.FromResult(JsonResponse(
-            "{\"id\":123456789,\"join_url\":\"https://zoom.test/j/123456789\"," +
-            "\"start_url\":\"https://zoom.test/s/123456789?zak=host\",\"password\":\"pw123\"}"));
-    });
-
-    private static HttpResponseMessage JsonResponse(string body)
-        => new(HttpStatusCode.OK)
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
-        };
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {

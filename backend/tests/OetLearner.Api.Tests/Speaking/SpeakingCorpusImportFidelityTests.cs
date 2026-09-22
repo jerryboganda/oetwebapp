@@ -41,6 +41,11 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
     private const int LongestRealBulletLength = 602;
     private const string RealRightsNotice =
         "\u00a9 Cambridge Boxhill Language Assessment";
+    // GetSpeakingTaskAsync now enforces profession isolation (22 Sep 2026
+    // handoff, item 2) \u2014 every card here is created with ProfessionId
+    // "medicine" (see CreateCardAsync), so the learner reading them back must
+    // be registered for that same profession.
+    private const string LearnerId = "learner-corpus-fidelity";
 
     private LearnerDbContext _db = default!;
     private AdminService _adminService = default!;
@@ -97,6 +102,19 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
             timeProvider: TimeProvider.System,
             notifications: null!,
             learnerService: _learnerService);
+
+        var now = DateTimeOffset.UtcNow;
+        _db.Users.Add(new LearnerUser
+        {
+            Id = LearnerId,
+            DisplayName = "Corpus Fidelity Learner",
+            Email = $"{LearnerId}@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        _db.SaveChanges();
 
         return Task.CompletedTask;
     }
@@ -202,7 +220,7 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
             .Select(c => c.ContentItemId)
             .FirstAsync();
         var payload = Assert.IsAssignableFrom<IDictionary<string, object?>>(
-            await _learnerService.GetSpeakingTaskAsync(contentItemId, CancellationToken.None));
+            await _learnerService.GetSpeakingTaskAsync(LearnerId, contentItemId, CancellationToken.None));
 
         // The notice reaches the learner verbatim, minus the trailing token.
         Assert.Equal(RealRightsNotice, payload["sourceAttribution"]);
@@ -228,7 +246,7 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
             .Select(c => c.ContentItemId)
             .FirstAsync();
         var payload = await _learnerService.GetSpeakingTaskAsync(
-            contentItemId, CancellationToken.None);
+            LearnerId, contentItemId, CancellationToken.None);
 
         Assert.Null(Assert.IsAssignableFrom<IDictionary<string, object?>>(payload)["sourceAttribution"]);
     }
@@ -311,7 +329,7 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
             .FirstAsync();
 
         var payload = await _learnerService.GetSpeakingTaskAsync(
-            contentItemId, CancellationToken.None);
+            LearnerId, contentItemId, CancellationToken.None);
         var json = JsonSerializer.Serialize(payload);
 
         // Premise check: the shell really is empty. Without this the assertions
@@ -336,7 +354,7 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
         // The results page's "practise again" link only knows the card id, so
         // the same task lookup has to resolve that too.
         var viaCardId = await _learnerService.GetSpeakingTaskAsync(
-            created.CardId, CancellationToken.None);
+            LearnerId, created.CardId, CancellationToken.None);
         Assert.Contains(
             background, JsonSerializer.Serialize(viaCardId), StringComparison.Ordinal);
     }

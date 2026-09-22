@@ -1,18 +1,22 @@
 import { cn } from '@/lib/utils';
-import { Card } from '@/components/ui/card';
 
+/**
+ * 22 Sep 2026 handoff (item 4): exam-style B&W card, matching the real OET
+ * role-play card format — see OfficialCandidateCard for the reference this
+ * mirrors. Field order is fixed: Profession, Setting, Background, Tasks.
+ * Emotion/Goal/Topic and the standalone Patient/Task(brief) rows are gone —
+ * patient context now reads as part of Background, the same way
+ * OfficialCandidateCard already folds patientName/Age into its role row.
+ */
 interface SpeakingRoleCardProps {
   role: string;
   setting: string;
   patient: string;
-  task: string;
   background?: string;
   tasks?: string[];
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
+  cardNumber?: number;
   disclaimer?: string;
   /** Rights notice printed on the source card. Shown verbatim beneath the card. */
   sourceAttribution?: string;
@@ -26,135 +30,89 @@ function formatSeconds(seconds?: number) {
   return remainder === 0 ? `${minutes} min` : `${minutes}m ${remainder}s`;
 }
 
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[100px_1fr] gap-3 px-4 py-3 sm:grid-cols-[130px_1fr]">
+      <div className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{label}</div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
 export function SpeakingRoleCard({
   role,
   setting,
   patient,
-  task,
   background,
   tasks = [],
-  patientEmotion,
-  communicationGoal,
-  clinicalTopic,
   prepTimeSeconds,
   roleplayTimeSeconds,
+  cardNumber,
   disclaimer,
   sourceAttribution,
   className,
 }: SpeakingRoleCardProps) {
   const prepLabel = formatSeconds(prepTimeSeconds);
   const roleplayLabel = formatSeconds(roleplayTimeSeconds);
+  const cleanTasks = tasks.filter((t) => t && t.trim().length > 0);
 
   return (
-    <Card className={cn('bg-primary/5 hover:bg-primary/[0.07] transition-colors border border-primary/20 rounded-2xl shadow-sm p-6 sm:p-8', className)} role="region" aria-label="Role card details">
-      <div className="space-y-6">
-        {(prepLabel || roleplayLabel) && (
-          <div className="flex flex-wrap gap-2 pb-2">
-            {prepLabel && <span className="rounded-full bg-surface shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">PREP: {prepLabel}</span>}
-            {roleplayLabel && <span className="rounded-full bg-surface shadow-sm border border-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-wide text-primary">ROLE-PLAY: {roleplayLabel}</span>}
-          </div>
-        )}
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-              Your Role
-            </p>
-            <p className="text-base font-bold text-navy leading-snug">{role}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-              Setting
-            </p>
-            <p className="text-sm font-medium text-navy/90 leading-snug">{setting}</p>
-          </div>
+    <div className={cn('space-y-3', className)} role="region" aria-label="Role card details">
+      {(prepLabel || roleplayLabel) && (
+        <div className="flex flex-wrap gap-2">
+          {prepLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-bold tracking-wide text-muted">PREP: {prepLabel}</span>}
+          {roleplayLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-bold tracking-wide text-muted">ROLE-PLAY: {roleplayLabel}</span>}
         </div>
-        
-        <div className="h-px w-full bg-border" />
+      )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-              Patient / Client
-            </p>
-            <p className="text-sm font-medium text-navy/90 leading-relaxed">{patient}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-              Task
-            </p>
-            <p className="text-sm font-medium text-navy/90 leading-relaxed">{task}</p>
-          </div>
+      <article className="overflow-hidden rounded-lg border border-border bg-white text-slate-900 shadow-sm dark:bg-slate-50">
+        <header className="flex items-center justify-between gap-3 bg-slate-800 px-4 py-2 text-white">
+          <h3 className="text-sm font-bold uppercase tracking-wide">
+            Role-Play Card{cardNumber != null ? ` No. ${cardNumber}` : ''}
+          </h3>
+        </header>
+
+        <div className="divide-y divide-slate-200">
+          <Row label="Profession">
+            <p className="text-sm font-medium">{role}</p>
+          </Row>
+
+          <Row label="Setting">
+            <p className="text-sm">{setting}</p>
+          </Row>
+
+          <Row label="Background">
+            {patient && (
+              <p className="mb-1 text-sm font-medium text-slate-700">{patient}</p>
+            )}
+            {background && (
+              <p className="whitespace-pre-line text-sm leading-relaxed">&quot;{background}&quot;</p>
+            )}
+          </Row>
+
+          {cleanTasks.length > 0 && (
+            <Row label="Tasks">
+              <ul className="list-disc space-y-1.5 pl-4 text-sm leading-relaxed">
+                {cleanTasks.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </Row>
+          )}
         </div>
 
-        {background && (
-          <>
-            <div className="h-px w-full bg-border" />
-            <div className="bg-surface p-4 rounded-xl border border-primary/10">
-              <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-                Background
-              </p>
-              <p className="text-sm font-medium text-navy/90 leading-relaxed italic">&quot;{background}&quot;</p>
-            </div>
-          </>
-        )}
-
-        {tasks.length > 0 && (
-          <div className="pt-2">
-            <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
-              Role Objectives
-            </p>
-            <ul className="grid gap-3">
-              {tasks.map((item, index) => (
-                <li key={`${item}-${index}`} className="flex items-start gap-3 bg-surface p-3 rounded-xl border border-primary/10">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white dark:bg-violet-700 text-xs font-bold shrink-0 mt-0.5 shadow-sm">
-                    {index + 1}
-                  </span>
-                  <span className="text-sm font-medium text-navy/90 leading-relaxed">{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        
-        {(patientEmotion || communicationGoal || clinicalTopic) && (
-          <div className="grid gap-3 rounded-xl border border-primary/20 bg-surface p-4 shrink-0 sm:grid-cols-3 mt-4 shadow-sm">
-            {patientEmotion && (
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Emotion</p>
-                <p className="font-bold text-navy text-sm">{patientEmotion}</p>
-              </div>
-            )}
-            {communicationGoal && (
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Goal</p>
-                <p className="font-bold text-navy text-sm">{communicationGoal}</p>
-              </div>
-            )}
-            {clinicalTopic && (
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Topic</p>
-                <p className="font-bold text-navy text-sm">{clinicalTopic}</p>
-              </div>
-            )}
-          </div>
-        )}
         {disclaimer && (
-          <p className="rounded-xl bg-background-light px-4 py-3 text-xs font-bold leading-relaxed text-muted border border-border/60 text-center">
+          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] italic text-slate-500">
             {disclaimer}
-          </p>
+          </footer>
         )}
-        {sourceAttribution && (
-          <p className="px-1 pt-1 text-[11px] leading-relaxed text-muted/80 text-center">
-            {sourceAttribution}
-          </p>
-        )}
-      </div>
-    </Card>
+      </article>
+
+      {sourceAttribution && (
+        <p className="px-1 text-[11px] leading-relaxed text-muted/80 text-center">
+          {sourceAttribution}
+        </p>
+      )}
+    </div>
   );
 }

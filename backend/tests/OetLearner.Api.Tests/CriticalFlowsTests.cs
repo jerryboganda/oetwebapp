@@ -81,7 +81,10 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
             Id = V11ScenarioId,
             Title = "V11 E2E Referral",
             InternalCode = "E2E-WR-V11",
-            Profession = "medicine",
+            // Handoff item 2 (22 Sep 2026): submission is now profession-locked
+            // to the caller's own account. The seeded test learner
+            // (SeedData.SeedDemoUserCore / mock-user-001) is "nursing".
+            Profession = "nursing",
             LetterType = "LT-RR",
             Difficulty = 3,
             TopicsJson = "[]",
@@ -127,7 +130,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         db.WritingAssessmentPackVersions.Add(new WritingAssessmentPackVersion
         {
             Id = Guid.NewGuid(),
-            Profession = "medicine",
+            Profession = "nursing",
             LetterType = "routine_referral",
             VersionKey = "e2e-medicine-core",
             Status = WritingAssessmentReleaseStatus.Approved,

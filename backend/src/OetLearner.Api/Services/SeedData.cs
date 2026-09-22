@@ -1297,6 +1297,60 @@ public static partial class SeedData
                 })
             }
         );
+
+        // The LiveKit/live-voice rewrite (22 Sep 2026) made every learner
+        // Speaking-attempt path (CreateSpeakingAttemptAsync,
+        // GetLegacyFreeSpeakingTaskAsync) resolve through a RolePlayCard row,
+        // not the bare ContentItem — st-001/st-002 never had one, so any test
+        // POSTing /v1/speaking/attempts against them 404'd. Mirrors the real
+        // ContentItem's profession/title/case-notes so learner-facing reads
+        // stay consistent between the two rows.
+        db.RolePlayCards.AddRange(
+            new RolePlayCard
+            {
+                Id = "st-001",
+                ContentItemId = "st-001",
+                ProfessionId = "nursing",
+                ScenarioTitle = "Patient Handover - Post-Op Recovery",
+                Setting = "Hospital surgical ward",
+                CandidateRole = "Nurse",
+                InterlocutorRole = "Incoming nurse",
+                PatientName = "Mr James Wheeler",
+                PatientAge = "68",
+                Background = "Mr James Wheeler, day one post right hip replacement.",
+                Task1 = "Summarise the surgery and current condition",
+                Task2 = "Report pain management and PRN use",
+                Task3 = "Highlight mobility and DVT prophylaxis",
+                Task4 = "Communicate outstanding tasks",
+                Difficulty = "core",
+                PrimaryCategory = "First Visit",
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "fluency", "appropriateness" }),
+                Status = ContentStatus.Published,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                PublishedAt = DateTimeOffset.UtcNow,
+            },
+            new RolePlayCard
+            {
+                Id = "st-002",
+                ContentItemId = "st-002",
+                ProfessionId = "medicine",
+                ScenarioTitle = "Breaking Bad News - Cancer Diagnosis",
+                Setting = "Outpatient room",
+                CandidateRole = "Doctor",
+                InterlocutorRole = "Patient",
+                PatientName = "Mrs Patricia Collins",
+                Background = "Biopsy confirms invasive ductal carcinoma.",
+                Task1 = "Deliver results using the SPIKES framework",
+                Difficulty = "core",
+                PrimaryCategory = "First Visit",
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "appropriateness", "grammar_expression" }),
+                Status = ContentStatus.Published,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                PublishedAt = DateTimeOffset.UtcNow,
+            }
+        );
     }
 
     private static void SeedDemoUserData(LearnerDbContext db)

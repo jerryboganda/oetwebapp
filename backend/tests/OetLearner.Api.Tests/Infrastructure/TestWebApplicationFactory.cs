@@ -713,6 +713,35 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
     }
 
+    /// <summary>
+    /// The LiveKit/live-voice rewrite (22 Sep 2026) reserved the legacy
+    /// record-upload-grade Speaking pipeline for the designated free Speaking
+    /// sample only (LearnerService.EnsureLegacyFreeSpeakingAccessAsync) — every
+    /// other card now requires the native live-voice flow. Tests exercising
+    /// that legacy pipeline (upload storage, expert streaming, grading) need
+    /// the free_samples_enabled flag on so FreeSampleService's auto-pick makes
+    /// their card the free one.
+    /// </summary>
+    public async Task EnsureFreeSamplesEnabledAsync(CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync(cancellationToken);
+        if (await db.FeatureFlags.AnyAsync(f => f.Key == "free_samples_enabled" && f.Enabled, cancellationToken)) return;
+
+        var now = DateTimeOffset.UtcNow;
+        db.FeatureFlags.Add(new FeatureFlag
+        {
+            Id = $"ff-test-{Guid.NewGuid():N}",
+            Name = "Free samples",
+            Key = "free_samples_enabled",
+            Enabled = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName, string? activeProfessionId = null)
     {
         await EnsureCatalogSeededAsync();

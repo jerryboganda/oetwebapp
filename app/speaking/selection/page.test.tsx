@@ -52,6 +52,10 @@ vi.mock('@/components/ui/filter-bar', () => ({
 
 vi.mock('@/lib/api/speaking-role-play-cards', () => ({
   listLearnerRolePlayCards: mockListLearnerCards,
+  // Added by the LiveKit rewrite (commit 74fdadd80) to show a Free Speaking
+  // Mock entry on this page; not under test here, so it just resolves to
+  // nothing — the component already handles that via .catch(() => null).
+  getFreeSpeakingCard: vi.fn().mockRejectedValue(new Error('not mocked in this test')),
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
