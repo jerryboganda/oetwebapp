@@ -125,7 +125,8 @@ for (const paper of PAPERS) {
       const a1Duration = await audio.evaluate((el: HTMLAudioElement) => el.duration);
       expect(Number.isFinite(a1Duration) && a1Duration > 0, `A1 audio must report a real duration, got ${a1Duration}`).toBe(true);
       const a1Src = await audio.evaluate((el: HTMLAudioElement) => el.currentSrc);
-      console.log(`[diag] A1 currentSrc=${a1Src} duration=${a1Duration}`);
+      const a1CurrentLabel = await page.locator('[aria-current="step"]').first().textContent().catch(() => '(none)');
+      console.log(`[diag] A1 currentSrc=${a1Src} duration=${a1Duration} currentLabel=${a1CurrentLabel}`);
 
       // Manually advance (the popup path — timer hasn't expired). This is the supported manual flow;
       // auto-advance-at-00:00 is covered by the existing unit/integration tests, not re-tested live here.
@@ -146,7 +147,8 @@ for (const paper of PAPERS) {
       const a2Duration = await audio.evaluate((el: HTMLAudioElement) => el.duration);
       expect(Number.isFinite(a2Duration) && a2Duration > 0, `A2 audio must report a real duration, got ${a2Duration}`).toBe(true);
       const a2Src = await audio.evaluate((el: HTMLAudioElement) => el.currentSrc);
-      console.log(`[diag] A2 currentSrc=${a2Src} duration=${a2Duration}`);
+      const a2CurrentLabel = await page.locator('[aria-current="step"]').first().textContent().catch(() => '(none)');
+      console.log(`[diag] A2 currentSrc=${a2Src} duration=${a2Duration} currentLabel=${a2CurrentLabel}`);
       expect(Math.abs(a2Duration - a1Duration), `A1 (${a1Duration}s) and A2 (${a2Duration}s) must be different underlying audio`).toBeGreaterThan(0.5);
 
       // One-way: the completed section's tab shows locked/completed, never "current" again; no native controls
