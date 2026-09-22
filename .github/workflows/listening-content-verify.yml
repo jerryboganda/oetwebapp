@@ -70,6 +70,25 @@ jobs:
           OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
         run: node scripts/listening/audit-audio-boundaries.mjs
 
+      - name: Full repair pipeline (prepare, transcribe, plan, apply)
+        if: ${{ github.event.inputs.mode == 'fullrepair' }}
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          HF_HUB_DISABLE_SYMLINKS_WARNING: '1'
+        run: |
+          ARGS=""
+          P="${{ github.event.inputs.paper }}"
+          if [ -n "$P" ]; then ARGS="--paper $P"; fi
+          node scripts/listening/fix-audio-boundaries.mjs prepare $ARGS
+          node scripts/listening/fix-audio-boundaries.mjs transcribe $ARGS --local-stt
+          for i in 1 2 3; do
+            node scripts/listening/fix-audio-boundaries.mjs transcribe $ARGS --local-stt | grep -q FAIL || break
+          done
+          node scripts/listening/fix-audio-boundaries.mjs plan $ARGS
+          node scripts/listening/fix-audio-boundaries.mjs apply $ARGS --local-stt
+
       - name: Apply boundary repairs (writes to production papers)
         if: ${{ github.event.inputs.mode == 'apply' }}
         env:
