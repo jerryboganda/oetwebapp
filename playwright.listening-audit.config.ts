@@ -7,7 +7,7 @@ export default defineConfig({
   testMatch: /prod-listening-audio-integrity\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0, // a real failure should surface fast, not double every test's wall-clock and blow the job timeout
   workers: 1,
   reporter: [
     ['list'],
