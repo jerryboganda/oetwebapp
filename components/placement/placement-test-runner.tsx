@@ -839,6 +839,11 @@ function ObjectiveStage({
 }) {
   const [unit, setUnit] = useState<PlacementDeliveryUnit | null>(null);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(null);
+  // Mandatory-first-play: an audio unit's answers/submit stay locked until
+  // the real 'playing' event fires (never preload/loadedmetadata) — see
+  // UnitAudio's onPlaybackStart below. Units with no audio have nothing to
+  // wait for.
+  const [playbackStarted, setPlaybackStarted] = useState(false);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [answered, setAnswered] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -876,6 +881,7 @@ function ObjectiveStage({
       currentKeyRef.current = unitKeyOf(next);
       setSelected({});
       setDeadlineAt(null);
+      setPlaybackStarted(false);
       setAudioAttempt(0);
       setUnit(next);
     },
@@ -896,11 +902,15 @@ function ObjectiveStage({
     };
   }, [loadAttempt, module, present, sessionId]);
 
-  /** Start the server clock for the unit on screen (idempotent engine-side). */
+  /** Start the server clock for the unit on screen (idempotent engine-side).
+   *  Called either immediately (no-audio units) or from the real 'playing'
+   *  event (audio units) — both cases mean the unit is now genuinely usable,
+   *  so this is also where the mandatory-first-play gate unlocks. */
   const startClock = useCallback(
     async (target: PlacementDeliveryUnit) => {
       const key = unitKeyOf(target);
       shownAtRef.current = Date.now();
+      setPlaybackStarted(true);
       const started = await startPlacementUnit(sessionId, module);
       if (currentKeyRef.current === key) setDeadlineAt((started ?? target).deadline_at);
     },
@@ -914,10 +924,16 @@ function ObjectiveStage({
   }, [startClock, unit]);
 
   const secondsLeft = useSecondsLeft(deadlineAt);
+  const audioGate = !unit?.audio_url || playbackStarted;
 
   const handleSubmit = useCallback(
     async (isTimeout: boolean) => {
       if (!unit || submitting) return;
+      // A manual submit can't reach the button while it's disabled, but
+      // guard the handler itself too — the timeout path can never hit this
+      // since deadlineAt (and secondsLeft) never leave null until the same
+      // startClock() call that sets playbackStarted=true.
+      if (!isTimeout && !audioGate) return;
       const key = unitKeyOf(unit);
       if (settledKeyRef.current === key) return;
       const elapsed = Math.max(0, Date.now() - shownAtRef.current);
@@ -947,7 +963,7 @@ function ObjectiveStage({
         setSubmitting(false);
       }
     },
-    [answered, present, selected, sessionId, submitting, unit],
+    [answered, audioGate, present, selected, sessionId, submitting, unit],
   );
 
   useEffect(() => {
@@ -1050,7 +1066,7 @@ function ObjectiveStage({
           number={firstNumber + index}
           item={item}
           value={selected[item.item_id] ?? null}
-          disabled={submitting}
+          disabled={submitting || !audioGate}
           onChange={(optionId) => setSelected((current) => ({ ...current, [item.item_id]: optionId }))}
         />
       ))}
@@ -1075,10 +1091,18 @@ function ObjectiveStage({
         </div>
       ) : null}
 
-      <button type="button" onClick={() => void handleSubmit(false)} disabled={submitting} className={PRIMARY_BUTTON}>
+      <button
+        type="button"
+        onClick={() => void handleSubmit(false)}
+        disabled={submitting || !audioGate}
+        className={PRIMARY_BUTTON}
+      >
         {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
         {isSingle ? 'Next' : 'Submit answers'}
       </button>
+      {!audioGate ? (
+        <p className="text-xs text-muted">Play the audio to start before you can answer.</p>
+      ) : null}
     </div>
   );
 }
@@ -1896,6 +1920,37 @@ function draftStorageKey(sessionId: string, taskId: string): string {
   return `oet_placement_draft:${sessionId}:${taskId}`;
 }
 
+function writingDeadlineStorageKey(sessionId: string, taskId: string): string {
+  return `oet_placement_writing_deadline:${sessionId}:${taskId}`;
+}
+
+/** The countdown starts the first time this task is opened and survives a
+ *  reload (same resilience the local draft already has) — re-opening the
+ *  same task later does not grant a fresh window. `seconds` already carries
+ *  the extra-time multiplier applied server-side. */
+function readOrCreateWritingDeadline(sessionId: string, taskId: string, seconds: number): string | null {
+  const key = writingDeadlineStorageKey(sessionId, taskId);
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+    const deadline = new Date(Date.now() + seconds * 1000).toISOString();
+    window.localStorage.setItem(key, deadline);
+    return deadline;
+  } catch {
+    // Storage blocked: no persisted deadline, but the in-memory countdown
+    // below still runs for this page view.
+    return new Date(Date.now() + seconds * 1000).toISOString();
+  }
+}
+
+function clearWritingDeadline(sessionId: string, taskId: string) {
+  try {
+    window.localStorage.removeItem(writingDeadlineStorageKey(sessionId, taskId));
+  } catch {
+    // Nothing to clean up if storage was never reachable.
+  }
+}
+
 function readLocalDraft(key: string): string {
   try {
     return window.localStorage.getItem(key) ?? '';
@@ -1934,6 +1989,16 @@ function WritingTaskEditor({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Real countdown + timeout enforcement, same pattern as the timed
+  // objective modules — extra time is already baked into timeLimitSeconds.
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const seconds = task.timeLimitSeconds ?? (task.minutes ? task.minutes * 60 : null);
+    if (!seconds) return;
+    setDeadlineAt(readOrCreateWritingDeadline(sessionId, task.taskId, seconds));
+  }, [sessionId, task.minutes, task.taskId, task.timeLimitSeconds]);
+  const secondsLeft = useSecondsLeft(deadlineAt);
 
   useEffect(() => {
     if (!text) return;
@@ -1952,32 +2017,45 @@ function WritingTaskEditor({
 
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
 
-  const submit = async () => {
+  const submit = useCallback(async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     try {
       await submitPlacementWriting(sessionId, task.taskId, text);
       writeLocalDraft(draftKey, null);
+      clearWritingDeadline(sessionId, task.taskId);
       onSubmitted();
     } catch (err) {
       setError(readErrorMessage(err, 'Could not submit your response — your text is still here. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [draftKey, isSubmitting, onSubmitted, sessionId, task.taskId, text]);
+
+  // Auto-submit on timeout, same pattern as the timed objective modules —
+  // whatever text exists is submitted rather than leaving the candidate
+  // stuck on an expired task.
+  useEffect(() => {
+    if (secondsLeft === 0 && deadlineAt && !isSubmitting) {
+      void submit();
+    }
+  }, [deadlineAt, isSubmitting, secondsLeft, submit]);
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">
-        Task {position} of {total}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          Task {position} of {total}
+        </p>
+        <UnitTimer secondsLeft={secondsLeft} waitingForAudio={false} />
+      </div>
 
       <section className="space-y-2 rounded-2xl border border-border bg-surface p-5 sm:p-6" aria-label="Writing task">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">Task</p>
         <p className="whitespace-pre-line break-words text-base leading-relaxed text-navy">{task.prompt}</p>
         <p className="text-xs text-muted">
-          {task.minutes ? `Suggested time: about ${task.minutes} minutes` : ''}
+          {task.minutes ? `Time limit: about ${task.minutes} minutes` : ''}
           {task.minutes && task.minWords ? ' · ' : ''}
           {task.minWords ? `Aim for at least ${task.minWords} words` : ''}
         </p>
@@ -2009,7 +2087,7 @@ function WritingTaskEditor({
             {error}
           </p>
         ) : null}
-        <button type="button" onClick={submit} disabled={isSubmitting || wordCount === 0} className={PRIMARY_BUTTON}>
+        <button type="button" onClick={() => void submit()} disabled={isSubmitting || wordCount === 0} className={PRIMARY_BUTTON}>
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
           Submit response
         </button>
