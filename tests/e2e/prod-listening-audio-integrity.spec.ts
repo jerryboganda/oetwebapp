@@ -7,11 +7,15 @@ import { expect, test, type Page } from '@playwright/test';
  * speech) was already verified by the ASR pipeline (docs/listening/fleet-audit-2026-09-22.md). This spec checks
  * what only a real browser against real production can confirm:
  *   1. auto-start — the section's audio begins playing without a manual tap
- *   2. distinct audio per section — A1 and A2 (and C1/C2) request DIFFERENT media assets (the Atlas Sample Test 8
- *      regression this remediation fixed was exactly A2 silently replaying A1's file)
- *   3. one-way flow — once a section is left, its media is never re-requested, and the section list shows it
- *      locked/completed, not clickable
- *   4. correct next section — advancing loads the next section's own audio, not a stale/duplicate load
+ *   2. distinct audio per section — A1 and A2 (and C1/C2) are DIFFERENT underlying files, proven by decoded
+ *      `<audio>.duration` (the Atlas Sample Test 8 regression this remediation fixed was exactly A2 silently
+ *      replaying A1's file). NOT proven by network-request tracking: the readiness probe prebuffers every
+ *      section's audio up front (see the note above the probe click below), so by the time any section starts
+ *      playing, all of the paper's media has already been fetched once and is served from cache — request
+ *      timing/identity can't tell sections apart, only the decoded media itself can.
+ *   3. one-way flow — once a section is left, the section list shows it locked/completed (not "current",
+ *      not clickable) and no native controls (which would allow seeking/replay) are ever exposed
+ *   4. correct next section — advancing auto-starts the next section's own (differently-fingerprinted) audio
  *
  * Uses a DEDICATED test-only learner account (scripts/listening/make-test-learner.mjs), never the shared QA
  * account. Read-only for content: starts real attempts (unavoidable — the player only exists inside an attempt)
@@ -84,16 +88,6 @@ async function seedAuth(page: Page, targetPath: string) {
   await page.waitForTimeout(1000); // settle for the destination page's own hydration before the caller interacts
 }
 
-/** media asset id -> first-seen order, populated from /v1/media/{id}/content requests. */
-function trackMediaRequests(page: Page) {
-  const seen: { id: string; at: number }[] = [];
-  page.on('request', (req) => {
-    const m = req.url().match(/\/v1\/media\/([a-f0-9-]+)\/content/i);
-    if (m) seen.push({ id: m[1], at: Date.now() });
-  });
-  return seen;
-}
-
 for (const paper of PAPERS) {
   for (const vp of VIEWPORTS) {
     test(`${paper.label} [${vp.name}] — auto-start, distinct sections, one-way, no replay`, async ({ browser }) => {
@@ -102,22 +96,18 @@ for (const paper of PAPERS) {
       const page = await context.newPage();
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
-      const media = trackMediaRequests(page);
 
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
       // Required pre-flight: "Start exam" stays disabled until the candidate runs the audio-readiness probe
-      // (components/domain/listening/TechReadinessCheck.tsx — plays a short clip to confirm playback works).
-      // Not part of the regression being checked here, so just clear it.
+      // (components/domain/listening/TechReadinessCheck.tsx). It also prebuffers every section's audio
+      // (verifyScoredAudioAssets -> lib/listening/audio-prebuffer, fed by IntroCard's audioUrls={scoredAudioUrls}
+      // in app/listening/paper/[paperId]/page.tsx) so mid-exam section changes never show a buffering spinner.
       await page.getByRole('button', { name: /play audio probe/i }).click();
       await expect(page.getByText(/audio confirmed/i)).toBeVisible({ timeout: 20_000 });
 
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeEnabled({ timeout: 30_000 });
-      // The readiness probe above legitimately fetches EVERY section's audio (IntroCard's
-      // audioUrls={scoredAudioUrls} in app/listening/paper/[paperId]/page.tsx) to catch broken
-      // files before the candidate starts — so requests before this point are not "playback".
-      const startedAt = Date.now();
       await startButton.click();
 
       // A1: wait for the hidden <audio> element to mount and for playback to actually begin.
@@ -132,9 +122,8 @@ for (const paper of PAPERS) {
       const t2 = await audio.evaluate((el: HTMLAudioElement) => el.currentTime);
       expect(t2, 'A1 audio should auto-advance without any manual play tap').toBeGreaterThan(t1);
 
-      await page.waitForTimeout(800); // let the media request for A1 land in the network log
-      const a1Ids = new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id));
-      expect(a1Ids.size, 'A1 should request exactly one media asset').toBeGreaterThanOrEqual(1);
+      const a1Duration = await audio.evaluate((el: HTMLAudioElement) => el.duration);
+      expect(Number.isFinite(a1Duration) && a1Duration > 0, `A1 audio must report a real duration, got ${a1Duration}`).toBe(true);
 
       // Manually advance (the popup path — timer hasn't expired). This is the supported manual flow;
       // auto-advance-at-00:00 is covered by the existing unit/integration tests, not re-tested live here.
@@ -146,26 +135,23 @@ for (const paper of PAPERS) {
         await continueButton.click();
       }
 
-      // A2 (or the next section): a NEW media request for a DIFFERENT asset id, and it also auto-starts.
+      // A2 (or the next section): auto-starts, and its decoded duration must differ from A1's — proof it's a
+      // different underlying file, not a silent replay (the exact Atlas ST8 regression this remediation fixed).
       await page.waitForFunction(() => {
         const el = document.querySelector('audio');
         return !!el && !el.paused && el.currentTime > 0 && el.currentTime < 5;
       }, { timeout: 20_000 });
-      await page.waitForTimeout(800);
-      const afterIds = [...new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id))];
-      const newIds = afterIds.filter((id) => !a1Ids.has(id));
-      expect(newIds.length, `the next section must load a NEW media asset, not reuse ${[...a1Ids].join(',')}`).toBeGreaterThanOrEqual(1);
+      const a2Duration = await audio.evaluate((el: HTMLAudioElement) => el.duration);
+      expect(Number.isFinite(a2Duration) && a2Duration > 0, `A2 audio must report a real duration, got ${a2Duration}`).toBe(true);
+      expect(Math.abs(a2Duration - a1Duration), `A1 (${a1Duration}s) and A2 (${a2Duration}s) must be different underlying audio`).toBeGreaterThan(0.5);
 
-      // One-way: the completed section's tab shows locked/completed, never "current" again; no way to replay it.
+      // One-way: the completed section's tab shows locked/completed, never "current" again; no native controls
+      // (which would allow seeking/replay) are ever exposed.
       const sectionList = page.getByRole('list', { name: /listening sub-sections/i });
       await expect(sectionList).toBeVisible();
       const firstTab = sectionList.getByRole('listitem').first();
       await expect(firstTab).not.toHaveAttribute('aria-current', 'step');
-      await expect(page.locator('audio[controls]')).toHaveCount(0); // native controls (incl. replay/seek) are never exposed
-
-      // Re-fetching the same paper URL later must not silently replay A1 through a stale element/src.
-      const laterIds = [...new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id))];
-      expect(laterIds.filter((id) => a1Ids.has(id)).length, 'A1 media must not be re-requested after moving on').toBe(a1Ids.size);
+      await expect(page.locator('audio[controls]')).toHaveCount(0);
 
       const badConsole = consoleErrors.filter((e) => !/favicon|ResizeObserver/i.test(e));
       expect(badConsole, `unexpected console errors: ${badConsole.join(' | ')}`).toEqual([]);
