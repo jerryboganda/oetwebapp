@@ -1,4 +1,4 @@
-run 5: ST15 A1/A2 corrected boundary (head_cue checker fix)
-extra: 9d1c5791623b4f4aae2c78fbc24317de,cea68002d8fe4a0b95b51141ea2ab622
+run 6: ST15 + ST14 corrected A1/A2 boundaries
+extra: 9d1c5791623b4f4aae2c78fbc24317de,cea68002d8fe4a0b95b51141ea2ab622,538ff4ccf4f54715833b07c23b80474e,e7234bbb640643ea8781d6112a1fc97e
 only-extra
-shards: 2
+shards: 4
