@@ -114,6 +114,10 @@ for (const paper of PAPERS) {
 
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeEnabled({ timeout: 30_000 });
+      // The readiness probe above legitimately fetches EVERY section's audio (IntroCard's
+      // audioUrls={scoredAudioUrls} in app/listening/paper/[paperId]/page.tsx) to catch broken
+      // files before the candidate starts — so requests before this point are not "playback".
+      const startedAt = Date.now();
       await startButton.click();
 
       // A1: wait for the hidden <audio> element to mount and for playback to actually begin.
@@ -129,7 +133,7 @@ for (const paper of PAPERS) {
       expect(t2, 'A1 audio should auto-advance without any manual play tap').toBeGreaterThan(t1);
 
       await page.waitForTimeout(800); // let the media request for A1 land in the network log
-      const a1Ids = new Set(media.map((m) => m.id));
+      const a1Ids = new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id));
       expect(a1Ids.size, 'A1 should request exactly one media asset').toBeGreaterThanOrEqual(1);
 
       // Manually advance (the popup path — timer hasn't expired). This is the supported manual flow;
@@ -148,7 +152,7 @@ for (const paper of PAPERS) {
         return !!el && !el.paused && el.currentTime > 0 && el.currentTime < 5;
       }, { timeout: 20_000 });
       await page.waitForTimeout(800);
-      const afterIds = [...new Set(media.map((m) => m.id))];
+      const afterIds = [...new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id))];
       const newIds = afterIds.filter((id) => !a1Ids.has(id));
       expect(newIds.length, `the next section must load a NEW media asset, not reuse ${[...a1Ids].join(',')}`).toBeGreaterThanOrEqual(1);
 
@@ -160,7 +164,7 @@ for (const paper of PAPERS) {
       await expect(page.locator('audio[controls]')).toHaveCount(0); // native controls (incl. replay/seek) are never exposed
 
       // Re-fetching the same paper URL later must not silently replay A1 through a stale element/src.
-      const laterIds = [...new Set(media.map((m) => m.id))];
+      const laterIds = [...new Set(media.filter((m) => m.at >= startedAt).map((m) => m.id))];
       expect(laterIds.filter((id) => a1Ids.has(id)).length, 'A1 media must not be re-requested after moving on').toBe(a1Ids.size);
 
       const badConsole = consoleErrors.filter((e) => !/favicon|ResizeObserver/i.test(e));
