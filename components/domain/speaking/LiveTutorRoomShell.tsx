@@ -8,7 +8,6 @@ import {
   VideoTrack,
   useLocalParticipant,
   useTracks,
-  type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Button } from '@/components/ui/button';
@@ -58,13 +57,10 @@ export function LiveTutorRoomShell({
 }
 
 function TutorRoomInterior({ onEnd }: { onEnd: () => void }) {
-  const tracks = useTracks([
-    { source: Track.Source.Camera, withPlaceholder: false },
-    { source: Track.Source.Microphone, withPlaceholder: false },
-  ]);
+  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone]);
   const { localParticipant } = useLocalParticipant();
-  const remoteCamera = tracks.find((track: TrackReferenceOrPlaceholder) => !track.participant.isLocal && track.source === Track.Source.Camera);
-  const localCamera = tracks.find((track: TrackReferenceOrPlaceholder) => track.participant.isLocal && track.source === Track.Source.Camera);
+  const remoteCamera = tracks.find((track) => !track.participant.isLocal && track.source === Track.Source.Camera);
+  const localCamera = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.Camera);
   const micOn = localParticipant.isMicrophoneEnabled;
   const camOn = localParticipant.isCameraEnabled;
 
