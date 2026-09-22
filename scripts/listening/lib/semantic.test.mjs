@@ -40,6 +40,13 @@ test('prep window is judged against the original recording; click-split pauses a
   assert.equal(level(checkDestinationHead('A2', segs, [{ start: 9, end: 24.4 }], 30.2), 'prep_window'), 'fail');
 });
 
+test('destination head: Part C speaker-led intro ("you hear a NAME called X, ROLE, giving/discussing Y") is recognized', () => {
+  const c1 = [seg(0, 5, 'You hear a clinical dietitian called Rebecca Hudson giving a presentation to a group of healthcare providers.')];
+  assert.equal(level(checkDestinationHead('C2', c1, [{ start: 8, end: 98 }], 90), 'head_cue'), 'pass');
+  const c2 = [seg(0, 5, 'You hear a specialist in health and nutrition called Dr. Gregor McGregor discussing the ideal healthy diet for humans.')];
+  assert.equal(level(checkDestinationHead('C2', c2, [{ start: 7, end: 68 }], 60.6), 'head_cue'), 'pass');
+});
+
 test('destination head: ASR mishearing "Extract" as "Act"/"Track" still finds the cue via the question range', () => {
   assert.equal(level(checkDestinationHead('A2', [seg(0, 6, 'Track 2, questions 13 to 24.')], [{ start: 8, end: 40 }]), 'head_cue'), 'pass');
   assert.equal(level(checkDestinationHead('A2', [seg(0, 6, 'Act 2, Questions 13-24.')], [{ start: 8, end: 40 }]), 'head_cue'), 'pass');

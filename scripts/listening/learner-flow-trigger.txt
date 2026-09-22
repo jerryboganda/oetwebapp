@@ -1,0 +1,2 @@
+flow run 1: ST8+ST9+repaired Nova19+repaired ST11
+papers: [{"paperId":"8625c6f593d440c1aeaf7a87ab34d4c0","label":"Atlas ST8"},{"paperId":"346bd9d66cbe4c8bb657cb674565925c","label":"Atlas ST9"},{"paperId":"15bf5b6b6efe41f5b704ed7cae853ab6","label":"Nova Test 19 (repaired)"},{"paperId":"cf669bbbdf364d60ab409b662da91b37","label":"Atlas ST11 (repaired)"}]

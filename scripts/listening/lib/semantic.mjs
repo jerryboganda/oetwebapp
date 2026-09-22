@@ -32,7 +32,11 @@ export const CUE = {
   extractTwo: /\b(?:extract|act|track|extra)\s+(?:two|2|to|too|tu)\b/i,
   questionsA2: /\bquestions?\s+13\s*(?:to|-|–|through)\s*24\b/i,
   questionsC2: /\bquestions?\s+37\s*(?:to|-|–|through)\s*42\b/i,
-  intro: /\byou (?:will )?hear (?:part of )?(?:a|an) (?:consultation|talk|interview|presentation|discussion|lecture|conversation)\b/i,
+  // Two Part C phrasings: narrator-led ("you hear a talk/presentation about X", topic noun within a few words
+  // of "a/an") and speaker-led ("you hear a ROLE called NAME {discussing|explaining|giving a talk on} Y" — the
+  // verb after the name varies too much to enumerate, so "called NAME" alone is the (still low-false-positive)
+  // signal there).
+  intro: /\byou (?:will )?hear (?:part of )?(?:a|an)\b(?:\s+\S+){0,4}\s+(?:consultation|talk|interview|presentation|discussion|lecture|conversation)\b|\byou (?:will )?hear (?:part of )?(?:a|an)\b(?:\s+\S+){1,8}\scalled\s/i,
   endOfPartA: /\bend of part a\b/i,
 };
 export function findCue(segs, re, from = 0, to = Infinity) {
