@@ -42,13 +42,19 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Resolve target papers
         id: papers
+        env:
+          PAPERS_INPUT: ${{ inputs.papers }}
         run: |
-          if [ -n "${{ inputs.papers }}" ]; then
-            echo "json=${{ inputs.papers }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$PAPERS_INPUT" ]; then
+            LINE="$PAPERS_INPUT"
           else
             LINE=$(grep -E '^papers:' scripts/listening/learner-flow-trigger.txt | head -1 | cut -d: -f2-)
-            echo "json=$LINE" >> "$GITHUB_OUTPUT"
           fi
+          {
+            echo "json<<PAPERS_EOF"
+            echo "$LINE"
+            echo "PAPERS_EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Run learner-flow spec
         env:
           LISTENING_TARGET_PAPERS_JSON: ${{ steps.papers.outputs.json }}
