@@ -117,8 +117,20 @@ public sealed class RulebookLoader : IRulebookLoader
     {
         var key = BuildKey(kind, profession);
         if (_cache.TryGetValue(key, out var book)) return book;
+        // An allied-health profession without its own book for this kind uses
+        // the "other allied health" book (e.g. Speaking has no Dietetics book),
+        // so its learners are graded instead of failing with no result.
+        if (IsAlliedHealth(profession)
+            && _cache.TryGetValue(BuildKey(kind, ExamProfession.OtherAlliedHealth), out var allied))
+        {
+            return allied;
+        }
         throw new RulebookNotFoundException(kind, profession);
     }
+
+    public static bool IsAlliedHealth(ExamProfession profession)
+        => profession is not (ExamProfession.Medicine or ExamProfession.Nursing
+            or ExamProfession.Dentistry or ExamProfession.Pharmacy or ExamProfession.OtherAlliedHealth);
 
     public IEnumerable<OetRulebook> All() => _cache.Values;
 
