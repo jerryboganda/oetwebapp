@@ -241,6 +241,25 @@ public static class AdminSpeakingContentEndpoints
             Results.Ok(await service.DeleteSpeakingCardTypeAsync(AdminId(http), AdminName(http), id, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        // ── $0 full-corpus compatibility harness (PDF §10B/§10C) ──────────
+        //
+        // Runs every published card through the real Speaking path inside a
+        // rolled-back transaction with a canned grader: zero provider calls,
+        // nothing persisted. Paged (offset/limit); see
+        // docs/speaking/corpus-compatibility-harness.md.
+        app.MapPost("/v1/admin/speaking/corpus-compatibility", async (
+            SpeakingCorpusCompatibilityService harness,
+            HttpContext http,
+            CancellationToken ct,
+            [FromQuery] string? profession,
+            [FromQuery] string? cardId,
+            [FromQuery] int? offset,
+            [FromQuery] int? limit) =>
+            Results.Ok(await harness.RunAsync(AdminId(http), profession, cardId, offset, limit, ct)))
+            .RequireAuthorization("AdminContentRead")
+            .WithAdminWrite("AdminContentWrite")
+            .WithTags("Admin Speaking Corpus Harness");
+
         return app;
     }
 
