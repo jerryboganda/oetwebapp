@@ -9,6 +9,8 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { LearnerSurfaceCard } from '@/components/domain';
+import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
+import { FREE_SPEAKING_SAMPLE_COPY } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import { WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
@@ -17,9 +19,7 @@ import {
   type SpeakingPrimaryCategory,
 } from '@/lib/speaking/category-taxonomy';
 import {
-  getFreeSpeakingCard,
   listLearnerRolePlayCards,
-  type RolePlayCardLearnerDetail,
   type LearnerRolePlayCardSummary,
 } from '@/lib/api/speaking-role-play-cards';
 import {
@@ -56,7 +56,6 @@ export default function SpeakingTaskSelection() {
   const [appliedProfessionLabel, setAppliedProfessionLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [freeCard, setFreeCard] = useState<RolePlayCardLearnerDetail | null>(null);
 
   // Stale-request guard: only the most recently issued fetch is allowed to
   // write state. A slow response for a filter the user has since changed
@@ -96,10 +95,6 @@ export default function SpeakingTaskSelection() {
   useEffect(() => {
     fetchCards(applied);
   }, [applied, fetchCards]);
-
-  useEffect(() => {
-    getFreeSpeakingCard().then(setFreeCard).catch(() => setFreeCard(null));
-  }, []);
 
   // The group is single-select (Writing parity): picking an option
   // replaces the group; picking it again clears the group.
@@ -174,27 +169,14 @@ export default function SpeakingTaskSelection() {
           </div>
         </MotionSection>
 
-        {freeCard ? (
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_setup',
-              accent: 'emerald',
-              eyebrow: 'Free featured card',
-              eyebrowIcon: Sparkles,
-              title: freeCard.scenarioTitle,
-              description: 'Use the existing Speaking recorder with real audio and AI grading. No credits are required for this featured card.',
-              metaItems: [
-                { icon: Sparkles, label: freeCard.primaryCategory ?? 'Speaking role-play' },
-                { icon: Sparkles, label: 'Zero-credit access' },
-              ],
-              primaryAction: {
-                label: 'Open free card',
-                href: `/speaking/roleplay/${encodeURIComponent(freeCard.cardId)}?free=1`,
-              },
-            }}
-          />
-        ) : null}
+        <FreeSampleLauncher
+          subtest="speaking"
+          icon={Sparkles}
+          testId="speaking-library-free-sample"
+          title="Free Speaking Mock"
+          description={FREE_SPEAKING_SAMPLE_COPY}
+          className=""
+        />
 
         <FilterBar
           groups={FILTER_GROUPS}

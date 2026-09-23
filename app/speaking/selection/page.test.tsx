@@ -59,6 +59,8 @@ vi.mock('@/lib/api/speaking-role-play-cards', () => ({
   getFreeSpeakingCard: mockGetFreeSpeakingCard,
 }));
 
+// The free sample card is the shared launcher (own tests); stub it here.
+vi.mock('@/components/domain/free-sample-launcher', () => ({ FreeSampleLauncher: () => null }));
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 
 import SpeakingTaskSelection from './page';
