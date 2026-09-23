@@ -18,19 +18,29 @@ RESULT=""
 adb reverse tcp:8080 tcp:8080
 adb install -r "$APK"
 
+SERVER_LOG=/tmp/probe-server.log
+
+# The probe page reports by requesting /result/<MIC_* line> from the probe server
+# (see mic-probe.html); only lines logged after this launch count.
 probe() {
+  baseline=$(wc -l < "$SERVER_LOG")
   adb logcat -c
   adb shell am force-stop "$PKG"
-  adb shell am start -W -n "$PKG/.MainActivity" >/dev/null
+  adb shell am start -n "$PKG/.MainActivity" >/dev/null
   RESULT=""
   i=0
-  while [ "$i" -lt 60 ]; do
-    RESULT=$(adb logcat -d | grep -o 'MIC_[A-Z_]*[^"]*' | grep -v MIC_PENDING | tail -n 1 || true)
+  while [ "$i" -lt 180 ]; do
+    RESULT=$(tail -n +"$((baseline + 1))" "$SERVER_LOG" | grep -o 'GET /result/MIC_[^ ]*' | tail -n 1 | sed 's|GET /result/||' | python3 -c 'import sys,urllib.parse;print(urllib.parse.unquote(sys.stdin.read().strip()))' || true)
     [ -n "$RESULT" ] && break
     i=$((i + 1))
     sleep 1
   done
-  echo "[$1] ${RESULT:-<no MIC_* result within 60 s>}"
+  echo "[$1] ${RESULT:-<no MIC_* result within 180 s>}"
+  if [ -z "$RESULT" ]; then
+    echo "--- probe server log ---"; cat "$SERVER_LOG"
+    echo "--- logcat (Capacitor / chromium / permissions) ---"
+    adb logcat -d | grep -iE 'Capacitor|chromium|permission|MIC_|AndroidRuntime' | tail -n 80 || true
+  fi
 }
 
 adb shell pm grant "$PKG" android.permission.RECORD_AUDIO

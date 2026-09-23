@@ -10,11 +10,14 @@
   <script>
     // Loaded by the Android app (server.url) in CI: exercises exactly the path the
     // Speaking pages use — WebView getUserMedia -> Capacitor BridgeWebChromeClient
-    // .onPermissionRequest -> Android runtime permissions — and logs one MIC_* line
-    // that .github/android-smoke/run-mic-smoke.sh reads back from logcat.
+    // .onPermissionRequest -> Android runtime permissions — and reports one MIC_*
+    // line that .github/android-smoke/run-mic-smoke.sh reads from the probe server log.
     function report(line) {
       document.getElementById('result').textContent = line;
       console.log(line);
+      // Primary channel: the runner-side probe server logs this request line, which
+      // does not depend on the WebView console reaching logcat.
+      fetch('/result/' + encodeURIComponent(line)).catch(() => {});
     }
 
     (async () => {
