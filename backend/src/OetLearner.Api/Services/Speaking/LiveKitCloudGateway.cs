@@ -165,12 +165,14 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
             CanPublish = caps.CanPublishAudio || caps.CanPublishVideo,
             CanSubscribe = caps.CanSubscribe,
             CanPublishData = true,
-            // Learners get mic + camera; tutors additionally get screenshare.
-            // LiveKit honours this
-            // list when CanPublishSources is non-empty.
-            CanPublishSources = isTutor
-                ? new[] { "microphone", "camera", "screen_share", "screen_share_audio" }
-                : new[] { "microphone", "camera" },
+            // Audio-only rooms publish the microphone only; camera (and the
+            // tutor's screenshare) only when the caller grants video.
+            // LiveKit honours this list when CanPublishSources is non-empty.
+            CanPublishSources = !caps.CanPublishVideo
+                ? new[] { "microphone" }
+                : isTutor
+                    ? new[] { "microphone", "camera", "screen_share", "screen_share_audio" }
+                    : new[] { "microphone", "camera" },
         };
 
         var now = _timeProvider.GetUtcNow();
@@ -229,14 +231,15 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         var opts = _options.Value;
         EnsureConfigured(opts);
 
-        // outputUrl format expectation: "s3://bucket-name/key.mp4". The
+        // outputUrl format expectation: "s3://bucket-name/key.ogg" (audio only). The
         // current StartEgress API keeps storage at request level and the
         // file output only carries the path and format.
         var target = BuildEgressTarget(outputUrl, opts);
 
+        // Keep layout and custom_base_url unset: either forces LiveKit's video pipeline.
         var request = new StartEgressRequest(
             RoomName: roomName,
-            Template: new LiveKitTemplateSource { Layout = "grid" },
+            Template: new LiveKitTemplateSource { AudioOnly = true },
             Outputs: [new LiveKitEgressOutput { File = target.File }],
             Storage: target.Storage);
 
@@ -535,7 +538,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
 
     private static LiveKitEgressTarget BuildEgressTarget(string outputUrl, LiveKitOptions opts)
     {
-        // s3://bucket/key.mp4 → S3 upload block
+        // s3://bucket/key.ogg → S3 upload block
         if (outputUrl.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
         {
             var rest = outputUrl.Substring(5);
@@ -548,7 +551,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
                 File = new LiveKitFileOutput
                 {
                     Filepath = filepath,
-                    FileType = "MP4",
+                    FileType = "OGG",
                 },
                 Storage = new LiveKitStorageConfig
                 {
@@ -571,7 +574,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
             File = new LiveKitFileOutput
             {
                 Filepath = outputUrl,
-                FileType = "MP4",
+                FileType = "OGG",
             },
         };
     }
@@ -620,8 +623,8 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
 
     private sealed class LiveKitTemplateSource
     {
-        [JsonPropertyName("layout")]
-        public string Layout { get; set; } = string.Empty;
+        [JsonPropertyName("audio_only")]
+        public bool AudioOnly { get; set; }
     }
 
     private sealed class LiveKitEgressOutput
@@ -653,7 +656,7 @@ public sealed class LiveKitCloudGateway : ILiveKitGateway
         public string Filepath { get; set; } = string.Empty;
 
         [JsonPropertyName("file_type")]
-        public string FileType { get; set; } = "MP4";
+        public string FileType { get; set; } = "OGG";
     }
 
     private sealed class LiveKitS3Upload

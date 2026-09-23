@@ -13,7 +13,19 @@ Every Speaking-module env key, grouped by subsystem. Defaults are listed; requir
 | `LIVEKIT__WEBHOOKSIGNINGSECRET` | yes (cloud) | — | HMAC secret for webhook verification. |
 | `LIVEKIT__EGRESSBUCKET` | yes (cloud) | — | S3 bucket for egress output. |
 | `LIVEKIT__DEFAULTMAXDURATIONSECONDS` | optional | `1800` | Auto-end ceiling per room (seconds). |
-| `LIVEKIT__EGRESSENABLED` | optional | `true` | Track-composite recording on/off. |
+| `LIVEKIT__EGRESSENABLED` | optional | `true` | Audio-only mixed-room recording on/off. |
+
+Rooms are **audio-only**: tokens grant microphone publish only, and egress is an
+audio-only room composite written as `{EgressBucket}/oet-speaking/{RoomName}.ogg`
+(`file_type: OGG`). Joining needs the current `recording`, `tutor_review` and
+`retention` consents; live-video consent is not required.
+
+When LiveKit is not configured outside Development/Testing (the
+`LiveKitProviderUnavailable` gateway), tutor slot listing, private-speaking
+booking and Full Mock Speaking tutor booking return `503`
+`{ "code": "tutor_rooms_unavailable", "message": "Live tutor sessions are temporarily unavailable." }`
+before any credit or payment is taken, and `GET /v1/private-speaking/config`,
+learner booking DTOs and `GET /v1/mocks/bookings` report `liveRoomsAvailable: false`.
 
 ## Anthropic — Default Speaking AI Provider
 
@@ -88,7 +100,7 @@ provider, or blocks an active turn.
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
 | `SpeakingCompliance__CurrentConsentVersion` | optional | `recording.v1` | Versioned consent code stamped on every session. |
-| `SpeakingCompliance__CurrentLiveVideoConsentVersion` | optional | `live_video_with_tutor.v1` | Versioned consent for live tutor rooms. |
+| `SpeakingCompliance__CurrentLiveVideoConsentVersion` | optional | `live_video_with_tutor.v1` | Versioned live-video consent. Not required for the audio-only live tutor rooms. |
 | `SpeakingCompliance__RetentionDaysDefault` | optional | `90` | Retention window for recordings WITHOUT tutor review. |
 | `SpeakingCompliance__RetentionDaysWhenTutorReviewed` | optional | `365` | Retention window WHEN tutor assessment exists. |
 | `SpeakingCompliance__AuditLogRetentionDays` | optional | `2555` | 7-year `AuditEvent` retention. |

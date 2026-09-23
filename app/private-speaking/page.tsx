@@ -13,6 +13,7 @@ import {
   fetchPrivateSpeakingConfig,
   fetchPrivateSpeakingTutors,
   fetchAllPrivateSpeakingSlots,
+  fetchPrivateSpeakingSlots,
   createPrivateSpeakingBooking,
   reschedulePrivateSpeakingBooking,
   fetchLearnerPrivateSpeakingBookings,
@@ -21,6 +22,7 @@ import {
   fetchMyEntitlementSnapshot,
   ratePrivateSpeakingSession,
   safePaymentRedirect,
+  isApiError,
   type PaymentCaptureResult,
 } from '@/lib/api';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
@@ -31,7 +33,17 @@ type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
   defaultSlotDurationMinutes: number; cancellationWindowHours: number;
   allowReschedule: boolean; rescheduleWindowHours: number; reservationTimeoutMinutes: number;
+  /** False when no LiveKit provider is configured (B9). */
+  liveRoomsAvailable?: boolean;
 };
+
+/** Tutor filter value for "Any available tutor" — the server assigns the least-loaded tutor. */
+const ANY_TUTOR = 'any';
+const TUTOR_ROOMS_UNAVAILABLE_MESSAGE = 'Live tutor sessions are temporarily unavailable.';
+
+function isTutorRoomsUnavailable(err: unknown): boolean {
+  return isApiError(err) && err.code === 'tutor_rooms_unavailable';
+}
 
 type Tutor = {
   id: string; displayName: string; bio: string | null; timezone: string;
@@ -214,6 +226,8 @@ export default function PrivateSpeakingPage() {
   // an eligible main course/package or the Speaking Crash Course
   // (plan flag SpeakingAddonsEnabled, resolved server-side) may book.
   const [liveTutorEligible, setLiveTutorEligible] = useState<boolean | null>(null);
+  // B9: LiveKit not configured → no slot browsing, booking or joining.
+  const [roomsUnavailable, setRoomsUnavailable] = useState(false);
   const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
@@ -235,6 +249,7 @@ export default function PrivateSpeakingPage() {
       fetchMyEntitlementSnapshot(),
     ]).then(([cfg, tut, bk, entitlement]) => {
       setConfig(cfg as Config);
+      if ((cfg as Config).liveRoomsAvailable === false) setRoomsUnavailable(true);
       setTutors(tut as Tutor[]);
       setBookings(bk as Booking[]);
       setEntitlementRemaining(entitlement.speakingSessionsRemaining);
@@ -248,26 +263,34 @@ export default function PrivateSpeakingPage() {
 
   // Ineligible learners land on My Bookings (slot browsing is hidden for them).
   useEffect(() => {
-    if (liveTutorEligible === false) setViewMode('bookings');
-  }, [liveTutorEligible]);
+    if (liveTutorEligible === false || roomsUnavailable) setViewMode('bookings');
+  }, [liveTutorEligible, roomsUnavailable]);
+
+  const canBrowse = liveTutorEligible !== false && !roomsUnavailable;
 
   // Load slots when week or tutor changes
   const loadSlots = useCallback(async () => {
     setSlotsLoading(true);
     try {
       const { from, to } = getWeekRange(weekOffset);
+      if (selectedTutor === ANY_TUTOR) {
+        // One slot per start time across every tutor; booking it auto-assigns a tutor.
+        setSlots(await fetchPrivateSpeakingSlots(ANY_TUTOR, from, to) as Slot[]);
+        return;
+      }
       const data = await fetchAllPrivateSpeakingSlots(from, to) as Slot[];
       setSlots(selectedTutor ? data.filter(s => s.tutorProfileId === selectedTutor) : data);
-    } catch {
-      setError('Could not load available slots.');
+    } catch (err: unknown) {
+      if (isTutorRoomsUnavailable(err)) setRoomsUnavailable(true);
+      else setError('Could not load available slots.');
     } finally {
       setSlotsLoading(false);
     }
   }, [weekOffset, selectedTutor]);
 
   useEffect(() => {
-    if (viewMode === 'browse' && !loading) loadSlots();
-  }, [viewMode, loading, loadSlots]);
+    if (viewMode === 'browse' && !loading && !roomsUnavailable) loadSlots();
+  }, [viewMode, loading, roomsUnavailable, loadSlots]);
 
   async function handleBook() {
     if (!selectedSlot || bookingInProgress) return;
@@ -303,6 +326,11 @@ export default function PrivateSpeakingPage() {
       setBookings(updated);
       setViewMode('bookings');
     } catch (err: unknown) {
+      if (isTutorRoomsUnavailable(err)) {
+        setRoomsUnavailable(true);
+        setSelectedSlot(null);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Could not book session.';
       setError(message);
     } finally {
@@ -335,6 +363,11 @@ export default function PrivateSpeakingPage() {
       }
       setPaypalOrderId(result.checkoutSessionId);
     } catch (err: unknown) {
+      if (isTutorRoomsUnavailable(err)) {
+        setRoomsUnavailable(true);
+        setSelectedSlot(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not start PayPal payment.');
     } finally {
       setBookingInProgress(false);
@@ -499,8 +532,8 @@ export default function PrivateSpeakingPage() {
 
           <div className="flex items-center gap-2">
             {(booking.status === 'Confirmed' || booking.status === 'InProgress') && (
-              <button onClick={() => handleJoin(booking)} disabled={!joinOpen || joiningBookingId === booking.id}
-                title={joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
+              <button onClick={() => handleJoin(booking)} disabled={roomsUnavailable || !joinOpen || joiningBookingId === booking.id}
+                title={roomsUnavailable ? TUTOR_ROOMS_UNAVAILABLE_MESSAGE : joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
                 <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join LiveKit' : 'Join soon'}
               </button>
@@ -652,12 +685,18 @@ export default function PrivateSpeakingPage() {
         )}
       </div>
 
+      {roomsUnavailable && (
+        <InlineAlert variant="warning" className="mb-4" data-testid="tutor-rooms-unavailable">
+          {TUTOR_ROOMS_UNAVAILABLE_MESSAGE}
+        </InlineAlert>
+      )}
+
       {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} aria-label="Dismiss error" className="ml-2"><X className="w-4 h-4 inline" aria-hidden /></button></InlineAlert>}
 
       {/* View mode toggle — slot browsing is hidden while ineligible (the
           server also blocks direct booking attempts). Past bookings stay visible. */}
       <div className="flex gap-2 mb-6">
-        {liveTutorEligible !== false && (
+        {canBrowse && (
         <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           Browse Slots
         </button>
@@ -668,7 +707,7 @@ export default function PrivateSpeakingPage() {
       </div>
 
       {/* ── Browse Slots ──────────────────────────────── */}
-      {viewMode === 'browse' && liveTutorEligible !== false && (
+      {viewMode === 'browse' && canBrowse && (
         <>
           {/* Week navigation + tutor filter */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
@@ -688,6 +727,7 @@ export default function PrivateSpeakingPage() {
             <select value={selectedTutor ?? ''} onChange={e => setSelectedTutor(e.target.value || null)}
               className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
               <option value="">All tutors</option>
+              {!rescheduleTarget && <option value={ANY_TUTOR}>Any available tutor</option>}
               {tutors.map(t => (
                 <option key={t.id} value={t.id}>{t.displayName}</option>
               ))}

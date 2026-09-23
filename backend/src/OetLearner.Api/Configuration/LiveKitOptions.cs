@@ -44,7 +44,7 @@ public sealed class LiveKitOptions
     /// S3-compatible URL like <c>s3://oet-speaking-recordings</c>).
     /// Production requires this when egress is enabled. The full output
     /// path emitted to LiveKit is
-    /// <c>{EgressBucket}/oet-speaking/{RoomName}.mp4</c>.</summary>
+    /// <c>{EgressBucket}/oet-speaking/{RoomName}.ogg</c>.</summary>
     public string EgressBucket { get; set; } = string.Empty;
 
     /// <summary>Optional region for the egress S3 bucket.</summary>

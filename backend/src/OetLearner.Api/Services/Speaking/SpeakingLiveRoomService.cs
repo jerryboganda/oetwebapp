@@ -35,14 +35,17 @@ public sealed class SpeakingLiveRoomService
     private readonly IOptions<LiveKitOptions> _options;
     private readonly IOptions<SpeakingComplianceOptions> _complianceOptions;
     private readonly ILogger<SpeakingLiveRoomService> _logger;
+    private readonly NotificationService? _notifications;
 
     public SpeakingLiveRoomService(
         LearnerDbContext db,
         ILiveKitGateway gateway,
         IOptions<LiveKitOptions> options,
         IOptions<SpeakingComplianceOptions> complianceOptions,
-        ILogger<SpeakingLiveRoomService> logger)
+        ILogger<SpeakingLiveRoomService> logger,
+        NotificationService? notifications = null)
     {
+        _notifications = notifications;
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -273,14 +276,16 @@ public sealed class SpeakingLiveRoomService
 
         var capabilities = role switch
         {
+            // Audio-only rooms: microphone publish only (no camera), matching
+            // the audio-only egress and the consent set above.
             SpeakingLiveRoomTokenRole.Learner => new LiveKitTokenCapabilities(
                 CanPublishAudio: true,
-                CanPublishVideo: true,
+                CanPublishVideo: false,
                 CanSubscribe: true,
                 CanManageRoom: false),
             SpeakingLiveRoomTokenRole.Tutor => new LiveKitTokenCapabilities(
                 CanPublishAudio: true,
-                CanPublishVideo: true,
+                CanPublishVideo: false,
                 CanSubscribe: true,
                 CanManageRoom: true),
             SpeakingLiveRoomTokenRole.Observer => new LiveKitTokenCapabilities(
@@ -344,14 +349,14 @@ public sealed class SpeakingLiveRoomService
             return;
         }
 
+        // Live tutor rooms are audio-only (microphone publish, audio-only
+        // egress), so live-video consent is not part of the join gate.
         var currentRecordingVersion = _complianceOptions.Value.CurrentConsentVersion;
-        var currentLiveVideoVersion = _complianceOptions.Value.CurrentLiveVideoConsentVersion;
         var required = new[]
         {
             (SpeakingComplianceConsentTypes.Recording, currentRecordingVersion),
             (SpeakingComplianceConsentTypes.TutorReview, currentRecordingVersion),
             (SpeakingComplianceConsentTypes.Retention, currentRecordingVersion),
-            (SpeakingComplianceConsentTypes.LiveVideoWithTutor, currentLiveVideoVersion),
         };
 
         foreach (var (consentType, consentVersion) in required)
@@ -407,22 +412,17 @@ public sealed class SpeakingLiveRoomService
         var learnerId = session.UserId;
         room.ActualStartUtc ??= DateTimeOffset.UtcNow;
 
+        // Audio-only egress: current recording consent is the requirement.
         var recordingConsentVersion = _complianceOptions.Value.CurrentConsentVersion;
-        var liveVideoConsentVersion = _complianceOptions.Value.CurrentLiveVideoConsentVersion;
         var hasRequiredConsent = await _db.SpeakingComplianceConsents.AsNoTracking()
             .AnyAsync(c => c.UserId == learnerId
                            && c.RevokedAt == null
                            && c.ConsentType == SpeakingComplianceConsentTypes.Recording
-                           && c.ConsentVersion == recordingConsentVersion, ct)
-            && await _db.SpeakingComplianceConsents.AsNoTracking()
-                .AnyAsync(c => c.UserId == learnerId
-                               && c.RevokedAt == null
-                               && c.ConsentType == SpeakingComplianceConsentTypes.LiveVideoWithTutor
-                               && c.ConsentVersion == liveVideoConsentVersion, ct);
+                           && c.ConsentVersion == recordingConsentVersion, ct);
         if (!hasRequiredConsent)
         {
             throw new SpeakingLiveRoomInvalidStateException(
-                $"Live room '{liveRoomId}' requires current learner recording and live-video consent before recording can start.");
+                $"Live room '{liveRoomId}' requires current learner recording consent before recording can start.");
         }
 
         if (!string.IsNullOrWhiteSpace(room.EgressId))
@@ -436,8 +436,8 @@ public sealed class SpeakingLiveRoomService
 
         var bucket = _options.Value.EgressBucket;
         var outputUrl = string.IsNullOrWhiteSpace(bucket)
-            ? $"livekit://egress/{room.RoomName}.mp4"
-            : $"{(bucket.StartsWith("s3://", StringComparison.OrdinalIgnoreCase) ? bucket.TrimEnd('/') : $"s3://{bucket.TrimEnd('/')}")}/oet-speaking/{room.RoomName}.mp4";
+            ? $"livekit://egress/{room.RoomName}.ogg"
+            : $"{(bucket.StartsWith("s3://", StringComparison.OrdinalIgnoreCase) ? bucket.TrimEnd('/') : $"s3://{bucket.TrimEnd('/')}")}/oet-speaking/{room.RoomName}.ogg";
 
         var egressId = await _gateway.StartEgressAsync(room.RoomName, outputUrl, ct);
 
@@ -928,14 +928,14 @@ public sealed class SpeakingLiveRoomService
         _db.MediaAssets.Add(new MediaAsset
         {
             Id = mediaAssetId,
-            OriginalFilename = $"{room.RoomName}.mp4",
-            MimeType = "video/mp4",
-            Format = "mp4",
+            OriginalFilename = $"{room.RoomName}.ogg",
+            MimeType = "audio/ogg",
+            Format = "ogg",
             SizeBytes = sizeBytes,
             DurationSeconds = durationSeconds > 0 ? durationSeconds : null,
             StoragePath = outputUrl,
             Status = MediaAssetStatus.Processing,
-            MediaKind = "video",
+            MediaKind = "audio",
             UploadedAt = now,
         });
 
@@ -949,7 +949,7 @@ public sealed class SpeakingLiveRoomService
             DurationSeconds = durationSeconds,
             SizeBytes = sizeBytes,
             Sha256 = string.Empty,
-            MimeType = "video/mp4",
+            MimeType = "audio/ogg",
             ConsentVersion = room.RecordingConsentVersion,
             IsArchived = false,
             EgressTrackId = effectiveEgressId,
@@ -961,6 +961,65 @@ public sealed class SpeakingLiveRoomService
             room.Id,
             egressId,
             durationSeconds);
+
+        await RouteRecordingToReviewAsync(room, effectiveEgressId, now, ct);
+    }
+
+    /// <summary>
+    /// Recording → review hand-off. Runs once per egress (the duplicate check
+    /// above returns early on a replayed webhook; notification dedupe keys are
+    /// per egress too). The review queue itself is derived:
+    /// <see cref="TutorReviewQueueService.ListQueueAsync"/> lists every
+    /// finished live-tutor session without a final tutor assessment, and every
+    /// room-end path finishes the session, so nothing extra is persisted here.
+    /// </summary>
+    private async Task RouteRecordingToReviewAsync(
+        SpeakingLiveRoom room,
+        string? egressId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        _db.PrivateSpeakingAuditLogs.Add(new PrivateSpeakingAuditLog
+        {
+            Id = $"psaudit_{Guid.NewGuid():N}",
+            BookingId = room.BookingId,
+            ActorId = "system",
+            ActorRole = "system",
+            Action = "livekit_recording_received",
+            Details = JsonSerializer.Serialize(new { roomId = room.Id, sessionId = room.SpeakingSessionId, egressId }),
+            CreatedAt = now,
+        });
+
+        if (_notifications is null) return;
+        var session = await _db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct);
+        if (session is null) return;
+
+        var bucket = $"recording-{egressId ?? room.Id}";
+        var payload = new Dictionary<string, object?>
+        {
+            ["sessionId"] = session.Id,
+            ["bookingId"] = room.BookingId,
+        };
+        try
+        {
+            await _notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerPrivateSpeakingRecordingReceived,
+                session.UserId, "speaking_session", session.Id, bucket, payload, ct);
+            if (!string.IsNullOrWhiteSpace(session.InterlocutorActorId))
+            {
+                await _notifications.CreateForExpertAsync(
+                    NotificationEventKey.ExpertPrivateSpeakingRecordingReady,
+                    session.InterlocutorActorId, "speaking_session", session.Id, bucket, payload, ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A notification failure must never make LiveKit replay the webhook.
+            _logger.LogWarning(ex,
+                "SpeakingLiveRoomService.RecordingReview notification_failed roomId={LiveRoomId}",
+                room.Id);
+        }
     }
 
     private async Task HandleParticipantPresenceAsync(
