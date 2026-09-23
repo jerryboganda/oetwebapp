@@ -342,9 +342,14 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     void load();
   }, [load]);
 
+  // Free Listening Mock (owner 2026-09-23): no audio readiness check, no
+  // sound-check call and no tech-readiness probe — Start Exam begins the real
+  // exam directly. The server skips those gates for the free-sample paper.
+  const isFreeSample = session?.isFreeSample === true || session?.paper.isFreeSample === true;
+
   const start = useCallback(async () => {
     const readiness = techReadiness;
-    if (!readiness?.audioOk) {
+    if (!isFreeSample && !readiness?.audioOk) {
       setError('Complete the audio readiness check before starting this strict Listening attempt.');
       return;
     }
@@ -355,17 +360,19 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
       // Ensure the 24h pathway sound-check gate is satisfied before creating
       // the attempt. The backend fix refreshes the timestamp on every successful
       // check, so a single retry is sufficient to recover from an expired gate.
-      try {
-        await submitAudioCheck({ outcome: 'clear' });
-      } catch {
-        // Non-fatal — startListeningAttempt will surface the authoritative error
-        // if the check truly failed. Swallow so we don't mask the start error.
+      if (!isFreeSample) {
+        try {
+          await submitAudioCheck({ outcome: 'clear' });
+        } catch {
+          // Non-fatal — startListeningAttempt will surface the authoritative error
+          // if the check truly failed. Swallow so we don't mask the start error.
+        }
       }
       let started: Awaited<ReturnType<typeof startListeningAttempt>>;
       try {
         started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
       } catch (err) {
-        if (isListeningAudioCheckError(err)) {
+        if (!isFreeSample && isListeningAudioCheckError(err)) {
           // Gate was expired — one more sound-check refresh then retry start.
           await submitAudioCheck({ outcome: 'clear' });
           started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
@@ -375,11 +382,13 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
       }
       showCreditFeedback(started.feedbackMessage);
       syncServerClock(started.serverNow);
-      const probe = await buildTechReadinessProbe({
-        audioOk: readiness.audioOk,
-        durationMs: readiness.durationMs,
-      });
-      await listeningV2Api.recordTechReadiness(started.attemptId, probe);
+      if (!isFreeSample && readiness) {
+        const probe = await buildTechReadinessProbe({
+          audioOk: readiness.audioOk,
+          durationMs: readiness.durationMs,
+        });
+        await listeningV2Api.recordTechReadiness(started.attemptId, probe);
+      }
       setAttempt(started);
       const restored: Record<string, string> = {};
       for (const [questionId, value] of Object.entries(started.answers ?? {})) {
@@ -406,7 +415,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     } finally {
       setStarting(false);
     }
-  }, [mockAttemptId, mockSectionId, mode, paperId, resumeAttemptId, router, search, syncServerClock, techReadiness]);
+  }, [isFreeSample, mockAttemptId, mockSectionId, mode, paperId, resumeAttemptId, router, search, syncServerClock, techReadiness]);
 
   const persistAnswer = useCallback(async (
     questionId: string,
@@ -659,6 +668,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
             allSectionsAudioReady={allSectionsAudioReady}
             audioUrls={scoredAudioUrls}
             techReadiness={techReadiness}
+            isFreeSample={isFreeSample}
             preflight={session.preflight}
             starting={starting}
             onTechReadinessReady={(result) => {
@@ -764,6 +774,7 @@ function IntroCard({
   allSectionsAudioReady,
   audioUrls,
   techReadiness,
+  isFreeSample,
   preflight,
   starting,
   onTechReadinessReady,
@@ -776,6 +787,7 @@ function IntroCard({
   allSectionsAudioReady: boolean;
   audioUrls: string[];
   techReadiness: { audioOk: boolean; durationMs: number } | null;
+  isFreeSample: boolean;
   preflight: ListeningSessionDto['preflight'];
   starting: boolean;
   onTechReadinessReady: (result: { audioOk: boolean; durationMs: number }) => void;
@@ -815,9 +827,11 @@ function IntroCard({
         the sub-section locks automatically and the next one opens — you can never return to a previous
         sub-section. Use headphones.
       </p>
-      <div className="mx-auto mt-5 max-w-2xl text-left">
-        <TechReadinessCheck audioUrls={audioUrls} onReady={onTechReadinessReady} />
-      </div>
+      {isFreeSample ? null : (
+        <div className="mx-auto mt-5 max-w-2xl text-left">
+          <TechReadinessCheck audioUrls={audioUrls} onReady={onTechReadinessReady} />
+        </div>
+      )}
       <p
         className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
         role="note"
@@ -841,7 +855,7 @@ function IntroCard({
           variant="primary"
           onClick={onStart}
           loading={starting}
-          disabled={sectionCount === 0 || !audioAvailable || !allSectionsAudioReady || !techReadiness?.audioOk || preflight?.eligibility.eligible === false}
+          disabled={sectionCount === 0 || !audioAvailable || !allSectionsAudioReady || (!isFreeSample && !techReadiness?.audioOk) || preflight?.eligibility.eligible === false}
         >
           <Play className="h-4 w-4" aria-hidden="true" />
           Start exam

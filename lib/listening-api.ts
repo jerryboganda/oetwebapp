@@ -263,7 +263,13 @@ export interface ListeningSessionDto {
      * A1, A2, B (one per workplace clip), C1, C2. Empty list when not
      * yet authored. */
     extracts?: ListeningExtractMetadataDto[];
+    /** True for the paper tagged `free-sample` (Free Listening Mock). The
+     * server skips the tech-readiness + audio-check gates for it, so the
+     * client starts the real exam directly with no readiness check. */
+    isFreeSample?: boolean;
   };
+  /** Same flag as `paper.isFreeSample`; either location is honoured. */
+  isFreeSample?: boolean;
   attempt: ListeningAttemptDto | null;
   questions: ListeningSessionQuestionDto[];
   modePolicy: {

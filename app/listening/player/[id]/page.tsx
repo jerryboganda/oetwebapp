@@ -389,6 +389,11 @@ function PlayerContent() {
     || mode === 'home'
     || session?.modePolicy.mode === 'exam'
     || session?.modePolicy.mode === 'home';
+  // Free Listening Mock (owner 2026-09-23): the free-sample paper never shows
+  // the audio readiness check, sound-check or tech-readiness probe; the rest of
+  // the strict exam flow (one-way navigation, server state) is unchanged.
+  const isFreeSample = session?.isFreeSample === true || session?.paper.isFreeSample === true;
+  const audioReadinessRequired = strictReadinessRequired && !isFreeSample;
 
   useEffect(() => {
     if (!id) return;
@@ -855,14 +860,14 @@ function PlayerContent() {
     if (audioValidityHeld) return;
     if (!session?.paper.audioAvailable || !session.readiness.objectiveReady) return;
     const readinessSnapshot = techReadiness;
-    if (strictReadinessRequired && !readinessSnapshot?.audioOk) {
+    if (audioReadinessRequired && !readinessSnapshot?.audioOk) {
       setStartError('Complete the audio readiness check before starting this strict Listening attempt.');
       return;
     }
     setIsStarting(true);
     setStartError(null);
     try {
-      if (strictReadinessRequired) {
+      if (audioReadinessRequired) {
         const audioCheck = await submitAudioCheck({ outcome: 'clear' });
         if (!audioCheck.success) {
           throw new Error('The audio readiness check was not accepted. Please retry the check before starting.');
@@ -879,17 +884,19 @@ function PlayerContent() {
       answerBaseValuesRef.current = {};
       pendingAnswersRef.current = {};
       if (strictReadinessRequired) {
-        if (!readinessSnapshot?.audioOk) {
-          throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
+        if (audioReadinessRequired) {
+          if (!readinessSnapshot?.audioOk) {
+            throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
+          }
+          // v1.1 — collect real-exam technical guidance telemetry. The server
+          // records device/screen observations for guidance and audit only; the
+          // audio sound check above is the only strict pre-start readiness gate.
+          const probe = await buildTechReadinessProbe({
+            audioOk: readinessSnapshot.audioOk,
+            durationMs: readinessSnapshot.durationMs,
+          });
+          await listeningV2Api.recordTechReadiness(started.attemptId, probe);
         }
-        // v1.1 — collect real-exam technical guidance telemetry. The server
-        // records device/screen observations for guidance and audit only; the
-        // audio sound check above is the only strict pre-start readiness gate.
-        const probe = await buildTechReadinessProbe({
-          audioOk: readinessSnapshot.audioOk,
-          durationMs: readinessSnapshot.durationMs,
-        });
-        await listeningV2Api.recordTechReadiness(started.attemptId, probe);
         try {
           await advanceStrictStart(started.attemptId);
         } catch (err) {
@@ -2159,7 +2166,7 @@ function PlayerContent() {
             session={session}
             isExam={isExam}
             drillId={drillId ?? null}
-            strictReadinessRequired={strictReadinessRequired}
+            strictReadinessRequired={audioReadinessRequired}
             techReadiness={techReadiness}
             audioUrls={scoredAudioUrls}
             isStarting={isStarting}

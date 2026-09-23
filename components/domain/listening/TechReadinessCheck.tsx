@@ -3,7 +3,6 @@
 import { AlertTriangle, CheckCircle2, Loader2, Mic, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { prebufferAudioChunks } from '@/lib/listening/audio-prebuffer';
 
 /**
@@ -146,49 +145,6 @@ async function verifyScoredAudioAssets(audioUrls: string[]) {
   const result = await prebufferAudioChunks(audioUrls);
   if (!result.success && result.warnings.length > 0) {
     throw new Error(result.warnings[0]);
-  }
-}
-
-async function verifyAudioAsset(url: string) {
-  let sourceUrl = url;
-  let objectUrl: string | null = null;
-  try {
-    // Authenticated media cannot be loaded directly by a native audio element.
-    // Fetching it first also proves the complete response is available before
-    // the server-authoritative attempt timer is allowed to start.
-    if (!/^https?:\/\//i.test(url) || /\/v1\//i.test(url)) {
-      objectUrl = await fetchAuthorizedObjectUrl(url);
-      sourceUrl = objectUrl;
-    }
-    const audio = new Audio();
-    audio.preload = 'auto';
-    await new Promise<void>((resolve, reject) => {
-      let timeoutId: number | null = null;
-      let cleanup = () => {};
-      const onReady = () => {
-        cleanup();
-        resolve();
-      };
-      const onError = () => {
-        cleanup();
-        reject(new Error('A scored audio asset failed its readiness check.'));
-      };
-      cleanup = () => {
-        if (timeoutId !== null) window.clearTimeout(timeoutId);
-        audio.removeEventListener('canplaythrough', onReady);
-        audio.removeEventListener('error', onError);
-      };
-      timeoutId = window.setTimeout(() => {
-        cleanup();
-        reject(new Error('A scored audio asset timed out during its readiness check.'));
-      }, 15_000);
-      audio.addEventListener('canplaythrough', onReady, { once: true });
-      audio.addEventListener('error', onError, { once: true });
-      audio.src = sourceUrl;
-      audio.load();
-    });
-  } finally {
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
   }
 }
 
