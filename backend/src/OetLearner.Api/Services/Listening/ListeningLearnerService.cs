@@ -530,9 +530,14 @@ public sealed class ListeningLearnerService(
                 preflightEligibilityReason = ex.Message;
             }
         }
+        var isFreeSample = await IsFreeSamplePaperAsync(source.Id, ct);
         return new
         {
             serverNow = DateTimeOffset.UtcNow,
+            // Owner Free Mocks (23 Sep 2026): the tagged free-sample paper has
+            // no audio readiness / sound check — the player starts the real
+            // exam directly (the server skips both gates for it too).
+            isFreeSample,
             paper = SourceDto(source),
             attempt = relationalAttempt is not null
                 ? RelationalAttemptDto(relationalAttempt, answers)
@@ -665,8 +670,11 @@ public sealed class ListeningLearnerService(
         // strict-start gates as relational papers. The client preflight is
         // only a convenience; a direct start request must not bypass the
         // sound check or begin an exam whose scored audio is incomplete.
+        // Owner Free Mocks (23 Sep 2026): the tagged free-sample paper starts
+        // the real exam directly — no sound check. Paid papers unchanged.
         if (normalizedMode is "exam" or "home"
-            && !await HasValidAudioCheckAsync(userId, DateTimeOffset.UtcNow, ct))
+            && !await HasValidAudioCheckAsync(userId, DateTimeOffset.UtcNow, ct)
+            && !await IsFreeSamplePaperAsync(source.Id, ct))
         {
             throw ApiException.Validation(
                 "listening_audio_check_required",
@@ -1848,8 +1856,11 @@ public sealed class ListeningLearnerService(
         // are "exam-like" for one-play/audio-asset purposes: only Exam + Home
         // carry OneWayLocks. Mirrors ListeningSessionService's advance gate and
         // shares its TTL.
+        // Owner Free Mocks (23 Sep 2026): the tagged free-sample paper starts
+        // the real exam directly — no sound check. Paid papers unchanged.
         if (relationalMode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home
-            && !await HasValidAudioCheckAsync(userId, now, ct))
+            && !await HasValidAudioCheckAsync(userId, now, ct)
+            && !await IsFreeSamplePaperAsync(source.Id, ct))
         {
             throw ApiException.Validation(
                 "listening_audio_check_required",

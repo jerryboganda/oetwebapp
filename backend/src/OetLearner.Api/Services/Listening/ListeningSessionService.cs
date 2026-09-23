@@ -118,7 +118,18 @@ public sealed class ListeningSessionService
                 $"Cannot advance to unknown Listening state {cmd.ToState}.");
         }
 
-        if (RequiresTechReadiness(nav.State, cmd.ToState, policy, mode)
+        var needsTechReadiness = RequiresTechReadiness(nav.State, cmd.ToState, policy, mode);
+        var needsAudioCheck = RequiresAudioCheck(nav.State, cmd.ToState, mode);
+        // Owner Free Mocks (23 Sep 2026): the tagged free-sample paper has no
+        // audio readiness / sound check — Start Exam starts the real exam
+        // directly. Paid papers keep both gates unchanged.
+        if ((needsTechReadiness || needsAudioCheck) && await IsFreeSamplePaperAsync(attempt.PaperId, ct))
+        {
+            needsTechReadiness = false;
+            needsAudioCheck = false;
+        }
+
+        if (needsTechReadiness
             && !HasValidTechReadiness(attempt.TechReadinessJson, policy, now, out var readinessReason))
         {
             return AdvanceResultDto.Rejected(
@@ -132,7 +143,7 @@ public sealed class ListeningSessionService
         // ungated. Mirrors the audio sound-check gate above but reads the
         // learner's LearnerListeningProfile.AudioCheckPassedAt instead of the
         // per-attempt readiness snapshot.
-        if (RequiresAudioCheck(nav.State, cmd.ToState, mode)
+        if (needsAudioCheck
             && !await HasValidAudioCheckAsync(userId, now, ct))
         {
             return AdvanceResultDto.Rejected(
@@ -564,6 +575,12 @@ public sealed class ListeningSessionService
 
         return passedAt is { } at && at.AddMilliseconds(AudioCheckTtlMs) >= now;
     }
+
+    private async Task<bool> IsFreeSamplePaperAsync(string paperId, CancellationToken ct)
+        => OetLearner.Api.Services.Content.ContentEntitlementService.IsFreeSample(await _db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == paperId)
+            .Select(p => p.TagsCsv)
+            .FirstOrDefaultAsync(ct));
 
     /// <summary>
     /// Resolve the per-state window in milliseconds.
