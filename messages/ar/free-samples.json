@@ -1,0 +1,10 @@
+{
+  "freeSample.speaking.allowance": "تتضمن العيّنة المجانية محاولة كاملة واحدة + إعادة محاولة مجانية واحدة.",
+  "freeSample.speaking.retryCta": "حاول مرة أخرى - تبقّت إعادة محاولة مجانية واحدة",
+  "freeSample.writing.allowance": "تتضمن العيّنة المجانية تسليمًا واحدًا مُصحّحًا + مراجعة مجانية واحدة.",
+  "freeSample.writing.retryCta": "راجِع وأعد التسليم - تبقّت مراجعة مجانية واحدة",
+  "freeSample.completed": "اكتملت العيّنة المجانية",
+  "freeSample.unavailable": "العيّنة المجانية غير متاحة لمهنتك المسجّلة.",
+  "freeSample.inProgress": "جارٍ معالجة نتيجتك",
+  "freeSample.viewResult": "عرض النتيجة"
+}

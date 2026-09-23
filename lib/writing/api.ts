@@ -499,9 +499,6 @@ export const getWritingScenario = (scenarioId: string) =>
     path('/v1/writing/scenarios/{id}', { id: scenarioId }),
   );
 
-export const getFreeWritingScenario = () =>
-  apiClient.get<WritingScenarioDto>('/v1/writing/scenarios/free');
-
 /**
  * Gate for AI-graded practice/paper sessions: throws (402, insufficient
  * credits) before any task content is shown. Do NOT call this from a mock

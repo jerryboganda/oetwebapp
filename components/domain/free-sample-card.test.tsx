@@ -32,7 +32,7 @@ describe('FreeSampleCard', () => {
     expect(card).toHaveTextContent('Try one complete OET Listening mock for free.');
   });
 
-  it('renders a button (profession-picker entry) when there is no href', async () => {
+  it('renders a button when there is no href', async () => {
     const onClick = vi.fn();
     render(
       <FreeSampleCard testId="fs-card" icon={Headphones} title="Free Writing Mock" description="Pick your profession." onClick={onClick} />,
