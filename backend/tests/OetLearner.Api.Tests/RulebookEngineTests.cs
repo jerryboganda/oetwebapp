@@ -54,11 +54,29 @@ public class RulebookLoaderTests
 
         var missing = Enum.GetValues<RuleKind>()
             .SelectMany(kind => Enum.GetValues<ExamProfession>().Select(profession => (kind, profession)))
-            .FirstOrDefault(pair => !registered.Contains(pair));
+            .FirstOrDefault(pair => !registered.Contains(pair)
+                && !(OetLearner.Api.Services.Rulebook.RulebookLoader.IsAlliedHealth(pair.profession)
+                    && registered.Contains((pair.kind, ExamProfession.OtherAlliedHealth))));
 
         Assert.DoesNotContain(registered, pair => pair == missing);
         Assert.Throws<OetLearner.Api.Services.Rulebook.RulebookNotFoundException>(() =>
             _loader.Load(missing.kind, missing.profession));
+    }
+
+    [Theory]
+    [InlineData(ExamProfession.Dietetics)]
+    [InlineData(ExamProfession.OccupationalTherapy)]
+    [InlineData(ExamProfession.Optometry)]
+    [InlineData(ExamProfession.Podiatry)]
+    [InlineData(ExamProfession.SpeechPathology)]
+    [InlineData(ExamProfession.Veterinary)]
+    public void Speaking_Allied_Health_Professions_Use_The_Allied_Health_Book(ExamProfession profession)
+    {
+        // Production 23 Sep 2026: these six had no Speaking book, so every
+        // Speaking grade for their learners threw RulebookNotFoundException.
+        var book = _loader.Load(RuleKind.Speaking, profession);
+        Assert.Same(_loader.Load(RuleKind.Speaking, ExamProfession.OtherAlliedHealth), book);
+        Assert.NotEmpty(book.Rules);
     }
 
     // Canonical successors of the retired R-id criticals (rulebook
