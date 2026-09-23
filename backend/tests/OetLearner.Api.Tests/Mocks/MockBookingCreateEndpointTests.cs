@@ -1,11 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Mocks;
+using OetLearner.Api.Services.Speaking;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Mocks;
@@ -151,6 +155,136 @@ public class MockBookingCreateEndpointTests : IClassFixture<TestWebApplicationFa
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("mock_attempt_not_found", json.RootElement.GetProperty("code").GetString());
+    }
+
+    // -- B9: tutor lifecycle --------------------------------------------------
+
+    [Fact]
+    public async Task SpeakingTutorBooking_WhenLiveKitUnavailable_Returns503BeforeDebit()
+    {
+        var userId = "mock-booking-create-rooms-down";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        using var factory = CreateLiveKitUnavailableFactory();
+        var bundleId = await SeedSpeakingBundleAsync(factory, "rooms-down");
+
+        using var client = CreateLearnerClient(factory, userId);
+        var response = await client.PostAsJsonAsync("/v1/mocks/bookings", new
+        {
+            bundleId,
+            scheduledStartAt = NextSlot(20),
+            timezone = "UTC",
+            consentToRecording = true,
+            tutorProfileId = "any",
+        });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("tutor_rooms_unavailable", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal("Live tutor sessions are temporarily unavailable.", json.RootElement.GetProperty("message").GetString());
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await db.MockBookings.AsNoTracking().AnyAsync(b => b.UserId == userId));
+        Assert.False(await db.PrivateSpeakingBookings.AsNoTracking().AnyAsync(b => b.LearnerUserId == userId));
+    }
+
+    [Fact]
+    public async Task PrivateSpeaking_WhenLiveKitUnavailable_ConfigSaysSoAndSlotsReturn503()
+    {
+        const string userId = "private-speaking-rooms-down";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        using var factory = CreateLiveKitUnavailableFactory();
+        using var client = CreateLearnerClient(factory, userId);
+
+        using (var config = JsonDocument.Parse(await client.GetStringAsync("/v1/private-speaking/config")))
+        {
+            Assert.False(config.RootElement.GetProperty("liveRoomsAvailable").GetBoolean());
+        }
+
+        var from = DateTime.UtcNow.Date.AddDays(3).ToString("yyyy-MM-dd");
+        var slots = await client.GetAsync($"/v1/private-speaking/tutors/any/slots?from={from}&to={from}");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, slots.StatusCode);
+        using var json = JsonDocument.Parse(await slots.Content.ReadAsStringAsync());
+        Assert.Equal("tutor_rooms_unavailable", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task SpeakingBookingWithoutTutor_NeverFallsBackToZoom()
+    {
+        var userId = "mock-booking-create-speaking-no-tutor";
+        await SeedLearnerWithGoalAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)));
+        var bundleId = await SeedSpeakingBundleAsync(_factory, "no-tutor");
+
+        using var client = CreateLearnerClient(userId);
+        var response = await client.PostAsJsonAsync("/v1/mocks/bookings", new
+        {
+            bundleId,
+            // 03:00 UTC on a far day: no tutor calendar is open, so auto-match finds nobody.
+            scheduledStartAt = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(22).AddHours(3), TimeSpan.Zero),
+            timezone = "UTC",
+            consentToRecording = true,
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("tutor_slot_unavailable", json.RootElement.GetProperty("code").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await db.MockBookings.AsNoTracking().AnyAsync(b => b.UserId == userId));
+        Assert.False(await db.BackgroundJobs.AsNoTracking().AnyAsync(j =>
+            j.Type == JobType.MockBookingZoomCreate
+            && db.MockBookings.Any(b => b.Id == j.ResourceId && b.UserId == userId)));
+    }
+
+    private WebApplicationFactory<Program> CreateLiveKitUnavailableFactory()
+        => _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<ILiveKitGateway>();
+            services.AddSingleton<ILiveKitGateway, LiveKitProviderUnavailable>();
+        }));
+
+    private static async Task<string> SeedSpeakingBundleAsync(WebApplicationFactory<Program> factory, string key)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var bundleId = $"mock-booking-speaking-bundle-{key}";
+        if (!await db.MockBundles.AnyAsync(b => b.Id == bundleId))
+        {
+            db.MockBundles.Add(new MockBundle
+            {
+                Id = bundleId,
+                Title = $"Speaking bundle {key}",
+                Slug = bundleId,
+                MockType = MockTypes.FinalReadiness,
+                SubtestCode = "speaking",
+                AppliesToAllProfessions = true,
+                Status = ContentStatus.Published,
+                EstimatedDurationMinutes = 20,
+                ReleasePolicy = MockReleasePolicies.AfterTeacherMarking,
+                SourceStatus = MockSourceStatuses.Original,
+                QualityStatus = MockQualityStatuses.Approved,
+                SourceProvenance = "B9 speaking booking test seed.",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        return bundleId;
+    }
+
+    private static HttpClient CreateLearnerClient(WebApplicationFactory<Program> factory, string userId)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
+        client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
+        return client;
     }
 
     // -- helpers -----------------------------------------------------------

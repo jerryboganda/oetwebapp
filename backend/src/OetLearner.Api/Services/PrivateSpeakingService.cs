@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -29,7 +30,10 @@ public sealed class PrivateSpeakingService(
     PaymentGatewayService paymentGateways,
     PlatformLinkService platformLinks,
     TimeProvider timeProvider,
-    ILogger<PrivateSpeakingService> logger)
+    ILogger<PrivateSpeakingService> logger,
+    // Optional so existing hand-built test instances keep compiling; DI always
+    // supplies the registered gateway. null is treated as "available".
+    ILiveKitGateway? liveKitGateway = null)
 {
     private const double CalibrationRedDriftThreshold100 = 40.0;
     private const string CalibrationOverrideAction = "tutor_calibration_override";
@@ -38,6 +42,106 @@ public sealed class PrivateSpeakingService(
     private const string PdfReminderOffsetsMinutesJson = "[1440, 60, 15]";
     private const string PdfCancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 24 hours before the scheduled start time. If you cancel 24 hours or less before the session, a full refund is not available.";
     private const string PdfBookingPolicyText = "You may reschedule your Speaking session any time before it starts, subject to an alternative slot currently available in the tutor calendar.";
+
+    // ── Live tutor room availability (B9) ───────────────────────────────
+
+    public const string AnyTutorId = "any";
+    public const string TutorRoomsUnavailableCode = "tutor_rooms_unavailable";
+    public const string TutorRoomsUnavailableMessage = "Live tutor sessions are temporarily unavailable.";
+
+    /// <summary>False when the registered gateway is <see cref="LiveKitProviderUnavailable"/>
+    /// (LiveKit not configured outside Development/Testing).</summary>
+    public bool LiveRoomsAvailable => liveKitGateway is not LiveKitProviderUnavailable;
+
+    /// <summary>Throws 503 <c>tutor_rooms_unavailable</c> so nobody pays for a room that cannot run.</summary>
+    public void EnsureLiveRoomsAvailable()
+    {
+        if (!LiveRoomsAvailable)
+            throw ApiException.ServiceUnavailable(TutorRoomsUnavailableCode, TutorRoomsUnavailableMessage);
+    }
+
+    /// <summary>null, blank or "any" means "Any available tutor".</summary>
+    public static bool IsAnyTutor([NotNullWhen(false)] string? tutorProfileId)
+        => string.IsNullOrWhiteSpace(tutorProfileId)
+            || string.Equals(tutorProfileId.Trim(), AnyTutorId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Learner slot listing. Blank = every active tutor's slots (per tutor);
+    /// "any" = one slot per start time across all active tutors, bookable with
+    /// tutorProfileId "any"; otherwise the named tutor's slots.
+    /// </summary>
+    public async Task<List<AvailableSlot>> GetLearnerSlotsAsync(
+        string? tutorProfileId, DateOnly fromDate, DateOnly toDate, CancellationToken ct)
+    {
+        EnsureLiveRoomsAvailable();
+        if (string.IsNullOrWhiteSpace(tutorProfileId))
+            return await GetAllAvailableSlotsAsync(fromDate, toDate, ct);
+        if (!IsAnyTutor(tutorProfileId))
+            return await GetAvailableSlotsAsync(tutorProfileId.Trim(), fromDate, toDate, ct);
+
+        var all = await GetAllAvailableSlotsAsync(fromDate, toDate, ct);
+        return all
+            .GroupBy(slot => (slot.StartTimeUtc, slot.DurationMinutes))
+            .Select(group => group.OrderBy(slot => slot.PriceMinorUnits).First() with
+            {
+                TutorProfileId = AnyTutorId,
+                TutorDisplayName = "Any available tutor",
+            })
+            .OrderBy(slot => slot.StartTimeUtc)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Picks the active tutor with the fewest upcoming bookings who has the
+    /// slot open (availability rules, overrides, existing bookings, buffers,
+    /// calibration guard and connected calendar all respected through
+    /// <see cref="GetAvailableSlotsAsync"/>). Ties break on tutor id.
+    /// <paramref name="exactDuration"/> true = the slot length must equal
+    /// <paramref name="durationMinutes"/> (private booking); false = at least
+    /// that long (mock bundle). Callers run this inside their booking transaction.
+    /// </summary>
+    public async Task<string?> FindLeastLoadedAvailableTutorAsync(
+        DateTimeOffset sessionStartUtc, int durationMinutes, CancellationToken ct, bool exactDuration = true)
+    {
+        var now = timeProvider.GetUtcNow();
+        var profiles = await db.PrivateSpeakingTutorProfiles
+            .Where(p => p.IsActive)
+            .ToListAsync(ct);
+        var load = await db.PrivateSpeakingBookings
+            .Where(b => b.SessionStartUtc >= now
+                && b.Status != PrivateSpeakingBookingStatus.Cancelled
+                && b.Status != PrivateSpeakingBookingStatus.Expired
+                && b.Status != PrivateSpeakingBookingStatus.Failed
+                && b.Status != PrivateSpeakingBookingStatus.Refunded)
+            .GroupBy(b => b.TutorProfileId)
+            .Select(g => new { TutorProfileId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TutorProfileId, x => x.Count, ct);
+
+        // ponytail: sequential per-tutor slot check; fine for a small tutor pool.
+        foreach (var profile in profiles
+            .OrderBy(p => load.GetValueOrDefault(p.Id))
+            .ThenBy(p => p.Id, StringComparer.Ordinal))
+        {
+            TimeZoneInfo tz;
+            try
+            {
+                tz = TimeZoneInfo.FindSystemTimeZoneById(profile.Timezone);
+            }
+            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+            {
+                continue;
+            }
+
+            // GetAvailableSlotsAsync applies the calibration guard itself.
+            var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(sessionStartUtc, tz).DateTime);
+            var slots = await GetAvailableSlotsAsync(profile.Id, localDate, localDate, ct);
+            if (slots.Any(slot => slot.StartTimeUtc == sessionStartUtc
+                    && (exactDuration ? slot.DurationMinutes == durationMinutes : slot.DurationMinutes >= durationMinutes)))
+                return profile.Id;
+        }
+
+        return null;
+    }
 
     // ── Config ──────────────────────────────────────────────────────────
 
@@ -533,7 +637,7 @@ public sealed class PrivateSpeakingService(
     /// Uses a serializable transaction to prevent double-booking and double-debiting.
     /// </summary>
     public async Task<BookingCheckoutResult> CreateBookingAndCheckoutAsync(
-        string learnerUserId, string tutorProfileId,
+        string learnerUserId, string? tutorProfileId,
         DateTimeOffset sessionStartUtc, int durationMinutes,
         string learnerTimezone, string? learnerNotes,
         string? professionTrack,
@@ -546,8 +650,11 @@ public sealed class PrivateSpeakingService(
         var config = await GetConfigAsync(ct);
         if (!config.IsEnabled)
             return BookingCheckoutResult.Fail("Private Speaking Sessions are currently disabled.");
+        // B9: refuse before any entitlement debit or payment order is created.
+        EnsureLiveRoomsAvailable();
         if (!IsUsableIdempotencyKey(idempotencyKey))
             return BookingCheckoutResult.Fail("A valid booking idempotency key is required.");
+        var autoAssignTutor = IsAnyTutor(tutorProfileId);
 
         // FINAL 2026-09-06: Live Tutor ("Book a tutor as your patient") is NOT
         // a general feature. Only candidates holding an eligible main
@@ -570,7 +677,7 @@ public sealed class PrivateSpeakingService(
         var idempotencyPrefix = BuildScopedIdempotencyPrefix(idempotencyScope);
         var scopedIdempotencyKey = BuildScopedIdempotencyKey(
             idempotencyScope,
-            tutorProfileId,
+            autoAssignTutor ? AnyTutorId : tutorProfileId!,
             sessionStartUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             durationMinutes.ToString(CultureInfo.InvariantCulture),
             learnerTimezone,
@@ -593,6 +700,15 @@ public sealed class PrivateSpeakingService(
                 ? BookingCheckoutResult.Fail("Previous booking attempt expired. Please try again with a new request.")
                 : new BookingCheckoutResult(true, null, existingBooking.Id,
                     existingBooking.StripeCheckoutSessionId, null, existingBooking.EntitlementConsumed);
+        }
+
+        if (autoAssignTutor)
+        {
+            // "Any available tutor": assign inside this serializable transaction so
+            // two concurrent "any" bookings cannot land on the same tutor slot.
+            tutorProfileId = await FindLeastLoadedAvailableTutorAsync(sessionStartUtc, durationMinutes, ct);
+            if (tutorProfileId is null)
+                return BookingCheckoutResult.Fail("No tutor is available at this time. Please select another slot.");
         }
 
         var profile = await db.PrivateSpeakingTutorProfiles.FindAsync([tutorProfileId], ct);
@@ -727,6 +843,8 @@ public sealed class PrivateSpeakingService(
 
             await AuditAsync(paidBooking.Id, learnerUserId, "learner", "booking_pending_payment",
                 $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, PayPal order: {intent.GatewayTransactionId}, Price minor units: {priceMinorUnits}", ct);
+            if (autoAssignTutor)
+                await AuditAsync(paidBooking.Id, "system", "system", "tutor_auto_assigned", $"Tutor: {tutorProfileId} (least-loaded available)", ct);
 
             // Calendar and notification jobs run on payment confirmation.
             // (ConfirmBookingPaymentAsync), exactly as the Stripe pending-payment path does.
@@ -790,6 +908,8 @@ public sealed class PrivateSpeakingService(
 
         await AuditAsync(booking.Id, learnerUserId, "learner", "booking_reserved",
             $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, Entitlement subscription: {subscription.Id}, Catalog price minor units: {priceMinorUnits}", ct);
+        if (autoAssignTutor)
+            await AuditAsync(booking.Id, "system", "system", "tutor_auto_assigned", $"Tutor: {tutorProfileId} (least-loaded available)", ct);
 
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: true);
         await db.SaveChangesAsync(ct);
