@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { LucideIcon } from 'lucide-react';
 import { FreeSampleCard } from '@/components/domain/free-sample-card';
 import { analytics } from '@/lib/analytics';
@@ -22,9 +23,20 @@ export interface FreeSampleLauncherProps {
   title: string;
   description: string;
   badgeLabel?: string;
-  usedLabel: string;
+  /** @deprecated Ignored: state copy comes from messages/{en,ar}/free-samples.json. Kept so older call sites still compile. */
+  usedLabel?: string;
   className?: string;
 }
+
+// Exact owner copy (retry addendum, 23 Sep 2026) lives in messages/{en,ar}/free-samples.json.
+const ALLOWANCE_KEY: Record<FreeSampleSubtest, string> = {
+  speaking: 'freeSample.speaking.allowance',
+  writing: 'freeSample.writing.allowance',
+};
+const RETRY_KEY: Record<FreeSampleSubtest, string> = {
+  speaking: 'freeSample.speaking.retryCta',
+  writing: 'freeSample.writing.retryCta',
+};
 
 export function FreeSampleLauncher({
   subtest,
@@ -33,9 +45,9 @@ export function FreeSampleLauncher({
   title,
   description,
   badgeLabel,
-  usedLabel,
   className = 'mb-4',
 }: FreeSampleLauncherProps) {
+  const t = useTranslations();
   const [option, setOption] = useState<FreeSampleOption | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -61,24 +73,42 @@ export function FreeSampleLauncher({
 
   if (!loaded || !option) return null;
 
-  const track = () => analytics.track('free_sample_click', { module: subtest, professionId: option.professionId });
+  const track = () => analytics.track('free_sample_click', { module: subtest, professionId: option.professionId, state: option.state });
+  const note = (text: string, tone: 'muted' | 'cta' = 'muted') => (
+    <span
+      className={`mt-1 block text-xs font-semibold ${tone === 'cta' ? 'text-violet-700 dark:text-violet-200' : 'text-muted'}`}
+      data-testid={`${testId}-status`}
+    >
+      {text}
+    </span>
+  );
 
-  if (option.state === 'used') {
-    return (
-      <FreeSampleCard
-        testId={testId}
-        icon={icon}
-        title={title}
-        description={description}
-        badgeLabel={badgeLabel}
-        disabled
-        footer={<span className="mt-1 block text-xs font-semibold text-muted">{usedLabel}</span>}
-        className={className}
-      />
-    );
+  let href: string | null = null;
+  let footer: ReturnType<typeof note>;
+  switch (option.state) {
+    case 'available':
+      href = option.route;
+      footer = note(t(ALLOWANCE_KEY[subtest]));
+      break;
+    case 'retry_available':
+      // Server route; Writing falls back to the revise page of the last graded letter.
+      href = option.route ?? (option.lastSubmissionId
+        ? `/writing/submissions/${encodeURIComponent(option.lastSubmissionId)}/revise`
+        : null);
+      footer = note(t(RETRY_KEY[subtest]), 'cta');
+      break;
+    case 'in_progress':
+      href = option.lastResultRoute ?? option.route;
+      footer = note(t('freeSample.inProgress'));
+      break;
+    case 'unavailable':
+      footer = note(t('freeSample.unavailable'));
+      break;
+    default:
+      // completed (and any unknown state): spent, visible but inert.
+      footer = note(t('freeSample.completed'));
   }
 
-  // Available or in_progress: one offer, one destination — click starts it.
   return (
     <FreeSampleCard
       testId={testId}
@@ -86,8 +116,10 @@ export function FreeSampleLauncher({
       title={title}
       description={description}
       badgeLabel={badgeLabel}
-      href={option.route}
-      onClick={track}
+      href={href ?? undefined}
+      onClick={href ? track : undefined}
+      disabled={!href}
+      footer={footer}
       className={className}
     />
   );

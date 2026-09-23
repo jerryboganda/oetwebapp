@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const { mockListLearnerCards, mockTrack } = vi.hoisted(() => ({
+const { mockListLearnerCards, mockGetFreeSpeakingCard, mockTrack } = vi.hoisted(() => ({
   mockListLearnerCards: vi.fn(),
+  mockGetFreeSpeakingCard: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -52,10 +53,10 @@ vi.mock('@/components/ui/filter-bar', () => ({
 
 vi.mock('@/lib/api/speaking-role-play-cards', () => ({
   listLearnerRolePlayCards: mockListLearnerCards,
-  // Added by the LiveKit rewrite (commit 74fdadd80) to show a Free Speaking
-  // Mock entry on this page; not under test here, so it just resolves to
-  // nothing — the component already handles that via .catch(() => null).
-  getFreeSpeakingCard: vi.fn().mockRejectedValue(new Error('not mocked in this test')),
+  // The page's Free featured card lookup; set per test in beforeEach so a
+  // mock reset can never leave it returning undefined (which crashed the
+  // effect and failed every test on origin/main).
+  getFreeSpeakingCard: mockGetFreeSpeakingCard,
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
@@ -88,6 +89,7 @@ const CARD = {
 describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetFreeSpeakingCard.mockResolvedValue(null);
     mockListLearnerCards.mockResolvedValue({
       rolePlayCards: [CARD],
       activeProfessionId: 'nursing',
@@ -101,7 +103,6 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
     render(<SpeakingTaskSelection />);
 
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledWith({
-      professionId: undefined,
       primaryCategory: undefined,
     }));
     expect(await screen.findByTestId('speaking-available-count')).toHaveTextContent('1');
@@ -121,11 +122,19 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
     expect(screen.queryByText('Difficulty')).not.toBeInTheDocument();
   });
 
-  it('applies profession + category only after Apply, then shows the new server count', async () => {
+  it('has no learner profession filter and never sends a professionId (owner, 23 Sep 2026)', async () => {
     render(<SpeakingTaskSelection />);
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('filter-profession-medicine'));
+    expect(screen.queryByText('Profession')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('filter-profession-medicine')).not.toBeInTheDocument();
+    expect(mockListLearnerCards.mock.calls[0][0]).not.toHaveProperty('professionId');
+  });
+
+  it('applies the category only after Apply, then shows the new server count', async () => {
+    render(<SpeakingTaskSelection />);
+    await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(1));
+
     fireEvent.click(screen.getByTestId('filter-category-First Visit'));
     // Draft only — no refetch before Apply.
     expect(mockListLearnerCards).toHaveBeenCalledTimes(1);
@@ -134,13 +143,12 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
       rolePlayCards: [],
       activeProfessionId: 'nursing',
       totalCount: 0,
-      appliedProfessionId: 'medicine',
+      appliedProfessionId: 'nursing',
       appliedPrimaryCategory: 'First Visit',
     });
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/ }));
 
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledWith({
-      professionId: 'medicine',
       primaryCategory: 'First Visit',
     }));
     expect(await screen.findByText('No cards available for these filters')).toBeInTheDocument();
@@ -150,13 +158,12 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
     render(<SpeakingTaskSelection />);
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByTestId('filter-profession-medicine'));
+    fireEvent.click(screen.getByTestId('filter-category-First Visit'));
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/ }));
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(2));
 
     fireEvent.click(screen.getByRole('button', { name: /Clear all filters/ }));
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledWith({
-      professionId: undefined,
       primaryCategory: undefined,
     }));
   });
@@ -212,10 +219,9 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
       rolePlayCards: [CARD],
       activeProfessionId: 'nursing',
       totalCount: 1,
-      appliedProfessionId: 'medicine',
+      appliedProfessionId: 'nursing',
       appliedPrimaryCategory: 'First Visit',
     });
-    fireEvent.click(screen.getByTestId('filter-profession-medicine'));
     fireEvent.click(screen.getByTestId('filter-category-First Visit'));
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/ }));
     await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(2));
