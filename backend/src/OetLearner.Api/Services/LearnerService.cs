@@ -3544,22 +3544,67 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId, expectedMockSessionId, cancellationToken);
-        if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
+
+        // Idempotent: any existing evaluation (newest first, since a retry
+        // adds a row) is the answer to a repeated submit.
+        var existing = await LatestSpeakingEvaluationAsync(attemptId, cancellationToken);
+        if (existing is not null)
         {
-            var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
-            if (existing is not null)
-            {
-                return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
-            }
-
-            await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
-
-            return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+            return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
         }
 
         await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
 
+        // Two concurrent submits both got here: only the caller whose atomic
+        // state flip wins queues an evaluation; the loser returns the
+        // winner's evaluation instead of creating a duplicate.
+        if (!await TryClaimSpeakingSubmissionAsync(db, attempt.Id, attempt.State, cancellationToken))
+        {
+            for (var poll = 0; poll < 20; poll++)
+            {
+                var winner = await LatestSpeakingEvaluationAsync(attemptId, cancellationToken);
+                if (winner is not null)
+                {
+                    return new { attemptId, evaluationId = (string?)winner.Id, state = ToAsyncState(winner.State) };
+                }
+                await Task.Delay(150, cancellationToken);
+            }
+            return new { attemptId, evaluationId = (string?)null, state = "queued" };
+        }
+
         return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+    }
+
+    /// <summary>
+    /// Compare-and-swap of the attempt from the state the caller read into
+    /// <see cref="AttemptState.Evaluating"/>, as one conditional UPDATE so two
+    /// racing submits cannot both win. The InMemory provider (tests only)
+    /// cannot run ExecuteUpdate and is single-threaded there, so it always
+    /// wins. ponytail: an attempt already stuck in Evaluating with no
+    /// evaluation lets both racers through; that is a crash leftover, not a
+    /// normal double-click.
+    /// </summary>
+    public static async Task<bool> TryClaimSpeakingSubmissionAsync(
+        LearnerDbContext db,
+        string attemptId,
+        AttemptState observedState,
+        CancellationToken cancellationToken)
+    {
+        if (db.Database.IsInMemory()) return true;
+
+        var claimed = await db.Attempts
+            .Where(x => x.Id == attemptId && x.State == observedState)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.State, AttemptState.Evaluating), cancellationToken);
+        return claimed == 1;
+    }
+
+    private async Task<Evaluation?> LatestSpeakingEvaluationAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        // Ordered in memory: SQLite cannot ORDER BY a DateTimeOffset.
+        var evaluations = await db.Evaluations.AsNoTracking()
+            .Where(x => x.AttemptId == attemptId)
+            .ToListAsync(cancellationToken);
+        return evaluations.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
     }
 
     /// <summary>
@@ -3721,7 +3766,10 @@ public partial class LearnerService(
             },
             statusReasonCode = evaluation.StatusReasonCode,
             statusMessage = evaluation.StatusMessage,
-            retryable = evaluation.Retryable,
+            // True only when "Try grading again" (POST /v1/speaking/attempts/
+            // {attemptId}/retry-evaluation) will be accepted; a queued row
+            // also carries Retryable=true but is not learner-retryable.
+            retryable = evaluation.State == AsyncState.Failed && evaluation.Retryable,
             retryAfterMs = evaluation.RetryAfterMs,
             // Wave 1 contract additions ↑
             generatedAt = evaluation.GeneratedAt,
