@@ -39,7 +39,9 @@ probe() {
   if [ -z "$RESULT" ]; then
     echo "--- probe server log ---"; cat "$SERVER_LOG"
     echo "--- logcat (Capacitor / chromium / permissions) ---"
-    adb logcat -d | grep -iE 'Capacitor|chromium|permission|MIC_|AndroidRuntime' | tail -n 80 || true
+    adb logcat -d | grep -E 'Capacitor|chromium|MIC_|AndroidRuntime|AudioRecord|AudioFlinger' | grep -v GoogleCertificates | tail -n 60 || true
+    echo "--- crash (tombstone) summary ---"
+    adb logcat -d | grep -E ' F DEBUG|Abort message|signal [0-9]+' | head -n 60 || true
   fi
 }
 

@@ -20,14 +20,23 @@
       fetch('/result/' + encodeURIComponent(line)).catch(() => {});
     }
 
+    // Progress beacons (ignored by the result check) so a hang or renderer crash
+    // shows which step it happened in.
+    function stage(name) {
+      fetch('/stage/' + name).catch(() => {});
+    }
+
     (async () => {
+      stage('loaded');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stage('stream-' + stream.getAudioTracks().length + '-tracks');
         const recorder = new MediaRecorder(stream);
         const chunks = [];
         recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
         const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
         recorder.start(250);
+        stage('recording');
         await new Promise((resolve) => setTimeout(resolve, 2000));
         recorder.stop();
         await stopped;
