@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SpeakingRoleCard } from './speaking-role-card';
+import { SpeakingRoleCard, roleCardPropsFrom } from './speaking-role-card';
 
 describe('SpeakingRoleCard', () => {
   it('renders the exam-style Profession/Setting/Background/Tasks card', () => {
@@ -47,5 +47,50 @@ describe('SpeakingRoleCard', () => {
     expect(screen.queryByText('Emotion')).not.toBeInTheDocument();
     expect(screen.queryByText('Goal')).not.toBeInTheDocument();
     expect(screen.queryByText('Topic')).not.toBeInTheDocument();
+  });
+
+  it('orders the rows Profession → Setting → Background → Tasks, with one task list', () => {
+    render(
+      <SpeakingRoleCard
+        role="Doctor"
+        setting="General practice"
+        patient="Mr Lee, 54"
+        background="Recent chest pain."
+        tasks={['Take a history', 'Explain the plan']}
+      />,
+    );
+
+    const labels = ['Profession', 'Setting', 'Background', 'Tasks'].map((label) => screen.getByText(label));
+    for (let index = 1; index < labels.length; index += 1) {
+      expect(labels[index - 1].compareDocumentPosition(labels[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(screen.getAllByRole('list')).toHaveLength(1);
+    expect(screen.getAllByText('Take a history')).toHaveLength(1);
+  });
+
+  it('maps a server card projection without emotion/goal/topic fields', () => {
+    const props = roleCardPropsFrom({
+      professionId: 'medicine',
+      candidateRole: '',
+      setting: 'Emergency department',
+      patientName: 'Ms Ortiz',
+      patientAge: '32',
+      background: 'Fell from a bike.',
+      tasks: ['Reassure'],
+      disclaimer: 'Practice estimate only.',
+      displayCardNumber: 7,
+    });
+
+    expect(props).toEqual({
+      role: 'Medicine',
+      setting: 'Emergency department',
+      patient: 'Ms Ortiz, 32',
+      background: 'Fell from a bike.',
+      tasks: ['Reassure'],
+      cardNumber: 7,
+      disclaimer: 'Practice estimate only.',
+    });
+    render(<SpeakingRoleCard {...props} />);
+    expect(screen.getByText('Role-Play Card No. 7')).toBeInTheDocument();
   });
 });

@@ -2,13 +2,16 @@ import { cn } from '@/lib/utils';
 
 /**
  * 22 Sep 2026 handoff (item 4): exam-style B&W card, matching the real OET
- * role-play card format — see OfficialCandidateCard for the reference this
- * mirrors. Field order is fixed: Profession, Setting, Background, Tasks.
- * Emotion/Goal/Topic and the standalone Patient/Task(brief) rows are gone —
- * patient context now reads as part of Background, the same way
- * OfficialCandidateCard already folds patientName/Age into its role row.
+ * role-play card format. Field order is fixed: Profession, Setting,
+ * Background, Tasks. Emotion/Goal/Topic and the standalone Patient/Task(brief)
+ * rows are gone — patient name/age read as part of Background.
+ *
+ * 23 Sep 2026: this is the ONE card for every Speaking surface (roleplay,
+ * prep, active, live tutor and the full exam, which replaced its separate
+ * OfficialCandidateCard with this). Candidate-facing fields only — never the
+ * roleplayer (patient) card.
  */
-interface SpeakingRoleCardProps {
+export interface SpeakingRoleCardProps {
   role: string;
   setting: string;
   patient: string;
@@ -30,10 +33,37 @@ function formatSeconds(seconds?: number) {
   return remainder === 0 ? `${minutes} min` : `${minutes}m ${remainder}s`;
 }
 
+/** Learner-safe card fields shared by the session and exam DTOs. */
+export interface LearnerRoleCardSource {
+  professionId: string;
+  candidateRole?: string | null;
+  setting: string;
+  patientName?: string | null;
+  patientAge?: string | null;
+  background: string;
+  tasks: string[];
+  disclaimer?: string | null;
+  displayCardNumber?: number | null;
+}
+
+/** Maps a server card projection onto the one exam-style card. */
+export function roleCardPropsFrom(card: LearnerRoleCardSource): SpeakingRoleCardProps {
+  const profession = card.professionId ? card.professionId.charAt(0).toUpperCase() + card.professionId.slice(1) : '';
+  return {
+    role: card.candidateRole?.trim() || profession,
+    setting: card.setting,
+    patient: [card.patientName, card.patientAge].filter(Boolean).join(', '),
+    background: card.background,
+    tasks: card.tasks ?? [],
+    cardNumber: card.displayCardNumber ?? undefined,
+    disclaimer: card.disclaimer ?? undefined,
+  };
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[100px_1fr] gap-3 px-4 py-3 sm:grid-cols-[130px_1fr]">
-      <div className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">{label}</div>
+      <div className="text-xs font-bold uppercase tracking-wide text-slate-600">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -57,7 +87,7 @@ export function SpeakingRoleCard({
   const cleanTasks = tasks.filter((t) => t && t.trim().length > 0);
 
   return (
-    <div className={cn('space-y-3', className)} role="region" aria-label="Role card details">
+    <div className={cn('space-y-3', className)} role="region" aria-label="Role card details" data-testid="speaking-role-card">
       {(prepLabel || roleplayLabel) && (
         <div className="flex flex-wrap gap-2">
           {prepLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-bold tracking-wide text-muted">PREP: {prepLabel}</span>}
