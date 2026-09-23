@@ -1259,6 +1259,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<OetLearner.Api.Services.ISpeakingPdfService, OetLearner.Api.Services.SpeakingPdfService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.IInvoicePdfService, OetLearner.Api.Services.InvoicePdfService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.IDocumentationPdfService, OetLearner.Api.Services.DocumentationPdfService>();
 // WS9 (SPK-007) — scanned/text PDF import → structured Speaking draft.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingContentImportService,
     OetLearner.Api.Services.Speaking.SpeakingContentImportService>();
@@ -2172,6 +2173,10 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderS
 // wins creation; this seeder only backfills missing canonical rows keyless so
 // admins can paste a key in /admin/ai-providers and the integration just works.
 builder.Services.AddHostedService<OetLearner.Api.Services.Ai.CoreAiProviderSeeder>();
+// Admin Documentation Center — idempotently seeds the 15 evidence-grade
+// specialist reports + Master Dossier, straight to Published (owner directive
+// 2026-09-23: nothing ships in Draft/Pending).
+builder.Services.AddHostedService<OetLearner.Api.Services.Seeding.DocumentationCenterSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.AiAssistantFeatureRouteSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Seeding.AntigravityGatewaySeedHostedService>();
 // UBAG OpenAI facade provider row (Code="ubag", OpenAiCompatible dialect).
@@ -3050,6 +3055,7 @@ app.MapPronunciationEndpoints();
 app.MapWritingCoachEndpoints();
 app.MapWritingPdfEndpoints();
 app.MapSpeakingPdfEndpoints();
+app.MapDocumentationCenterAdminEndpoints();
 app.MapMarketplaceEndpoints();
 
 // ── Sponsor Dashboard ──

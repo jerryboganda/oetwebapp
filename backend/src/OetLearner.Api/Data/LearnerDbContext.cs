@@ -1517,6 +1517,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W10 — provider benchmark runs that gate route switches.
         OnModelCreatingAiProviderBenchmarks(modelBuilder);
 
+        // Admin Documentation Center — evidence-grade platform documentation for
+        // immigration/innovation review. Partial class in
+        // LearnerDbContext.DocumentationCenter.cs.
+        OnModelCreatingDocumentationCenter(modelBuilder);
+
         // W11 — encrypted raw provider payloads with retention.
         OnModelCreatingAiRawResponses(modelBuilder);
 
@@ -1720,6 +1725,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiProviderBenchmarks.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiProviderBenchmarks(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.DocumentationCenter.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingDocumentationCenter(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.AiRawResponses.cs (partial).

@@ -1447,6 +1447,18 @@ export {
   updateAdminTaxonomy,
 } from './api/admin-platform';
 
+export {
+  downloadDocumentationEvidencePdf,
+  downloadDocumentationExportById,
+  downloadDocumentationMasterPdf,
+  downloadDocumentationModulePdf,
+  fetchDocumentationEvidence,
+  fetchDocumentationExports,
+  fetchDocumentationModuleDetail,
+  fetchDocumentationModules,
+} from './api/documentation-center';
+export type { DocumentationExportMode } from './api/documentation-center';
+
 export type {
   AdminBillingAddOnOet2026Fields,
   AdminBillingPlanOet2026Fields,

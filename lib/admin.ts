@@ -5,6 +5,10 @@ import {
   fetchAdminCohortAnalysis,
   fetchAdminAuditLogDetail,
   fetchAdminAuditLogs,
+  fetchDocumentationModules,
+  fetchDocumentationModuleDetail,
+  fetchDocumentationEvidence,
+  fetchDocumentationExports,
   fetchAdminBillingAddOns,
   fetchAdminBillingAddOnVersions,
   fetchAdminBillingCouponRedemptions,
@@ -441,6 +445,117 @@ export async function getAdminAuditLogDetailData(eventId: string): Promise<Admin
     resourceId: toStringValue(raw.resourceId),
     details: toStringValue(raw.details),
   };
+}
+
+export interface DocumentationModuleSummary {
+  code: string;
+  title: string;
+  description: string;
+  versionNumber: number;
+  status: string;
+  generatedAt: string | null;
+  approvedByName: string | null;
+  immigrationReady: boolean;
+}
+
+export async function getDocumentationModulesPageData(): Promise<DocumentationModuleSummary[]> {
+  const raw = await fetchDocumentationModules();
+  return asArray(raw).map((item) => ({
+    code: toStringValue(item.code),
+    title: toStringValue(item.title),
+    description: toStringValue(item.description),
+    versionNumber: toNumberValue(item.versionNumber),
+    status: toStringValue(item.status, 'NotYetAvailable'),
+    generatedAt: toNullableString(item.generatedAt),
+    approvedByName: toNullableString(item.approvedByName),
+    immigrationReady: toBooleanValue(item.immigrationReady),
+  }));
+}
+
+export interface DocumentationModuleDetail {
+  code: string;
+  title: string;
+  description: string;
+  versionNumber: number;
+  status: string;
+  sections: { heading: string; bodyMarkdown: string; isInternalOnly: boolean }[];
+  evidence: { evidenceId: string; evidenceType: string; description: string; sourceReference: string; isInternalOnly: boolean }[];
+  versions: { id: string; versionNumber: number; status: string; generatedAt: string; approvedByName: string | null; approvedAt: string | null }[];
+}
+
+export async function getDocumentationModuleDetailData(code: string): Promise<DocumentationModuleDetail> {
+  const raw = asRecord(await fetchDocumentationModuleDetail(code));
+  return {
+    code: toStringValue(raw.code),
+    title: toStringValue(raw.title),
+    description: toStringValue(raw.description),
+    versionNumber: toNumberValue(raw.versionNumber),
+    status: toStringValue(raw.status, 'NotYetAvailable'),
+    sections: asArray(raw.sections).map((s) => ({
+      heading: toStringValue(s.heading),
+      bodyMarkdown: toStringValue(s.bodyMarkdown),
+      isInternalOnly: toBooleanValue(s.isInternalOnly),
+    })),
+    evidence: asArray(raw.evidence).map((e) => ({
+      evidenceId: toStringValue(e.evidenceId),
+      evidenceType: toStringValue(e.evidenceType),
+      description: toStringValue(e.description),
+      sourceReference: toStringValue(e.sourceReference),
+      isInternalOnly: toBooleanValue(e.isInternalOnly),
+    })),
+    versions: asArray(raw.versions).map((v) => ({
+      id: toStringValue(v.id),
+      versionNumber: toNumberValue(v.versionNumber),
+      status: toStringValue(v.status),
+      generatedAt: toStringValue(v.generatedAt),
+      approvedByName: toNullableString(v.approvedByName),
+      approvedAt: toNullableString(v.approvedAt),
+    })),
+  };
+}
+
+export interface DocumentationEvidenceRow {
+  evidenceId: string;
+  moduleId: string;
+  evidenceType: string;
+  description: string;
+  sourceReference: string;
+  isInternalOnly: boolean;
+}
+
+export async function getDocumentationEvidencePageData(params?: { q?: string; moduleId?: string }): Promise<DocumentationEvidenceRow[]> {
+  const raw = await fetchDocumentationEvidence(params);
+  return asArray(raw).map((item) => ({
+    evidenceId: toStringValue(item.evidenceId),
+    moduleId: toStringValue(item.moduleId),
+    evidenceType: toStringValue(item.evidenceType),
+    description: toStringValue(item.description),
+    sourceReference: toStringValue(item.sourceReference),
+    isInternalOnly: toBooleanValue(item.isInternalOnly),
+  }));
+}
+
+export interface DocumentationExportRow {
+  id: string;
+  exportType: string;
+  mode: string;
+  moduleId: string | null;
+  generatedAt: string;
+  generatedByName: string;
+  sha256Hash: string;
+}
+
+export async function getDocumentationExportsPageData(): Promise<DocumentationExportRow[]> {
+  const raw = await fetchDocumentationExports();
+  return asArray(raw).map((item) => ({
+    id: toStringValue(item.id),
+    exportType: toStringValue(item.exportType),
+    mode: toStringValue(item.mode),
+    moduleId: toNullableString(item.moduleId),
+    generatedAt: toStringValue(item.generatedAt),
+    generatedByName: toStringValue(item.generatedByName),
+    sha256Hash: toStringValue(item.sha256Hash),
+  }));
 }
 
 export async function getAdminUsersPageData(params?: Parameters<typeof fetchAdminUsers>[0]): Promise<AdminUsersPageData> {
