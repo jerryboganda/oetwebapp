@@ -227,6 +227,15 @@ jobs:
       - name: Serve the probe page
         run: nohup python3 -m http.server 8080 --directory .github/android-smoke > /tmp/probe-server.log 2>&1 &
 
+      # Without KVM the emulator runs in pure software: the low-memory killer
+      # reaps process after process and the WebView renderer crashed before the
+      # probe's first line of JS ran (runs 35913066319 / 35921223203).
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Record through the app WebView on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -234,6 +243,9 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          ram-size: 4096M
+          heap-size: 512M
+          cores: 4
           # Audio stays ON (no -no-audio): the emulator must expose a microphone.
           emulator-options: -no-window -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
