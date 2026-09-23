@@ -323,8 +323,11 @@ jobs:
       - name: Assert a current Xcode toolchain
         run: |
           set -euo pipefail
-          xcodebuild -version
-          xcode_major="$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)"
+          # Capture once: piping xcodebuild into `head` under pipefail kills it with
+          # SIGPIPE (exit 134) whenever head closes the pipe first.
+          xcode_version="$(xcodebuild -version)"
+          echo "$xcode_version"
+          xcode_major="$(echo "$xcode_version" | awk 'NR==1 {print $2}' | cut -d. -f1)"
           if [ "${xcode_major:-0}" -lt 26 ]; then
             echo "::error::App Store Connect requires Xcode 26 or later since 2026-04-28; this runner has Xcode ${xcode_major:-unknown}." >&2
             exit 1
