@@ -73,7 +73,11 @@ public sealed class PrivateSpeakingEndpointProjectionTests
     {
         var mapper = typeof(PrivateSpeakingEndpoints).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException($"Mapper {methodName} was not found.");
-        return mapper.Invoke(null, [booking]) ?? throw new InvalidOperationException($"Mapper {methodName} returned null.");
+        // Extra mapper flags (e.g. liveRoomsAvailable) don't affect which fields are exposed.
+        var args = mapper.GetParameters()
+            .Select((p, i) => i == 0 ? booking : p.ParameterType == typeof(bool) ? (object)true : null)
+            .ToArray();
+        return mapper.Invoke(null, args) ?? throw new InvalidOperationException($"Mapper {methodName} returned null.");
     }
 
     private static string[] ProjectionPropertyNames(object projection)

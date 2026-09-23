@@ -122,7 +122,10 @@ export default function SpeakingSessionRecordingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, sessionId]);
+    // Load once per session id: a re-run would flip `loading` and unmount the
+    // recorder mid-take, discarding the kept audio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // Server-authoritative clock: re-sync while speaking.
   useEffect(() => {

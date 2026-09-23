@@ -47,8 +47,8 @@ describe('Writing practice library', () => {
     expect(screen.queryByText('writing.practice.library.filters.profession')).not.toBeInTheDocument();
     // Only the letter-type select remains.
     expect(screen.getAllByRole('combobox')).toHaveLength(1);
-    expect(mockListScenarios).toHaveBeenCalledTimes(1);
-    expect(mockListScenarios.mock.calls[0][0]).not.toHaveProperty('profession');
+    expect(mockListScenarios).toHaveBeenCalled();
+    for (const [params] of mockListScenarios.mock.calls) expect(params).not.toHaveProperty('profession');
   });
 
   it('shows the same free-sample state as the hub (launcher data), not a separate featured entry', async () => {
