@@ -97,6 +97,14 @@ for (const paper of PAPERS) {
       const consoleErrors: string[] = [];
       page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
       const unexpected404s: string[] = [];
+      // Every viewport signs in as the same test learner. An attempt left in progress would be RESUMED by the next
+      // viewport (straight into A2, no readiness probe), so the finally-block below submits this test's attempt.
+      let attemptUrl: string | null = null;
+      let authHeader: string | undefined;
+      page.on('request', (req) => {
+        const m = req.url().match(/^(.*\/v1\/listening\/v2\/attempts\/[^/?#]+)/);
+        if (m && req.headers()['authorization']) { attemptUrl = m[1]; authHeader = req.headers()['authorization']; }
+      });
       page.on('response', (r) => {
         if (r.url().includes('/advance-section')) {
           r.text().then((body) => console.log(`[diag] POST .../advance-section -> ${r.status()}: ${body.slice(0, 500)}`)).catch(() => {});
@@ -109,7 +117,20 @@ for (const paper of PAPERS) {
         }
       });
 
+      try {
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
+
+      // A leftover in-progress attempt (e.g. from an aborted earlier run) is resumed with no readiness probe:
+      // submit it and reload so this test always starts from a fresh attempt.
+      const probe = page.getByRole('button', { name: /play audio probe/i });
+      if (!(await probe.isVisible({ timeout: 15_000 }).catch(() => false))) {
+        await expect.poll(() => attemptUrl, { timeout: 30_000, message: 'no probe and no resumed attempt seen' }).not.toBeNull();
+        const res = await context.request.post(`${attemptUrl}/submit`, { headers: { authorization: authHeader! }, data: {} });
+        console.log(`[cleanup] submitted leftover ${attemptUrl} -> ${res.status()}`);
+        attemptUrl = null;
+        await page.reload({ waitUntil: 'load' });
+        await page.waitForTimeout(1000);
+      }
 
       // Required pre-flight: "Start exam" stays disabled until the candidate runs the audio-readiness probe
       // (components/domain/listening/TechReadinessCheck.tsx). It also prebuffers every section's audio
@@ -186,8 +207,13 @@ for (const paper of PAPERS) {
       const badConsole = consoleErrors.filter((e) => !/favicon|ResizeObserver|Failed to load resource/i.test(e));
       expect(badConsole, `unexpected console errors: ${badConsole.join(' | ')}`).toEqual([]);
       expect(unexpected404s, `unexpected 404s: ${unexpected404s.join(' | ')}`).toEqual([]);
-
-      await context.close();
+      } finally {
+        if (attemptUrl && authHeader) {
+          const res = await context.request.post(`${attemptUrl}/submit`, { headers: { authorization: authHeader }, data: {} }).catch(() => null);
+          console.log(`[cleanup] submit ${attemptUrl} -> ${res?.status() ?? 'error'}`);
+        }
+        await context.close();
+      }
     });
   }
 }
