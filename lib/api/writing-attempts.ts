@@ -77,9 +77,6 @@ function mapSpeakingTask(item: ApiRecord): SpeakingTask {
     duration: minutesToLabel(item.estimatedDurationMinutes),
     prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
     roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
-    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
-    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
-    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
     criteriaFocusTags,
     disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
   };
