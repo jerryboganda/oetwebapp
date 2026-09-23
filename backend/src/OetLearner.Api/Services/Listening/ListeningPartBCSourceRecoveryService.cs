@@ -83,7 +83,45 @@ public interface IListeningPartBCSourceRecoveryService
     /// independent: one failing never aborts the sweep.</summary>
     Task<ListeningPartBCSweepReport> RecoverAllAsync(
         bool publishedOnly, bool dryRun, string adminId, CancellationToken ct);
+
+    /// <summary>Find every published Part B/C stem/option carrying a stray
+    /// watermark letter and re-derive it from a fresh extraction of the printed
+    /// paper. Writes ONLY the items whose <c>paperId:number</c> key is in
+    /// <paramref name="approvedKeys"/>; null or empty = dry run.</summary>
+    Task<ListeningPartBCWatermarkReport> RepairWatermarkResidueAsync(
+        IReadOnlyCollection<string>? approvedKeys, string adminId, CancellationToken ct);
 }
+
+/// <summary>One stored Part B/C field (stem or option) of an item with watermark residue.</summary>
+public sealed record ListeningPartBCWatermarkField(string Field, string Current, string? Proposed);
+
+/// <summary>
+/// One Part B/C item carrying a stray watermark letter. <c>verified</c>: the
+/// fresh re-read of the printed paper equals the stored text with the stray
+/// letters removed, in every field. <c>needs-review</c>: the re-read differs
+/// in some other way (e.g. a stray "A" moved an option boundary), so a human
+/// must compare. <c>no-source</c>: the paper text could not re-derive the item.
+/// </summary>
+public sealed record ListeningPartBCWatermarkItem(
+    string Key,
+    string PaperId,
+    string PaperTitle,
+    int Number,
+    string Status,
+    IReadOnlyList<ListeningPartBCWatermarkField> Fields,
+    string? Detail);
+
+public sealed record ListeningPartBCWatermarkReport(
+    bool DryRun,
+    int PapersScanned,
+    int PapersAffected,
+    int ItemsWithResidue,
+    int Verified,
+    int NeedsReview,
+    int NoSource,
+    int Applied,
+    IReadOnlyList<ListeningPartBCWatermarkItem> Items,
+    IReadOnlyList<string> Failures);
 
 /// <summary>Fleet-wide result for the whole Listening catalogue.</summary>
 public sealed record ListeningPartBCSweepReport(
@@ -563,6 +601,249 @@ public sealed class ListeningPartBCSourceRecoveryService(
         }
 
         return report;
+    }
+
+    // -- Watermark residue repair ---------------------------------------------
+    // The August recovery sweeps parsed text from the word-box extractor before
+    // it filtered watermark glyphs, so lone S/A/M/P/L/E/B/N/K letters were
+    // written into stems and options that are otherwise perfectly "usable" --
+    // RecoverPaperAsync never looks at them again. This pass targets exactly
+    // those items, in BOTH stores (relational rows and the authored JSON the
+    // learner projection prefers). Option keys, correctness, numbering and
+    // scoring are never touched.
+
+    public async Task<ListeningPartBCWatermarkReport> RepairWatermarkResidueAsync(
+        IReadOnlyCollection<string>? approvedKeys, string adminId, CancellationToken ct)
+    {
+        var approved = (approvedKeys ?? []).ToHashSet(StringComparer.Ordinal);
+        var dryRun = approved.Count == 0;
+
+        var paperIds = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.SubtestCode == "listening" && p.Status == ContentStatus.Published)
+            .OrderBy(p => p.Title)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+        var items = new List<ListeningPartBCWatermarkItem>();
+        var failures = new List<string>();
+        var affected = 0;
+        var applied = 0;
+        foreach (var paperId in paperIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var (paperItems, paperApplied) = await RepairPaperWatermarkAsync(paperId, approved, adminId, ct);
+                if (paperItems.Count > 0) affected++;
+                items.AddRange(paperItems);
+                applied += paperApplied;
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{paperId}: {ex.Message}");
+            }
+            finally
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        return new ListeningPartBCWatermarkReport(
+            DryRun: dryRun,
+            PapersScanned: paperIds.Count,
+            PapersAffected: affected,
+            ItemsWithResidue: items.Count,
+            Verified: items.Count(i => i.Status == "verified"),
+            NeedsReview: items.Count(i => i.Status == "needs-review"),
+            NoSource: items.Count(i => i.Status == "no-source"),
+            Applied: applied,
+            Items: items,
+            Failures: failures);
+    }
+
+    private async Task<(List<ListeningPartBCWatermarkItem> Items, int Applied)> RepairPaperWatermarkAsync(
+        string paperId, HashSet<string> approved, string adminId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.Include(p => p.Assets).FirstAsync(p => p.Id == paperId, ct);
+
+        var questions = await db.ListeningQuestions
+            .Where(q => q.PaperId == paperId
+                && q.QuestionNumber >= ListeningPartBCSourceParser.FirstNumber
+                && q.QuestionNumber <= ListeningPartBCSourceParser.LastNumber)
+            .ToListAsync(ct);
+        var questionIds = questions.Select(q => q.Id).ToList();
+        var optionsByQuestion = (await db.ListeningQuestionOptions
+                .Where(o => questionIds.Contains(o.ListeningQuestionId))
+                .ToListAsync(ct))
+            .GroupBy(o => o.ListeningQuestionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(o => o.OptionKey.Trim().ToUpperInvariant(), StringComparer.Ordinal)
+                    .ToDictionary(k => k.Key, k => k.First(), StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
+        // Every stored field per printed number, from both stores.
+        var fields = new Dictionary<int, List<(string Field, string Current)>>();
+        void Add(int number, string field, string? value)
+        {
+            if (value is null) return;
+            if (!fields.TryGetValue(number, out var list)) fields[number] = list = [];
+            list.Add((field, value));
+        }
+        foreach (var question in questions)
+        {
+            Add(question.QuestionNumber, "stem", question.Stem);
+            var options = optionsByQuestion.GetValueOrDefault(question.Id);
+            foreach (var key in new[] { "A", "B", "C" })
+                Add(question.QuestionNumber, $"option{key}", options?.GetValueOrDefault(key)?.Text);
+        }
+        foreach (var (number, item) in ReadAuthoredPartBC(paper.ExtractedTextJson))
+        {
+            Add(number, "json.stem", JsonString(item["stem"]) ?? JsonString(item["text"]));
+            if (item["options"] is JsonArray optionArray)
+                for (var index = 0; index < Math.Min(3, optionArray.Count); index++)
+                    Add(number, "json.option" + (char)('A' + index), JsonString(optionArray[index]));
+        }
+
+        bool HasResidue(int number) => fields[number].Any(f => ListeningPartBCSourceParser.HasWatermarkResidue(f.Current));
+        if (!fields.Keys.Any(HasResidue)) return ([], 0);
+
+        // The cached text is the polluted pre-fix extraction: always re-read the
+        // PDFs with the watermark-filtering extractor before comparing.
+        if (textExtraction is not null)
+        {
+            try { await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true); }
+            catch (Exception) { /* reported per item as no-source below */ }
+        }
+        // Compare EVERY Part B/C item on an affected paper, not only the ones
+        // with a visible stray letter: when the stray letter was an "A" the
+        // parser took it as the option marker, so the stem swallowed the real
+        // "A <words>" (which reads as a sentence-initial article) and option A
+        // lost its opening words -- no lone letter is left to detect.
+        var numbers = fields.Keys.ToHashSet();
+        var parsed = ListeningPartBCSourceParser.Parse(
+            ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), numbers), numbers);
+        var sourceByNumber = parsed.Items.ToDictionary(item => item.Number);
+        var skipByNumber = parsed.Skipped.ToDictionary(skip => skip.Number);
+
+        var report = new List<ListeningPartBCWatermarkItem>();
+        var toApply = new List<ListeningPartBCSourceItem>();
+        foreach (var number in numbers.Order())
+        {
+            var key = $"{paper.Id}:{number}";
+            var source = sourceByNumber.GetValueOrDefault(number);
+            if (source is null)
+            {
+                if (!HasResidue(number)) continue;
+                report.Add(new(key, paper.Id, paper.Title, number, "no-source",
+                    fields[number]
+                        .Where(f => ListeningPartBCSourceParser.HasWatermarkResidue(f.Current))
+                        .Select(f => new ListeningPartBCWatermarkField(f.Field, f.Current, null))
+                        .ToList(),
+                    skipByNumber.GetValueOrDefault(number)?.Detail
+                        ?? $"Q{number} could not be re-derived from the question-paper text."));
+                continue;
+            }
+
+            var changed = fields[number]
+                .Select(f => new ListeningPartBCWatermarkField(f.Field, f.Current, SourceValue(source, f.Field)))
+                .Where(f => Normalise(f.Current) != Normalise(f.Proposed))
+                .ToList();
+            if (changed.Count == 0) continue;
+
+            var status = changed.All(f => Normalise(ListeningPartBCSourceParser.StripWatermarkResidue(f.Current)) == Normalise(f.Proposed))
+                ? "verified"
+                : "needs-review";
+            report.Add(new(key, paper.Id, paper.Title, number, status, changed, null));
+
+            if (approved.Contains(key)) toApply.Add(source);
+        }
+
+        if (toApply.Count == 0) return (report, 0);
+
+        foreach (var source in toApply)
+        {
+            var question = questions.FirstOrDefault(q => q.QuestionNumber == source.Number);
+            if (question is null) continue;
+            question.Stem = source.Stem;
+            var options = optionsByQuestion.GetValueOrDefault(question.Id);
+            foreach (var (key, text) in new[] { ("A", source.OptionA), ("B", source.OptionB), ("C", source.OptionC) })
+            {
+                if (options?.GetValueOrDefault(key) is not { } option || option.Text == text) continue;
+                option.Text = text;
+                option.Version += 1;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(paper.ExtractedTextJson)
+            && JsonNode.Parse(paper.ExtractedTextJson) is JsonObject root
+            && root[QuestionsKey] is JsonArray authored)
+        {
+            var byNumber = toApply.ToDictionary(item => item.Number);
+            foreach (var entry in authored)
+            {
+                if (entry is not JsonObject item || !TryReadNumber(item, out var number)) continue;
+                if (!byNumber.TryGetValue(number, out var source)) continue;
+                item["stem"] = source.Stem;
+                // `text` is the legacy alias the learner projection also reads.
+                if (item.ContainsKey("text")) item["text"] = source.Stem;
+                if (item["options"] is JsonArray optionArray)
+                    for (var index = 0; index < Math.Min(3, optionArray.Count); index++)
+                        optionArray[index] = source.Options[index];
+            }
+            paper.ExtractedTextJson = root.ToJsonString();
+        }
+
+        var appliedNumbers = toApply.Select(item => item.Number).ToHashSet();
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorAuthAccountId = await db.ResolveActorAuthAccountIdAsync(adminId, ct),
+            ActorName = adminId,
+            Action = "ListeningPartBCWatermarkResidueRepaired",
+            ResourceType = "ContentPaper",
+            ResourceId = paper.Id,
+            // The full before/after for every applied item: this IS the rollback record.
+            Details = JsonSerializer.Serialize(new
+            {
+                numbers = appliedNumbers.Order().ToList(),
+                items = report.Where(item => appliedNumbers.Contains(item.Number)).ToList(),
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+        return (report, toApply.Count);
+    }
+
+    private static string SourceValue(ListeningPartBCSourceItem source, string field) => field switch
+    {
+        "stem" or "json.stem" => source.Stem,
+        "optionA" or "json.optionA" => source.OptionA,
+        "optionB" or "json.optionB" => source.OptionB,
+        _ => source.OptionC,
+    };
+
+    private static string Normalise(string? text) =>
+        string.Join(' ', (text ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static string? JsonString(JsonNode? node) =>
+        node?.GetValueKind() == JsonValueKind.String ? node.GetValue<string>() : null;
+
+    private static IEnumerable<(int Number, JsonObject Item)> ReadAuthoredPartBC(string? extractedTextJson)
+    {
+        if (string.IsNullOrWhiteSpace(extractedTextJson)) yield break;
+        JsonNode? root;
+        try { root = JsonNode.Parse(extractedTextJson); }
+        catch (JsonException) { yield break; }
+        if ((root as JsonObject)?[QuestionsKey] is not JsonArray authored) yield break;
+        foreach (var entry in authored)
+        {
+            if (entry is JsonObject item && TryReadNumber(item, out var number)
+                && number is >= ListeningPartBCSourceParser.FirstNumber and <= ListeningPartBCSourceParser.LastNumber)
+                yield return (number, item);
+        }
     }
 
     private static bool HasUsableOptionsJson(JsonArray? options)

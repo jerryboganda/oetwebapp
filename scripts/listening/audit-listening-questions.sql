@@ -79,3 +79,38 @@ FROM "ListeningQuestions" q
 JOIN "ContentPapers" p ON p."Id" = q."PaperId"
 WHERE TRIM(q."Stem") = ''
 ORDER BY p."Title", q."QuestionNumber";
+
+-- 8) Stray watermark letters. The question papers' diagonal "SAMPLE"/"BLANK"
+--    watermark used to be extracted glyph by glyph into nearby lines, leaving
+--    lone capitals in Part B/C stems and options. This is a COARSE net (it also
+--    lists legit "vitamin A", "Plan B" ...); the authoritative, allow-listed
+--    check is GET /v1/admin/listening/part-bc/watermark-audit. Should be 0
+--    rows (after eyeballing legit labels) once the repair is applied.
+\echo '=== 8a) Lone watermark letters in relational Part B/C stems and options ==='
+SELECT p."Title" AS paper, q."QuestionNumber" AS number, 'stem' AS field, q."Stem" AS text
+FROM "ListeningQuestions" q
+JOIN "ContentPapers" p ON p."Id" = q."PaperId"
+WHERE p."Status" = 4 /* ContentStatus.Published */ AND q."QuestionNumber" BETWEEN 25 AND 42
+  AND q."Stem" ~ '(^|\s)[SMPLEBNK](\s|$)|[a-z,;]\s+A\s+[a-z]'
+UNION ALL
+SELECT p."Title", q."QuestionNumber", 'option' || o."OptionKey", o."Text"
+FROM "ListeningQuestionOptions" o
+JOIN "ListeningQuestions" q ON q."Id" = o."ListeningQuestionId"
+JOIN "ContentPapers" p ON p."Id" = q."PaperId"
+WHERE p."Status" = 4 /* ContentStatus.Published */ AND q."QuestionNumber" BETWEEN 25 AND 42
+  AND o."Text" ~ '\s[SMPLEBNK](\s|$)|[a-z,;]\s+A\s+[a-z]'
+ORDER BY 1, 2, 3;
+
+\echo '=== 8b) Same check on the authored JSON projection (what learners are served) ==='
+SELECT p."Title" AS paper, (item->>'number')::int AS number,
+       COALESCE(item->>'stem', item->>'text') AS stem, item->'options' AS options
+FROM "ContentPapers" p
+CROSS JOIN LATERAL jsonb_array_elements(
+  CASE WHEN p."ExtractedTextJson" LIKE '{%'
+        AND jsonb_typeof(p."ExtractedTextJson"::jsonb -> 'listeningQuestions') = 'array'
+       THEN p."ExtractedTextJson"::jsonb -> 'listeningQuestions' ELSE '[]'::jsonb END) AS item
+WHERE p."SubtestCode" = 'listening' AND p."Status" = 4 /* ContentStatus.Published */
+  AND (item->>'number') ~ '^\d+$' AND (item->>'number')::int BETWEEN 25 AND 42
+  AND (COALESCE(item->>'stem', item->>'text') ~ '(^|\s)[SMPLEBNK](\s|$)|[a-z,;]\s+A\s+[a-z]'
+       OR (item->'options')::text ~ '\s[SMPLEBNK](\s|")|[a-z,;]\s+A\s+[a-z]')
+ORDER BY 1, 2;

@@ -1498,6 +1498,16 @@ public sealed class ListeningAuthoringService(
                     "listening_part_bc_source_content_required",
                     $"Q{question.Number} requires the exact source answer choices A, B and C before it can be saved.");
             }
+
+            var residue = ListeningPartBCSourceParser.FindWatermarkResidue(question.Stem)
+                .Concat(options.Take(3).SelectMany(ListeningPartBCSourceParser.FindWatermarkResidue))
+                .ToList();
+            if (residue.Count > 0)
+            {
+                throw ApiException.Validation(
+                    "listening_part_bc_stray_token",
+                    $"Q{question.Number} contains a stray single letter ({string.Join(", ", residue)}) left by the source PDF's watermark. Remove it so the text matches the printed paper.");
+            }
         }
     }
 

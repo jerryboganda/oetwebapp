@@ -436,6 +436,17 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Part B/C item requires the exact source question stem above its options; {invalidPartBCStems} item(s) contain a blank, PDF sentinel, generic fallback, or section heading."));
         }
 
+        var strayTokenItems = rows
+            .Where(row => (IsPartB(row.PartCode) || row.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2)
+                && (ListeningPartBCSourceParser.HasWatermarkResidue(row.Stem)
+                    || row.Options.Any(option => ListeningPartBCSourceParser.HasWatermarkResidue(option.Text))))
+            .Select(row => row.QuestionNumber)
+            .ToList();
+        if (strayTokenItems.Count > 0)
+        {
+            warnings.Add(StrayTokenWarning(strayTokenItems));
+        }
+
         var blankAnswers = rows.Count(row => string.IsNullOrWhiteSpace(ReadJsonString(row.CorrectAnswerJson)));
         if (blankAnswers > 0)
         {
@@ -892,6 +903,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var wrongOptionsInvalidDistractorCategory = 0;
         var unpublishedStatuses = new List<int>();
         var invalidPartBCStems = 0;
+        var strayTokenItems = new List<int>();
 
         foreach (var q in questions)
         {
@@ -923,6 +935,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 && !ListeningLearnerService.IsUsablePartBCStem(effectiveStem))
             {
                 invalidPartBCStems++;
+            }
+            if ((partCode.StartsWith("B", StringComparison.Ordinal)
+                    || partCode.StartsWith("C", StringComparison.Ordinal))
+                && (ListeningPartBCSourceParser.HasWatermarkResidue(effectiveStem)
+                    || ReadOptions(q).Any(ListeningPartBCSourceParser.HasWatermarkResidue)))
+            {
+                strayTokenItems.Add(questionNumber ?? 0);
             }
             if (string.IsNullOrWhiteSpace(ReadString(q, "correctAnswer"))) blankAnswers++;
             var skillTag = ReadString(q, "skillTag");
@@ -1075,6 +1094,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_part_bc_stems", "error",
                 $"Every Part B/C item requires the exact source question stem above its options; {invalidPartBCStems} item(s) contain a blank, PDF sentinel, generic fallback, or section heading."));
+        }
+        if (strayTokenItems.Count > 0)
+        {
+            warnings.Add(StrayTokenWarning(strayTokenItems));
         }
 
         if (blankAnswers > 0)
@@ -1365,6 +1388,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             return null;
         }
     }
+
+    /// <summary>A lone watermark letter ("SAMPLE"/"BLANK" glyph) left in a Part B/C
+    /// stem or option by PDF extraction — see ListeningPartBCSourceParser.</summary>
+    private static ListeningValidationIssue StrayTokenWarning(IReadOnlyCollection<int> questionNumbers) =>
+        new("listening_part_bc_stray_token", "error",
+            $"{questionNumbers.Count} Part B/C item(s) contain a stray single letter left by the source PDF's watermark (Q{string.Join(", Q", questionNumbers.Order())}). Remove it so the text matches the printed paper.");
 
     private static IReadOnlyList<string> ReadOptions(Dictionary<string, object?> question)
     {
