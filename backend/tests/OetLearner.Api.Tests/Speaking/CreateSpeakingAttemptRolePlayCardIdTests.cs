@@ -6,7 +6,6 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
-using OetLearner.Api.Tests.FreeSamples;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -29,9 +28,12 @@ namespace OetLearner.Api.Tests.Speaking;
 /// 22 Sep 2026 live-voice rewrite: CreateSpeakingAttemptAsync now also runs
 /// EnsureLegacyFreeSpeakingAccessAsync FIRST — the legacy record-upload-grade
 /// pipeline these tests exercise is reserved for the designated free Speaking
-/// sample. Every seeded card below is made the free sample via an explicit
+/// card. Every seeded card below is made the designated card via an explicit
 /// FreeSampleDesignation (not auto-pick, to avoid depending on seed-call
 /// ordering) so attempt creation reaches the id-resolution logic under test.
+/// Since the free sample retry addendum (23 Sep 2026) NEW free-sample uses run
+/// on the session engine, so these learners reach the recorder through the
+/// free-plan designated card (free-samples flag off) instead.
 /// </summary>
 public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
 {
@@ -77,9 +79,8 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
         _learnerService = new LearnerService(
             _db, fileStorage, pdfTextExtractor, platformLinks,
             notifications: null!, walletService, paymentGateways,
-            disputeService: null!, billingOptions, storageOptions);
-
-        await FreeSampleServiceTests.EnableAsync(_db);
+            disputeService: null!, billingOptions, storageOptions,
+            freeTierContentResolver: new FreeTierContentResolver(_db));
     }
 
     public Task DisposeAsync()
@@ -219,6 +220,7 @@ public sealed class CreateSpeakingAttemptRolePlayCardIdTests : IAsyncLifetime
             DisplayName = "Test Learner",
             Email = $"{userId}@example.test",
             ActiveProfessionId = activeProfessionId,
+            CurrentPlanId = "free",
             AccountStatus = "active",
             CreatedAt = now,
             LastActiveAt = now,
