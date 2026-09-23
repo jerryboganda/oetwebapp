@@ -200,15 +200,12 @@ Scoring rules:
 
         var userInput = BuildUserInput(card, script, transcript, cardTypeRow);
 
-        // Free Mocks: is this attempt the learner's ONE free AI-graded sample?
-        // Derived server-side from the claim bound to the attempt — never from
-        // the request — so only that grading call skips the plan/token gate.
-        var freeSample = await new OetLearner.Api.Services.FreeSamples.FreeSampleService(db)
-            .IsFreeAttemptAsync(
-                session.UserId,
-                OetLearner.Api.Services.FreeSamples.FreeSampleService.Speaking,
-                session.AttemptId,
-                ct);
+        // Free Mocks: is this session a use of the learner's free sample?
+        // Derived server-side from the bound use — the session itself (shared
+        // engine) or its legacy recorder attempt (attempt→session bridge) —
+        // never from the request, so only that grading call skips the
+        // plan/token gate (kill switches still win in AiQuotaService).
+        var freeSample = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct);
 
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
         AiGatewayResult aiResult;
