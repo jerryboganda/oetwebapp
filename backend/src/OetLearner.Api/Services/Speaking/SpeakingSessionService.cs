@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -30,7 +32,10 @@ public sealed class SpeakingSessionService(
     IEffectiveEntitlementResolver? entitlementResolver = null,
     SpeakingSimulationV11PersonaService? personaService = null,
     OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
-    ISpeakingCanonicalAssessmentService? canonical = null)
+    ISpeakingCanonicalAssessmentService? canonical = null,
+    SpeakingComplianceService? compliance = null,
+    LiveVoiceProviderProbeState? liveVoiceProbe = null,
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -160,7 +165,9 @@ public sealed class SpeakingSessionService(
             RolePlayEndsAt: rolePlayEndsAt,
             ConsentVersion: consentVersion,
             Card: ProjectLearnerCard(card),
-            IsFreeSample: isFreeSample);
+            IsFreeSample: isFreeSample,
+            ConsentAccepted: false,
+            LiveVoiceAvailable: IsLiveVoiceAvailable());
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -298,8 +305,13 @@ public sealed class SpeakingSessionService(
             ConsentVersion: session.ConsentVersion,
             Card: ProjectLearnerCard(card),
             FeedbackMessage: feedbackMessage,
-            IsFreeSample: await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct));
+            IsFreeSample: await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct),
+            ConsentAccepted: session.ConsentAcceptedAt is not null,
+            LiveVoiceAvailable: IsLiveVoiceAvailable());
     }
+
+    private bool IsLiveVoiceAvailable()
+        => liveVoiceProbe?.IsLiveVoiceAvailable(liveVoiceOptions?.Value) == true;
 
     public async Task<SpeakingSessionDetail> StartRolePlayAsync(
         string userId,
@@ -328,10 +340,9 @@ public sealed class SpeakingSessionService(
         session.State = SpeakingSessionState.Active;
         session.RolePlayStartedAt = now;
         session.UpdatedAt = now;
-        if (session.Mode == SpeakingSessionMode.AiSelfPractice && creditReservations is not null)
-        {
-            await creditReservations.CommitByBusinessReferenceAsync($"practice:{session.Id}", ct);
-        }
+        // The practice credit hold taken at finish-warmup is committed only
+        // when the card is GRADED (SpeakingCanonicalAssessmentService via
+        // SpeakingCreditSettlement) and refunded if it never is.
         await db.SaveChangesAsync(ct);
 
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
@@ -458,6 +469,13 @@ public sealed class SpeakingSessionService(
         session.ConsentAcceptedAt = now;
         session.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
+        // One client call covers the account-level Recording + AI-processing
+        // + Retention consents the realtime voice and recorder paths require,
+        // so no consent prompt can appear inside a timed screen.
+        if (compliance is not null)
+        {
+            await compliance.EnsureSessionConsentsAsync(userId, ct);
+        }
 
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
     }

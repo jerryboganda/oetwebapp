@@ -1312,7 +1312,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
-        var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
+        var evaluation = await SpeakingEvaluationPipeline.FindEvaluationForJobAsync(db, job, cancellationToken);
+        if (evaluation is null) return;
 
         if (evaluation.State != AsyncState.Completed)
         {
@@ -2068,6 +2069,33 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
     private static async Task MarkResourceFailedAfterFinalRetryAsync(LearnerDbContext db, BackgroundJobItem job, Exception ex, CancellationToken cancellationToken)
     {
+        if (job.Type == JobType.SpeakingEvaluation)
+        {
+            // Without this the Evaluation stayed Queued forever once the job
+            // exhausted its retries (or was orphaned by a restart): the
+            // learner polled a dead "processing" state with no retry button.
+            // Retryable=true unlocks POST /v1/speaking/attempts/{id}/retry-evaluation.
+            var evaluation = await SpeakingEvaluationPipeline.FindEvaluationForJobAsync(db, job, cancellationToken);
+            if (evaluation is not null && evaluation.State != AsyncState.Completed)
+            {
+                evaluation.State = AsyncState.Failed;
+                evaluation.Retryable = true;
+                evaluation.RetryAfterMs = 60_000;
+                evaluation.StatusReasonCode = "speaking_evaluation_failed";
+                evaluation.StatusMessage = "We couldn't finish grading your recording. Please try grading again.";
+                evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+            }
+
+            if (!string.IsNullOrWhiteSpace(job.AttemptId))
+            {
+                var attempt = await db.Attempts.FirstOrDefaultAsync(item => item.Id == job.AttemptId, cancellationToken);
+                if (attempt is not null && attempt.State == AttemptState.Evaluating)
+                {
+                    attempt.State = AttemptState.Submitted;
+                }
+            }
+        }
+
         if (IsLiveClassRecordingPipelineJob(job.Type) && !string.IsNullOrWhiteSpace(job.ResourceId))
         {
             var recording = await db.LiveClassRecordings.FirstOrDefaultAsync(item => item.Id == job.ResourceId, cancellationToken);

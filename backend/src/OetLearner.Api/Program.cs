@@ -1060,6 +1060,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscripti
         : sp.GetRequiredService<OetLearner.Api.Services.Speaking.SpeakingTranscriptionProviderUnavailable>();
 });
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+// Recorder fallback upload for the shared session engine (no live-voice provider).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionRecordingService>();
 // RULE_40 tone assessor — consumed by SpeakingTranscriptionEndpoints below.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingToneAssessor,
     OetLearner.Api.Services.Speaking.SpeakingToneAssessor>();

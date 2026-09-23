@@ -40,6 +40,8 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         // the state machine + credits + leakage, so a minimal construction is fine.
         _assessor = null!;
         _exams = new SpeakingExamService(_db, _assessor!, NullLogger<SpeakingExamService>.Instance, _credits);
+        // Exams always run on the caller's own registered profession.
+        SeedLearner(UserId, "medicine");
         return Task.CompletedTask;
     }
 
@@ -459,6 +461,289 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(["A", "B", "C"], cards);
     }
 
+    // ── Card resolution: own profession + persona-ready cards only ──────────
+
+    [Fact]
+    public async Task CreateExam_IgnoresRequestedProfession_AndUsesTheLearnersOwn()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        var cardType = await SeedCardTypeAsync();
+        var medicineA = await SeedCardAsync("A", cardType, 180, 300);
+        var medicineB = await SeedCardAsync("B", cardType, 180, 300);
+        await SeedCardAsync("C", cardType, 180, 300, profession: "nursing");
+        await SeedCardAsync("D", cardType, 180, 300, profession: "nursing");
+        await _db.SaveChangesAsync();
+
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "nursing"), default);
+
+        Assert.Equal("medicine", exam.ProfessionId);
+        var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal(new[] { medicineA, medicineB }.OrderBy(x => x), new[] { stored.CardAId, stored.CardBId }.OrderBy(x => x));
+    }
+
+    [Fact]
+    public async Task CreateExam_OnlyPicksCardsWhosePersonaIsReady()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        var cardType = await SeedCardTypeAsync();
+        var readyA = await SeedCardAsync("A", cardType, 180, 300);
+        var readyB = await SeedCardAsync("B", cardType, 180, 300);
+        await SeedCardAsync("C", cardType, 180, 300, withScript: false);
+        await SeedCardAsync("D", cardType, 180, 300, needsOwnerInput: true);
+        await _db.SaveChangesAsync();
+        var ready = new HashSet<string> { readyA, readyB };
+
+        for (var i = 0; i < 12; i++)
+        {
+            var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+            var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+            Assert.Contains(stored.CardAId, ready);
+            Assert.Contains(stored.CardBId, ready);
+        }
+    }
+
+    [Fact]
+    public async Task CreateExam_LearnerWithoutProfession_IsRefused()
+    {
+        await SeedTwoPublishedCardsAsync();
+        SeedLearner("exam-no-profession", activeProfessionId: null);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync("exam-no-profession", new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default));
+        Assert.Equal("speaking_profession_required", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExam_WithAnotherProfessionsMockSet_IsNotFound()
+    {
+        var setId = await SeedPublishedMockSetAsync();
+        SeedLearner("exam-nursing-learner", "nursing");
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync("exam-nursing-learner",
+                new CreateSpeakingExamRequest("live_tutor", MockSetId: setId, BookingId: "psb-x"), default));
+        Assert.Equal("speaking_mock_set_not_found", ex.ErrorCode);
+    }
+
+    // ── MockAttemptId only pre-pays for the caller's own active Speaking mock ──
+
+    [Fact]
+    public async Task CreateExam_UnknownMockAttempt_IsChargedNormally()
+    {
+        await SeedWalletAsync(speakingCredits: 1);
+        await SeedTwoPublishedCardsAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", MockAttemptId: "mock-does-not-exist"), default));
+        Assert.Equal("speaking_exam_insufficient_credits", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExam_AnotherLearnersMockAttempt_IsChargedNormally()
+    {
+        await SeedWalletAsync(speakingCredits: 1);
+        await SeedTwoPublishedCardsAsync();
+        SeedMockAttempt("mock-someone-else", userId: "another-learner", AttemptState.InProgress);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", MockAttemptId: "mock-someone-else"), default));
+        Assert.Equal("speaking_exam_insufficient_credits", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateExam_OwnActiveFullMockAttempt_CoversTheExam_WithoutSpeakingCredits()
+    {
+        await SeedWalletAsync(speakingCredits: 1);
+        await SeedTwoPublishedCardsAsync();
+        SeedMockAttempt("mock-own-active", UserId, AttemptState.InProgress);
+        await _db.SaveChangesAsync();
+
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", MockAttemptId: "mock-own-active"), default);
+        await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        Assert.Equal($"exam:{exam.ExamId}:mock-attempt", tracked.CreditARefId);
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task CreateExam_OwnCompletedMockAttempt_IsChargedNormally()
+    {
+        await SeedWalletAsync(speakingCredits: 1);
+        await SeedTwoPublishedCardsAsync();
+        SeedMockAttempt("mock-own-done", UserId, AttemptState.Completed);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", MockAttemptId: "mock-own-done"), default));
+        Assert.Equal("speaking_exam_insufficient_credits", ex.ErrorCode);
+    }
+
+    // ── Credits: held at reveal, committed only for a graded exam result ──────
+
+    [Fact]
+    public async Task AiExam_HoldsFourCredits_CommitsOnlyWhenBothCardsAreGraded_AndNeverTwice()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(20), default);
+        await _db.SaveChangesAsync();
+
+        // Exactly 4 credits held (2 per card), nothing committed yet.
+        Assert.Equal(SpeakingExamState.Completed, tracked.State);
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        Assert.All(await _db.AiCreditReservations.AsNoTracking().ToListAsync(),
+            r => Assert.Equal(AiCreditReservationState.Reserved, r.State));
+
+        // Only card A graded → still not committed.
+        SeedCompleteV11CardScore(tracked.SessionAId!, 360);
+        await _db.SaveChangesAsync();
+        var partial = await exams.GetResultsAsync(UserId, exam.ExamId, default);
+        Assert.Equal("pending", partial.OverallStatus);
+        Assert.All(await _db.AiCreditReservations.AsNoTracking().ToListAsync(),
+            r => Assert.Equal(AiCreditReservationState.Reserved, r.State));
+
+        // Both graded → the exam result is reachable and the holds commit.
+        SeedCompleteV11CardScore(tracked.SessionBId!, 400);
+        await _db.SaveChangesAsync();
+        var results = await exams.GetResultsAsync(UserId, exam.ExamId, default);
+        Assert.Equal("scored", results.OverallStatus);
+        Assert.Equal(380, results.CombinedScaledScore);
+        var reservations = await _db.AiCreditReservations.AsNoTracking().ToListAsync();
+        Assert.Equal(2, reservations.Count);
+        Assert.All(reservations, r => Assert.Equal(AiCreditReservationState.Committed, r.State));
+
+        // Re-reading the result never charges again.
+        await exams.GetResultsAsync(UserId, exam.ExamId, default);
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task AiExam_CancelledBeforeAResult_RefundsTheHeldCredits()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync();
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+
+        await exams.CancelAsync(UserId, exam.ExamId, default);
+
+        var reservation = await _db.AiCreditReservations.AsNoTracking().SingleAsync();
+        Assert.Equal(AiCreditReservationState.Released, reservation.State);
+        Assert.Equal(5, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+    }
+
+    // ── Consent at the intro carries into both timed cards ──────────────────
+
+    [Fact]
+    public async Task ExamConsent_AtIntro_IsInheritedByBothCards_AndRecordsAccountConsents()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var compliance = new SpeakingComplianceService(
+            _db,
+            storage: null!,
+            Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.SpeakingComplianceOptions()),
+            NullLogger<SpeakingComplianceService>.Instance,
+            TimeProvider.System);
+        var exams = new SpeakingExamService(_db, _assessor!, NullLogger<SpeakingExamService>.Instance, _credits,
+            compliance: compliance);
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        Assert.False(exam.ConsentAccepted);
+
+        var consented = await exams.AcceptConsentAsync(UserId, exam.ExamId, default);
+        Assert.True(consented.ConsentAccepted);
+        Assert.Equal("intro", consented.State);
+        var cardASessionId = consented.Cards!.Single(c => c.CardNumber == 1).SessionId;
+        Assert.NotNull(cardASessionId);
+
+        // Card A's prep reuses the consented session; Card B inherits it.
+        var prepA = await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        Assert.Equal(cardASessionId, prepA.CurrentSessionId);
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(9), default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(SpeakingExamState.PrepB, tracked.State);
+        var sessions = await _db.SpeakingSessions.AsNoTracking()
+            .Where(s => s.ExamSessionId == exam.ExamId)
+            .ToListAsync();
+        Assert.Equal(2, sessions.Count);
+        Assert.All(sessions, s => Assert.NotNull(s.ConsentAcceptedAt));
+        var consentTypes = await _db.SpeakingComplianceConsents.AsNoTracking()
+            .Where(c => c.UserId == UserId)
+            .Select(c => c.ConsentType)
+            .ToListAsync();
+        Assert.Contains(SpeakingComplianceConsentTypes.Recording, consentTypes);
+        Assert.Contains(SpeakingComplianceConsentTypes.AiProcessing, consentTypes);
+        Assert.Contains(SpeakingComplianceConsentTypes.Retention, consentTypes);
+    }
+
+    private SpeakingExamService BuildExamServiceWithReservations()
+        => new(_db, _assessor!, NullLogger<SpeakingExamService>.Instance, _credits,
+            creditReservations: new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, _credits, TimeProvider.System));
+
+    private void SeedCompleteV11CardScore(string sessionId, int score)
+        => _db.SpeakingSimulationV11Assessments.Add(new SpeakingSimulationV11Assessment
+        {
+            Id = $"v11-{Guid.NewGuid():N}",
+            SpeakingSessionId = sessionId,
+            AssessmentKind = "card",
+            Status = SpeakingSimulationV11AssessmentStatus.Complete,
+            EstimatedPracticeScore = score,
+            GeneratedAt = DateTimeOffset.UtcNow,
+        });
+
+    private void SeedMockAttempt(string id, string userId, AttemptState state)
+        => _db.MockAttempts.Add(new MockAttempt
+        {
+            Id = id,
+            UserId = userId,
+            MockType = "full",
+            State = state,
+            StartedAt = DateTimeOffset.UtcNow,
+        });
+
+    private void SeedLearner(string userId, string? activeProfessionId)
+    {
+        _db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = "Exam Learner",
+            Email = $"{userId}@example.test",
+            ActiveProfessionId = activeProfessionId,
+            AccountStatus = "active",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        });
+        _db.SaveChanges();
+    }
+
+    private async Task<string> SeedCardTypeAsync()
+    {
+        var cardType = new SpeakingCardType
+        {
+            Id = $"sct-{Guid.NewGuid():N}",
+            Name = "Examination Card",
+            Description = "Hidden marking guidance",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        _db.SpeakingCardTypes.Add(cardType);
+        await _db.SaveChangesAsync();
+        return cardType.Id;
+    }
+
     private static void AssertNoLeak(SpeakingExamDetail detail)
     {
         var json = JsonSerializer.Serialize(detail);
@@ -538,7 +823,14 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         return set.Id;
     }
 
-    private async Task SeedCardAsync(string slot, string cardTypeId, int prepSeconds, int discussionSeconds)
+    private async Task<string> SeedCardAsync(
+        string slot,
+        string cardTypeId,
+        int prepSeconds,
+        int discussionSeconds,
+        string profession = "medicine",
+        bool withScript = true,
+        bool needsOwnerInput = false)
     {
         var now = DateTimeOffset.UtcNow;
         var contentItemId = $"ci-{Guid.NewGuid():N}";
@@ -547,7 +839,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
             Id = contentItemId,
             ContentType = "speaking_roleplay",
             SubtestCode = "speaking",
-            ProfessionId = "medicine",
+            ProfessionId = profession,
             Title = $"Card {slot}",
             Difficulty = "exam",
             Status = ContentStatus.Published,
@@ -564,7 +856,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         {
             Id = cardId,
             ContentItemId = contentItemId,
-            ProfessionId = "medicine",
+            ProfessionId = profession,
             ScenarioTitle = $"Scenario {slot}",
             Setting = "General Practice",
             CandidateRole = "Doctor",
@@ -589,10 +881,13 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
             PublishedAt = now,
         });
 
+        if (!withScript) return cardId;
+
         _db.InterlocutorScripts.Add(new InterlocutorScript
         {
             Id = $"is-{Guid.NewGuid():N}",
             RolePlayCardId = cardId,
+            NeedsOwnerInput = needsOwnerInput,
             OpeningResponse = "Doctor, my knee hurts.",
             HiddenInformation = "SECRET-PATIENT hidden detail",
             PatientBackground = "SECRET-PATIENT background paragraph",
@@ -604,5 +899,6 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
             CreatedAt = now,
             UpdatedAt = now,
         });
+        return cardId;
     }
 }

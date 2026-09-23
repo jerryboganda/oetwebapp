@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -23,10 +25,12 @@ namespace OetLearner.Api.Services.Speaking;
 ///
 /// Credits (AI mode): Card A first tries to fund the whole exam from a "Full
 /// Mock Speaking Exam Access" unit (<see cref="Domain.SpeakingExamSession.FundedByMockCredit"/>);
-/// otherwise one AI Speaking Credit is debited per card at card reveal (prep
-/// start), idempotent on the exam+slot reference, so an exam costs exactly
-/// two credits. Live-tutor exams cost no credits (pay-per-session via the
-/// Stripe booking) and are human-marked.
+/// otherwise 2 AI credits are held per card at card reveal (prep start),
+/// idempotent on the exam+slot reference, so an exam costs exactly 4 AI
+/// credits. The holds are committed only once both cards are graded and
+/// refunded if the exam ends without a result (see
+/// <see cref="SpeakingCreditSettlement"/>). Live-tutor exams cost no credits
+/// (pay-per-session via the Stripe booking) and are human-marked.
 /// </summary>
 public sealed class SpeakingExamService(
     LearnerDbContext db,
@@ -35,7 +39,10 @@ public sealed class SpeakingExamService(
     IAiPackageCreditService? creditService = null,
     SpeakingSimulationV11PersonaService? personaService = null,
     OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
-    ISpeakingCanonicalAssessmentService? canonical = null)
+    ISpeakingCanonicalAssessmentService? canonical = null,
+    SpeakingComplianceService? compliance = null,
+    LiveVoiceProviderProbeState? liveVoiceProbe = null,
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
 {
     private const int DefaultPrepSeconds = 180;
     private const int DefaultDiscussionSeconds = 300;
@@ -72,16 +79,24 @@ public sealed class SpeakingExamService(
         // candidate's target exam is under 7 days away, a live-tutor booking
         // can't reliably be arranged in time, so only AI is allowed. At 7+
         // days out, either mode is allowed — the candidate's choice.
-        var isMockLaunch = !string.IsNullOrWhiteSpace(req.MockSetId) || !string.IsNullOrWhiteSpace(req.MockAttemptId);
 
-        var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
+        // The exam always uses the caller's OWN registered profession; a
+        // client-supplied ProfessionId is ignored.
+        var ownProfession = await ResolveOwnProfessionAsync(userId, ct);
+        var (cardA, cardB, professionId) = await ResolveCardsAsync(req.MockSetId, ownProfession, ct);
+
+        // A MockAttemptId only pre-pays the exam when it is the caller's own
+        // active mock attempt that includes Speaking; anything else is
+        // charged like a normal AI exam.
+        var coveredByMockAttempt = !string.IsNullOrWhiteSpace(req.MockAttemptId)
+            && await IsCoveredByMockAttemptAsync(userId, req.MockAttemptId, ct);
 
         // AI exams pre-check the wallet so the candidate is never stranded
         // after Card A with no credit for Card B. Four AI credits needed
         // (2 per card) — UNLESS the account has a "Full Mock Speaking Exam Access" unit
         // (MockExamsRemaining), which alone funds the whole exam (see
         // DebitCardAsync). This mirrors the fallback order used at debit time.
-        if (mode == SpeakingExamMode.Ai && creditService is not null && !isMockLaunch)
+        if (mode == SpeakingExamMode.Ai && creditService is not null && !coveredByMockAttempt)
         {
             var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
             if (snapshot.MockExamsRemaining < 1)
@@ -186,8 +201,7 @@ public sealed class SpeakingExamService(
             ? "medicine"
             : booking.ProfessionTrack!.Trim().ToLowerInvariant();
 
-        var (cardA, cardB, resolvedProfession) = await ResolveCardsAsync(
-            new CreateSpeakingExamRequest("live_tutor", ProfessionId: profession), ct);
+        var (cardA, cardB, resolvedProfession) = await ResolveCardsAsync(mockSetId: null, profession, ct);
 
         var exam = new SpeakingExamSession
         {
@@ -444,6 +458,52 @@ public sealed class SpeakingExamService(
         await EndChildIfPresentAsync(exam.SessionAId, now, ct);
         await EndChildIfPresentAsync(exam.SessionBId, now, ct);
         await db.SaveChangesAsync(ct);
+        // A cancelled exam produces no exam result, so its card holds are
+        // refunded (full mock = 4 credits only for a graded result).
+        if (creditReservations is not null)
+        {
+            await SpeakingCreditSettlement.ReleaseExamAsync(db, creditReservations, exam, ct);
+        }
+        return await ProjectAsync(exam, now, ct);
+    }
+
+    /// <summary>
+    /// Records the learner's recording + AI-processing consent at the exam
+    /// intro, BEFORE Card A's prep timer. Card A's child session is created
+    /// now (and reused by <see cref="FinishIntroAsync"/>) so the consent is
+    /// stamped on it; Card B inherits it at reveal. The realtime voice
+    /// consent gate therefore never blocks inside a timed card.
+    /// </summary>
+    public async Task<SpeakingExamDetail> AcceptConsentAsync(string userId, string examId, CancellationToken ct)
+    {
+        var exam = await LoadOwnedAsync(userId, examId, ct, tracking: true);
+        if (SpeakingExamStates.IsTerminal(exam.State))
+        {
+            throw ApiException.Conflict("speaking_exam_closed", "This Speaking exam has already finished.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (compliance is not null)
+        {
+            await compliance.EnsureSessionConsentsAsync(userId, ct);
+        }
+        if (string.IsNullOrWhiteSpace(exam.SessionAId))
+        {
+            exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+        }
+
+        foreach (var sessionId in new[] { exam.SessionAId, exam.SessionBId })
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)) continue;
+            var child = db.SpeakingSessions.Local.FirstOrDefault(s => s.Id == sessionId)
+                ?? await db.SpeakingSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+            if (child is null) continue;
+            child.ConsentAcceptedAt ??= now;
+            child.UpdatedAt = now;
+        }
+
+        exam.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
         return await ProjectAsync(exam, now, ct);
     }
 
@@ -605,6 +665,12 @@ public sealed class SpeakingExamService(
                     await db.SaveChangesAsync(ct);
                 }
             }
+
+            // The exam result is complete: settle the held card credits.
+            if (creditReservations is not null)
+            {
+                await SpeakingCreditSettlement.CommitExamIfGradedAsync(db, creditReservations, exam, ct);
+            }
         }
 
         return new SpeakingExamResults(
@@ -638,21 +704,37 @@ public sealed class SpeakingExamService(
         }
 
         // A session with a captured v1.1 persona is owned by the released
-        // ten-criterion simulation path. Do not silently create a second,
-        // legacy AI score while the v1.1 report is being generated or is
-        // fail-closed behind its owner gates. The dedicated v1.1 endpoints
-        // remain the only scoring path for these sessions.
-        var hasSimulationV11Persona = await db.SpeakingSimulationV11PersonaRuntimeSnapshots
-            .AsNoTracking()
-            .AnyAsync(x => x.SpeakingSessionId == sessionId, ct);
-        if (hasSimulationV11Persona)
+        // ten-criterion simulation path (unless it was recorded through the
+        // recorder fallback, which the classic assessor scores). Its complete
+        // v1.1 card report counts as the card's score so the exam result is
+        // reachable here instead of staying "pending" forever.
+        var recorderFallbackId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
+        var usesSimulationV11 = await db.SpeakingSimulationV11PersonaRuntimeSnapshots
+                .AsNoTracking()
+                .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
+            && !await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recorderFallbackId, ct);
+
+        SpeakingAiAssessmentProjection? latest;
+        if (usesSimulationV11)
         {
-            return new SpeakingExamCardResult(cardNumber, sessionId, "pending", null);
+            var v11Report = (await db.SpeakingSimulationV11Assessments.AsNoTracking()
+                    .Where(a => a.SpeakingSessionId == sessionId
+                        && a.AssessmentKind == "card"
+                        && a.Status == SpeakingSimulationV11AssessmentStatus.Complete)
+                    .ToListAsync(ct))
+                .OrderByDescending(a => a.GeneratedAt)
+                .FirstOrDefault();
+            latest = v11Report is null ? null : ProjectV11CardScore(v11Report);
+        }
+        else
+        {
+            latest = await assessor.GetLatestAsync(sessionId, ct);
         }
 
-        var latest = await assessor.GetLatestAsync(sessionId, ct);
         if (latest is null)
         {
+            // Make sure grading is queued once the card has finished; the AI
+            // worker (or the learner's own /ai-assess) completes it.
             var child = await db.SpeakingSessions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sessionId, ct);
             if (child is not null && child.State == SpeakingSessionState.Finished && canonical is not null)
             {
@@ -664,18 +746,67 @@ public sealed class SpeakingExamService(
             cardNumber, sessionId, latest is null ? "pending" : "scored", latest);
     }
 
+    /// <summary>Summary projection of a complete v1.1 card report into the
+    /// exam card result shape. The full ten-criterion report stays on the
+    /// dedicated v1.1 endpoints.</summary>
+    private static SpeakingAiAssessmentProjection ProjectV11CardScore(SpeakingSimulationV11Assessment report)
+    {
+        var score = report.EstimatedPracticeScore ?? 0;
+        return new SpeakingAiAssessmentProjection(
+            AssessmentId: report.Id,
+            Provider: report.Provider ?? "speaking_simulation_v11",
+            ModelId: report.ModelName ?? string.Empty,
+            PromptTemplateId: report.PromptTemplateId ?? string.Empty,
+            CriterionScores: new Dictionary<string, CriterionScore>(),
+            EstimatedScaledScore: score,
+            ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(score)),
+            OverallSummary: string.Empty,
+            ConfidenceBand: report.ConfidenceLabel ?? "medium",
+            GeneratedAt: report.GeneratedAt,
+            IsAdvisory: true);
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
 
-    private async Task<(RolePlayCard A, RolePlayCard B, string ProfessionId)> ResolveCardsAsync(
-        CreateSpeakingExamRequest req, CancellationToken ct)
+    /// <summary>The caller's own registered profession. A learner with no
+    /// profession cannot start an exam (fail closed, never a default).</summary>
+    private async Task<string> ResolveOwnProfessionAsync(string userId, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(req.MockSetId))
+        var profession = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(profession))
+        {
+            throw ApiException.Forbidden("speaking_profession_required",
+                "Choose your profession before starting a Speaking exam.");
+        }
+        return profession.Trim().ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Picks the exam's two cards, restricted to <paramref name="professionId"/>
+    /// and to cards whose hidden role-player persona is ready: an approved
+    /// interlocutor script is what <see cref="SpeakingSimulationV11PersonaService.CaptureAtRevealAsync"/>
+    /// needs at card reveal and what realtime voice needs to play the
+    /// patient, so Card B can never fail with
+    /// <c>speaking_simulation_v11_persona_missing</c> mid-exam.
+    /// </summary>
+    private async Task<(RolePlayCard A, RolePlayCard B, string ProfessionId)> ResolveCardsAsync(
+        string? mockSetId, string professionId, CancellationToken ct)
+    {
+        var profession = professionId.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(mockSetId))
         {
             var set = await db.SpeakingMockSets.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == req.MockSetId, ct)
-                ?? throw ApiException.NotFound("speaking_mock_set_not_found", "That mock set does not exist.");
+                .FirstOrDefaultAsync(s => s.Id == mockSetId, ct);
+            // Another profession's mock set is reported as not found.
+            if (set is null || !string.Equals(set.ProfessionId?.Trim(), profession, StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.NotFound("speaking_mock_set_not_found", "That mock set does not exist.");
+            }
 
             var a = await db.RolePlayCards.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.ContentItemId == set.RolePlay1ContentId, ct);
@@ -686,15 +817,18 @@ public sealed class SpeakingExamService(
                 throw ApiException.Conflict("speaking_mock_set_incomplete",
                     "This mock set is missing one of its role-play cards.");
             }
+            if (!await IsPersonaReadyAsync(a.Id, ct) || !await IsPersonaReadyAsync(b.Id, ct))
+            {
+                throw ApiException.Conflict("speaking_mock_set_not_ready",
+                    "This mock set's role-play cards are not ready for an AI exam yet.");
+            }
             return (a, b, set.ProfessionId);
         }
 
-        var profession = string.IsNullOrWhiteSpace(req.ProfessionId)
-            ? "medicine"
-            : req.ProfessionId!.Trim().ToLowerInvariant();
-
         var published = await db.RolePlayCards.AsNoTracking()
-            .Where(c => c.ProfessionId == profession && c.Status == ContentStatus.Published)
+            .Where(c => c.ProfessionId == profession
+                && c.Status == ContentStatus.Published
+                && db.InterlocutorScripts.Any(s => s.RolePlayCardId == c.Id && !s.NeedsOwnerInput))
             .Select(c => c.Id)
             .ToListAsync(ct);
         if (published.Count < 2)
@@ -711,6 +845,36 @@ public sealed class SpeakingExamService(
         var cardA = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.First, ct);
         var cardB = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.Second, ct);
         return (cardA, cardB, profession);
+    }
+
+    private Task<bool> IsPersonaReadyAsync(string cardId, CancellationToken ct)
+        => db.InterlocutorScripts.AsNoTracking()
+            .AnyAsync(s => s.RolePlayCardId == cardId && !s.NeedsOwnerInput, ct);
+
+    /// <summary>True only for the caller's own, still-active mock attempt that
+    /// includes Speaking; that attempt already paid for the exam.</summary>
+    private async Task<bool> IsCoveredByMockAttemptAsync(string userId, string mockAttemptId, CancellationToken ct)
+    {
+        var attempt = await db.MockAttempts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == mockAttemptId, ct);
+        if (attempt is null
+            || !string.Equals(attempt.UserId, userId, StringComparison.Ordinal)
+            || attempt.State is not (AttemptState.NotStarted or AttemptState.InProgress or AttemptState.Paused))
+        {
+            return false;
+        }
+
+        if (string.Equals(attempt.MockType, "full", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(attempt.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var sectionSubtests = await db.MockSectionAttempts.AsNoTracking()
+            .Where(s => s.MockAttemptId == mockAttemptId)
+            .Select(s => s.SubtestCode)
+            .ToListAsync(ct);
+        return sectionSubtests.Any(code => string.Equals(code, "speaking", StringComparison.OrdinalIgnoreCase));
     }
 
     internal static (T First, T Second) SampleTwo<T>(
@@ -801,6 +965,9 @@ public sealed class SpeakingExamService(
             AttemptId = attemptId,
             PrepStartedAt = now,
             RulebookVersion = exam.RulebookVersion,
+            // Card B inherits the consent given at the exam intro so the
+            // realtime voice consent gate never blocks a timed card.
+            ConsentAcceptedAt = await ExamConsentAcceptedAtAsync(exam, ct),
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -809,6 +976,19 @@ public sealed class SpeakingExamService(
         await snapshotService.CaptureAtRevealAsync(exam, childSession, card, now, ct);
 
         return sessionId;
+    }
+
+    /// <summary>When the exam's consent was given (stamped on Card A's child
+    /// session by <see cref="AcceptConsentAsync"/>), else null.</summary>
+    private async Task<DateTimeOffset?> ExamConsentAcceptedAtAsync(SpeakingExamSession exam, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(exam.SessionAId)) return null;
+        var sessionA = db.SpeakingSessions.Local.FirstOrDefault(s => s.Id == exam.SessionAId);
+        if (sessionA is not null) return sessionA.ConsentAcceptedAt;
+        return await db.SpeakingSessions.AsNoTracking()
+            .Where(s => s.Id == exam.SessionAId)
+            .Select(s => s.ConsentAcceptedAt)
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task<string?> ResolveTutorActorIdAsync(string? bookingId, CancellationToken ct)
@@ -831,18 +1011,10 @@ public sealed class SpeakingExamService(
         var child = await db.SpeakingSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (child is null || child.State == SpeakingSessionState.Finished) return;
         child.State = SpeakingSessionState.Active;
-        var firstStart = child.RolePlayStartedAt is null;
         child.RolePlayStartedAt ??= now;
         child.UpdatedAt = now;
-        if (firstStart && creditReservations is not null)
-        {
-            var exam = await db.SpeakingExamSessions.FirstOrDefaultAsync(e => e.Id == child.ExamSessionId, ct);
-            var refId = child.ExamSlot == "b" ? exam?.CreditBRefId : exam?.CreditARefId;
-            if (!string.IsNullOrWhiteSpace(refId))
-            {
-                await creditReservations.CommitByBusinessReferenceAsync(refId, ct);
-            }
-        }
+        // Card credit holds are committed only once the exam result is
+        // graded (GetResultsAsync / SpeakingCreditSettlement), never here.
     }
 
     private async Task EndChildIfPresentAsync(string? sessionId, DateTimeOffset endedAt, CancellationToken ct)
@@ -890,9 +1062,12 @@ public sealed class SpeakingExamService(
     {
         if (exam.Mode != SpeakingExamMode.Ai || creditService is null) return;
 
-        if (!string.IsNullOrWhiteSpace(exam.MockAttemptId))
+        var covered = $"exam:{exam.Id}:mock-attempt";
+        if (!string.IsNullOrWhiteSpace(exam.MockAttemptId)
+            && (slot == "b"
+                ? string.Equals(exam.CreditARefId, covered, StringComparison.Ordinal)
+                : await IsCoveredByMockAttemptAsync(exam.UserId, exam.MockAttemptId, ct)))
         {
-            var covered = $"exam:{exam.Id}:mock-attempt";
             if (slot == "a") exam.CreditARefId = covered; else exam.CreditBRefId = covered;
             return;
         }
@@ -1044,6 +1219,8 @@ public sealed class SpeakingExamService(
             }
         }
 
+        var consentAccepted = await ExamConsentAcceptedAtAsync(exam, ct) is not null;
+
         return new SpeakingExamDetail(
             ExamId: exam.Id,
             Mode: SpeakingExamModes.ToCode(exam.Mode),
@@ -1063,6 +1240,13 @@ public sealed class SpeakingExamService(
                         && r.SpeakingSessionId == currentSessionId)
                     .OrderByDescending(r => r.CreatedAt)
                     .Select(r => r.Id)
-                    .FirstOrDefaultAsync(ct));
+                    .FirstOrDefaultAsync(ct),
+            ConsentAccepted: consentAccepted,
+            LiveVoiceAvailable: liveVoiceProbe?.IsLiveVoiceAvailable(liveVoiceOptions?.Value) == true,
+            Cards:
+            [
+                new SpeakingExamCardSession(1, exam.SessionAId),
+                new SpeakingExamCardSession(2, exam.SessionBId),
+            ]);
     }
 }

@@ -196,6 +196,72 @@ public sealed class SpeakingEvaluationPipelineTests : IAsyncLifetime
         Assert.Equal("awaiting_human_review", reloadedEval.StatusReasonCode);
     }
 
+    [Fact]
+    public async Task CompleteEvaluationAsync_AfterRetry_UpdatesTheJobsEvaluation_NotTheStaleFailedRow()
+    {
+        // Retry-evaluation adds a NEW Evaluation row for the same attempt. The
+        // job carries that row's id; an unordered AttemptId lookup used to
+        // grade the stale failed row and leave the new one queued forever.
+        var (attempt, staleEvaluation, job) = SeedAttemptAndCard(seedAudioObjectKey: false);
+        staleEvaluation.State = AsyncState.Failed;
+        staleEvaluation.Retryable = true;
+        staleEvaluation.StatusReasonCode = "speaking_evaluation_failed";
+        staleEvaluation.LastTransitionAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var retryEvaluation = new Evaluation
+        {
+            Id = $"eval-retry-{Guid.NewGuid():N}",
+            AttemptId = attempt.Id,
+            SubtestCode = "speaking",
+            State = AsyncState.Queued,
+            ScoreRange = "pending",
+            ModelExplanationSafe = "pending",
+            LearnerDisclaimer = "pending",
+            LastTransitionAt = DateTimeOffset.UtcNow,
+        };
+        _db.Evaluations.Add(retryEvaluation);
+        job.ResourceId = retryEvaluation.Id;
+        await _db.SaveChangesAsync();
+        SeedLinkedSessionWithTranscript(attempt.Id, "rpc-linked");
+
+        var pipeline = new SpeakingEvaluationPipeline(
+            _db, new FakeAiGateway(BuildValidAssessmentJson()), new SpeakingRuleEngine(new NoOpRulebookLoader()),
+            NullLogger<SpeakingEvaluationPipeline>.Instance,
+            sessionAssessor: BuildAssessor(BuildValidAssessmentJson()));
+
+        await pipeline.CompleteEvaluationAsync(job, default);
+        await _db.SaveChangesAsync();
+
+        var retried = await _db.Evaluations.AsNoTracking().FirstAsync(x => x.Id == retryEvaluation.Id);
+        var stale = await _db.Evaluations.AsNoTracking().FirstAsync(x => x.Id == staleEvaluation.Id);
+        Assert.Equal(AsyncState.Completed, retried.State);
+        Assert.Equal(AsyncState.Failed, stale.State);
+        Assert.Equal("speaking_evaluation_failed", stale.StatusReasonCode);
+    }
+
+    [Fact]
+    public async Task FindEvaluationForJobAsync_WithoutResourceId_FallsBackToNewestEvaluation()
+    {
+        var (attempt, older, job) = SeedAttemptAndCard(seedAudioObjectKey: false);
+        older.LastTransitionAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var newer = new Evaluation
+        {
+            Id = $"eval-new-{Guid.NewGuid():N}",
+            AttemptId = attempt.Id,
+            SubtestCode = "speaking",
+            State = AsyncState.Queued,
+            ScoreRange = "pending",
+            ModelExplanationSafe = "pending",
+            LearnerDisclaimer = "pending",
+            LastTransitionAt = DateTimeOffset.UtcNow,
+        };
+        _db.Evaluations.Add(newer);
+        await _db.SaveChangesAsync();
+
+        var resolved = await SpeakingEvaluationPipeline.FindEvaluationForJobAsync(_db, job, default);
+
+        Assert.Equal(newer.Id, resolved?.Id);
+    }
+
     // -------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------

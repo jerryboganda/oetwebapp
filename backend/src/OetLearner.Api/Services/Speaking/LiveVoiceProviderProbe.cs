@@ -23,6 +23,16 @@ public sealed class LiveVoiceProviderProbeState
 
     public bool IsVerified(string provider)
         => Get(provider)?.Verified == true;
+
+    /// <summary>True only when the primary realtime voice provider is both
+    /// configured and probe-verified, i.e. the learner can actually start a
+    /// live AI patient. Otherwise the client uses the recorder fallback.</summary>
+    public bool IsLiveVoiceAvailable(LiveVoiceOptions? options)
+    {
+        if (options is null) return false;
+        var provider = LiveVoiceOptions.NormalizeProvider(options.PrimaryProvider);
+        return provider.Length > 0 && options.IsConfigured(provider) && IsVerified(provider);
+    }
 }
 
 /// <summary>
