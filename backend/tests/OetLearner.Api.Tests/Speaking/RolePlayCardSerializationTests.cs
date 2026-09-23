@@ -125,6 +125,87 @@ public sealed class RolePlayCardSerializationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task LearnerProjections_NeverIncludeEmotionGoalTopic()
+    {
+        // Owner, 23 Sep 2026: Emotion / Goal / Topic are internal (AI patient
+        // prompt only) and never reach a learner — neither the card detail
+        // nor the speaking task payload (which also feeds attempt reads and
+        // evaluation summary/review roleCard).
+        const string userId = "learner-no-emotion";
+        var (cardId, _) = await SeedPublishedCardWithInterlocutorAsync();
+        await SeedLearnerProfileAsync(userId);
+
+        var detail = JsonSerializer.Serialize(await _learnerService.GetSpeakingRolePlayCardForLearnerAsync(
+            userId, cardId, CancellationToken.None));
+        var task = JsonSerializer.Serialize(await _learnerService.GetSpeakingTaskAsync(
+            userId, cardId, CancellationToken.None));
+
+        foreach (var json in new[] { detail, task })
+        {
+            Assert.DoesNotContain("patientEmotion", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("communicationGoal", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("clinicalTopic", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Reassure", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("pain management", json, StringComparison.Ordinal);
+            Assert.Contains("Test scenario", json, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("medicine")]
+    [InlineData(null)]
+    public async Task CardDetail_OtherProfessionOrNoProfession_Is404(string? learnerProfession)
+    {
+        var userId = $"learner-locked-{learnerProfession ?? "none"}";
+        var (cardId, _) = await SeedPublishedCardWithInterlocutorAsync();
+        await SeedLearnerProfileAsync(userId, learnerProfession);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _learnerService.GetSpeakingRolePlayCardForLearnerAsync(userId, cardId, CancellationToken.None));
+        Assert.Equal("role_play_card_not_found", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CardDetail_OrphanCardWithoutContentItem_IsNotUniversal()
+    {
+        // A card whose ContentItem row is missing used to count as
+        // "applies to all professions". Now only its own profession sees it.
+        var cardId = $"rpc-orphan-{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
+        _db.RolePlayCards.Add(new RolePlayCard
+        {
+            Id = cardId,
+            ContentItemId = $"ci-missing-{Guid.NewGuid():N}",
+            ProfessionId = "nursing",
+            ScenarioTitle = "Orphan scenario",
+            Setting = "Ward",
+            CandidateRole = "Nurse",
+            InterlocutorRole = "Patient",
+            Background = "Background",
+            Task1 = "Task 1",
+            Difficulty = "core",
+            CriteriaFocusJson = "[]",
+            Disclaimer = "Practice estimate only.",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+        });
+        await _db.SaveChangesAsync();
+        await SeedLearnerProfileAsync("orphan-medicine", "medicine");
+        await SeedLearnerProfileAsync("orphan-nursing", "nursing");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            _learnerService.GetSpeakingRolePlayCardForLearnerAsync("orphan-medicine", cardId, CancellationToken.None));
+        Assert.Equal("role_play_card_not_found", ex.ErrorCode);
+
+        var own = JsonSerializer.Serialize(await _learnerService.GetSpeakingRolePlayCardForLearnerAsync(
+            "orphan-nursing", cardId, CancellationToken.None));
+        Assert.Contains("Orphan scenario", own, StringComparison.Ordinal);
+        Assert.Contains("\"appliesToAllProfessions\":false", own, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PublishGate_RequiresInterlocutorScript()
     {
         var cardId = await SeedDraftCardWithoutInterlocutorAsync();
@@ -256,7 +337,9 @@ public sealed class RolePlayCardSerializationTests : IAsyncLifetime
         return cardId;
     }
 
-    private async Task SeedLearnerProfileAsync(string userId)
+    // Profession lock (23 Sep 2026): a learner with no profession fails
+    // closed, so the default learner is of the seeded cards' profession.
+    private async Task SeedLearnerProfileAsync(string userId, string? profession = "nursing")
     {
         var now = DateTimeOffset.UtcNow;
         _db.Users.Add(new LearnerUser
@@ -264,6 +347,7 @@ public sealed class RolePlayCardSerializationTests : IAsyncLifetime
             Id = userId,
             DisplayName = "Test Learner",
             Email = $"{userId}@example.test",
+            ActiveProfessionId = profession,
             CreatedAt = now,
             LastActiveAt = now,
         });

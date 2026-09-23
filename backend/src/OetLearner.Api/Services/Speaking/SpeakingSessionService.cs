@@ -55,6 +55,12 @@ public sealed class SpeakingSessionService(
             ?? throw ApiException.NotFound("role_play_card_not_found",
                 "That role-play card does not exist.");
 
+        // Profession lock (23 Sep 2026): another profession's card (or a
+        // learner with no profession) is "not found", before any card payload.
+        // The designated free card is own-profession by construction.
+        await LearnerProfessionGuard.RequireRolePlayCardAsync(db, userId, card.Id,
+            "role_play_card_not_found", "That role-play card does not exist.", ct);
+
         if (card.Status != ContentStatus.Published)
         {
             throw ApiException.Conflict("role_play_card_not_published",
@@ -634,6 +640,12 @@ public sealed class SpeakingSessionService(
                 "That Speaking session does not exist.");
         }
 
+        // Profession lock (23 Sep 2026): every learner read/transition routes
+        // through here, so a session resumed from before the lock on another
+        // profession's card 404s before any state change or card payload.
+        await LearnerProfessionGuard.RequireRolePlayCardAsync(db, userId, session.RolePlayCardId,
+            "speaking_session_not_found", "That Speaking session does not exist.", ct);
+
         return session;
     }
 
@@ -664,9 +676,8 @@ public sealed class SpeakingSessionService(
             allowedNotes = card.AllowedNotes,
             prepTimeSeconds = card.PrepTimeSeconds,
             rolePlayTimeSeconds = card.RolePlayTimeSeconds,
-            patientEmotion = card.PatientEmotion,
-            communicationGoal = card.CommunicationGoal,
-            clinicalTopic = card.ClinicalTopic,
+            // Emotion / Goal / Topic are internal (AI patient prompt only) and
+            // never sent to learners (owner, 23 Sep 2026).
             difficulty = card.Difficulty,
             criteriaFocus,
             disclaimer = card.Disclaimer,
