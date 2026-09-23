@@ -1,23 +1,55 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
 import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { FREE_SPEAKING_SAMPLE_COPY } from '@/components/domain/speaking/SpeakingRulesConsent';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import {
   SPEAKING_ASSESSMENT_CRITERIA_HREF,
   SPEAKING_INTRO_QUESTIONS_HREF,
 } from '@/lib/speaking-candidate-resources';
+
+/**
+ * 23 Sep 2026 owner copy (exact): the Practice Library is a full card in the
+ * same pattern as the Writing hub's practice card (WritingLandingCardItem).
+ */
+function PracticeLibraryCard() {
+  return (
+    <Card padding="md" className="h-full" data-testid="speaking-practice-library-card">
+      <CardContent className="flex h-full flex-col">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-background-light text-primary">
+          <BookOpen className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <h3 className="mt-3 text-base font-bold text-navy">Practice Library</h3>
+        <p className="mt-1 flex-1 text-sm leading-snug text-muted">
+          Practise one OET Speaking role-play card at a time - 3 minutes to prepare and 5 minutes to speak. The AI plays the patient and marks your result.
+        </p>
+        <p className="mt-2 text-xs font-semibold text-muted" data-testid="speaking-credit-cost-note">
+          1 card = 2 AI credits | Browsing the library is free
+        </p>
+        <Link
+          href="/speaking/selection"
+          className="mt-4 inline-flex items-center gap-1.5 rounded text-sm font-bold text-primary transition-colors hover:text-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          Open practice library <span aria-hidden="true">→</span>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SpeakingHome() {
   const router = useRouter();
@@ -72,23 +104,6 @@ export default function SpeakingHome() {
     return state === 'in_progress' || state === 'in-progress' || state === 'draft';
   }) ?? null;
 
-  // 22 Sep 2026 handoff (item 3): Practice Library is now a full card, not a
-  // text link, so it reads consistently alongside the other hub entries.
-  const libraryCard: LearnerSurfaceCardModel = {
-    kind: 'navigation',
-    sourceType: 'frontend_navigation',
-    accent: 'purple',
-    eyebrow: 'Browse',
-    eyebrowIcon: BookOpen,
-    title: 'Practice Library',
-    description: 'Browse every role-play card on the platform, filtered to your profession. Practice individually with native realtime voice, no exam timing.',
-    metaItems: [
-      { icon: Mic, label: practiceCardCount > 0 ? `${practiceCardCount} cards` : 'Browse library' },
-      { icon: ClipboardList, label: 'By category' },
-    ],
-    primaryAction: { label: 'Open Practice Library', href: '/speaking/selection' },
-  };
-
   const examCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'backend_task',
@@ -99,7 +114,7 @@ export default function SpeakingHome() {
     description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result.',
     metaItems: [
       { icon: Mic, label: 'Card A + Card B' },
-      { icon: Star, label: '4 AI credits' },
+      { icon: Star, label: '2 cards = 4 AI credits' },
     ],
     primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
   };
@@ -234,14 +249,13 @@ export default function SpeakingHome() {
             icon={Mic}
             testId="speaking-free-mock-card"
             title="Free Speaking Mock"
-            description="Try one AI-graded role play for free."
-            usedLabel="Free sample already used"
+            description={FREE_SPEAKING_SAMPLE_COPY}
             className=""
           />
 
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <MotionSection>
-              <LearnerSurfaceCard card={libraryCard} />
+              <PracticeLibraryCard />
             </MotionSection>
             <MotionSection delayIndex={1}>
               <LearnerSurfaceCard card={examCard} />
