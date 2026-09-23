@@ -7,8 +7,20 @@ import { apiClient } from '@/lib/api';
 
 export type FreeSampleSubtest = 'writing' | 'speaking';
 
-/** available = not started · in_progress = claimed, may continue · used = spent. */
-export type FreeSampleState = 'available' | 'in_progress' | 'used';
+/**
+ * 23 Sep 2026 contract (2 successful graded results per subtest, same item):
+ * available = 0 successes · retry_available = 1 success · in_progress = a use
+ * is grading · completed = 2 successes · unavailable = claim pinned elsewhere /
+ * no eligible content. `used` is the pre-contract value, kept until the
+ * launcher stops reading it.
+ */
+export type FreeSampleState =
+  | 'available'
+  | 'retry_available'
+  | 'in_progress'
+  | 'completed'
+  | 'unavailable'
+  | 'used';
 
 export interface FreeSampleOption {
   /** Normalised profession id (lower-case, hyphenated). */
@@ -18,6 +30,11 @@ export interface FreeSampleOption {
   state: FreeSampleState;
   /** App route that opens the sample (server-built). */
   route: string;
+  limit?: number;
+  successfulCount?: number;
+  remaining?: number;
+  lastResultRoute?: string | null;
+  lastSubmissionId?: string | null;
 }
 
 /**

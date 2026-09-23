@@ -57,7 +57,6 @@ export interface ConversationScenario {
   patientRole?: string;
   clinicianRole?: string;
   context?: string;
-  expectedOutcomes?: string | null;
   objectives?: string[];
   expectedRedFlags?: string[];
   keyVocabulary?: string[];

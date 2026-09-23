@@ -213,9 +213,6 @@ function mapRoleCardPayload(item: ApiRecord): RoleCard {
     warmUpQuestions: toStringArray(item.warmUpQuestions),
     prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
     roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
-    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
-    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
-    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
     criteriaFocus,
     disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
     sourceAttribution: typeof item.sourceAttribution === 'string' && item.sourceAttribution.trim()
@@ -260,9 +257,6 @@ export async function fetchRoleCard(taskId: string, options?: { freeSample?: boo
     },
     prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
     roleplayTimeSeconds: typeof item.rolePlayTimeSeconds === 'number' ? item.rolePlayTimeSeconds : undefined,
-    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
-    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
-    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
     criteriaFocus: toStringArray(item.criteriaFocus),
     disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
   };
@@ -345,6 +339,7 @@ export async function fetchSpeakingResult(resultId: string): Promise<SpeakingRes
     statusMessage: typeof summary.statusMessage === 'string' ? summary.statusMessage : undefined,
     retryable: typeof summary.retryable === 'boolean' ? summary.retryable : undefined,
     retryAfterMs: typeof summary.retryAfterMs === 'number' ? summary.retryAfterMs : undefined,
+    attemptId: typeof summary.attemptId === 'string' && summary.attemptId ? summary.attemptId : undefined,
     timing: summary.timing
       ? {
         prepTimeSeconds: typeof summary.timing.prepTimeSeconds === 'number' ? summary.timing.prepTimeSeconds : undefined,
@@ -458,4 +453,9 @@ export async function submitSpeakingRecording(
   }
   cacheSet(evaluationCacheKey('speaking', taskId), evaluationId);
   return { uploadUrl: upload.uploadUrl, submissionId: evaluationId };
+}
+
+/** Re-queue a failed, retryable legacy recorder evaluation (no extra charge). */
+export async function retrySpeakingEvaluation(attemptId: string): Promise<void> {
+  await apiRequest(`/v1/speaking/attempts/${encodeURIComponent(attemptId)}/retry-evaluation`, { method: 'POST' });
 }
