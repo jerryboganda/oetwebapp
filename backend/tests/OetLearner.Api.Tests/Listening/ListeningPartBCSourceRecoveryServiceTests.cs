@@ -639,4 +639,105 @@ public class ListeningPartBCSourceRecoveryServiceTests
         Assert.Equal(1, sweep.PapersScanned);
         Assert.All(sweep.Papers, r => Assert.Equal(PaperId, r.PaperId));
     }
+
+    // -- Watermark residue repair ------------------------------------------
+
+    private const string Q27CleanStem = "You hear the beginning of a training session for nurses about to start work on a paediatric ward. What is the focus of today's session?";
+    private static readonly string[] Q27CleanOptions =
+    [
+        "comparing equipment used with patients of different ages",
+        "gaining an awareness of how some equipment is used",
+        "learning how best to organise some equipment",
+    ];
+
+    /// <summary>Seed Q27 as the August sweep left it: the printed wording plus lone
+    /// watermark letters, identical in the relational rows and the authored JSON.</summary>
+    private static async Task SeedWatermarkedQ27Async(LearnerDbContext db, string stem, string[] options)
+    {
+        await SeedPaperAsync(db, q27Stem: stem, q28Stem: "A real authored Part B question?",
+            questionPaperText: "stale polluted cache", q27OptionTexts: options);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == PaperId);
+        var root = System.Text.Json.Nodes.JsonNode.Parse(paper.ExtractedTextJson!)!.AsObject();
+        var q27 = root["listeningQuestions"]!.AsArray()[0]!.AsObject();
+        q27["options"] = new System.Text.Json.Nodes.JsonArray(options.Select(o => (System.Text.Json.Nodes.JsonNode?)o).ToArray());
+        paper.ExtractedTextJson = root.ToJsonString();
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Watermark_repair_dry_runs_first_then_writes_only_the_approved_item_in_both_stores()
+    {
+        await using var db = NewDb();
+        await SeedWatermarkedQ27Async(db,
+            "You hear the beginning of a training session for nurses about to start work on a paediatric ward. What is the S focus of today's session? E",
+            [Q27CleanOptions[0], "gaining an awareness of how some M equipment is used", Q27CleanOptions[2]]);
+        var extraction = new StubTextExtraction(db, QuestionPaperText);
+        var service = new ListeningPartBCSourceRecoveryService(db, extraction);
+
+        var audit = await service.RepairWatermarkResidueAsync(null, "system:audit", CancellationToken.None);
+
+        Assert.True(audit.DryRun);
+        // Q28's hand-authored fixture wording differs from the printed paper, so it
+        // is listed for review too; only Q27 is the watermark case under test.
+        var item = Assert.Single(audit.Items, i => i.Number == 27);
+        Assert.Equal($"{PaperId}:27", item.Key);
+        Assert.Equal("verified", item.Status);
+        Assert.Equal(0, audit.Applied);
+        Assert.True(extraction.LastForce);
+        Assert.Contains(" S ", (await db.ListeningQuestions.AsNoTracking().SingleAsync(q => q.Id == "q-27")).Stem);
+
+        var repair = await service.RepairWatermarkResidueAsync([$"{PaperId}:27"], "admin-1", CancellationToken.None);
+
+        Assert.Equal(1, repair.Applied);
+        var q27 = await db.ListeningQuestions.AsNoTracking().SingleAsync(q => q.Id == "q-27");
+        Assert.Equal(Q27CleanStem, q27.Stem);
+        var optionB = await db.ListeningQuestionOptions.AsNoTracking().SingleAsync(o => o.Id == "o-27-b");
+        Assert.Equal(Q27CleanOptions[1], optionB.Text);
+        Assert.True(optionB.IsCorrect);
+        Assert.Equal(2, optionB.Version);
+
+        var paper = await db.ContentPapers.AsNoTracking().SingleAsync(p => p.Id == PaperId);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(paper.ExtractedTextJson!)!["listeningQuestions"]!.AsArray()[0]!;
+        Assert.Equal(Q27CleanStem, json["stem"]!.GetValue<string>());
+        Assert.Equal(Q27CleanOptions[1], json["options"]!.AsArray()[1]!.GetValue<string>());
+        Assert.Equal("B", json["correctAnswer"]!.GetValue<string>());
+        Assert.Single(db.AuditEvents.Where(e => e.Action == "ListeningPartBCWatermarkResidueRepaired"));
+
+        // Q27 is clean now; with no residue left anywhere the paper is not even re-read.
+        var after = await service.RepairWatermarkResidueAsync(null, "system:audit", CancellationToken.None);
+        Assert.Empty(after.Items);
+    }
+
+    [Fact]
+    public async Task Watermark_repair_catches_a_shifted_boundary_that_left_no_lone_letter_and_writes_nothing_unapproved()
+    {
+        await using var db = NewDb();
+        // A stray "A" became Q27's option marker: the stem swallowed the real
+        // "A comparing" (reads like a sentence-initial article, so no lone letter
+        // is left) and option A lost its opening word. Q28 on the same paper
+        // carries a plain stray "P", which is what marks the paper as affected.
+        await SeedWatermarkedQ27Async(db,
+            Q27CleanStem + " A comparing",
+            ["equipment used with patients of different ages", Q27CleanOptions[1], Q27CleanOptions[2]]);
+        var q28Row = await db.ListeningQuestions.SingleAsync(q => q.Id == "q-28");
+        q28Row.Stem = "You hear an occupational therapist briefing a trainee about a home visit. What is the P priority for today's visit?";
+        await db.SaveChangesAsync();
+        var service = new ListeningPartBCSourceRecoveryService(db, new StubTextExtraction(db, QuestionPaperText));
+
+        var repair = await service.RepairWatermarkResidueAsync(["some-other-paper:27"], "admin-1", CancellationToken.None);
+
+        var q27Item = Assert.Single(repair.Items, i => i.Number == 27);
+        Assert.Equal("needs-review", q27Item.Status);
+        Assert.Contains(q27Item.Fields, f => f.Field == "optionA" && f.Proposed == Q27CleanOptions[0]);
+        Assert.Contains(q27Item.Fields, f => f.Field == "stem" && f.Proposed == Q27CleanStem);
+        Assert.Equal(0, repair.Applied);
+        Assert.EndsWith(" A comparing", (await db.ListeningQuestions.AsNoTracking().SingleAsync(q => q.Id == "q-27")).Stem);
+
+        // No source text that prints Q27 -> reported, nothing proposed.
+        await using var db2 = NewDb();
+        await SeedWatermarkedQ27Async(db2, Q27CleanStem + " S", Q27CleanOptions);
+        var noSource = await new ListeningPartBCSourceRecoveryService(db2, new StubTextExtraction(db2, "nothing printed here"))
+            .RepairWatermarkResidueAsync(null, "system:audit", CancellationToken.None);
+        Assert.Equal("no-source", Assert.Single(noSource.Items).Status);
+    }
 }

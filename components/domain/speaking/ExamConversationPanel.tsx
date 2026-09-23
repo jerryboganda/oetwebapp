@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSpeakingRealtimeVoice } from '@/hooks/useSpeakingRealtimeVoice';
 import { useSpeakingSessionRecorder } from '@/hooks/useSpeakingSessionRecorder';
+import { OpenAppSettingsButton } from '@/components/domain/speaking/OpenAppSettingsButton';
 import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
 export interface ExamConversationPanelProps {
@@ -180,6 +181,7 @@ function RecorderIndicator({ sessionId, onVoiceStopReady, onSpeakingStarted }: E
       <ActivityIndicator active={recorder.status === 'recording'} label={label} level={recorder.level} />
       {/* Upload failures are shown once, next to the page's Retry upload control. */}
       {recorder.error && recorder.status !== 'upload_failed' ? <ErrorLine message={recorder.error} /> : null}
+      {recorder.status === 'error' && recorder.micPermissionDenied ? <OpenAppSettingsButton /> : null}
       {recorder.status === 'error' ? (
         <StartButton busy={false} onClick={() => void recorder.start()} />
       ) : null}

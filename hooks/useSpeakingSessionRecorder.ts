@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { uploadSpeakingSessionRecording } from '@/lib/api/speaking-sessions';
+import { describeMicrophoneError } from '@/lib/mobile/speaking-recorder';
 
 export type SpeakingRecorderStatus =
   | 'idle'
@@ -31,19 +32,11 @@ export function pickRecordingMimeType(): string | undefined {
     .find((type) => MediaRecorder.isTypeSupported(type));
 }
 
-function micErrorMessage(caught: unknown): string {
-  if (caught instanceof DOMException && caught.name === 'NotAllowedError') {
-    return 'Microphone permission was blocked. Allow microphone access, then press Start speaking again.';
-  }
-  if (caught instanceof DOMException && caught.name === 'NotFoundError') {
-    return 'No microphone was detected. Connect a microphone, then press Start speaking again.';
-  }
-  return caught instanceof Error && caught.message ? `Recording could not start: ${caught.message}` : 'Recording could not start.';
-}
-
 export interface UseSpeakingSessionRecorderResult {
   status: SpeakingRecorderStatus;
   error: string | null;
+  /** True when the last start failed because microphone permission was refused (drives the app-settings recovery path). */
+  micPermissionDenied: boolean;
   /** 0..1 microphone level for the single activity indicator. */
   level: number;
   start: () => Promise<boolean>;
@@ -53,6 +46,7 @@ export interface UseSpeakingSessionRecorderResult {
 export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessionRecorderResult {
   const [status, setStatus] = useState<SpeakingRecorderStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [level, setLevel] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -91,6 +85,7 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
   const start = useCallback(async () => {
     if (recorderRef.current || blobRef.current) return true;
     setError(null);
+    setMicPermissionDenied(false);
     setStatus('starting');
     try {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -130,7 +125,9 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
     } catch (caught) {
       releaseMic();
       recorderRef.current = null;
-      setError(micErrorMessage(caught));
+      const micError = describeMicrophoneError(caught);
+      setMicPermissionDenied(micError.permissionDenied);
+      setError(micError.message);
       setStatus('error');
       return false;
     }
@@ -186,5 +183,5 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
     return promise;
   }, [finalizeBlob, sessionId]);
 
-  return { status, error, level, start, stop };
+  return { status, error, micPermissionDenied, level, start, stop };
 }

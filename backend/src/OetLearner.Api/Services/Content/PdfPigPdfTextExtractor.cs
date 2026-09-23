@@ -35,6 +35,18 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
     /// </summary>
     private const double SameLineTolerance = 0.6;
 
+    /// <summary>
+    /// Watermark filter. The Atlas/Nova question papers carry a diagonal
+    /// ~118pt "SAMPLE" (or "BLANK") watermark. PdfPig reports each rotated glyph
+    /// as its own one-letter word, and because <see cref="SameLineTolerance"/>
+    /// scales with the word's own height a huge glyph joins whatever question
+    /// line sits near it — the lone S/A/M/P/L/E letters that leaked into
+    /// published Part B/C stems and options. Body and heading text on an exam
+    /// paper is never an inch tall nor several times the page's typical height.
+    /// </summary>
+    private const double MaxWordHeightPoints = 72;
+    private const double MaxWordHeightToMedian = 3;
+
     /// <summary>Kept as two newlines, the separator callers already parse against.</summary>
     private const string PageSeparator = "\n\n";
 
@@ -89,6 +101,18 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
         // Some producers emit no word boxes at all; fall back to the raw run so
         // the asset is not treated as textless.
         if (words.Count == 0) return page.Text ?? string.Empty;
+
+        // Drop watermark glyphs (see MaxWordHeightPoints): anything off the
+        // page's dominant text orientation, or far taller than its body text.
+        var dominant = words.GroupBy(w => w.TextOrientation).MaxBy(g => g.Count())!.Key;
+        var heights = words.Where(w => w.TextOrientation == dominant).Select(w => w.BoundingBox.Height).Order().ToList();
+        var medianHeight = heights[heights.Count / 2];
+        words = words
+            .Where(w => w.TextOrientation == dominant
+                && w.BoundingBox.Height <= MaxWordHeightPoints
+                && w.BoundingBox.Height <= medianHeight * MaxWordHeightToMedian)
+            .ToList();
+        if (words.Count == 0) return string.Empty;
 
         var lines = new List<List<UglyToad.PdfPig.Content.Word>>();
         foreach (var word in words.OrderByDescending(w => w.BoundingBox.Bottom).ThenBy(w => w.BoundingBox.Left))

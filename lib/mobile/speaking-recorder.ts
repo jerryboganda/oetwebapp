@@ -21,6 +21,8 @@ export interface NativeSpeakingRecorderPlugin {
   resume(): Promise<void>;
   stop(): Promise<NativeSpeakingRecorderStopResult>;
   cancel(): Promise<void>;
+  /** Added in Android 1.4.15 / the next iOS build; older installs reject (unimplemented). */
+  openAppSettings(): Promise<void>;
 }
 
 export type SpeakingRecordingCaptureMethod = 'browser-recording' | 'native-speaking-recorder' | 'desktop-recorder';
@@ -107,4 +109,64 @@ export async function tryResumeNativeSpeakingRecorder(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Open this app's OS settings page so a learner can re-allow the microphone. False on web or on app builds that predate the method. */
+export async function tryOpenNativeAppSettings(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) {
+    return false;
+  }
+
+  try {
+    await SpeakingRecorder.openAppSettings();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface MicrophoneErrorInfo {
+  message: string;
+  permissionDenied: boolean;
+}
+
+/**
+ * One learner-facing message for every way microphone capture can fail to start:
+ * browser DOMExceptions (web, and the WebView inside the apps) and the native
+ * SpeakingRecorder plugin's own "permission was denied" rejection.
+ */
+export function describeMicrophoneError(error: unknown, native = Capacitor.isNativePlatform()): MicrophoneErrorInfo {
+  const name = error instanceof DOMException ? error.name : '';
+  const text = error instanceof Error ? error.message : '';
+
+  if (name === 'NotAllowedError' || name === 'SecurityError' || /permission.*denied/i.test(text)) {
+    return {
+      permissionDenied: true,
+      message: native
+        ? 'Microphone permission was blocked. Allow Microphone for this app in your device Settings (Open app settings), then press Start recording again.'
+        : 'Microphone permission was blocked. Allow microphone access in your browser settings, then press Start recording again.',
+    };
+  }
+
+  const message = (() => {
+    switch (name) {
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'No microphone was found. Connect a microphone and try again.';
+      case 'NotReadableError':
+      case 'TrackStartError':
+        return 'Your microphone is busy or unavailable. Close other apps using it and try again.';
+      case 'OverconstrainedError':
+      case 'ConstraintNotSatisfiedError':
+        return 'This microphone does not support the requested recording settings. Try another device.';
+      case 'NotSupportedError':
+        return 'This browser does not support the recording mode needed for Speaking practice.';
+      default:
+        return text
+          ? `Recording could not start: ${text}`
+          : 'Could not start the microphone. Check your audio settings and try again.';
+    }
+  })();
+
+  return { message, permissionDenied: false };
 }

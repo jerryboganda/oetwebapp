@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { completeConversation, resumeConversation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
+import { describeMicrophoneError } from '@/lib/mobile/speaking-recorder';
+import { OpenAppSettingsButton } from '@/components/domain/speaking/OpenAppSettingsButton';
 import {
   ConversationPrepCard,
   ConversationChatView,
@@ -57,30 +59,6 @@ function ensureAudioCaptureSupported() {
   if (typeof MediaRecorder === 'undefined') {
     throw new DOMException('This browser cannot record microphone audio.', 'NotSupportedError');
   }
-}
-
-function readableMicrophoneError(error: unknown) {
-  if (error instanceof DOMException) {
-    switch (error.name) {
-      case 'NotAllowedError':
-      case 'SecurityError':
-        return 'Microphone permission was blocked. Allow microphone access and try again.';
-      case 'NotFoundError':
-      case 'DevicesNotFoundError':
-        return 'No microphone was found. Connect a microphone and try again.';
-      case 'NotReadableError':
-      case 'TrackStartError':
-        return 'Your microphone is busy or unavailable. Close other apps using it and try again.';
-      case 'OverconstrainedError':
-      case 'ConstraintNotSatisfiedError':
-        return 'This microphone does not support the requested recording settings. Try another device.';
-      case 'NotSupportedError':
-        return 'This browser does not support the recording mode needed for conversation practice.';
-      default:
-        break;
-    }
-  }
-  return 'Could not start the microphone. Check your browser audio settings and try again.';
 }
 
 function pickRecorderFormat(): RecorderFormat {
@@ -204,6 +182,7 @@ export default function ConversationSessionPage() {
   const [aiThinking, setAiThinking] = useState(false);
   const [aiSpeakingTurn, setAiSpeakingTurn] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [prepCountdown, setPrepCountdown] = useState(PREP_DURATION_DEFAULT);
   const [ending, setEnding] = useState(false);
@@ -489,7 +468,7 @@ export default function ConversationSessionPage() {
       setAiSpeakingTurn(null);
       interruptedAiRef.current = true;
     }
-    setRecording(true); setError(null); setConnectionState('listening'); setPartialTranscript(null);
+    setRecording(true); setError(null); setMicPermissionDenied(false); setConnectionState('listening'); setPartialTranscript(null);
     audioChunksRef.current = [];
     discardCurrentRecordingRef.current = false;
     chunkSequenceRef.current = 0;
@@ -697,7 +676,8 @@ export default function ConversationSessionPage() {
       audioChunksRef.current = [];
       stopStream(activeMediaStreamRef.current);
       activeMediaStreamRef.current = null;
-      setError(readableMicrophoneError(captureError)); setRecording(false); setConnectionState('error');
+      const micError = describeMicrophoneError(captureError);
+      setError(micError.message); setMicPermissionDenied(micError.permissionDenied); setRecording(false); setConnectionState('error');
     }
   }, [aiSpeakingTurn, hubReady, recording, sessionId]);
 
@@ -770,7 +750,12 @@ export default function ConversationSessionPage() {
   return (
     <LearnerDashboardShell>
       <div className="max-w-4xl mx-auto">
-        {error && (<InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>)}
+        {error && (
+          <InlineAlert variant="warning" className="mb-4">
+            {error}
+            {micPermissionDenied && <OpenAppSettingsButton className="mt-2" />}
+          </InlineAlert>
+        )}
 
         {state === 'preparing' && scenario && (
           <MotionSection>

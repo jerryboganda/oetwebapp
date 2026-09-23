@@ -28,6 +28,38 @@ public class PdfPigPdfTextExtractorTests
     }
 
     [Fact]
+    public async Task Drops_giant_watermark_glyphs_that_share_a_question_line()
+    {
+        // Reproduces the production defect: a 118pt watermark letter sitting on the
+        // same baseline band as a 10pt Part C stem used to be merged into it as a
+        // lone "S" ("...role of cholesterol S largely arise...").
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);
+        var page = builder.AddPage(595, 842);
+        page.AddText("31. Dr Everall thinks misunderstandings about cholesterol largely arise", 10, new UglyToad.PdfPig.Core.PdfPoint(40, 700), font);
+        page.AddText("A a lack of focus on its positive influences", 10, new UglyToad.PdfPig.Core.PdfPoint(55, 685), font);
+        page.AddText("Part C", 20, new UglyToad.PdfPig.Core.PdfPoint(40, 760), font);
+        page.AddText("S", 118, new UglyToad.PdfPig.Core.PdfPoint(300, 690), font);
+        page.AddText("E", 118, new UglyToad.PdfPig.Core.PdfPoint(420, 640), font);
+
+        // A "BLANK" page whose only text is the watermark itself.
+        var blank = builder.AddPage(595, 842);
+        blank.AddText("B", 118, new UglyToad.PdfPig.Core.PdfPoint(150, 400), font);
+        blank.AddText("L", 118, new UglyToad.PdfPig.Core.PdfPoint(250, 470), font);
+
+        using var stream = new MemoryStream(builder.Build());
+        var extractor = new PdfPigPdfTextExtractor(NullLogger<PdfPigPdfTextExtractor>.Instance);
+        var pages = await extractor.ExtractPagesAsync(stream, CancellationToken.None);
+
+        Assert.Equal(2, pages.Count);
+        Assert.Contains("31. Dr Everall thinks misunderstandings about cholesterol largely arise", pages[0]);
+        Assert.Contains("A a lack of focus on its positive influences", pages[0]);
+        Assert.Contains("Part C", pages[0]);
+        Assert.DoesNotMatch(@"(^|\s)[SE](\s|$)", pages[0]);
+        Assert.Equal(string.Empty, pages[1]);
+    }
+
+    [Fact]
     public async Task Returns_empty_on_corrupted_pdf()
     {
         var bytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };

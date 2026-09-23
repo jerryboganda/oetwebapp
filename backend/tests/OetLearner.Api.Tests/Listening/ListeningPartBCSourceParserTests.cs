@@ -406,4 +406,55 @@ public class ListeningPartBCSourceParserTests
         Assert.Equal("Funding their own research to confuse people.", q42.OptionA);
         Assert.Equal("Denying evidence that their products are bad.", q42.OptionC);
     }
+
+    // Since the word-box extractor (f3edbc9cd) the watermark no longer arrives as
+    // the word "SAMPLE": each rotated glyph lands on a nearby line as a lone
+    // capital. This is that shape, as it reached published Atlas/Nova items.
+    private const string SplitWatermarkPartCText = """
+        31. Dr Everall thinks misunderstandings about the role of cholesterol E largely arise due
+        A an imprecise use of the term in the media. B inadequate explanations by health professionals. C a lack of focus on its M positive influences P in research studies.
+        32. What point does Dr Everall make about the technology known as 'gene silencing'?
+        A It is still S in its infancy. B It has been widely misunderstood. C It is likely to replace older drugs.
+        """;
+
+    [Fact]
+    public void Split_watermark_letters_fail_closed_instead_of_being_recovered()
+    {
+        var result = ListeningPartBCSourceParser.Parse(SplitWatermarkPartCText, [31, 32]);
+
+        Assert.Empty(result.Items);
+        Assert.Contains(result.Skipped, skip => skip.Number == 31 && skip.Reason == ListeningPartBCSourceSkipReason.StemRejected);
+        Assert.Contains(result.Skipped, skip => skip.Number == 32 && skip.Reason == ListeningPartBCSourceSkipReason.OptionTextRejected);
+    }
+
+    [Theory]
+    // The owner's reported shapes.
+    [InlineData("Dr Everall thinks misunderstandings about the role of cholesterol E largely arise due", "E")]
+    [InlineData("a lack of focus on its M positive influences P in research studies.", "M,P")]
+    [InlineData("What does Lianne S suggest about the new approach?", "S")]
+    [InlineData("You hear a physiotherapist talking to a patient. What is she doing? E", "E")]
+    [InlineData("the regular A medication that he needs to take.", "A")]
+    [InlineData("L What does the nurse say about the new ward?", "L")]
+    // Real content that must NOT be flagged.
+    [InlineData("A patient called Marisol has been admitted.", "")]
+    [InlineData("What does he say about vitamin A and hepatitis B screening?", "")]
+    [InlineData("The doctor suggests moving to Plan B. A new trial is due.", "")]
+    [InlineData("She was referred to A and E after the fall.", "")]
+    [InlineData("Mr P was given a grade A result for type K fitness.", "")]
+    [InlineData("It is still in its infancy.", "")]
+    public void Detects_lone_watermark_letters_but_not_real_letter_labels(string text, string expected)
+    {
+        Assert.Equal(expected, string.Join(",", ListeningPartBCSourceParser.FindWatermarkResidue(text)));
+    }
+
+    [Fact]
+    public void Stripping_residue_restores_the_printed_text()
+    {
+        Assert.Equal(
+            "a lack of focus on its positive influences in research studies.",
+            ListeningPartBCSourceParser.StripWatermarkResidue("a lack of focus on its M positive  influences P in research studies."));
+        Assert.Equal(
+            "being expected to mobilise without assistance.",
+            ListeningPartBCSourceParser.StripWatermarkResidue("being expected to mobilise without assistance. E"));
+    }
 }

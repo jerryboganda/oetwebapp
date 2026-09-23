@@ -394,6 +394,20 @@ public static class ListeningPartBCSourceParser
                 $"Q{number}: the recovered stem is a sentinel, a section heading, or a generic placeholder rather than the printed question."));
         }
 
+        if (HasWatermarkResidue(stem))
+        {
+            return (null, new(number, ListeningPartBCSourceSkipReason.StemRejected,
+                $"Q{number}: the recovered stem still contains a stray watermark letter ({string.Join(", ", FindWatermarkResidue(stem))})."));
+        }
+        foreach (var (key, value) in new[] { ("A", optionA), ("B", optionB), ("C", optionC) })
+        {
+            if (HasWatermarkResidue(value))
+            {
+                return (null, new(number, ListeningPartBCSourceSkipReason.OptionTextRejected,
+                    $"Q{number}: option {key} still contains a stray watermark letter ({string.Join(", ", FindWatermarkResidue(value))})."));
+            }
+        }
+
         return (new ListeningPartBCSourceItem(number, stem, optionA, optionB, optionC), null);
     }
 
@@ -476,6 +490,74 @@ public static class ListeningPartBCSourceParser
         }
         return bestScore > 0 ? best : null;
     }
+
+    // ── Watermark residue ────────────────────────────────────────────────────
+    // The question papers' diagonal "SAMPLE"/"BLANK" watermark used to be
+    // extracted glyph by glyph and merged into nearby lines, leaving lone
+    // capitals inside stems and options ("...cholesterol E largely arise...",
+    // "...without assistance. E"). PdfPigPdfTextExtractor now drops those
+    // glyphs; this check keeps any that slip through (or that were already
+    // stored) from being published.
+
+    private static readonly HashSet<string> WatermarkLetters = ["S", "A", "M", "P", "L", "E", "B", "N", "K"];
+
+    /// <summary>Words after which a lone capital is real content: "vitamin A",
+    /// "hepatitis B", "Plan B", "grade A", "Mr P", "option A".</summary>
+    private static readonly HashSet<string> LetterLabelPrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "vitamin", "vitamins", "hepatitis", "type", "types", "plan", "group", "groups", "grade", "stage",
+        "part", "parts", "extract", "question", "option", "options", "class", "category", "schedule",
+        "factor", "protein", "strep", "streptococcus", "size", "level", "ward", "bay", "wing", "block",
+        "unit", "room", "bed", "mr", "mrs", "ms", "miss", "dr", "grades", "choice", "answer", "letter",
+        "column", "box", "list", "table", "figure", "appendix", "zone", "phase", "area", "section",
+    };
+
+    private static readonly Regex TokenPattern = new(@"\S+", Std);
+
+    /// <summary>Lone watermark letters in <paramref name="text"/>, in order. Empty when clean.</summary>
+    public static IReadOnlyList<string> FindWatermarkResidue(string? text) =>
+        WatermarkResidueTokens(text).Select(token => token.Value).ToList();
+
+    public static bool HasWatermarkResidue(string? text) => WatermarkResidueTokens(text).Count > 0;
+
+    /// <summary><paramref name="text"/> with every lone watermark letter removed and
+    /// whitespace collapsed — what the printed text reads like without the watermark.</summary>
+    public static string StripWatermarkResidue(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var drop = WatermarkResidueTokens(text).Select(token => token.Index).ToHashSet();
+        return string.Join(' ', TokenPattern.Matches(text).Where(token => !drop.Contains(token.Index)).Select(token => token.Value));
+    }
+
+    private static List<Match> WatermarkResidueTokens(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return [];
+        var tokens = TokenPattern.Matches(text).ToList();
+        // A value that is ONLY a letter is a placeholder, not residue inside text.
+        if (tokens.Count < 2) return [];
+        var residue = new List<Match>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i].Value;
+            if (!WatermarkLetters.Contains(token)) continue;
+
+            var previous = i > 0 ? tokens[i - 1].Value : null;
+            // "A" opening a sentence is the indefinite article ("A patient called...").
+            if (token == "A" && (previous is null || previous[^1] is '.' or '?' or '!' or ':')) continue;
+            if (previous is not null && LetterLabelPrefixes.Contains(previous.TrimEnd(',', ';', ':', '(', ')'))) continue;
+            // "A and E" / "A & E" (either letter).
+            if (IsLetterPairJoin(tokens, i + 1, i + 2) || IsLetterPairJoin(tokens, i - 1, i - 2)) continue;
+
+            residue.Add(tokens[i]);
+        }
+        return residue;
+    }
+
+    private static bool IsLetterPairJoin(List<Match> tokens, int joinIndex, int letterIndex) =>
+        letterIndex >= 0 && letterIndex < tokens.Count
+        && tokens[joinIndex].Value is "and" or "&"
+        && tokens[letterIndex].Value.TrimEnd('.', ',', ';', ':', '?', '!') is { Length: 1 } other
+        && char.IsUpper(other[0]);
 
     /// <summary>Human-readable one-line summary for admin reports and audit rows.</summary>
     public static string Describe(ListeningPartBCSourceParseResult result)

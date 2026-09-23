@@ -1204,6 +1204,29 @@ public static class ListeningAuthoringAdminEndpoints
             return Results.Ok(report);
         });
 
+        // Stray watermark letters in published Part B/C stems/options. The audit
+        // writes nothing but a refreshed PDF-text cache; the repair writes ONLY
+        // the "paperId:number" keys an operator approved from the audit.
+        fleet.MapGet("/watermark-audit", async (
+            IListeningPartBCSourceRecoveryService svc,
+            CancellationToken ct) =>
+            Results.Ok(await svc.RepairWatermarkResidueAsync(null, "system:audit", ct)));
+
+        fleet.MapPost("/watermark-repair", async (
+            ListeningPartBCWatermarkRepairRequest request,
+            IListeningPartBCSourceRecoveryService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (request.Items is not { Count: > 0 })
+            {
+                throw ApiException.Validation("listening_watermark_repair_items_required",
+                    "List the approved \"paperId:number\" items from /watermark-audit.");
+            }
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            return Results.Ok(await svc.RepairWatermarkResidueAsync(request.Items, adminId, ct));
+        });
+
         return app;
     }
 
@@ -1235,4 +1258,5 @@ public static class ListeningAuthoringAdminEndpoints
     public sealed record BulkValidateResult(string PaperId, string? Title, string Status, bool IsPublishReady, IReadOnlyList<string> Issues);
     public sealed record BulkValidateSummary(int Total, int Ready, int NotReady);
     public sealed record BulkValidateResponse(IReadOnlyList<BulkValidateResult> Results, BulkValidateSummary Summary);
+    public sealed record ListeningPartBCWatermarkRepairRequest(IReadOnlyList<string>? Items);
 }
