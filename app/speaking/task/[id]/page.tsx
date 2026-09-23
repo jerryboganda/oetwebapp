@@ -5,14 +5,15 @@ import { Capacitor } from '@capacitor/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
-  FileText, ChevronUp, ChevronDown,
-  User, ShieldCheck, Loader2, Play, Pause,
+  Mic, RotateCcw, CheckCircle2, AlertCircle,
+  User, ShieldCheck, Loader2,
   Scissors,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
+import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
+import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, completeMockSection, type SpeakingComplianceCopy } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import {
@@ -24,7 +25,7 @@ import {
   tryResumeNativeSpeakingRecorder,
   type CapturedSpeakingRecording,
 } from '@/lib/mobile/speaking-recorder';
-import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
+import { getRealtimeValueTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
 import { deriveDeliveryMode, deliveryModeLabel } from '@/lib/mocks/delivery-mode';
 import { getFreeSpeakingCard } from '@/lib/api/speaking-role-play-cards';
@@ -36,7 +37,6 @@ type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 function LiveSpeakingTaskContent() {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const realtimeTransition = getRealtimeValueTransition(reducedMotion);
-  const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,7 +112,6 @@ function LiveSpeakingTaskContent() {
   // --- State ---
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const recordingStateRef = useRef<RecordingState>('idle');
-  const [showRoleCard, setShowRoleCard] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -457,30 +456,6 @@ function LiveSpeakingTaskContent() {
     }
   };
 
-  const handlePauseRecording = async () => {
-    if (mode === 'exam') {
-      return;
-    }
-
-    if (isNativeRecorder) {
-      const paused = await tryPauseNativeSpeakingRecorder();
-      if (!paused) {
-        setSubmitError('Pause is not available on this device yet. Continue recording or finish this attempt.');
-        return;
-      }
-      stopNativeVisualizerPulse();
-      pauseDurationClock();
-      setRecordingState('paused');
-      return;
-    }
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.pause();
-      pauseDurationClock();
-      setRecordingState('paused');
-    }
-  };
-
   useEffect(() => {
     if (mode !== 'exam' || recordingState !== 'recording' || elapsedSeconds < roleplayTimeSeconds) {
       return;
@@ -601,10 +576,6 @@ function LiveSpeakingTaskContent() {
 
   const confirmSubmit = async () => {
     if (isSubmitting) return;
-    if (!recordingConsentAccepted) {
-      setSubmitError('Please accept the recording consent before submitting.');
-      return;
-    }
     if (paperRuleRequired && !paperDestroyed) {
       setSubmitError('Please confirm you have destroyed your scratch paper on camera before submitting.');
       return;
@@ -816,202 +787,70 @@ function LiveSpeakingTaskContent() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      {/* 22 Sep 2026 handoff (item 6): this used to be justify-center, which
-          vertically centers the whole block — including the "Start
-          recording" mic button, the LAST thing in it. With long consent
-          copy the centered block could grow taller than the fixed pb-56/64
-          clearance below it, pushing the mic button underneath the fixed
-          Role Card dock (bottom-24 sm:bottom-32) where it received no
-          clicks — confirmed live: completely unusable via mouse/keyboard at
-          a standard 1366x900 desktop viewport. justify-start lets content
-          flow top-down instead of being squeezed between two fixed layers;
-          pb-56/64 + overflow-y-auto still guarantee clearance at whatever
-          height the content ends up, by scrolling rather than compressing. */}
-      <main className="relative flex flex-1 flex-col items-center justify-start overflow-y-auto bg-background-light p-6 pt-10 pb-56 sm:pb-64">
-
-        {/* Visualizer / AI State */}
-        <div className="relative z-10 mb-24 flex flex-col items-center gap-10">
-          <div className="relative">
-            <div className="absolute inset-0 -z-10 rounded-full bg-primary/10 opacity-80 blur-2xl scale-150"></div>
-            
-            <motion.div 
-              animate={recordingState === 'recording' && !reducedMotion ? { scale: [1, 1.05, 1] } : {}}
-              transition={recordingPulseTransition}
-              className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-500 ${
-                recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
-                recordingState === 'paused' ? 'border-warning/30 bg-warning/10 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
-              }`}
-            >
-              <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-500 shadow-sm ${
-                recordingState === 'recording' ? 'bg-danger/10 shadow-inner' :
-                recordingState === 'paused' ? 'bg-warning/10 shadow-inner' : 
-                'bg-surface border border-primary/10'
-              }`}>
-                {recordingState === 'recording' ? (
-                  <div className="flex items-center gap-1.5 h-12 items-center">
-                    {audioLevels.map((level, i) => (
-                      <motion.div
-                        key={i}
-                        animate={{ height: level }}
-                        transition={realtimeTransition}
-                        className="w-1.5 bg-danger rounded-full"
-                      />
-                    ))}
-                  </div>
-                ) : recordingState === 'paused' ? (
-                  <Pause className="w-12 h-12 text-warning" />
-                ) : (
-                  <Mic className="w-12 h-12 text-primary/80" />
-                )}
-              </div>
-            </motion.div>
-            
-            {recordingState === 'recording' && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-surface px-3 py-1.5 rounded-full border border-danger/20 shadow-sm"
-              >
-                <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-danger">Recording</span>
-              </motion.div>
-            )}
-            {recordingState === 'paused' && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-surface px-3 py-1.5 rounded-full border border-warning/20 shadow-sm"
-              >
-                <div className="w-2 h-2 rounded-full bg-warning" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-warning">Paused</span>
-              </motion.div>
-            )}
+      {/* Main Content Area — 23 Sep 2026 owner flow: the ONE Rules + consent
+          step comes first (no timer runs until recording starts), then the
+          exam-style role card stays visible inline (no toggle/drawer) above a
+          single recording control and one level indicator. Submit lives in
+          the fixed footer; pb-40 keeps content clear of it. */}
+      <main className="relative flex flex-1 flex-col items-center justify-start gap-6 overflow-y-auto bg-background-light p-4 pb-40 sm:p-6 sm:pb-44">
+        {!recordingConsentAccepted ? (
+          <div className="w-full max-w-2xl">
+            <SpeakingRulesConsent
+              freeSample={requestedFree}
+              startLabel="Continue to the recorder"
+              onStart={() => setRecordingConsentAccepted(true)}
+            />
           </div>
-
-          <div className="text-center max-w-xl mx-auto relative">
-            <h2 className="text-3xl font-black mb-3 text-navy tracking-tight">
-              {recordingState === 'idle' ? "Ready to record" :
-               recordingState === 'paused' ? "Recording paused" :
-               "Recording your response..."}
-            </h2>
-            <p className="text-sm font-medium text-navy/70 leading-relaxed px-4">
-              Complete the tasks on your role card. Your recording will be saved for transcript review and speaking feedback.
-            </p>
-            <p className="mt-2 text-xs font-bold leading-relaxed text-muted px-4">
-              {card?.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
-            </p>
-            
-            <label className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-left text-sm leading-relaxed text-navy shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 cursor-pointer group">
-              <div className="bg-surface p-1 rounded-md border border-primary/20 shadow-sm shrink-0 group-hover:border-primary/40 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={recordingConsentAccepted}
-                  onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
-                  disabled={recordingState !== 'idle'}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-              </div>
-              <span className="text-xs sm:text-sm font-medium opacity-90">
-                {compliance?.consentText ?? 'By recording you agree that your audio will be processed by our AI evaluator and may be reviewed by a human tutor. Recordings are stored securely and deleted after the configured retention window.'}
-              </span>
-            </label>
-            
-            <div className="mt-8">
-              <span className="inline-flex items-center gap-2 bg-navy text-white rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.15em] shadow-md shadow-navy/20">
-                <span className="opacity-70">Duration</span>
-                <span>{elapsedSeconds}s</span>
-              </span>
-            </div>
-          </div>
-          
-          {/* Manual Recording Controls */}
-          <div className="flex items-center gap-4 mt-2">
-            {recordingState === 'idle' ? (
-              <button
-                onClick={handleStartRecording}
-                disabled={!recordingConsentAccepted}
-                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-[0_0_30px_rgba(239,68,68,0.3)] hoverable:scale-105 active:scale-95"
-                aria-label="Start recording"
-              >
-                <Mic className="w-8 h-8 text-white" />
-              </button>
-            ) : recordingState === 'paused' ? (
-              <button
-                onClick={handleStartRecording}
-                disabled={!recordingConsentAccepted}
-                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-[0_0_30px_rgba(239,68,68,0.3)] hoverable:scale-105 active:scale-95"
-                aria-label="Resume recording"
-              >
-                <Play className="w-8 h-8 text-white ml-1.5" />
-              </button>
-            ) : recordingState === 'recording' ? (
-              <button
-                onClick={mode === 'exam' ? handleSubmit : handlePauseRecording}
-                className="w-[72px] h-[72px] rounded-full border-2 border-border bg-surface hover:bg-background-light hover:border-danger/30 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-lg hoverable:scale-105 active:scale-95"
-                aria-label={mode === 'exam' ? 'Finish exam recording' : 'Pause recording'}
-              >
-                {mode === 'exam' ? <Square className="w-8 h-8 text-danger fill-danger" /> : <Pause className="w-8 h-8 text-navy fill-navy" />}
-              </button>
+        ) : (
+          <>
+            {card ? (
+              <SpeakingRoleCard
+                role={card.profession}
+                setting={card.setting}
+                patient={card.patient}
+                background={card.background}
+                tasks={card.tasks}
+                disclaimer={card.disclaimer}
+                sourceAttribution={card.sourceAttribution}
+                className="w-full max-w-2xl"
+              />
             ) : null}
-          </div>
-        </div>
 
-        {/* Role Card Toggle (22 Sep 2026 handoff: Notes and AI-patient dock buttons removed as clutter) */}
-        <div className="fixed bottom-24 sm:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-20 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
-          <button
-            onClick={() => setShowRoleCard(!showRoleCard)}
-            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-              showRoleCard
-                ? 'bg-navy text-white shadow-md'
-                : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
-            }`}
-          >
-            <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
-          </button>
-        </div>
+            <div className="flex w-full max-w-2xl flex-col items-center gap-4 text-center">
+              <h2 className="text-2xl font-black tracking-tight text-navy">
+                {recordingState === 'idle' ? 'Ready to record' : 'Recording your response...'}
+              </h2>
+              <p className="text-sm font-medium leading-relaxed text-navy/70">
+                Complete the tasks on your role card. Your recording will be saved for transcript review and speaking feedback.
+              </p>
 
-        {/* Overlays */}
-        <AnimatePresence>
-          {showRoleCard && (
-            <motion.div 
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-border rounded-3xl p-6 shadow-2xl z-30 max-h-[50vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Role Card Reference</h3>
-                <button onClick={() => setShowRoleCard(false)} aria-label="Close role card reference" className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" aria-hidden /></button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-lg font-bold text-navy mb-1">{card?.title}</h4>
-                  <p className="text-xs text-muted uppercase font-bold tracking-wider">{card?.profession} - {card?.setting}</p>
-                </div>
-                <p className="text-sm text-navy/80 leading-relaxed">{card?.brief}</p>
-                {card?.patient && (
-                  <p className="text-sm text-navy/80 leading-relaxed">
-                    <span className="font-bold text-navy">Patient / Client:</span> {card.patient}
-                  </p>
-                )}
-                {card?.background && (
-                  <p className="text-sm text-navy/80 leading-relaxed whitespace-pre-line">{card.background}</p>
-                )}
-                <ul className="space-y-2">
-                  {card?.tasks.map((t, i) => (
-                    <li key={i} className="text-sm text-muted flex gap-3">
-                      <span className="text-primary font-bold">{i+1}.</span> {t}
-                    </li>
+              {/* The single activity indicator. */}
+              <div className="flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-2" aria-live="polite">
+                <span className={`h-2.5 w-2.5 rounded-full ${recordingState === 'recording' ? 'animate-pulse bg-danger' : 'bg-border'}`} />
+                <div className="flex h-8 items-center gap-1" aria-hidden>
+                  {audioLevels.map((level, i) => (
+                    <motion.div
+                      key={i}
+                      animate={{ height: recordingState === 'recording' ? level * 0.8 : 6 }}
+                      transition={realtimeTransition}
+                      className="w-1.5 rounded-full bg-danger/80"
+                    />
                   ))}
-                </ul>
-                {card?.sourceAttribution && (
-                  <p className="text-[11px] leading-relaxed text-muted/80">{card.sourceAttribution}</p>
-                )}
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-navy">
+                  {recordingState === 'recording' ? `Recording · ${elapsedSeconds}s` : `${elapsedSeconds}s`}
+                </span>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+              {recordingState === 'idle' ? (
+                <Button size="lg" onClick={handleStartRecording}>
+                  <Mic className="mr-2 h-5 w-5" aria-hidden />
+                  Start recording
+                </Button>
+              ) : null}
+            </div>
+          </>
+        )}
       </main>
 
       {/* Bottom Controls */}
@@ -1175,21 +1014,6 @@ function LiveSpeakingTaskContent() {
                 </div>
               </div>
 
-              <div className="mb-6 rounded-2xl border border-border bg-background-light p-4">
-                <label className="flex items-start gap-3 text-xs leading-relaxed text-muted">
-                  <input
-                    type="checkbox"
-                    checked={recordingConsentAccepted}
-                    onChange={(event) => setRecordingConsentAccepted(event.target.checked)}
-                    disabled={isSubmitting || recordingState !== 'finished'}
-                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>
-                    {compliance?.consentText ?? 'I consent to this speaking recording being stored and processed for transcription, feedback, tutor review, and quality assurance.'}
-                  </span>
-                </label>
-              </div>
-
               {submitError && (
                 <p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-xs font-semibold text-danger">
                   {submitError}
@@ -1197,7 +1021,7 @@ function LiveSpeakingTaskContent() {
               )}
 
               <div className="flex flex-col gap-3">
-                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting || !recordingConsentAccepted || (paperRuleRequired && !paperDestroyed)} className="py-4 rounded-2xl font-black">
+                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting || (paperRuleRequired && !paperDestroyed)} className="py-4 rounded-2xl font-black">
                   {isSubmitting ? 'Submitting...' : 'Submit for Evaluation'}
                 </Button>
                 <Button variant="outline" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl">
