@@ -134,8 +134,8 @@ public class DocumentationEvidenceItem
     [MaxLength(512)]
     public string Description { get; set; } = default!;
 
-    /// <summary>The real, checkable source: commit SHA, config key/file path, doc path, or test run id.</summary>
-    [MaxLength(256)]
+    /// <summary>The real, checkable source: commit SHA, config key/file path, doc path, or test run id. Can list several sibling files, so kept generous.</summary>
+    [MaxLength(512)]
     public string SourceReference { get; set; } = default!;
 
     /// <summary>Optional attached file (screenshot, signed declaration scan) via the existing <c>MediaAsset</c>/<c>IFileStorage</c> pipeline.</summary>
