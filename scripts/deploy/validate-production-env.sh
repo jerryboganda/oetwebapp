@@ -39,30 +39,6 @@ required_keys=(
   AI__APIKEY
   AI__PROVIDERID
   AI__DEFAULTMODEL
-  FEATURES__SPEAKINGV2
-  LIVEVOICE__PRIMARYPROVIDER
-  LIVEVOICE__OPENAIAPIKEY
-  LIVEVOICE__OPENAIBASEURL
-  LIVEVOICE__OPENAIMODELSBASEURL
-  LIVEVOICE__OPENAIMODEL
-  LIVEVOICE__GEMINIAPIKEY
-  LIVEVOICE__GEMINIBASEURL
-  LIVEVOICE__GEMINIMODELSBASEURL
-  LIVEVOICE__GEMINIMODEL
-  LIVEVOICE__GEMINIWEBSOCKETBASEURL
-  LIVEKIT__PROVIDER
-  LIVEKIT__APIKEY
-  LIVEKIT__APISECRET
-  LIVEKIT__WSSURL
-  LIVEKIT__WEBHOOKSIGNINGSECRET
-  LIVEKIT__EGRESSENABLED
-  LIVEKIT__EGRESSBUCKET
-  LIVEKIT__EGRESSBUCKETREGION
-  LIVEKIT__EGRESSACCESSKEY
-  LIVEKIT__EGRESSSECRET
-  TYPESAFE__ENABLED
-  TYPESAFE__APIKEY
-  TYPESAFE__CONVERSATIONADVISORYENABLED
   PRONUNCIATION__PROVIDER
   PRONUNCIATION__AZURESPEECHKEY
   PRONUNCIATION__AZURESPEECHREGION
@@ -474,14 +450,6 @@ require_min_length BACKUP_AWS_ACCESS_KEY_ID 8
 require_min_length BACKUP_AWS_SECRET_ACCESS_KEY 16
 require_min_length BACKUP_RESTORE_DRILL_ID 8
 require_min_length READING_SMOKE_LEARNER_PASSWORD 12
-require_min_length LIVEVOICE__OPENAIAPIKEY 16
-require_min_length LIVEVOICE__GEMINIAPIKEY 16
-require_min_length LIVEKIT__APIKEY 8
-require_min_length LIVEKIT__APISECRET 16
-require_min_length LIVEKIT__WEBHOOKSIGNINGSECRET 16
-require_min_length LIVEKIT__EGRESSACCESSKEY 8
-require_min_length LIVEKIT__EGRESSSECRET 16
-require_min_length TYPESAFE__APIKEY 16
 require_email READING_SMOKE_LEARNER_EMAIL
 require_https_url PUBLIC_API_BASE_URL
 require_https_url CHECKOUT_BASE_URL
@@ -491,21 +459,10 @@ require_https_url APP_URL
 require_https_url SENTRY_DSN
 require_https_url NEXT_PUBLIC_SENTRY_DSN
 require_https_url BACKUP_ALERT_WEBHOOK
-require_https_url LIVEVOICE__OPENAIBASEURL
-require_https_url LIVEVOICE__OPENAIMODELSBASEURL
-require_https_url LIVEVOICE__GEMINIBASEURL
-require_https_url LIVEVOICE__GEMINIMODELSBASEURL
-require_wss_url LIVEVOICE__GEMINIWEBSOCKETBASEURL
-require_wss_url LIVEKIT__WSSURL
 require_s3_url BACKUP_S3_URL
-require_s3_url LIVEKIT__EGRESSBUCKET
 require_no_wildcard_or_localhost API_ALLOWED_HOSTS
 require_no_wildcard_or_localhost CORS_ALLOWED_ORIGINS
 require_boolean_false BILLING__ALLOWSANDBOXFALLBACKS
-require_boolean_true FEATURES__SPEAKINGV2
-require_boolean_true TYPESAFE__ENABLED
-require_boolean_true TYPESAFE__CONVERSATIONADVISORYENABLED
-require_boolean_true LIVEKIT__EGRESSENABLED
 require_absent NEXT_PUBLIC_ELEVENLABS_API_KEY
 require_absent NEXT_PUBLIC_ELEVENLABS_STT_API_KEY
 require_absent NEXT_PUBLIC_ELEVENLABS_KEY
@@ -525,21 +482,60 @@ require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTALLOWREALPROV
 require_boolean_false_unless_acknowledged CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED Conversation__RealtimeSttRealProviderProductionAuthorized CONVERSATION__REALTIMESTTROLLOUTACKNOWLEDGEMENT Conversation__RealtimeSttRolloutAcknowledgement
 require_not_value CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER Conversation__RealtimeSttAllowManagedLearnerRealProvider true
 
+# Live AI voice, LiveKit tutor rooms and TypeSafe are OPTIONAL in production
+# (owner decision 2026-09-23). A missing provider leaves that feature in its
+# controlled "unavailable" state; it must never block the whole deploy. When a
+# provider IS configured, its settings are validated in full.
 live_voice_primary=$(read_env_value LIVEVOICE__PRIMARYPROVIDER || true)
 live_voice_primary=$(printf '%s' "$live_voice_primary" | tr '[:upper:]' '[:lower:]')
-case "$live_voice_primary" in
-  openai|gemini) ;;
+live_voice_openai_key=$(read_env_value LIVEVOICE__OPENAIAPIKEY || true)
+live_voice_gemini_key=$(read_env_value LIVEVOICE__GEMINIAPIKEY || true)
+if [ -n "$live_voice_openai_key" ] || [ -n "$live_voice_gemini_key" ]; then
+  case "$live_voice_primary" in
+    openai|gemini) ;;
+    *)
+      echo "[env] LIVEVOICE__PRIMARYPROVIDER must be openai or gemini when a live voice key is set" >&2
+      failed=1
+      ;;
+  esac
+fi
+if [ -n "$live_voice_openai_key" ]; then
+  require_min_length LIVEVOICE__OPENAIAPIKEY 16
+  require_https_url LIVEVOICE__OPENAIBASEURL
+  require_https_url LIVEVOICE__OPENAIMODELSBASEURL
+fi
+if [ -n "$live_voice_gemini_key" ]; then
+  require_min_length LIVEVOICE__GEMINIAPIKEY 16
+  require_https_url LIVEVOICE__GEMINIBASEURL
+  require_https_url LIVEVOICE__GEMINIMODELSBASEURL
+  require_wss_url LIVEVOICE__GEMINIWEBSOCKETBASEURL
+fi
+
+livekit_provider=$(read_env_value LIVEKIT__PROVIDER || true)
+livekit_provider=$(printf '%s' "$livekit_provider" | tr '[:upper:]' '[:lower:]')
+case "$livekit_provider" in
+  ""|disabled) ;;
+  livekit_cloud)
+    require_min_length LIVEKIT__APIKEY 8
+    require_min_length LIVEKIT__APISECRET 16
+    require_min_length LIVEKIT__WEBHOOKSIGNINGSECRET 16
+    require_wss_url LIVEKIT__WSSURL
+    livekit_egress=$(read_env_value LIVEKIT__EGRESSENABLED || true)
+    if [ "$(printf '%s' "$livekit_egress" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+      require_s3_url LIVEKIT__EGRESSBUCKET
+      require_min_length LIVEKIT__EGRESSACCESSKEY 8
+      require_min_length LIVEKIT__EGRESSSECRET 16
+    fi
+    ;;
   *)
-    echo "[env] LIVEVOICE__PRIMARYPROVIDER must be openai or gemini" >&2
+    echo "[env] LIVEKIT__PROVIDER must be livekit_cloud or disabled" >&2
     failed=1
     ;;
 esac
 
-livekit_provider=$(read_env_value LIVEKIT__PROVIDER || true)
-livekit_provider=$(printf '%s' "$livekit_provider" | tr '[:upper:]' '[:lower:]')
-if [ "$livekit_provider" != "livekit_cloud" ]; then
-  echo "[env] LIVEKIT__PROVIDER must be livekit_cloud for production tutor rooms" >&2
-  failed=1
+typesafe_enabled=$(read_env_value TYPESAFE__ENABLED || true)
+if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+  require_min_length TYPESAFE__APIKEY 16
 fi
 
 real_provider_enabled=$(read_env_value_any CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider || true)
