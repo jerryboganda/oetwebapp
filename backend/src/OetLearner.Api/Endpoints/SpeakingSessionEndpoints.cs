@@ -100,7 +100,7 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapGet("/{id}/results", GetResultsAsync)
-            .WithSummary("Learner-facing grading state: assessmentState (processing|completed|failed), retryable, failureReason.")
+            .WithSummary("Learner-facing grading state: assessmentState (processing|completed|failed), retryable, failureReason, isFreeSample, cardId. 404 only when the session is not the caller's.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -335,18 +335,30 @@ public static class SpeakingSessionEndpoints
         HttpContext http,
         string id,
         SpeakingSessionService sessions,
+        LearnerDbContext db,
         CancellationToken ct)
     {
+        // Lean status payload: the page loads the detailed assessment from
+        // /ai-assessment, /transcript and the v1.1 endpoints. "No assessment
+        // yet" is assessmentState=processing, never a 404.
         var userId = ResolveUserId(http);
-        _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        var session = await sessions.GetSessionForLearnerAsync(userId, id, ct);
         var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
         var state = await canonical.GetStateAsync(id, ct);
+        var attemptId = await db.SpeakingSessions.AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => s.AttemptId)
+            .FirstOrDefaultAsync(ct);
+        var isFreeSample = await new OetLearner.Api.Services.FreeSamples.FreeSampleService(db)
+            .IsFreeAttemptAsync(userId, OetLearner.Api.Services.FreeSamples.FreeSampleService.Speaking, attemptId, ct);
         return Results.Ok(new
         {
             sessionId = id,
             assessmentState = state.AssessmentState,
             retryable = state.Retryable,
             failureReason = state.FailureReason,
+            isFreeSample,
+            cardId = session.RolePlayCardId,
         });
     }
 
