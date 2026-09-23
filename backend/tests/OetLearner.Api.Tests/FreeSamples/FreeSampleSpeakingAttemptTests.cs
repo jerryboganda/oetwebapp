@@ -13,12 +13,13 @@ using OetLearner.Api.Services.FreeSamples;
 namespace OetLearner.Api.Tests.FreeSamples;
 
 /// <summary>
-/// Free Mocks — starting a single-card Speaking attempt. The learner's ONE free
-/// AI-graded sample is the OWN profession's designated card: it starts for a
-/// learner who has no credits left, binds the once-only claim, and changes
-/// nothing else — every other card, a spent sample, another profession's
-/// designated card, and the dark-launch-off state keep the profession-isolation
-/// and credit gates exactly as before.
+/// Free Mocks — the LEGACY single-card Speaking recorder. Since the free sample
+/// retry addendum (owner 23 Sep 2026) NEW free Speaking uses run on the shared
+/// Speaking session engine (see FreeSampleRetryPolicyTests); the legacy recorder
+/// only resumes a free attempt that was already in flight and never mints a new
+/// free use. Every other card, a spent sample, another profession's designated
+/// card, and the dark-launch-off state keep the profession-isolation and credit
+/// gates exactly as before.
 ///
 /// CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): there is no longer a
 /// cross-profession free-sample picker — a learner may only ever get the free
@@ -149,25 +150,18 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheDesignatedCard_StartsFree_ForAnExhaustedLearnerOfTheSameProfession_AndBindsTheClaim()
+    public async Task TheDesignatedCard_NeverStartsANewFreeLegacyAttempt_TheSessionEngineOwnsNewUses()
     {
         await FreeSampleServiceTests.EnableAsync(_db);
         var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
         var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
 
-        var result = await StartAsync(learner, medCard);
+        var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
 
-        var attemptId = AttemptIdOf(result);
-        var claim = await _db.FreeSampleClaims.SingleAsync(c => c.UserId == learner);
-        Assert.Equal("speaking", claim.Subtest);
-        Assert.Equal("medicine", claim.Profession);
-        Assert.Equal(medCard, claim.ContentId);
-        Assert.Equal(attemptId, claim.AttemptId);
-        // Compare the PARSED value: the serializer escapes the em dash as — on the wire,
-        // which the client decodes back to the exact FREE_SAMPLE_FEEDBACK string.
-        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(result));
-        Assert.Equal(ContentEntitlementService.FreeSampleFeedback, payload.RootElement.GetProperty("feedbackMessage").GetString());
-        Assert.Equal("medicine", (await _db.Users.SingleAsync(u => u.Id == learner)).ActiveProfessionId);
+        Assert.Equal("free_speaking_session_required", ex.ErrorCode);
+        Assert.Empty(_db.FreeSampleClaims);
+        Assert.Empty(_db.FreeSampleUses);
+        Assert.Empty(_db.Attempts);
     }
 
     [Fact]
@@ -233,29 +227,38 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
     public async Task ASpentSample_IsNotFreeAgain()
     {
         await FreeSampleServiceTests.EnableAsync(_db);
-        var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
+        var (item, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
         var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
-
-        var attemptId = AttemptIdOf(await StartAsync(learner, medCard));
-        (await _db.Attempts.SingleAsync(a => a.Id == attemptId)).State = AttemptState.Completed;
-        await _db.SaveChangesAsync();
+        var service = new FreeSampleService(_db);
+        for (var i = 0; i < FreeSampleService.SuccessLimit; i++)
+        {
+            var attemptId = await FreeSampleServiceTests.SeedAttemptAsync(_db, learner, item, AttemptState.InProgress);
+            Assert.True(await service.TryClaimAsync(learner, "speaking", medCard, FreeSampleUse.KindLegacyAttempt, attemptId, CancellationToken.None));
+            (await _db.Attempts.SingleAsync(a => a.Id == attemptId)).State = AttemptState.Completed;
+            await _db.SaveChangesAsync();
+            await FreeSampleServiceTests.SeedEvaluationAsync(_db, attemptId, AsyncState.Completed);
+        }
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => StartAsync(learner, medCard));
         Assert.Equal("live_voice_required", ex.ErrorCode);
     }
 
     [Fact]
-    public async Task ReopeningTheCardWhileTheFreeAttemptIsInProgress_ResumesIt()
+    public async Task AFreeLegacyAttemptAlreadyInFlight_IsResumed_WithoutANewUse()
     {
         await FreeSampleServiceTests.EnableAsync(_db);
-        var (_, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
+        var (item, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
         var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
+        // Started on the recorder before the cut-over (the migration backfilled its use).
+        var inFlight = await FreeSampleServiceTests.SeedAttemptAsync(_db, learner, item, AttemptState.InProgress);
+        Assert.True(await new FreeSampleService(_db).TryClaimAsync(
+            learner, "speaking", medCard, FreeSampleUse.KindLegacyAttempt, inFlight, CancellationToken.None));
 
-        var first = AttemptIdOf(await StartAsync(learner, medCard));
-        var again = AttemptIdOf(await StartAsync(learner, medCard));
+        var resumed = AttemptIdOf(await StartAsync(learner, medCard));
 
-        Assert.Equal(first, again);
+        Assert.Equal(inFlight, resumed);
         Assert.Single(_db.FreeSampleClaims);
+        Assert.Equal(inFlight, (await _db.FreeSampleUses.SingleAsync()).ResourceId);
     }
 
     private sealed class TestHostEnvironment(string contentRootPath)

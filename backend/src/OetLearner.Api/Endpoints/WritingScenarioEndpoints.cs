@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.FreeSamples;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -118,7 +119,11 @@ public static class WritingScenarioEndpoints
 
         var userId = http.WritingV2UserId();
         var entitlement = await writingEntitlement.CheckAsync(userId, ct);
-        if (entitlement.Allowed && string.Equals(entitlement.Tier, "free", StringComparison.OrdinalIgnoreCase))
+        // The learner's own pinned free sample (FreeSampleService) is never
+        // blocked by the free-tier featured-item rule — even if an admin moved
+        // the designation after the learner claimed it.
+        if (entitlement.Allowed && string.Equals(entitlement.Tier, "free", StringComparison.OrdinalIgnoreCase)
+            && !await new FreeSampleService(db).IsOfferedAsync(userId, FreeSampleService.Writing, id.ToString("D"), ct))
         {
             var profession = await db.Users.AsNoTracking()
                 .Where(user => user.Id == userId)

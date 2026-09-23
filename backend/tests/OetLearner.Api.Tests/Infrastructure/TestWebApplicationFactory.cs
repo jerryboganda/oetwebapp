@@ -742,6 +742,48 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Free sample retry addendum (23 Sep 2026): NEW free Speaking uses run on
+    /// the session engine; the legacy recorder only resumes a free attempt that
+    /// was already in flight. Seeds exactly that (attempt + bound legacy use) so
+    /// legacy-pipeline tests can keep exercising it. Call after
+    /// <see cref="EnsureFreeSamplesEnabledAsync"/> and the learner profile.
+    /// </summary>
+    public async Task<string> SeedInFlightLegacyFreeSpeakingAttemptAsync(
+        string userId, string contentRef, string mode, CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var card = await db.RolePlayCards.AsNoTracking()
+            .FirstAsync(c => c.Id == contentRef || c.ContentItemId == contentRef, cancellationToken);
+        var attemptId = $"sa-{Guid.NewGuid():N}";
+        db.Attempts.Add(new Attempt
+        {
+            Id = attemptId,
+            UserId = userId,
+            ContentId = card.ContentItemId,
+            SubtestCode = "speaking",
+            Context = "practice",
+            Mode = mode,
+            State = AttemptState.InProgress,
+            StartedAt = DateTimeOffset.UtcNow,
+            DeviceType = "desktop",
+            ComparisonGroupId = $"speaking-{card.ContentItemId}",
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        if (!await new OetLearner.Api.Services.FreeSamples.FreeSampleService(db).TryClaimAsync(
+                userId,
+                OetLearner.Api.Services.FreeSamples.FreeSampleService.Speaking,
+                card.Id,
+                FreeSampleUse.KindLegacyAttempt,
+                attemptId,
+                cancellationToken))
+        {
+            throw new InvalidOperationException("The seeded legacy attempt could not be bound as a free-sample use.");
+        }
+        return attemptId;
+    }
+
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName, string? activeProfessionId = null)
     {
         await EnsureCatalogSeededAsync();

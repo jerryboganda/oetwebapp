@@ -5,6 +5,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
+using OetLearner.Api.Services.FreeSamples;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -29,8 +30,7 @@ public sealed class SpeakingSessionService(
     IEffectiveEntitlementResolver? entitlementResolver = null,
     SpeakingSimulationV11PersonaService? personaService = null,
     OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
-    ISpeakingCanonicalAssessmentService? canonical = null,
-    IFreeTierContentResolver? freeTierContentResolver = null)
+    ISpeakingCanonicalAssessmentService? canonical = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -68,13 +68,6 @@ public sealed class SpeakingSessionService(
         }
 
         var mode = SpeakingSessionModes.Parse(req.Mode);
-        if (mode is SpeakingSessionMode.AiSelfPractice or SpeakingSessionMode.AiExam
-            && await IsFreeFeaturedSpeakingCardAsync(userId, card.Id, ct))
-        {
-            throw ApiException.Conflict(
-                "free_speaking_recorder_required",
-                "The designated free Speaking card must be completed with the existing recorder.");
-        }
 
         var consentVersion = string.IsNullOrWhiteSpace(req.ConsentVersion)
             ? DefaultConsentVersion
@@ -83,6 +76,22 @@ public sealed class SpeakingSessionService(
         var now = DateTimeOffset.UtcNow;
         var sessionId = $"sps_{Guid.NewGuid():N}";
         var attemptId = $"att_{Guid.NewGuid():N}";
+
+        // Free sample retry addendum (owner 23 Sep 2026): the learner's pinned
+        // free Speaking card runs on this shared engine. The server alone decides
+        // (no client flag): a practice session on the offered card is bound as a
+        // free use — restarting rebinds, and only a produced result counts.
+        var freeSamples = new FreeSampleService(db);
+        var isFreeSample = mode == SpeakingSessionMode.AiSelfPractice
+            && string.IsNullOrWhiteSpace(req.MockSetId)
+            && await freeSamples.IsOfferedAsync(userId, FreeSampleService.Speaking, card.Id, ct);
+        if (isFreeSample
+            && !await freeSamples.TryClaimAsync(
+                userId, FreeSampleService.Speaking, card.Id, FreeSampleUse.KindSpeakingSession, sessionId, ct))
+        {
+            // Lost a race for the last free slot (second tab) — never silently paid.
+            throw ApiException.Conflict("free_sample_unavailable", "Your free Speaking sample is no longer available.");
+        }
 
         var attempt = new Attempt
         {
@@ -150,7 +159,8 @@ public sealed class SpeakingSessionService(
             PrepEndsAt: prepEndsAt,
             RolePlayEndsAt: rolePlayEndsAt,
             ConsentVersion: consentVersion,
-            Card: ProjectLearnerCard(card));
+            Card: ProjectLearnerCard(card),
+            IsFreeSample: isFreeSample);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -226,7 +236,9 @@ public sealed class SpeakingSessionService(
         // pay-per-session (no credit) and AI-exam cards are charged by
         // SpeakingExamService, so only AiSelfPractice debits here.
         string? feedbackMessage = null;
-        if (session.Mode == SpeakingSessionMode.AiSelfPractice)
+        // A bound free-sample use holds no credits (free = 0 AI credits).
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice
+            && !await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct))
         {
             var refId = $"practice:{session.Id}";
             if (creditReservations is not null)
@@ -285,7 +297,8 @@ public sealed class SpeakingSessionService(
             ElapsedSeconds: session.ElapsedSeconds,
             ConsentVersion: session.ConsentVersion,
             Card: ProjectLearnerCard(card),
-            FeedbackMessage: feedbackMessage);
+            FeedbackMessage: feedbackMessage,
+            IsFreeSample: await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct));
     }
 
     public async Task<SpeakingSessionDetail> StartRolePlayAsync(
@@ -580,33 +593,6 @@ public sealed class SpeakingSessionService(
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
-
-    private async Task<bool> IsFreeFeaturedSpeakingCardAsync(
-        string userId,
-        string cardId,
-        CancellationToken ct)
-    {
-        if (entitlementResolver is null
-            || aiPackageCreditService is null
-            || freeTierContentResolver is null)
-        {
-            return false;
-        }
-
-        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
-        if (!string.Equals(entitlement.Tier, "free", StringComparison.OrdinalIgnoreCase)
-            || entitlement.HasEligibleSubscription)
-        {
-            return false;
-        }
-
-        var credits = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
-        return !credits.HasSpeakingActivity
-            && await freeTierContentResolver.IsFeaturedSpeakingCardAsync(
-                entitlement.ProfessionId,
-                cardId,
-                ct);
-    }
 
     private async Task<SpeakingSession> LoadOwnedSessionAsync(
         string userId,
