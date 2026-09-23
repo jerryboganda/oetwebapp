@@ -15,7 +15,8 @@ namespace OetLearner.Api.Endpoints;
 ///   * POST   ""                       create an exam (ai | live_tutor)
 ///   * GET    /{id}                     current state + server clock + current card
 ///   * GET    /{id}/clock              authoritative phase clock only
-///   * POST   /{id}/finish-intro       intro → prep_a (reveals Card A, debits credit A)
+///   * POST   /{id}/consent            record recording/AI consent at the intro (before any timer)
+///   * POST   /{id}/finish-intro       intro → prep_a (reveals Card A, holds 2 AI credits)
 ///   * POST   /{id}/start-card         prep → active for the current card
 ///   * POST   /{id}/cancel             abandon the exam
 ///   * POST   /{id}/technical-issue    flag a technical issue (never affects scoring)
@@ -52,8 +53,14 @@ public static class SpeakingExamEndpoints
             .Produces<SpeakingExamDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        learner.MapPost("/{id}/consent", ConsentAsync)
+            .WithSummary("Accept recording + AI-processing consent at the intro, before any card timer starts. Returns the exam (consentAccepted=true).")
+            .Produces<SpeakingExamDetail>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         learner.MapPost("/{id}/finish-intro", FinishIntroAsync)
-            .WithSummary("Finish the unscored Intro and reveal Card A (debits 1 AI credit).")
+            .WithSummary("Finish the unscored Intro and reveal Card A (holds 2 AI credits; an exam costs 4 AI credits, 2 per card, charged only when graded).")
             .Produces<SpeakingExamDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status402PaymentRequired)
             .Produces(StatusCodes.Status404NotFound)
@@ -110,6 +117,13 @@ public static class SpeakingExamEndpoints
         var userId = ResolveUserId(http);
         var detail = await exams.GetExamForLearnerAsync(userId, id, ct);
         return Results.Ok(detail.Clock);
+    }
+
+    private static async Task<IResult> ConsentAsync(
+        HttpContext http, string id, SpeakingExamService exams, CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        return Results.Ok(await exams.AcceptConsentAsync(userId, id, ct));
     }
 
     private static async Task<IResult> FinishIntroAsync(
