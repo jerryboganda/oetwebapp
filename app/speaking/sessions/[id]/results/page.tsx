@@ -14,6 +14,11 @@
  *
  * If tutor is null, the layout's tutor column shows a CTA "Request tutor review
  * (uses 1 credit)" — visually disabled for now (credit gating wires in later).
+ *
+ * 23 Sep 2026: never a dead end. While grading runs the page polls every
+ * 3 s with backoff (capped, then "Check again"); a failed + retryable grade
+ * offers "Try grading again" (POST /ai-assess, no extra charge). For the free
+ * sample card it shows the retry CTA or "Free sample completed".
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -37,10 +42,14 @@ import {
 } from '@/lib/api/speaking-assessments';
 import {
   getSpeakingSession,
+  getSpeakingSessionResults,
   getSpeakingSessionTranscript,
+  runAiAssessment,
   type SpeakingSessionDetail,
+  type SpeakingSessionResultsStatus,
   type SpeakingTranscriptPayload,
 } from '@/lib/api/speaking-sessions';
+import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
   getSpeakingResultVisibility,
   type SpeakingResultVisibilityDto,
@@ -79,10 +88,88 @@ function AiProcessingCta() {
     <div className="flex flex-col items-start gap-2">
       <p className="text-sm font-semibold text-navy">Assessment processing…</p>
       <p className="text-xs leading-relaxed text-muted">
-        Your AI assessment will appear here in a few minutes. Refresh once it&apos;s ready.
+        Your AI assessment will appear here automatically in a few minutes.
       </p>
     </div>
   );
+}
+
+const POLL_START_MS = 3_000;
+const POLL_MAX_MS = 15_000;
+const POLL_MAX_ATTEMPTS = 40;
+
+function GradingStatus({
+  status,
+  pending,
+  pollCapped,
+  retrying,
+  onRetry,
+  onCheckAgain,
+}: {
+  status: SpeakingSessionResultsStatus | null;
+  pending: boolean;
+  pollCapped: boolean;
+  retrying: boolean;
+  onRetry: () => void;
+  onCheckAgain: () => void;
+}) {
+  if (status?.assessmentState === 'failed') {
+    return (
+      <InlineAlert
+        variant="error"
+        title="Grading could not be completed"
+        action={status.retryable ? (
+          <Button size="sm" onClick={onRetry} disabled={retrying} data-testid="speaking-retry-grading">
+            {retrying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+            Try grading again
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/speaking">Back to Speaking</Link>
+          </Button>
+        )}
+      >
+        {status.failureReason ?? 'Your recording is saved. No credits were used for this failed grade.'}
+      </InlineAlert>
+    );
+  }
+  if (!pending) return null;
+  return (
+    <InlineAlert
+      variant="info"
+      title="Grading your role-play…"
+      action={pollCapped ? (
+        <Button variant="outline" size="sm" onClick={onCheckAgain}>
+          Check again
+        </Button>
+      ) : undefined}
+    >
+      <span className="inline-flex items-center gap-2" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        {pollCapped
+          ? 'This is taking longer than usual. Your result is saved and will appear here — you can leave and come back.'
+          : 'Your recording is being transcribed and marked. This page updates automatically.'}
+      </span>
+    </InlineAlert>
+  );
+}
+
+function FreeSampleNext({ row }: { row: FreeSampleOption | null }) {
+  if (row?.state === 'retry_available' && row.route) {
+    return (
+      <Button asChild fullWidth size="lg" data-testid="speaking-free-retry-cta">
+        <Link href={row.route}>Try Again - 1 Free Retry Remaining</Link>
+      </Button>
+    );
+  }
+  if (row?.state === 'completed' || row?.state === 'used') {
+    return (
+      <p className="rounded-lg border border-border bg-background-light px-3 py-2 text-center text-sm font-semibold text-muted" data-testid="speaking-free-completed">
+        Free sample completed
+      </p>
+    );
+  }
+  return null;
 }
 
 function VisibilityLockedCta({ title, body }: { title: string; body: string }) {
@@ -108,6 +195,10 @@ export default function SpeakingSessionResultsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [status, setStatus] = useState<SpeakingSessionResultsStatus | null>(null);
+  const [freeRow, setFreeRow] = useState<FreeSampleOption | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const trackedAiAssessmentRef = useRef(false);
   const trackedTutorAssessmentRef = useRef(false);
 
@@ -126,12 +217,19 @@ export default function SpeakingSessionResultsPage() {
         ? getSpeakingSessionTranscript(sessionId).catch(() => null)
         : Promise.resolve(null);
 
-      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse] = await Promise.all([
+      const statusPromise = getSpeakingSessionResults(sessionId).catch(() => null);
+      const freePromise = listFreeSamples('speaking').catch(() => []);
+
+      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse, statusResponse, freeRows] = await Promise.all([
         v11Promise,
         assessmentPromise,
         transcriptPromise,
         v11TutorOverridePromise,
+        statusPromise,
+        freePromise,
       ]);
+      setStatus(statusResponse);
+      setFreeRow((Array.isArray(freeRows) ? freeRows : []).find((row) => row.contentId === sessionDetail.card.cardId) ?? null);
       setSession(sessionDetail);
       setVisibility(visibilityDto);
       setData(assessmentResponse);
@@ -150,15 +248,52 @@ export default function SpeakingSessionResultsPage() {
     void load();
   }, [load]);
 
+  // Grading is pending until an AI result (v1.1 or dual) exists, unless the
+  // server says it failed. A completed state with no payload yet also polls.
+  const gradingPending = !v11 && !data?.ai && status?.assessmentState !== 'failed';
+  const pollCapped = pollAttempt >= POLL_MAX_ATTEMPTS;
+
   useEffect(() => {
-    // Poll once a minute while AI is still processing or the transcript is pending.
-    const interval = window.setInterval(() => {
-      if ((!v11 && !data?.ai) || (visibility?.showTranscript && !transcript)) {
+    // 3 s, backing off to 15 s, capped — then the learner gets "Check again".
+    if (loading || errorMsg || pollCapped) return;
+    if (!gradingPending && !(visibility?.showTranscript && !transcript)) return;
+    const delay = Math.min(POLL_MAX_MS, Math.round(POLL_START_MS * 1.25 ** pollAttempt));
+    const timer = window.setTimeout(() => {
+      setPollAttempt((attempt) => attempt + 1);
+      void load(false);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [errorMsg, gradingPending, load, loading, pollAttempt, pollCapped, transcript, visibility?.showTranscript]);
+
+  const retryGrading = useCallback(async () => {
+    setRetrying(true);
+    try {
+      await runAiAssessment(sessionId);
+      setStatus({ assessmentState: 'processing', retryable: false, failureReason: null });
+      setPollAttempt(0);
+    } catch (err) {
+      setStatus((current) => current && {
+        ...current,
+        failureReason: err instanceof ApiError ? err.userMessage : 'Could not restart grading. Please try again.',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  }, [sessionId]);
+
+  const gradingStatus = (
+    <GradingStatus
+      status={status}
+      pending={gradingPending}
+      pollCapped={pollCapped}
+      retrying={retrying}
+      onRetry={() => void retryGrading()}
+      onCheckAgain={() => {
+        setPollAttempt(0);
         void load(false);
-      }
-    }, 60_000);
-    return () => window.clearInterval(interval);
-  }, [data?.ai, load, transcript, v11, visibility?.showTranscript]);
+      }}
+    />
+  );
 
   const showSubmissionReceived = visibility?.showSubmissionReceived ?? true;
   const showAiEstimate = visibility?.showAiEstimate ?? true;
@@ -251,7 +386,7 @@ export default function SpeakingSessionResultsPage() {
     />
   );
 
-  const reattemptHref = session ? `/speaking/roleplay/${encodeURIComponent(session.card.cardId)}` : '/speaking';
+  const reattemptHref = session && !session.isFreeSample ? `/speaking/roleplay/${encodeURIComponent(session.card.cardId)}` : '/speaking/selection';
   const submissionAtLabel = session?.submittedAt
     ? new Date(session.submittedAt).toLocaleString()
     : null;
@@ -290,6 +425,8 @@ export default function SpeakingSessionResultsPage() {
               We received your recording{submissionAtLabel ? ` on ${submissionAtLabel}` : ''} and queued it for the released v1.1 practice report.
             </InlineAlert>
           ) : null}
+          {gradingStatus}
+          <FreeSampleNext row={freeRow} />
           <SpeakingSimulationV11ReportView
             sessionId={sessionId}
             response={v11}
@@ -301,7 +438,7 @@ export default function SpeakingSessionResultsPage() {
     );
   }
 
-  if (errorMsg || !data) {
+  if (errorMsg) {
     return (
       <LearnerDashboardShell pageTitle="Speaking results">
         <InlineAlert
@@ -313,11 +450,21 @@ export default function SpeakingSessionResultsPage() {
             </Button>
           }
         >
-          {errorMsg ?? 'No assessment data available.'}
+          {errorMsg}
         </InlineAlert>
       </LearnerDashboardShell>
     );
   }
+
+  // No dual assessment yet (still grading): render the processing layout, never a dead end.
+  const layoutData: DualAssessmentResponse = visibleData ?? data ?? {
+    sessionId,
+    ai: null,
+    tutor: null,
+    tutorHistory: [],
+    divergence: null,
+  };
+  const isFreeSession = Boolean(session?.isFreeSample || freeRow);
 
   const subtitle = session
     ? `${session.card.scenarioTitle} · Session ${sessionId.slice(0, 8)}…`
@@ -343,7 +490,10 @@ export default function SpeakingSessionResultsPage() {
           </InlineAlert>
         ) : null}
 
-        {allowReattempt ? (
+        {gradingStatus}
+        <FreeSampleNext row={freeRow} />
+
+        {allowReattempt && !isFreeSession ? (
           <Card padding="md" className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-navy">Reattempt this speaking card</p>
@@ -361,7 +511,7 @@ export default function SpeakingSessionResultsPage() {
 
         <TabPanel id="overview" activeTab={activeTab}>
           <DualAssessmentLayout
-            data={visibleData ?? data}
+            data={layoutData}
             tutorPlaceholderCta={showTutorScore ? <TutorReviewCta /> : hiddenTutorPlaceholder}
             aiPlaceholderCta={showAiEstimate ? <AiProcessingCta /> : hiddenAiPlaceholder}
             showFullCriteria={showFullCriteria}
