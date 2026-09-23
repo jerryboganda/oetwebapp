@@ -119,8 +119,14 @@ jobs:
           fi
 
           # Round-robin: class on line i (1-based) belongs to shard ((i-1) % N)+1.
-          awk -v shard="$SHARD_INDEX" -v n="$TOTAL_SHARDS" \
-            'NR % n == (shard - 1) % n { print }' all-classes.txt > shard-classes.txt
+          # The two ~20-30 min classes are pinned to shards 1 and 2 so adding
+          # test classes can never round-robin both into one shard (that blew
+          # the 60-min cap on 23 Sep 2026).
+          awk -v shard="$SHARD_INDEX" -v n="$TOTAL_SHARDS" '
+            /\.PlacementEndpointsTests$/ { if (shard == 1) print; next }
+            /\.AuthFlowsTests$/ { if (shard == 2) print; next }
+            { i++; if (i % n == (shard - 1) % n) print }
+          ' all-classes.txt > shard-classes.txt
 
           COUNT=$(wc -l < shard-classes.txt | tr -d ' ')
           echo "Shard $SHARD_INDEX owns $COUNT classes."
