@@ -71,7 +71,8 @@ public sealed class SpeakingEvaluationPipeline(
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
-        var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
+        var evaluation = await FindEvaluationForJobAsync(db, job, cancellationToken)
+            ?? throw new InvalidOperationException($"Speaking evaluation for job {job.Id} does not exist.");
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
 
         // A pre-existing typed SpeakingSession (live-tutor or AI) carries its
@@ -176,7 +177,7 @@ public sealed class SpeakingEvaluationPipeline(
                         attempt.Id);
                 }
 
-                if (transcription is not null && !string.IsNullOrWhiteSpace(transcription.SegmentsJson) && transcription.SegmentsJson != "[]")
+                if (SpeakingTranscriptionPipeline.HasUsableSegments(transcription))
                 {
                     var now = DateTimeOffset.UtcNow;
                     var bridgeSessionId = $"sps_{Guid.NewGuid():N}";
@@ -198,18 +199,14 @@ public sealed class SpeakingEvaluationPipeline(
                         CreatedAt = attempt.StartedAt,
                         UpdatedAt = now,
                     });
-                    db.SpeakingTranscripts.Add(new SpeakingTranscript
+                    var bridgeTranscript = new SpeakingTranscript
                     {
                         Id = Guid.NewGuid().ToString("N"),
                         SpeakingSessionId = bridgeSessionId,
-                        Provider = transcription.Provider,
-                        Language = transcription.Language,
-                        SegmentsJson = transcription.SegmentsJson,
-                        IsLatest = true,
-                        WordCount = transcription.WordCount,
-                        MeanConfidence = transcription.MeanConfidence,
-                        GeneratedAt = now,
-                    });
+                    };
+                    db.SpeakingTranscripts.Add(bridgeTranscript);
+                    await SpeakingTranscriptionPipeline.PromoteLatestAsync(
+                        db, bridgeTranscript, transcription, attemptTranscriptionProvider.ProviderCode, cancellationToken);
                     await db.SaveChangesAsync(cancellationToken);
 
                     var bridgeProjection = await sessionAssessor.RunAssessmentAsync(bridgeSessionId, cancellationToken);
@@ -226,6 +223,33 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.Retryable = true;
         evaluation.RetryAfterMs = 60_000;
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// The Evaluation a SpeakingEvaluation job was queued for. The job's
+    /// ResourceId is that Evaluation's id (LearnerService.QueueSpeakingEvaluationAsync);
+    /// a retry adds a NEW Evaluation for the same attempt, so an unordered
+    /// AttemptId lookup could update a stale row. Jobs without a ResourceId
+    /// fall back to the attempt's newest Evaluation.
+    /// </summary>
+    public static async Task<Evaluation?> FindEvaluationForJobAsync(
+        LearnerDbContext db,
+        BackgroundJobItem job,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(job.ResourceId))
+        {
+            var byId = await db.Evaluations.FirstOrDefaultAsync(x => x.Id == job.ResourceId, cancellationToken);
+            if (byId is not null) return byId;
+        }
+
+        if (string.IsNullOrWhiteSpace(job.AttemptId)) return null;
+        // Ordered in memory: SQLite cannot ORDER BY a DateTimeOffset, and an
+        // attempt only ever has a handful of evaluations.
+        var evaluations = await db.Evaluations
+            .Where(x => x.AttemptId == job.AttemptId)
+            .ToListAsync(cancellationToken);
+        return evaluations.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
     }
 
     private static void MarkTranscriptionUnavailable(Attempt attempt, Evaluation evaluation)

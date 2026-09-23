@@ -28,7 +28,9 @@ public record CreateSpeakingSessionResponse(
     DateTimeOffset PrepEndsAt,
     DateTimeOffset RolePlayEndsAt,
     string ConsentVersion,
-    object Card);
+    object Card,
+    bool ConsentAccepted = false,
+    bool LiveVoiceAvailable = false);
 
 /// <summary>Response from <c>GET /v1/speaking/sessions/{id}</c>. Returns
 /// the current state of the session along with the same learner-safe
@@ -49,7 +51,9 @@ public record SpeakingSessionDetail(
     int ElapsedSeconds,
     string ConsentVersion,
     object Card,
-    string? FeedbackMessage = null);
+    string? FeedbackMessage = null,
+    bool ConsentAccepted = false,
+    bool LiveVoiceAvailable = false);
 
 /// <summary>One criterion in the AI assessment per-criterion drawer.
 /// `Score`/`MaxScore` matches the canonical 0–6 linguistic / 0–3 clinical
