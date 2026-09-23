@@ -22,7 +22,7 @@ public sealed class SpeakingSimulationV11PersonaRuntimeSnapshot
     [MaxLength(64)]
     public string RolePlayCardId { get; set; } = default!;
 
-    [MaxLength(2)]
+    [MaxLength(16)]
     public string CardSlot { get; set; } = "standalone";
 
     [MaxLength(32)]
