@@ -23,8 +23,6 @@ export interface FreeSampleLauncherProps {
   title: string;
   description: string;
   badgeLabel?: string;
-  /** @deprecated Ignored: state copy comes from messages/{en,ar}/free-samples.json. Kept so older call sites still compile. */
-  usedLabel?: string;
   className?: string;
 }
 

@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
 import { LearnerLiveRoomShell } from '@/components/domain/speaking/LearnerLiveRoomShell';
+import { SpeakingRoleCard, roleCardPropsFrom } from '@/components/domain/speaking-role-card';
 import {
   endSpeakingSession,
   getSpeakingSession,
@@ -259,25 +260,8 @@ export default function SpeakingSessionLiveTutorPage() {
           )}
         </div>
 
-        {/* Candidate card recap */}
-        <aside className="rounded-2xl border border-border bg-surface p-5 text-sm text-foreground shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Candidate card
-          </h2>
-          <p className="mt-2 whitespace-pre-wrap leading-relaxed text-foreground">
-            {card.background}
-          </p>
-          {card.tasks.length > 0 ? (
-            <ol className="mt-3 list-decimal space-y-1 pl-5">
-              {card.tasks.map((task, idx) => (
-                <li key={idx}>{task}</li>
-              ))}
-            </ol>
-          ) : null}
-          <p className="mt-3 text-xs text-muted">
-            Goal: <span className="text-foreground">{card.communicationGoal}</span>
-          </p>
-        </aside>
+        {/* Candidate card — the one exam-style card, always visible. */}
+        <SpeakingRoleCard {...roleCardPropsFrom(card)} className="lg:max-h-[80dvh] lg:overflow-y-auto" />
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import { analytics } from '@/lib/analytics';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import { SpeakingScoreDisclaimer } from '@/components/domain/SpeakingScoreDisclaimer';
+import { retrySpeakingEvaluation } from '@/lib/api/speaking-results';
 import type { SpeakingResult } from '@/lib/mock-data';
 
 type PronunciationLinkedAssessment = {
@@ -67,8 +68,37 @@ export default function SpeakingResultSummary() {
     rulebookRef: string;
   } | null>(null);
 
+  // Bumping pollKey restarts polling ("Check again" / "Try grading again").
+  const [pollKey, setPollKey] = useState(0);
+  const [stillProcessing, setStillProcessing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const restartPolling = () => {
+    setFailedResult(null);
+    setError(false);
+    setStillProcessing(false);
+    setAnalysing(true);
+    setPollKey((key) => key + 1);
+  };
+
+  const retryGrading = async (attemptId: string) => {
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await retrySpeakingEvaluation(attemptId);
+      restartPolling();
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Could not restart grading. Please try again.');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const poll = async () => {
       try {
@@ -105,7 +135,15 @@ export default function SpeakingResultSummary() {
           return;
         }
 
-        setTimeout(() => { void poll(); }, 2000);
+        // Back off from 2 s to 15 s and stop after ~10 min with a "Check
+        // again" state — the result is saved server-side either way.
+        attempt += 1;
+        if (attempt >= 60) {
+          setStillProcessing(true);
+          setAnalysing(false);
+          return;
+        }
+        timer = setTimeout(() => { void poll(); }, Math.min(15_000, Math.round(2000 * 1.2 ** attempt)));
       } catch {
         if (!cancelled) {
           setError(true);
@@ -114,12 +152,12 @@ export default function SpeakingResultSummary() {
       }
     };
 
-    const timer = setTimeout(() => { void poll(); }, 800);
+    timer = setTimeout(() => { void poll(); }, 800);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     };
-  }, [id]);
+  }, [id, pollKey]);
 
   if (analysing) {
     return (
@@ -174,7 +212,14 @@ export default function SpeakingResultSummary() {
             {failedResult.statusMessage
               ?? 'Grading could not be completed for this attempt. Please try again.'}
           </InlineAlert>
+          {retryError ? <InlineAlert variant="error">{retryError}</InlineAlert> : null}
           <div className="flex flex-wrap gap-2">
+            {failedResult.retryable && failedResult.attemptId ? (
+              <Button onClick={() => void retryGrading(failedResult.attemptId as string)} disabled={retrying}>
+                {retrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                Try grading again
+              </Button>
+            ) : null}
             {noCredits ? (
               <Button onClick={() => router.push('/ai-packages')}>Buy AI Credits</Button>
             ) : null}
@@ -187,10 +232,17 @@ export default function SpeakingResultSummary() {
     );
   }
 
-  if (error || !result) {
+  if (stillProcessing || error || !result) {
     return (
       <LearnerDashboardShell pageTitle="Results">
-        <InlineAlert variant="error">Could not load your speaking result. Please try again later.</InlineAlert>
+        <InlineAlert
+          variant={stillProcessing ? 'info' : 'error'}
+          action={<Button size="sm" variant="outline" onClick={restartPolling}>Check again</Button>}
+        >
+          {stillProcessing
+            ? 'Grading is taking longer than usual. Your recording is saved and the result will appear here.'
+            : 'Could not load your speaking result. Please try again.'}
+        </InlineAlert>
       </LearnerDashboardShell>
     );
   }

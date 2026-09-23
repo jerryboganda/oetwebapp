@@ -173,9 +173,6 @@ export interface SpeakingTask {
   duration: string;
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
   criteriaFocusTags?: string[];
   disclaimer?: string;
 }
@@ -205,9 +202,6 @@ export interface MockSpeakingContent {
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
   roleplayCount?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
   criteriaFocus?: string[];
   disclaimer?: string;
 }
@@ -225,9 +219,6 @@ export interface RoleCard {
   warmUpQuestions?: string[];
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
   criteriaFocus?: string[];
   disclaimer?: string;
   /** Rights notice printed on the source card, shown verbatim to the learner. */
@@ -313,6 +304,8 @@ export interface SpeakingResult {
   statusMessage?: string;
   retryable?: boolean;
   retryAfterMs?: number;
+  /** Legacy recorder attempt id — needed for POST /v1/speaking/attempts/{attemptId}/retry-evaluation. */
+  attemptId?: string;
   timing?: {
     prepTimeSeconds?: number;
     roleplayTimeSeconds?: number;

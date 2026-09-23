@@ -163,7 +163,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('speaking task supports pause-resume, keyboard-safe dialogs, and result completion', async ({ page }, testInfo) => {
+  test('speaking task: rules + consent first, one record control, keyboard-safe dialogs, result completion', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
@@ -173,7 +173,13 @@ test.describe('Learner immersive completion workflows @learner', () => {
     const diagnostics = observePage(page);
 
     await page.goto('/speaking/task/st-001?mode=self', { waitUntil: 'domcontentloaded' });
+    // 23 Sep 2026: ONE Rules + consent step before the recorder (replaces the
+    // inline and finish-dialog consent checkboxes).
+    await expect(page.getByTestId('speaking-rules-consent')).toBeVisible({ timeout: 60000 });
+    await page.getByRole('checkbox', { name: /i have read the rules/i }).check();
+    await page.getByRole('button', { name: /continue to the recorder/i }).click();
     await expect(page.getByRole('heading', { name: /ready to record/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByTestId('speaking-role-card')).toBeVisible();
 
     const cancelTaskButton = page.getByRole('button', { name: /cancel task/i });
     await cancelTaskButton.click();
@@ -184,9 +190,6 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(stopDialog).toHaveCount(0);
     await expect(cancelTaskButton).toBeFocused();
 
-    // Recording consent must be accepted before Start Recording becomes
-    // enabled. The checkbox is the first checkbox on the Ready-to-record card.
-    await page.getByRole('checkbox').first().check();
     // The fixed footer + the floating "AI patient" coach pill both intercept
     // pointer events at the bottom of the viewport, so we dispatch the click
     // directly on the recording control buttons via the DOM. This still
@@ -199,12 +202,8 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await startRecording.scrollIntoViewIfNeeded();
     await clickByDom(startRecording);
     await expect(page.getByRole('heading', { name: /recording your response/i })).toBeVisible();
-
-    await clickByDom(page.getByRole('button', { name: /pause recording/i }));
-    await expect(page.getByRole('heading', { name: /recording paused/i })).toBeVisible();
-
-    await clickByDom(page.getByRole('button', { name: /resume recording/i }));
-    await expect(page.getByRole('heading', { name: /recording your response/i })).toBeVisible();
+    // One control only: no pause/stop duplicates while recording.
+    await expect(page.getByRole('button', { name: /pause recording|finish exam recording/i })).toHaveCount(0);
 
     const submitButton = page.getByRole('button', { name: /submit recording/i });
     // Focus the trigger explicitly so the dialog focus-trap restores focus

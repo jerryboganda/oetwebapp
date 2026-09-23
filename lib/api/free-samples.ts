@@ -19,8 +19,8 @@ export type FreeSampleState = 'available' | 'retry_available' | 'in_progress' | 
 export interface FreeSampleOption {
   /** Normalised profession id (lower-case, hyphenated). */
   professionId: string;
-  /** Writing: scenario id. Speaking: role-play card id. */
-  contentId: string;
+  /** Writing: scenario id. Speaking: role-play card id. Null when unavailable. */
+  contentId: string | null;
   state: FreeSampleState;
   /** App route that opens the sample (server-built). Writing retry: the revise route. Null when unavailable. */
   route: string | null;

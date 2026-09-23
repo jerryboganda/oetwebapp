@@ -1,35 +1,38 @@
 'use client';
 
 /**
- * Recording room for a Speaking session (plan C.2).
+ * Active 5-minute role-play for a Speaking session (practice, free sample,
+ * trainee). 23 Sep 2026 owner flow: the Rules + consent step and the 3-minute
+ * prep already happened, so this screen is minimal —
  *
- * Mounted at `/speaking/sessions/[id]`. Branches by `mode`:
- *   • `ai_self_practice` / `ai_exam` → runs the hands-free native realtime AI
- *     patient voice conversation through the selected live provider. Renders
- *     the card, a 5-minute timer, an "End early" button, captions, and a
- *     mic-level indicator.
- *   • `live_tutor` → immediately redirects to `./live-tutor` where the
- *     LiveKit room is provisioned.
+ *   • the exam-style role card, always visible and independently scrollable;
+ *   • ONE microphone / voice-activity indicator (ExamConversationPanel):
+ *     live AI patient when `liveVoiceAvailable`, otherwise the recorder
+ *     fallback that uploads the recording on finish;
+ *   • the countdown, which starts when speaking actually begins;
+ *   • ONE "Finish & submit" in a sticky bottom bar (safe-area aware; this
+ *     route renders no learner bottom nav, so nothing overlaps it).
  *
- * The consent banner is mounted up front for AI sessions — the existing
- * `SpeakingConsentBanner` writes a server-side consent row before mic capture
- * begins (Phase 7 contract). The conversation hook is only handed the session
- * id once consent is accepted, so no provider/mic work starts before then.
+ * Finish sequence (idempotent server-side): fallback upload (must succeed,
+ * never discarded) → /end → /submit → /ai-assess → results.
  *
- * NOTE: this page does NOT replace the 50KB native-capable recorder at
- * `app/speaking/task/[id]/page.tsx`. It targets the new SessionId-based flow.
+ * `live_tutor` sessions redirect to `./live-tutor`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, Loader2, PhoneOff } from 'lucide-react';
+import { Activity, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
-import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
+import { SpeakingRoleCard, roleCardPropsFrom } from '@/components/domain/speaking-role-card';
 import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
+import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
+import { RECORDING_UPLOAD_FAILED } from '@/hooks/useSpeakingSessionRecorder';
 import {
   endSpeakingSession,
   getSpeakingSession,
   getSpeakingSessionClock,
+  recordConsent,
   runAiAssessment,
   submitSpeakingSessionForMarking,
   type SpeakingSessionDetail,
@@ -62,19 +65,24 @@ export default function SpeakingSessionRecordingPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [consentAccepted, setConsentAccepted] = useState(false);
   const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
+  const [consentAccepted, setConsentAccepted] = useState(true);
+  const [speakingStarted, setSpeakingStarted] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(ROLE_PLAY_HARD_LIMIT_SECONDS);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
 
   const endedRef = useRef(false);
-  const roleplayStartedAtRef = useRef<number | null>(null);
+  const speakingStartedAtRef = useRef<number | null>(null);
   const trackedTimeWarningRef = useRef(false);
   const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
-  const handleFinalizeRef = useRef<((reason?: 'manual' | 'timer') => Promise<void>) | null>(null);
   const handleVoiceStopReady = useCallback((stop: (() => Promise<boolean>) | null) => {
     voiceStopRef.current = stop;
+  }, []);
+  const handleSpeakingStarted = useCallback(() => {
+    speakingStartedAtRef.current = Date.now();
+    setSpeakingStarted(true);
   }, []);
 
   useEffect(() => {
@@ -91,49 +99,22 @@ export default function SpeakingSessionRecordingPage() {
       .then((s) => {
         if (cancelled) return;
         setSession(s);
-
-        // Live-tutor mode redirects to its own page.
+        // Sessions created before the consent-first flow (or by the trainee
+        // route) still get the one Rules + consent step, never a timed modal.
+        setConsentAccepted(s.consentAccepted !== false);
         if (s.mode === 'live_tutor') {
           router.replace(`/speaking/sessions/${sessionId}/live-tutor`);
-          return;
-        }
-
-        // Seed countdown from the server-side rolePlayEndsAt if present.
-        if (s.rolePlayEndsAt) {
-          const remaining = Math.max(
-            0,
-            Math.floor((new Date(s.rolePlayEndsAt).getTime() - Date.now()) / 1000),
-          );
-          setSecondsLeft(Math.min(ROLE_PLAY_HARD_LIMIT_SECONDS, remaining || ROLE_PLAY_HARD_LIMIT_SECONDS));
-        }
-        if (s.rolePlayStartedAt) {
-          roleplayStartedAtRef.current = new Date(s.rolePlayStartedAt).getTime();
-        }
-
-        if (isAiMode(s.mode)) {
-          void getSpeakingSessionClock(s.sessionId)
-            .then((clock) => {
-              if (cancelled) return;
-              if (clock.expired || clock.stage === 'finished' || clock.stage === 'cancelled') {
-                setSecondsLeft(0);
-                return;
-              }
-              if (typeof clock.secondsRemaining === 'number') {
-                setSecondsLeft(clock.secondsRemaining);
-              }
-            })
-            .catch(() => undefined);
         }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const msg =
+        setLoadError(
           err instanceof ApiError
             ? err.userMessage
             : err instanceof Error
               ? err.message
-              : 'Could not load session.';
-        setLoadError(msg);
+              : 'Could not load session.',
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -143,8 +124,9 @@ export default function SpeakingSessionRecordingPage() {
     };
   }, [router, sessionId]);
 
+  // Server-authoritative clock: re-sync while speaking.
   useEffect(() => {
-    if (!session || !isAiMode(session.mode)) return;
+    if (!session || !isAiMode(session.mode) || !speakingStarted) return;
 
     let cancelled = false;
     const syncClock = async () => {
@@ -155,7 +137,7 @@ export default function SpeakingSessionRecordingPage() {
           setSecondsLeft(0);
           return;
         }
-        if (typeof clock.secondsRemaining === 'number') {
+        if (clock.stage === 'active' && typeof clock.secondsRemaining === 'number') {
           setSecondsLeft(clock.secondsRemaining);
         }
       } catch {
@@ -164,94 +146,70 @@ export default function SpeakingSessionRecordingPage() {
     };
 
     void syncClock();
-    const interval = window.setInterval(() => {
-      void syncClock();
-    }, CLOCK_SYNC_INTERVAL_MS);
-
+    const interval = window.setInterval(() => void syncClock(), CLOCK_SYNC_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [session]);
+  }, [session, speakingStarted]);
 
   const handleFinalize = useCallback(async (reason: 'manual' | 'timer' = 'manual') => {
     if (!session || endedRef.current) return;
     endedRef.current = true;
+    setConfirmOpen(false);
     setEnding(true);
     setEndError(null);
     try {
-      const voiceSaved = await voiceStopRef.current?.() ?? true;
-      if (!voiceSaved) {
-        throw new Error('The live voice transcript could not be saved. Please retry before ending the session.');
+      // Recorder fallback: the upload MUST land before /end. On failure the
+      // blob stays in memory and pressing the button again retries it.
+      const saved = await voiceStopRef.current?.() ?? true;
+      if (!saved) {
+        throw new Error(session.liveVoiceAvailable
+          ? 'The live voice transcript could not be saved. Please try again.'
+          : RECORDING_UPLOAD_FAILED);
       }
       await endSpeakingSession(session.sessionId);
-      // WS4 (§14.2) — commit the finished role-play for marking. Best-effort:
-      // the backend gate stamps `submittedAt` only when assessable evidence
-      // (a recording or non-empty transcript) exists, so a session the
-      // learner ended without speaking simply skips the stamp.
-      try {
-        await submitSpeakingSessionForMarking(session.sessionId);
-      } catch {
-        // Non-blocking: results page does not depend on the submit stamp.
-      }
-      if (isAiMode(session.mode)) {
-        // Kick off scoring; non-blocking — server returns the in-flight job.
-        try {
-          await runAiAssessment(session.sessionId);
-        } catch {
-          // Scoring kickoff is best-effort; results page will retry.
-        }
-      }
-      const startedAt = roleplayStartedAtRef.current;
-      const durationSeconds = startedAt
-        ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
-        : ROLE_PLAY_HARD_LIMIT_SECONDS;
+      // Both are idempotent server-side; the results page shows processing
+      // and offers "Try grading again", so a blip here never strands the learner.
+      await submitSpeakingSessionForMarking(session.sessionId).catch(() => undefined);
+      if (isAiMode(session.mode)) await runAiAssessment(session.sessionId).catch(() => undefined);
+      const startedAt = speakingStartedAtRef.current;
       trackSpeaking('roleplay_ended', {
         sessionId: session.sessionId,
-        durationSeconds,
+        durationSeconds: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : ROLE_PLAY_HARD_LIMIT_SECONDS,
         reason,
       });
       router.push(`/speaking/sessions/${session.sessionId}/results`);
     } catch (err) {
-      const msg =
+      setEndError(
         err instanceof ApiError
           ? err.userMessage
           : err instanceof Error
             ? err.message
-            : 'Could not end the session. Please try again.';
-      setEndError(msg);
+            : 'Could not submit the role-play. Please try again.',
+      );
       endedRef.current = false;
       setEnding(false);
     }
   }, [router, session]);
-  handleFinalizeRef.current = handleFinalize;
 
+  // Local countdown — only once speaking has actually begun.
   useEffect(() => {
-    if (!session || !consentAccepted || !isAiMode(session.mode)) return;
+    if (!session || !speakingStarted || !isAiMode(session.mode) || endedRef.current || endError) return;
     if (secondsLeft <= 0) {
-      if (!endedRef.current) void handleFinalize('timer');
+      void handleFinalize('timer');
       return;
     }
-
     const timer = window.setTimeout(() => {
-      const nextSecondsLeft = Math.max(0, secondsLeft - 1);
-      setSecondsLeft(nextSecondsLeft);
-      if (nextSecondsLeft <= 30 && !trackedTimeWarningRef.current) {
+      const next = Math.max(0, secondsLeft - 1);
+      setSecondsLeft(next);
+      if (next <= 30 && !trackedTimeWarningRef.current) {
         trackedTimeWarningRef.current = true;
-        trackSpeaking('roleplay_time_nearly_up', {
-          sessionId: session.sessionId,
-          secondsLeft: nextSecondsLeft,
-        });
-      }
-      if (nextSecondsLeft <= 0 && !endedRef.current) {
-        void handleFinalize('timer');
+        trackSpeaking('roleplay_time_nearly_up', { sessionId: session.sessionId, secondsLeft: next });
       }
     }, 1000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [consentAccepted, handleFinalize, secondsLeft, session]);
+    return () => window.clearTimeout(timer);
+  }, [endError, handleFinalize, secondsLeft, session, speakingStarted]);
 
   if (loading) {
     return (
@@ -268,12 +226,7 @@ export default function SpeakingSessionRecordingPage() {
       <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
         <h2 className="text-base font-semibold">Could not load this session</h2>
         <p className="mt-1">{loadError ?? 'Session not available.'}</p>
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-4"
-          onClick={() => router.push('/speaking')}
-        >
+        <Button type="button" variant="outline" className="mt-4" onClick={() => router.push('/speaking')}>
           Back to speaking
         </Button>
       </div>
@@ -281,8 +234,6 @@ export default function SpeakingSessionRecordingPage() {
   }
 
   if (session.mode === 'live_tutor') {
-    // Redirect is in flight — render a tiny placeholder so the page
-    // never flashes the AI UI.
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Switching to live tutor room…
@@ -290,103 +241,100 @@ export default function SpeakingSessionRecordingPage() {
     );
   }
 
-  const { card } = session;
-  const isWarning = secondsLeft > 0 && secondsLeft <= 30;
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-      {!consentAccepted ? (
-        <SpeakingConsentBanner
-          sessionMode="ai"
-          sessionId={session.sessionId}
-          onAccepted={() => setConsentAccepted(true)}
-          consentVersionOverride={session.consentVersion}
+  if (!consentAccepted) {
+    return (
+      <div className="mx-auto w-full max-w-2xl p-4 sm:p-6">
+        <SpeakingRulesConsent
+          freeSample={session.isFreeSample}
+          startLabel="Continue"
+          onStart={async () => {
+            await recordConsent(session.sessionId, session.consentVersion || 'recording.v1');
+            setConsentAccepted(true);
+          }}
         />
-      ) : null}
+      </div>
+    );
+  }
 
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">
-            Speaking · Role-play
-          </p>
-          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
-          <p className="text-sm text-muted">
-            {card.setting} · {card.candidateRole}
-          </p>
+  const isWarning = speakingStarted && secondsLeft > 0 && secondsLeft <= 30;
+  const retryUpload = endError === RECORDING_UPLOAD_FAILED;
+
+  return (
+    <div className="flex min-h-[100dvh] flex-col bg-background-light">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">Speaking · Role-play</p>
+          <h1 className="truncate text-base font-bold text-foreground sm:text-lg">{session.card.scenarioTitle}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <Timer secondsLeft={secondsLeft} isWarning={isWarning} />
-          <Button
-            type="button"
-            variant="destructive"
-            size="md"
-            onClick={() => void handleFinalize('manual')}
-            disabled={ending}
-            data-testid="speaking-session-end-early"
-          >
-            {ending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Ending…
-              </>
-            ) : (
-              <>
-                <PhoneOff className="mr-2 h-4 w-4" aria-hidden /> End early
-              </>
-            )}
-          </Button>
+        <div
+          role="timer"
+          aria-live={isWarning ? 'polite' : 'off'}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-base tabular-nums',
+            isWarning ? 'bg-danger/10 text-danger' : 'bg-muted text-foreground',
+          )}
+        >
+          <Activity className="h-4 w-4" aria-hidden />
+          {formatMmSs(secondsLeft)}
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_minmax(280px,360px)]">
-        {/* Card recap */}
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Candidate card
-          </h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-            {card.background}
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4">
+        <SpeakingRoleCard
+          {...roleCardPropsFrom(session.card)}
+          className="max-h-[50dvh] overflow-y-auto overscroll-contain"
+        />
+        <ExamConversationPanel
+          sessionId={session.sessionId}
+          liveVoiceAvailable={session.liveVoiceAvailable}
+          requestedProvider={requestedVoiceProvider}
+          onVoiceStopReady={handleVoiceStopReady}
+          onSpeakingStarted={handleSpeakingStarted}
+        />
+        {isWarning ? (
+          <p className="text-center text-sm font-medium text-danger" role="status">
+            30 seconds left — wrap up. Your role-play submits automatically at 00:00.
           </p>
-          {card.tasks.length > 0 ? (
-            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-foreground">
-              {card.tasks.map((task, idx) => (
-                <li key={idx}>{task}</li>
-              ))}
-            </ol>
-          ) : null}
-        </section>
+        ) : null}
+      </main>
 
-        <aside className="flex flex-col gap-4">
-          <ExamConversationPanel
-            sessionId={session.sessionId}
-            micAllowed={consentAccepted}
-            requestedProvider={requestedVoiceProvider}
-            onVoiceStopReady={handleVoiceStopReady}
-          />
+      <div
+        className="sticky bottom-0 z-10 border-t border-border bg-surface px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        data-testid="speaking-action-bar"
+      >
+        <div className="mx-auto w-full max-w-3xl space-y-2">
           {endError ? (
-            <p
-              role="alert"
-              className="rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
-            >
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {endError}
             </p>
           ) : null}
-        </aside>
+          <Button
+            type="button"
+            fullWidth
+            size="lg"
+            disabled={ending}
+            onClick={() => (retryUpload ? void handleFinalize('manual') : setConfirmOpen(true))}
+            data-testid="speaking-finish-submit"
+          >
+            {ending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+            {ending ? 'Submitting…' : retryUpload ? 'Retry upload' : 'Finish & submit'}
+          </Button>
+        </div>
       </div>
-    </div>
-  );
-}
 
-function Timer({ secondsLeft, isWarning }: { secondsLeft: number; isWarning: boolean }) {
-  return (
-    <div
-      role="timer"
-      aria-live="polite"
-      className={cn(
-        'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-base font-mono tabular-nums',
-        isWarning ? 'bg-danger/10 text-danger' : 'bg-muted text-foreground',
-      )}
-    >
-      <Activity className="h-4 w-4" aria-hidden />
-      {formatMmSs(secondsLeft)}
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Finish and submit?" size="sm">
+        <p className="text-sm text-foreground">
+          Your role-play ends now and is sent for AI grading. You can&apos;t continue speaking afterwards.
+        </p>
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>
+            Keep speaking
+          </Button>
+          <Button type="button" onClick={() => void handleFinalize('manual')} disabled={ending}>
+            Submit now
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

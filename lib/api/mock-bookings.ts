@@ -95,9 +95,6 @@ export function mapMockSpeakingContent(value: unknown): MockSpeakingContent | nu
     prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
     roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
     roleplayCount: typeof item.roleplayCount === 'number' ? item.roleplayCount : undefined,
-    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
-    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
-    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
     criteriaFocus: toStringArray(item.criteriaFocus),
     disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
   };
@@ -238,9 +235,6 @@ export interface ExpertSpeakingContent {
   warmUpQuestions?: string[];
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
   criteriaFocus?: string[];
   disclaimer?: string;
   background?: string;

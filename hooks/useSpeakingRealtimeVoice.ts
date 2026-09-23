@@ -36,9 +36,8 @@ export interface UseSpeakingRealtimeVoiceResult {
   ended: boolean;
   audioRef: RefObject<HTMLAudioElement | null>;
   prepare: () => Promise<void>;
-  start: (disclosureAccepted: boolean) => Promise<boolean>;
-  pauseMicrophone: () => void;
-  resumeMicrophone: () => void;
+  /** Consent (incl. the provider disclosure) is recorded on the Rules + consent step before prep. */
+  start: () => Promise<boolean>;
   stop: () => Promise<boolean>;
 }
 
@@ -562,11 +561,7 @@ export function useSpeakingRealtimeVoice(
     });
   }, [configureGeminiInput, handleGeminiMessage, sessionId]);
 
-  const start = useCallback(async (disclosureAccepted: boolean) => {
-    if (!disclosureAccepted) {
-      setError('Please read and accept the provider disclosure before enabling your microphone.');
-      return false;
-    }
+  const start = useCallback(async () => {
     if (!sessionId) return false;
     if (!preflight) await prepare();
     const provider = providerRef.current;
@@ -598,19 +593,6 @@ export function useSpeakingRealtimeVoice(
       return false;
     }
   }, [closeTransport, configureGeminiInput, configureMeter, connectGemini, connectOpenAi, preflight, prepare, sessionId]);
-
-  const pauseMicrophone = useCallback(() => {
-    streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = false; });
-    setMicEnabled(false);
-    setPhase('idle');
-  }, []);
-
-  const resumeMicrophone = useCallback(() => {
-    if (!streamRef.current) return;
-    streamRef.current.getAudioTracks().forEach((track) => { track.enabled = true; });
-    setMicEnabled(true);
-    setPhase('listening');
-  }, []);
 
   const stop = useCallback(async () => {
     const provider = providerRef.current;
@@ -684,8 +666,6 @@ export function useSpeakingRealtimeVoice(
     audioRef,
     prepare,
     start,
-    pauseMicrophone,
-    resumeMicrophone,
     stop,
   };
 }

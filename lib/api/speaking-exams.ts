@@ -72,6 +72,10 @@ export interface SpeakingExamDetail {
   mockAttemptId?: string | null;
   mockSectionId?: string | null;
   liveRoomId?: string | null;
+  /** Consent recorded at the intro (before prep_a); child sessions inherit it. */
+  consentAccepted: boolean;
+  /** False = recorder fallback: each active card is recorded and uploaded to its child session. */
+  liveVoiceAvailable: boolean;
 }
 
 export interface CreateSpeakingExamInput {
@@ -187,6 +191,14 @@ export function getSpeakingExamClock(examId: string) {
 export function finishSpeakingExamIntro(examId: string) {
   return apiClient.post<SpeakingExamDetail>(
     `/v1/speaking/exams/${encodeURIComponent(examId)}/finish-intro`,
+    {},
+  );
+}
+
+/** Rules + consent at the intro, before prep_a. Records account consents server-side too. */
+export function recordSpeakingExamConsent(examId: string) {
+  return apiClient.post<{ consentAccepted: boolean }>(
+    `/v1/speaking/exams/${encodeURIComponent(examId)}/consent`,
     {},
   );
 }
