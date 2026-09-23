@@ -148,7 +148,11 @@ public enum NotificationEventKey
     LearnerPrivateSpeakingRescheduled,
     ExpertPrivateSpeakingRescheduled,
     LearnerPrivateSpeakingNoShow,
-    ExpertPrivateSpeakingNoShow
+    ExpertPrivateSpeakingNoShow,
+
+    // B9 — live tutor recording → review lifecycle
+    ExpertPrivateSpeakingRecordingReady,
+    LearnerPrivateSpeakingRecordingReceived
 }
 
 public enum NotificationChannel
