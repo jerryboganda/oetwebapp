@@ -88,6 +88,14 @@ async function seedAuth(page: Page, targetPath: string) {
   await page.waitForTimeout(1000); // settle for the destination page's own hydration before the caller interacts
 }
 
+/** Ends the in-progress attempt through the real UI (header Submit -> "Submit now"); returns the API status. */
+async function submitViaUi(page: Page): Promise<number> {
+  const done = page.waitForResponse((r) => /\/attempts\/[^/]+\/submit/.test(r.url()) && r.request().method() === 'POST', { timeout: 30_000 });
+  await page.getByRole('button', { name: /^submit$/i }).first().click();
+  await page.getByRole('button', { name: /^submit now$/i }).click();
+  return (await done).status();
+}
+
 for (const paper of PAPERS) {
   for (const vp of VIEWPORTS) {
     test(`${paper.label} [${vp.name}] — auto-start, distinct sections, one-way, no replay`, async ({ browser }) => {
@@ -99,12 +107,7 @@ for (const paper of PAPERS) {
       const unexpected404s: string[] = [];
       // Every viewport signs in as the same test learner. An attempt left in progress would be RESUMED by the next
       // viewport (straight into A2, no readiness probe), so the finally-block below submits this test's attempt.
-      let attemptUrl: string | null = null;
-      let authHeader: string | undefined;
-      page.on('request', (req) => {
-        const m = req.url().match(/^(.*\/v1\/listening\/v2\/attempts\/[^/?#]+)/);
-        if (m && req.headers()['authorization']) { attemptUrl = m[1]; authHeader = req.headers()['authorization']; }
-      });
+      let started = false;
       page.on('response', (r) => {
         if (r.url().includes('/advance-section')) {
           r.text().then((body) => console.log(`[diag] POST .../advance-section -> ${r.status()}: ${body.slice(0, 500)}`)).catch(() => {});
@@ -124,11 +127,8 @@ for (const paper of PAPERS) {
       // submit it and reload so this test always starts from a fresh attempt.
       const probe = page.getByRole('button', { name: /play audio probe/i });
       if (!(await probe.isVisible({ timeout: 15_000 }).catch(() => false))) {
-        await expect.poll(() => attemptUrl, { timeout: 30_000, message: 'no probe and no resumed attempt seen' }).not.toBeNull();
-        const res = await context.request.post(`${attemptUrl}/submit`, { headers: { authorization: authHeader! }, data: {} });
-        console.log(`[cleanup] submitted leftover ${attemptUrl} -> ${res.status()}`);
-        attemptUrl = null;
-        await page.reload({ waitUntil: 'load' });
+        console.log(`[cleanup] leftover submit -> ${await submitViaUi(page)}`);
+        await page.goto(`${PROD_URL}/listening/paper/${encodeURIComponent(paper.paperId)}`, { waitUntil: 'load' });
         await page.waitForTimeout(1000);
       }
 
@@ -142,6 +142,7 @@ for (const paper of PAPERS) {
       const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeEnabled({ timeout: 30_000 });
       await startButton.click();
+      started = true;
 
       // A1: wait for the hidden <audio> element to mount and for playback to actually begin.
       const audio = page.locator('audio');
@@ -208,10 +209,7 @@ for (const paper of PAPERS) {
       expect(badConsole, `unexpected console errors: ${badConsole.join(' | ')}`).toEqual([]);
       expect(unexpected404s, `unexpected 404s: ${unexpected404s.join(' | ')}`).toEqual([]);
       } finally {
-        if (attemptUrl && authHeader) {
-          const res = await context.request.post(`${attemptUrl}/submit`, { headers: { authorization: authHeader }, data: {} }).catch(() => null);
-          console.log(`[cleanup] submit ${attemptUrl} -> ${res?.status() ?? 'error'}`);
-        }
+        if (started) console.log(`[cleanup] submit -> ${await submitViaUi(page).catch((e) => `error ${e}`)}`);
         await context.close();
       }
     });
