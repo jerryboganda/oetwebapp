@@ -3,18 +3,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, FilterIcon, Layers, Library, Search, Sparkles } from 'lucide-react';
+import { ArrowRight, FilterIcon, Layers, Library, PenTool, Search } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
-import { getFreeWritingScenario, listWritingScenarios } from '@/lib/writing/api';
-import { WRITING_PROFESSIONS, WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
+import { listWritingScenarios } from '@/lib/writing/api';
 import type {
   WritingLetterType,
-  WritingProfession,
   WritingScenarioDto,
 } from '@/lib/writing/types';
 
@@ -29,22 +28,17 @@ export default function WritingPracticeLibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [letterType, setLetterType] = useState<WritingLetterType | null>(null);
   const [search, setSearch] = useState('');
-  const [freeScenario, setFreeScenario] = useState<WritingScenarioDto | null>(null);
 
-  useEffect(() => {
-    getFreeWritingScenario().then(setFreeScenario).catch(() => setFreeScenario(null));
-  }, []);
-
-  // Load page 1 (replacing the list) whenever a filter changes.
+  // Load page 1 (replacing the list) whenever a filter changes. Profession is
+  // never a learner filter: the server scopes the catalogue to the learner's
+  // registered profession (owner, 23 Sep 2026).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setPage(1);
     listWritingScenarios({
-      profession: profession ?? undefined,
       letterType: letterType ?? undefined,
       search: search.trim() || undefined,
       page: 1,
@@ -67,13 +61,12 @@ export default function WritingPracticeLibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [profession, letterType, search, t]);
+  }, [letterType, search, t]);
 
   const loadMore = () => {
     const nextPage = page + 1;
     setLoadingMore(true);
     listWritingScenarios({
-      profession: profession ?? undefined,
       letterType: letterType ?? undefined,
       search: search.trim() || undefined,
       page: nextPage,
@@ -114,31 +107,20 @@ export default function WritingPracticeLibraryPage() {
           description={t('writing.practice.library.description')}
           highlights={[
             { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length} / ${total}` },
-            { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[profession, letterType, search].filter(Boolean).length}` },
+            { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[letterType, search].filter(Boolean).length}` },
           ]}
         />
 
-        {freeScenario ? (
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_setup',
-              accent: 'emerald',
-              eyebrow: 'Free featured case note',
-              eyebrowIcon: Sparkles,
-              title: freeScenario.title,
-              description: 'Start the admin-designated case note for your profession. Free-tier access uses the normal Writing editor and grading flow.',
-              metaItems: [
-                { icon: Sparkles, label: freeScenario.letterType },
-                { icon: Sparkles, label: 'Zero-credit access' },
-              ],
-              primaryAction: {
-                label: 'Open free case note',
-                href: `/writing/practice/session/${encodeURIComponent(freeScenario.id)}`,
-              },
-            }}
-          />
-        ) : null}
+        {/* Same free-sample state as the Writing hub card (one source: /v1/free-samples/writing). */}
+        <FreeSampleLauncher
+          subtest="writing"
+          icon={PenTool}
+          testId="writing-library-free-sample-card"
+          title={t('writing.hub.freeSample.title')}
+          description={t('writing.hub.freeSample.description')}
+          badgeLabel={t('writing.hub.freeSample.badge')}
+          className=""
+        />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -150,20 +132,6 @@ export default function WritingPracticeLibraryPage() {
 
         <fieldset className="grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm md:grid-cols-2" aria-label={t('writing.practice.library.filters.legend')}>
           <legend className="sr-only">{t('writing.practice.library.filters.legend')}</legend>
-
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
-            {t('writing.practice.library.filters.profession')}
-            <select
-              value={profession ?? ''}
-              onChange={(e) => setProfession((e.target.value || null) as WritingProfession | null)}
-              className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="">{t('writing.practice.library.filters.all')}</option>
-              {WRITING_PROFESSIONS.map((p) => (
-                <option key={p} value={p}>{WRITING_PROFESSION_LABELS[p]}</option>
-              ))}
-            </select>
-          </label>
 
           <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
             {t('writing.practice.library.filters.letterType')}

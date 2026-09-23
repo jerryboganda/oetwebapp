@@ -412,6 +412,62 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task MockSets_OtherProfessionLearner_CannotListStartOrResume()
+    {
+        // Profession lock (23 Sep 2026): the seeded set is Nursing.
+        var mockSetId = await EnsureSeedMockSetAsync();
+        using var nurse = await CreateLearnerClientAsync("speaking-mocks-lock-nurse");
+        var (sessionId, _, _, _) = await StartMockSessionAsync(nurse, mockSetId);
+
+        using var doctor = await CreateLearnerClientAsync("speaking-mocks-lock-doctor", profession: "medicine");
+        var list = await doctor.GetAsync("/v1/speaking/mock-sets");
+        list.EnsureSuccessStatusCode();
+        using (var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync()))
+        {
+            Assert.DoesNotContain(json.RootElement.GetProperty("mockSets").EnumerateArray(),
+                s => s.GetProperty("mockSetId").GetString() == mockSetId);
+        }
+
+        var start = await doctor.PostAsJsonAsync($"/v1/speaking/mock-sets/{mockSetId}/start", new { mode = "exam" });
+        Assert.Equal(HttpStatusCode.NotFound, start.StatusCode);
+
+        // A pre-lock session whose owner later changed profession is not resumable.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var user = await db.Users.FirstAsync(x => x.Id == "speaking-mocks-lock-nurse");
+            user.ActiveProfessionId = "medicine";
+            await db.SaveChangesAsync();
+        }
+        var resume = await nurse.GetAsync($"/v1/speaking/mock-sessions/{sessionId}");
+        Assert.Equal(HttpStatusCode.NotFound, resume.StatusCode);
+    }
+
+    [Fact]
+    public async Task MockSets_LearnerWithNoProfession_FailsClosed()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        using var client = await CreateLearnerClientAsync("speaking-mocks-lock-none");
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var user = await db.Users.FirstAsync(x => x.Id == "speaking-mocks-lock-none");
+            user.ActiveProfessionId = null;
+            await db.SaveChangesAsync();
+        }
+
+        var list = await client.GetAsync("/v1/speaking/mock-sets");
+        list.EnsureSuccessStatusCode();
+        using (var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(0, json.RootElement.GetProperty("mockSets").GetArrayLength());
+        }
+
+        var start = await client.PostAsJsonAsync($"/v1/speaking/mock-sets/{mockSetId}/start", new { mode = "exam" });
+        Assert.Equal(HttpStatusCode.NotFound, start.StatusCode);
+    }
+
+    [Fact]
     public async Task StartMockSet_UnpublishedSet_Returns409()
     {
         const string draftId = "sms-test-draft";
@@ -479,9 +535,11 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private async Task<HttpClient> CreateLearnerClientAsync(string userId)
+    private async Task<HttpClient> CreateLearnerClientAsync(string userId, string profession = "nursing")
     {
-        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // The seeded set is a Nursing set; the profession lock (23 Sep 2026)
+        // only lets a learner of that profession list/start/resume it.
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId, profession);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");

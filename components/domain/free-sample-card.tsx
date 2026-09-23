@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 // module (Free Mocks proposal, 2026-09). Styled like the "How credits work"
 // banner (CreditsGuideButton): soft purple tint, rounded card, icon tile,
 // short title + one sentence, chevron. Renders a link when `href` is given,
-// otherwise a button (Writing/Speaking open a profession picker first).
+// otherwise a button (a spent/unavailable sample renders as a disabled one).
 //
 // Import this by its direct path, not the '@/components/domain' barrel — the
 // hub page tests mock the barrel with only the exports they need.

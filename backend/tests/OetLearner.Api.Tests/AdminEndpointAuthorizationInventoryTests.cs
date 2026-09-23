@@ -102,6 +102,7 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/reading/attempts/{attemptId}/override", "POST", "AdminAssessmentResultsWrite")]
     [InlineData("/v1/admin/reading/assignments", "GET", "AdminAssessmentResultsRead")]
     [InlineData("/v1/admin/reading/assignments", "POST", "AdminAssessmentResultsWrite")]
+    [InlineData("/v1/admin/speaking/corpus-compatibility", "POST", "AdminContentWrite")]
     [InlineData("/v1/admin/study-plan/{userId}", "GET", "AdminContentRead")]
     [InlineData("/v1/admin/study-plan/{userId}/regenerate", "POST", "AdminContentWrite")]
     [InlineData("/v1/admin/study-plan/{userId}/items/{itemId}/override", "POST", "AdminContentWrite")]

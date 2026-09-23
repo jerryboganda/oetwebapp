@@ -79,6 +79,10 @@ public class MockBookingLearnerDtoTests : IClassFixture<TestWebApplicationFactor
         Assert.Equal("Community clinic", candidateCard.GetProperty("setting").GetString());
         Assert.Equal(180, speaking.GetProperty("prepTimeSeconds").GetInt32());
         Assert.Equal(300, speaking.GetProperty("roleplayTimeSeconds").GetInt32());
+        // Owner, 23 Sep 2026: Emotion / Goal / Topic never reach learners.
+        Assert.False(speaking.TryGetProperty("patientEmotion", out _));
+        Assert.False(speaking.TryGetProperty("communicationGoal", out _));
+        Assert.False(speaking.TryGetProperty("clinicalTopic", out _));
 
         // Belt-and-braces: even raw substring search must miss the interlocutor
         // background paragraph and any cue prompt.

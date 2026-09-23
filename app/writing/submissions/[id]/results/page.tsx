@@ -27,6 +27,7 @@ import {
   publishToShowcase,
 } from '@/lib/writing/api';
 import { parseHighlights } from '@/lib/writing/highlights';
+import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
   OET_SCALED_MAX,
   OET_SCALED_PASS_B,
@@ -111,6 +112,23 @@ export default function WritingSubmissionResultsPage() {
   const [caseNotes, setCaseNotes] = useState<WritingCaseNotesDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [freeSample, setFreeSample] = useState<FreeSampleOption | null>(null);
+
+  // Free Writing sample (retry addendum, 23 Sep 2026): the second free result
+  // is a revise & resubmit of the same letter. A failed lookup just hides it.
+  useEffect(() => {
+    let cancelled = false;
+    listFreeSamples('writing')
+      .then((rows) => {
+        if (!cancelled) setFreeSample(Array.isArray(rows) && rows.length > 0 ? rows[0] : null);
+      })
+      .catch(() => {
+        if (!cancelled) setFreeSample(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!submissionId) return;
@@ -193,6 +211,12 @@ export default function WritingSubmissionResultsPage() {
   // context. A mock keeps its tutor's human grade as the headline (zero AI).
   const practiceScore = assessmentVisible && !(isMock && grade)
     ? assessment?.estimatedPracticeScore ?? null
+    : null;
+  const freeSampleForThisLetter = freeSample && submission && freeSample.contentId === submission.scenarioId
+    ? freeSample
+    : null;
+  const freeRevisionHref = freeSampleForThisLetter?.state === 'retry_available'
+    ? `/writing/submissions/${encodeURIComponent(freeSampleForThisLetter.lastSubmissionId ?? submissionId)}/revise`
     : null;
   const practiceRawTotal = assessment
     ? writingRawTotalFromCriterionScores(
@@ -449,14 +473,26 @@ export default function WritingSubmissionResultsPage() {
         <section aria-labelledby="actions-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <h2 id="actions-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.next.heading')}</h2>
           <p className="mt-1 text-sm text-muted">{t('writing.submissions.results.next.description')}</p>
+          {freeSampleForThisLetter?.state === 'completed' ? (
+            <InlineAlert variant="info" className="mt-3">
+              <span data-testid="free-sample-completed">{t('freeSample.completed')}</span>
+            </InlineAlert>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
+            {freeRevisionHref ? (
+              <Button asChild>
+                <Link href={freeRevisionHref} data-testid="free-sample-revise-cta">
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('freeSample.writing.retryCta')}
+                </Link>
+              </Button>
+            ) : null}
             {/* "Practice this again" is a genuinely new attempt — links to the
                 scenario's practice session so it runs the same entitlement
                 gate as any other new attempt (Writing Rule Enforcement
                 Addendum Rev5, 10 Sep 2026, §13). This submission's own
                 letter/score/feedback stay reviewable, unchanged, above. */}
             {submission ? (
-              <Button asChild>
+              <Button asChild variant={freeRevisionHref ? 'outline' : 'primary'}>
                 <Link href={`/writing/practice/session/${encodeURIComponent(submission.scenarioId)}`}>
                   <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.practiceAgain')}
                 </Link>

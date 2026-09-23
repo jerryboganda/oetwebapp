@@ -215,7 +215,11 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         // requires the native live-voice flow instead. st-001 is nursing's
         // only live RolePlayCard, so enabling the flag auto-picks it free.
         await _factory.EnsureFreeSamplesEnabledAsync();
+        // Free sample retry addendum (23 Sep 2026): the recorder only resumes a
+        // free attempt already in flight (new free uses run on the session engine).
+        var inFlight = await _factory.SeedInFlightLegacyFreeSpeakingAttemptAsync("audio-owner", "st-001", mode: "exam");
         var attemptId = await CreateSpeakingAttemptAsync(learner, "practice");
+        Assert.Equal(inFlight, attemptId);
 
         var uploadSessionResponse = await learner.PostAsync($"/v1/speaking/attempts/{attemptId}/audio/upload-session", content: null);
         uploadSessionResponse.EnsureSuccessStatusCode();

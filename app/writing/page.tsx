@@ -124,7 +124,6 @@ export default function WritingHome() {
             title={t('writing.hub.freeSample.title')}
             description={t('writing.hub.freeSample.description')}
             badgeLabel={t('writing.hub.freeSample.badge')}
-            usedLabel={t('writing.hub.freeSample.used')}
             className=""
           />
           <ul className="grid gap-4 sm:grid-cols-2">

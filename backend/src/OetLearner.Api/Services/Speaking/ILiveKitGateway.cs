@@ -26,7 +26,7 @@ public interface ILiveKitGateway
         TimeSpan ttl,
         CancellationToken ct);
 
-    /// <summary>Start a track-composite egress on the given room. Returns
+    /// <summary>Start an audio-only room recording on the given room. Returns
     /// the provider's egress identifier, which the backend persists so
     /// follow-up webhooks can be reconciled back to the room.</summary>
     Task<string> StartEgressAsync(string roomName, string outputUrl, CancellationToken ct);

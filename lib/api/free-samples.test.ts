@@ -8,7 +8,17 @@ describe('listFreeSamples', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('asks the server what is on offer for the subtest — a plain GET, no free flag anywhere', async () => {
-    const rows = [{ professionId: 'medicine', contentId: 'c1', state: 'available', route: '/writing/practice/session/c1' }];
+    const rows = [{
+      professionId: 'medicine',
+      contentId: 'c1',
+      state: 'retry_available',
+      route: '/writing/submissions/sub-1/revise',
+      limit: 2,
+      successfulCount: 1,
+      remaining: 1,
+      lastResultRoute: '/writing/submissions/sub-1/results',
+      lastSubmissionId: 'sub-1',
+    }];
     mockGet.mockResolvedValue(rows);
 
     await expect(listFreeSamples('writing')).resolves.toEqual(rows);

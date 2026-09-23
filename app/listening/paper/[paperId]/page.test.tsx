@@ -10,6 +10,7 @@ const {
   mockSubmitListeningAttempt,
   mockRecordListeningIntegrityEvent,
   mockSubmitAudioCheck,
+  mockRecordTechReadiness,
   mockFetchAuthorizedObjectUrl,
   mockRouterPush,
   mockRouterReplace,
@@ -21,6 +22,7 @@ const {
   mockSubmitListeningAttempt: vi.fn().mockResolvedValue({}),
   mockRecordListeningIntegrityEvent: vi.fn().mockResolvedValue({ success: true }),
   mockSubmitAudioCheck: vi.fn(),
+  mockRecordTechReadiness: vi.fn(),
   mockFetchAuthorizedObjectUrl: vi.fn(),
   mockRouterPush: vi.fn(),
   mockRouterReplace: vi.fn(),
@@ -68,7 +70,7 @@ vi.mock('@/lib/listening-api', async () => {
 
 vi.mock('@/lib/listening/v2-api', () => ({
   listeningV2Api: {
-    recordTechReadiness: vi.fn().mockResolvedValue({}),
+    recordTechReadiness: mockRecordTechReadiness,
   },
 }));
 
@@ -207,6 +209,7 @@ describe('ListeningPaperPlayerPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchAuthorizedObjectUrl.mockImplementation(async (url: string) => url);
+    mockRecordTechReadiness.mockResolvedValue({});
     window.HTMLMediaElement.prototype.play = vi.fn().mockImplementation(() => Promise.resolve());
     window.HTMLMediaElement.prototype.pause = vi.fn();
   });
@@ -247,6 +250,44 @@ describe('ListeningPaperPlayerPage', () => {
     await waitFor(() => {
       expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();
     });
+    // Paid papers keep the full readiness gate.
+    expect(mockSubmitAudioCheck).toHaveBeenCalledWith({ outcome: 'clear' });
+    expect(mockRecordTechReadiness).toHaveBeenCalledWith('attempt-101', expect.anything());
+  });
+
+  it.each([
+    ['paper.isFreeSample', (session: ReturnType<typeof makeMockSession>) => ({ ...session, paper: { ...session.paper, isFreeSample: true } })],
+    ['session.isFreeSample', (session: ReturnType<typeof makeMockSession>) => ({ ...session, isFreeSample: true })],
+  ])('free sample (%s): no readiness check, Start exam is enabled and starts the real exam directly', async (_label, makeFree) => {
+    mockGetListeningSession.mockResolvedValue(makeFree(makeMockSession()));
+    mockStartListeningAttempt.mockResolvedValue({
+      attemptId: 'attempt-free',
+      paperId: 'paper-1',
+      mode: 'exam',
+      sectionCursor: 0,
+      answers: {},
+      serverNow: new Date().toISOString(),
+      feedbackMessage: null,
+    });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Listening Benchmark Test 1' })).toBeInTheDocument());
+    expect(screen.queryByTestId('mock-tech-readiness')).not.toBeInTheDocument();
+
+    const startBtn = screen.getByRole('button', { name: /start exam/i });
+    expect(startBtn).toBeEnabled();
+    await user.click(startBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument();
+    });
+    expect(mockStartListeningAttempt).toHaveBeenCalledWith('paper-1', 'exam', expect.anything());
+    expect(mockSubmitAudioCheck).not.toHaveBeenCalled();
+    expect(mockRecordTechReadiness).not.toHaveBeenCalled();
   });
 
   it('renders ListeningAudioTransport with exam mode props and attempt countdown', async () => {

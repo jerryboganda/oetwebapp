@@ -197,7 +197,7 @@ describe('Speaking page', () => {
     expect(screen.getByText('Full AI Speaking Mock')).toBeInTheDocument();
     expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
     expect(screen.getByText('Practice Library')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Practice Library' })).toHaveAttribute('href', '/speaking/selection');
+    expect(screen.getByRole('link', { name: 'Open practice library' })).toHaveAttribute('href', '/speaking/selection');
     // The library card links out — individual task cards are not inlined on the hub.
     expect(screen.queryByText('Patient Handover - Post-Op Recovery')).not.toBeInTheDocument();
 
@@ -223,23 +223,37 @@ describe('Speaking page', () => {
     expect(await screen.findByText('Open Assessment Criteria')).toBeInTheDocument();
     expect(screen.getByText('Open Intro Questions')).toBeInTheDocument();
     // The library link and the exam stay reachable when the library is empty.
-    expect(screen.getByRole('link', { name: 'Open Practice Library' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open practice library' })).toBeInTheDocument();
     expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
   });
 
-  it('shows the full exam as 4 AI credits and no per-card credit price on the hub', async () => {
+  it('shows the owner-mandated credit copy: full mock "Card A + Card B" / "2 cards = 4 AI credits"', async () => {
     render(<SpeakingPage />);
 
-    expect(await screen.findByText('4 AI credits')).toBeInTheDocument();
-    expect(screen.queryByText('2 AI credits')).not.toBeInTheDocument();
+    expect(await screen.findByText('2 cards = 4 AI credits')).toBeInTheDocument();
+    expect(screen.getByText('Card A + Card B')).toBeInTheDocument();
   });
 
-  it('orders the hub: criteria, intro, Open Practice Library, full AI mock, then Book a Tutor (no free sample offered)', async () => {
+  it('renders the Practice Library as a full card with the exact PDF copy', async () => {
+    render(<SpeakingPage />);
+
+    const card = await screen.findByTestId('speaking-practice-library-card');
+    expect(card).toHaveTextContent('Practice Library');
+    expect(card).toHaveTextContent(
+      'Practise one OET Speaking role-play card at a time - 3 minutes to prepare and 5 minutes to speak. The AI plays the patient and marks your result.',
+    );
+    expect(card).toHaveTextContent('1 card = 2 AI credits | Browsing the library is free');
+    const cta = screen.getByRole('link', { name: 'Open practice library' });
+    expect(cta).toHaveTextContent('Open practice library →');
+    expect(cta).toHaveAttribute('href', '/speaking/selection');
+  });
+
+  it('orders the hub: criteria, intro, Practice Library, full AI mock, then Book a Tutor (no free sample offered)', async () => {
     render(<SpeakingPage />);
 
     const criteria = await screen.findByText('Speaking Assessment Criteria');
     const intro = screen.getByText('Speaking Intro Questions');
-    const library = screen.getByRole('link', { name: 'Open Practice Library' });
+    const library = screen.getByRole('link', { name: 'Open practice library' });
     const exam = screen.getByText('Start Speaking Exam');
     const tutor = screen.getByText('Book a Tutor');
     const follows = (a: Element, b: Element) =>
@@ -258,12 +272,12 @@ describe('Speaking page', () => {
       { professionId: 'medicine', contentId: 'rpc-med', state: 'available', route: '/speaking/roleplay/rpc-med?free=1' },
     ];
 
-    it('sits BEFORE the Open Practice Library card, Full AI Speaking Mock, and Book a Tutor (item 3 hub order)', async () => {
+    it('sits BEFORE the Practice Library card, Full AI Speaking Mock, and Book a Tutor (item 3 hub order)', async () => {
       mockListFreeSamples.mockResolvedValue(OWN_PROFESSION_OFFER);
       render(<SpeakingPage />);
 
       const free = await screen.findByTestId('speaking-free-mock-card');
-      const library = screen.getByRole('link', { name: 'Open Practice Library' });
+      const library = screen.getByRole('link', { name: 'Open practice library' });
       const exam = screen.getByText('Start Speaking Exam');
       const tutor = screen.getByText('Book a Tutor');
       const follows = (a: Element, b: Element) =>
@@ -272,7 +286,7 @@ describe('Speaking page', () => {
       expect(follows(library, exam)).toBe(true);
       expect(follows(exam, tutor)).toBe(true);
       expect(free).toHaveTextContent('Free Speaking Mock');
-      expect(free).toHaveTextContent(/free sample/i);
+      expect(free).toHaveTextContent('Free sample includes one full attempt + one free retry.');
     });
 
     it('links straight to the offered card — no cross-profession picker', async () => {

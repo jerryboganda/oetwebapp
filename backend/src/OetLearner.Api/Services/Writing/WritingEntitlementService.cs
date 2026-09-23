@@ -162,10 +162,11 @@ public sealed class WritingEntitlementService(
 
     public async Task<WritingStartAuthorization> AuthorizeStartAsync(string? userId, string referenceId, string? taskId, CancellationToken ct)
     {
-        // Free Mocks (owner 2026-09-22): the learner's ONE free AI-graded Writing
-        // sample. READ-ONLY here — the once-only claim is taken when the letter is
-        // submitted for grading, so this eligibility GET (page mount, Retry) can
-        // never burn it. Runs before the paid gate because a zero-credit learner
+        // Free Mocks (owner 2026-09-22; retry addendum 23 Sep: two graded
+        // results) — the learner's free AI-graded Writing sample. READ-ONLY
+        // here — a use is only bound when a letter is submitted for grading and
+        // only counts once graded, so this eligibility GET (page mount, Retry)
+        // can never burn it. Runs before the paid gate because a zero-credit learner
         // must be able to open the designated task. CheckAsync is untouched: the
         // legacy attempt flow depends on it.
         if (!string.IsNullOrWhiteSpace(userId)

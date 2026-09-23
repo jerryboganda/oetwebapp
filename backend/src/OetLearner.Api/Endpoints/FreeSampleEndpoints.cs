@@ -10,8 +10,9 @@ namespace OetLearner.Api.Endpoints;
 /// <summary>
 /// Free Mocks (owner 2026-09-22) — the free AI-graded Writing / Speaking sample.
 ///
-///  • learner  GET /v1/free-samples/{subtest}: which professions offer a free
-///    sample right now, with the route to open. The client never sends a "free"
+///  • learner  GET /v1/free-samples/{subtest}: the learner's own sample (0 or 1
+///    rows) — state, limit / successfulCount / remaining (two successful results
+///    per subtest) and the route to open next. The client never sends a "free"
 ///    flag — the server decides at start/grade time (see <c>FreeSampleService</c>).
 ///  • admin    GET/PUT/DELETE /v1/admin/free-samples/...: optionally designate the
 ///    curated item of a profession (no row = the server auto-picks the
@@ -41,7 +42,12 @@ public static class FreeSampleEndpoints
                 professionId = o.ProfessionId,
                 contentId = o.ContentId,
                 state = o.State,
-                route = RouteFor(key, o.ContentId),
+                route = o.Route,
+                limit = o.Limit,
+                successfulCount = o.SuccessfulCount,
+                remaining = o.Remaining,
+                lastResultRoute = o.LastResultRoute,
+                lastSubmissionId = o.LastSubmissionId,
             }));
         })
         .WithName("ListFreeSamples");
@@ -150,13 +156,6 @@ public static class FreeSampleEndpoints
         }
         return key;
     }
-
-    private static string RouteFor(string subtest, string contentId)
-        => subtest == FreeSampleService.Writing
-            ? $"/writing/practice/session/{Uri.EscapeDataString(contentId)}"
-            // free=1 is a DISPLAY-ONLY hint (copy on the preview page); the server
-            // decides what is free at attempt creation and never reads it.
-            : $"/speaking/roleplay/{Uri.EscapeDataString(contentId)}?free=1";
 
     private static AuditEvent Audit(string adminId, string action, string resourceId, string details) => new()
     {

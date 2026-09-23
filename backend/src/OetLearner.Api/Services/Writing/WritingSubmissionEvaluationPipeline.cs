@@ -1013,18 +1013,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
             if (creditReservations is not null
                 && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
             {
-                // Free Mocks: the learner's ONE free AI-graded sample. The server
-                // decides — designated scenario, once per learner (the claim is
-                // bound to THIS submission id, so retry-grade re-enters
-                // idempotently and a failed grade leaves it re-usable). Revisions
-                // are always paid.
-                freeSample = !submission.IsRevision
-                    && await new FreeSamples.FreeSampleService(db).TryClaimAsync(
-                        submission.UserId,
-                        FreeSamples.FreeSampleService.Writing,
-                        submission.ScenarioId.ToString("D"),
-                        submission.Id.ToString("N"),
-                        ct);
+                // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
+                // results on the learner's pinned scenario — the second is the
+                // "Revise & Resubmit" of the same letter, so revisions qualify
+                // too. The server decides: the scenario must be the claimed one
+                // and fewer than two results may exist. The use is bound to THIS
+                // submission id, so retry-grade re-enters idempotently and a
+                // failed grade never counts.
+                freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                    submission.UserId,
+                    FreeSamples.FreeSampleService.Writing,
+                    submission.ScenarioId.ToString("D"),
+                    FreeSampleUse.KindWritingSubmission,
+                    submission.Id.ToString("N"),
+                    ct);
                 var ticket = freeSample
                     ? await creditReservations.ReserveFreeSampleAsync(
                         submission.UserId, operationId, businessReference, ct)

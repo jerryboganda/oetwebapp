@@ -26,11 +26,18 @@ public partial class LearnerService
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
 
-        var sets = await db.SpeakingMockSets
+        // Profession lock (23 Sep 2026): only the learner's own profession's
+        // sets; a learner with no profession sees none. Filtered in memory so
+        // the comparison uses the same normalisation as every other guard
+        // (the published set list is small).
+        var learnerProfession = await LearnerProfessionGuard.GetLearnerProfessionAsync(db, userId, cancellationToken);
+        var sets = (await db.SpeakingMockSets
             .Where(x => x.Status == SpeakingMockSetStatus.Published)
             .OrderBy(x => x.SortOrder)
             .ThenBy(x => x.Title)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .Where(x => LearnerProfessionGuard.Matches(learnerProfession, x.ProfessionId))
+            .ToList();
 
         var rolling = await GetSpeakingMockSessionRollingUsageAsync(userId, cancellationToken);
 
@@ -64,6 +71,12 @@ public partial class LearnerService
         var mockSet = await db.SpeakingMockSets
             .FirstOrDefaultAsync(x => x.Id == mockSetId, cancellationToken)
             ?? throw ApiException.NotFound("speaking_mock_set_not_found", "That speaking mock set does not exist.");
+
+        // Profession lock: another profession's set is "not found", checked
+        // before any role-play content is loaded.
+        await LearnerProfessionGuard.RequireAsync(
+            db, userId, mockSet.ProfessionId,
+            "speaking_mock_set_not_found", "That speaking mock set does not exist.", cancellationToken);
 
         if (mockSet.Status != SpeakingMockSetStatus.Published)
         {
@@ -150,6 +163,10 @@ public partial class LearnerService
 
         var mockSet = await db.SpeakingMockSets
             .FirstAsync(x => x.Id == session.MockSetId, cancellationToken);
+        // Profession lock also covers sessions resumed from before the lock.
+        await LearnerProfessionGuard.RequireAsync(
+            db, userId, mockSet.ProfessionId,
+            "speaking_mock_session_not_found", "That mock session does not exist.", cancellationToken);
 
         // Sync OrchestratorState with the actual attempt/evaluation state on
         // every read so the orchestrator UI never gets stuck if the learner

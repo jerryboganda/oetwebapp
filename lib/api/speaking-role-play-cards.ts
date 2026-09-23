@@ -124,9 +124,6 @@ export interface RolePlayCardLearnerDetail {
   allowedNotes: boolean;
   prepTimeSeconds: number;
   rolePlayTimeSeconds: number;
-  patientEmotion: string;
-  communicationGoal: string;
-  clinicalTopic: string;
   difficulty: RolePlayCardDifficulty | string;
   criteriaFocus: string[];
   disclaimer: string;
@@ -441,9 +438,6 @@ export interface LearnerRolePlayCardSummary {
   allowedNotes: boolean;
   prepTimeSeconds: number;
   rolePlayTimeSeconds: number;
-  patientEmotion: string;
-  communicationGoal: string;
-  clinicalTopic: string;
   primaryCategory?: string | null;
   secondaryTags?: string[];
   criteriaFocus: string[];

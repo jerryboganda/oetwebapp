@@ -9858,6 +9858,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId", "Subtest")
@@ -9900,6 +9904,50 @@ namespace OetLearner.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("FreeSampleDesignations");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.FreeSampleUse", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClaimId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResourceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResourceKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Subtest")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimId");
+
+                    b.HasIndex("ResourceId")
+                        .IsUnique();
+
+                    b.ToTable("FreeSampleUses");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.FreeTierConfig", b =>
@@ -31768,6 +31816,15 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ApplicationUserAccount");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.FreeSampleUse", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.FreeSampleClaim", null)
+                        .WithMany()
+                        .HasForeignKey("ClaimId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.InterlocutorScript", b =>

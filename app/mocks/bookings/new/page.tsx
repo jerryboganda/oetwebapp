@@ -36,6 +36,11 @@ import type { MockBundleOption, MockOptions } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 
 const DAYS_AHEAD = 14;
+const TUTOR_ROOMS_UNAVAILABLE_MESSAGE = 'Live tutor sessions are temporarily unavailable.';
+
+function isTutorRoomsUnavailable(err: unknown): boolean {
+  return isApiError(err) && err.code === 'tutor_rooms_unavailable';
+}
 
 function pad2(value: number): string {
   return value.toString().padStart(2, '0');
@@ -120,6 +125,8 @@ export default function NewMockBookingPage() {
   const [toast, setToast] = useState<{ variant: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [speakingAccess, setSpeakingAccess] = useState<{ requiresAiOnly: boolean; daysUntilExam: number | null } | null>(null);
   const [speakingAccessError, setSpeakingAccessError] = useState<string | null>(null);
+  // B9: LiveKit not configured → the server answers 503 tutor_rooms_unavailable.
+  const [roomsUnavailable, setRoomsUnavailable] = useState(false);
 
   // Load bundles once, then auto-select a Speaking bundle (the main booking case).
   useEffect(() => {
@@ -182,7 +189,8 @@ export default function NewMockBookingPage() {
       });
     } catch (err) {
       setSlots([]);
-      setError(err instanceof Error ? err.message : 'Could not load slot availability.');
+      if (isTutorRoomsUnavailable(err)) setRoomsUnavailable(true);
+      else setError(err instanceof Error ? err.message : 'Could not load slot availability.');
     } finally {
       setSlotsLoading(false);
     }
@@ -231,7 +239,11 @@ export default function NewMockBookingPage() {
       router.push('/mocks/bookings');
     } catch (err) {
       const code = isApiError(err) ? err.code : null;
-      if (code === 'slot_taken' || code === 'conflict') {
+      if (code === 'tutor_rooms_unavailable') {
+        setRoomsUnavailable(true);
+        setSelectedSlot(null);
+        setSelectedTutorProfileId(null);
+      } else if (code === 'slot_taken' || code === 'conflict') {
         setToast({
           variant: 'error',
           message: 'That slot was taken just now. We refreshed the calendar, so please pick another time.',
@@ -258,7 +270,7 @@ export default function NewMockBookingPage() {
     }
   };
 
-  const noSlotsBecauseOfDate = !slotsLoading && slots.length === 0 && !error;
+  const noSlotsBecauseOfDate = !slotsLoading && slots.length === 0 && !error && !roomsUnavailable;
 
   if (!speakingAccess) {
     return (
@@ -285,6 +297,12 @@ export default function NewMockBookingPage() {
             { icon: Mic, label: 'Mode', value: 'Live + recorded' },
           ]}
         />
+
+        {roomsUnavailable ? (
+          <InlineAlert variant="warning" data-testid="tutor-rooms-unavailable">
+            {TUTOR_ROOMS_UNAVAILABLE_MESSAGE}
+          </InlineAlert>
+        ) : null}
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -476,7 +494,7 @@ export default function NewMockBookingPage() {
         <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !selectedBundle || !selectedSlot || !selectedTutorProfileId || !consent}
+            disabled={roomsUnavailable || submitting || !selectedBundle || !selectedSlot || !selectedTutorProfileId || !consent}
             loading={submitting}
             size="lg"
             className="w-full gap-2 py-5 text-base font-black"

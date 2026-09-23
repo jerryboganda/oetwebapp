@@ -73,7 +73,7 @@ public class ListeningAudioCheckGateTests
     /// tech-readiness gate at the same transition passes — isolating the
     /// sound-check gate as the thing under test.</summary>
     private static ListeningAttempt SeedIntroAttempt(
-        LearnerDbContext db, ListeningAttemptMode mode, string attemptId = "att-1")
+        LearnerDbContext db, ListeningAttemptMode mode, string attemptId = "att-1", bool withTechReadiness = true)
     {
         var attempt = new ListeningAttempt
         {
@@ -88,8 +88,10 @@ public class ListeningAudioCheckGateTests
             // Null NavigationStateJson → service seeds `intro` for in-progress.
             NavigationStateJson = null,
             // Fresh, passing device probe so RequiresTechReadiness is satisfied.
-            TechReadinessJson = JsonSerializer.Serialize(
-                new TechReadinessSnapshot(AudioOk: true, DurationMs: 1500, CheckedAt: Now), WebJson),
+            TechReadinessJson = withTechReadiness
+                ? JsonSerializer.Serialize(
+                    new TechReadinessSnapshot(AudioOk: true, DurationMs: 1500, CheckedAt: Now), WebJson)
+                : null,
         };
         db.ListeningAttempts.Add(attempt);
         db.SaveChanges();
@@ -211,6 +213,70 @@ public class ListeningAudioCheckGateTests
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Owner Free Mocks (23 Sep 2026) — the free-sample paper skips BOTH the
+    // tech-readiness and the sound-check gates; a paid paper keeps them.
+    // ─────────────────────────────────────────────────────────────────────
+
+    private static void SeedPaperRow(LearnerDbContext db, string tagsCsv)
+    {
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-1",
+            SubtestCode = "listening",
+            Title = "Gate Listening Paper",
+            Slug = "gate-listening-paper",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            AppliesToAllProfessions = true,
+            EstimatedDurationMinutes = 45,
+            TagsCsv = tagsCsv,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+            PublishedAt = Now,
+            ExtractedTextJson = "{}",
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task AdvanceAsync_free_sample_paper_skips_readiness_and_sound_check()
+    {
+        await using var db = NewDb();
+        SeedPaperRow(db, ContentEntitlementService.FreeSampleTag);
+        // No tech-readiness snapshot AND no sound-check profile.
+        SeedIntroAttempt(db, ListeningAttemptMode.Exam, withTechReadiness: false);
+        var svc = NewSessionService(db, new FixedClock(Now));
+
+        var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
+
+        // Neither gate fired: the strict advance reached its confirm step.
+        Assert.Equal("confirm-required", result.Outcome);
+        Assert.Null(result.RejectionReason);
+    }
+
+    [Fact]
+    public async Task AdvanceAsync_paid_paper_still_requires_readiness_then_sound_check()
+    {
+        await using var db = NewDb();
+        SeedPaperRow(db, "access:paid");
+        SeedIntroAttempt(db, ListeningAttemptMode.Exam, withTechReadiness: false);
+        var svc = NewSessionService(db, new FixedClock(Now));
+
+        var noReadiness = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
+        Assert.Equal("rejected", noReadiness.Outcome);
+        Assert.Equal("tech-readiness-required", noReadiness.RejectionReason);
+
+        await using var db2 = NewDb();
+        SeedPaperRow(db2, "access:paid");
+        SeedIntroAttempt(db2, ListeningAttemptMode.Exam);
+        var svc2 = NewSessionService(db2, new FixedClock(Now));
+
+        var noSoundCheck = await svc2.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
+        Assert.Equal("rejected", noSoundCheck.Outcome);
+        Assert.Equal("audio-check-required", noSoundCheck.RejectionReason);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // AdvanceAsync — non-strict modes are never gated
     // ─────────────────────────────────────────────────────────────────────
 
@@ -253,7 +319,8 @@ public class ListeningAudioCheckGateTests
     private static async Task SeedRelationalPaperWithAudioAsync(
         LearnerDbContext db,
         bool perSectionAudioOnly = false,
-        bool jsonBacked = false)
+        bool jsonBacked = false,
+        bool freeSample = false)
     {
         var user = new LearnerUser
         {
@@ -287,6 +354,7 @@ public class ListeningAudioCheckGateTests
             Difficulty = "standard",
             AppliesToAllProfessions = true,
             EstimatedDurationMinutes = 45,
+            TagsCsv = freeSample ? ContentEntitlementService.FreeSampleTag : string.Empty,
             CreatedAt = Now,
             UpdatedAt = Now,
             PublishedAt = Now,
@@ -406,6 +474,42 @@ public class ListeningAudioCheckGateTests
 
         Assert.NotNull(dto);
         Assert.True(await db.ListeningAttempts.AnyAsync(a => a.Mode == ListeningAttemptMode.Exam));
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_free_sample_exam_starts_without_sound_check()
+    {
+        await using var db = NewDb();
+        await SeedRelationalPaperWithAudioAsync(db, freeSample: true);
+        // No profile → no passed check; the free-sample paper is not gated.
+        var svc = new ListeningLearnerService(db, new AllowAllContentEntitlementService());
+
+        var dto = await svc.StartAttemptAsync(UserId, "paper-1", "exam", null, forceNewAttempt: true, CancellationToken.None);
+
+        Assert.NotNull(dto);
+        Assert.True(await db.ListeningAttempts.AnyAsync(a => a.Mode == ListeningAttemptMode.Exam));
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_reports_isFreeSample_only_for_the_tagged_paper()
+    {
+        await using var freeDb = NewDb();
+        await SeedRelationalPaperWithAudioAsync(freeDb, freeSample: true);
+        var freeSession = await new ListeningLearnerService(freeDb, new AllowAllContentEntitlementService())
+            .GetSessionAsync(UserId, "paper-1", "practice", null, CancellationToken.None);
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(freeSession, WebJson)))
+        {
+            Assert.True(json.RootElement.GetProperty("isFreeSample").GetBoolean());
+        }
+
+        await using var paidDb = NewDb();
+        await SeedRelationalPaperWithAudioAsync(paidDb);
+        var paidSession = await new ListeningLearnerService(paidDb, new AllowAllContentEntitlementService())
+            .GetSessionAsync(UserId, "paper-1", "practice", null, CancellationToken.None);
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(paidSession, WebJson)))
+        {
+            Assert.False(json.RootElement.GetProperty("isFreeSample").GetBoolean());
+        }
     }
 
     [Fact]

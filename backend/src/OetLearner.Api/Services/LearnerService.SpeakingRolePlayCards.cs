@@ -90,25 +90,25 @@ public partial class LearnerService
                 card.AllowedNotes,
                 card.PrepTimeSeconds,
                 card.RolePlayTimeSeconds,
-                card.PatientEmotion,
-                card.CommunicationGoal,
-                card.ClinicalTopic,
                 card.PrimaryCategory,
                 card.SecondaryTagsJson,
                 card.CriteriaFocusJson,
                 card.Disclaimer,
                 card.UpdatedAt,
+                HasContentItem = item != null,
                 ContentItemProfessionId = item != null ? item.ProfessionId : null,
             })
             .OrderByDescending(r => r.UpdatedAt)
             .ToListAsync(ct);
 
+        // Profession lock (23 Sep 2026): a learner with no profession sees
+        // nothing (fail closed — they must pick one first). Otherwise own
+        // profession (normalised) plus cards whose linked ContentItem is
+        // explicitly universal. A card with NO linked ContentItem is never
+        // treated as universal — only its own ProfessionId can admit it.
         var filtered = rows.AsEnumerable()
-            .Where(r =>
-                string.IsNullOrWhiteSpace(effectiveProfession)
-                || string.Equals(r.ProfessionId ?? string.Empty, effectiveProfession, StringComparison.OrdinalIgnoreCase)
-                || r.ContentItemProfessionId is null
-                || string.IsNullOrWhiteSpace(r.ContentItemProfessionId));
+            .Where(r => LearnerProfessionGuard.CanAccessRolePlayCard(
+                effectiveProfession, r.ProfessionId, r.HasContentItem, r.ContentItemProfessionId));
 
         if (!string.IsNullOrWhiteSpace(requestedCategory))
         {
@@ -126,7 +126,7 @@ public partial class LearnerService
             {
                 cardId = r.Id,
                 professionId = r.ProfessionId,
-                appliesToAllProfessions = r.ContentItemProfessionId == null,
+                appliesToAllProfessions = LearnerProfessionGuard.IsUniversalRolePlayCard(r.HasContentItem, r.ContentItemProfessionId),
                 scenarioTitle = r.ScenarioTitle,
                 setting = r.Setting,
                 candidateRole = r.CandidateRole,
@@ -138,9 +138,8 @@ public partial class LearnerService
                 allowedNotes = r.AllowedNotes,
                 prepTimeSeconds = r.PrepTimeSeconds,
                 rolePlayTimeSeconds = r.RolePlayTimeSeconds,
-                patientEmotion = r.PatientEmotion,
-                communicationGoal = r.CommunicationGoal,
-                clinicalTopic = r.ClinicalTopic,
+                // Emotion / Goal / Topic are internal (AI patient prompt only)
+                // and never sent to learners (owner, 23 Sep 2026).
                 primaryCategory = string.IsNullOrWhiteSpace(r.PrimaryCategory) ? "Other Cards" : r.PrimaryCategory,
                 secondaryTags = DeserializeSecondaryTags(r.SecondaryTagsJson),
                 criteriaFocus,
@@ -186,8 +185,7 @@ public partial class LearnerService
     public async Task<object> GetSpeakingRolePlayCardForLearnerAsync(
         string userId,
         string cardId,
-        CancellationToken ct,
-        bool allowFreeSample = false)
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(cardId))
         {
@@ -221,6 +219,7 @@ public partial class LearnerService
             select new
             {
                 Card = rpc,
+                HasContentItem = item != null,
                 ContentItemProfessionId = item != null ? item.ProfessionId : null,
             })
             .FirstOrDefaultAsync(ct);
@@ -240,15 +239,19 @@ public partial class LearnerService
         // Plan P2.1 — profession filter. Cards that don't match the
         // learner's active profession (and aren't universal) are
         // surfaced as 404 to avoid leaking the existence of content
-        // intended for a different profession.
-        var activeProfession = (learner?.ActiveProfessionId ?? string.Empty).Trim().ToLowerInvariant();
-        var cardProfession = (record.Card.ProfessionId ?? string.Empty).Trim().ToLowerInvariant();
-        var appliesToAllProfessions = record.ContentItemProfessionId is null;
+        // intended for a different profession. Profession lock (23 Sep
+        // 2026): a learner with no profession now fails closed, an orphan
+        // card (no ContentItem) is no longer treated as universal, and the
+        // free-sample route gets no bypass (the free card is always the
+        // learner's own profession).
+        var appliesToAllProfessions = LearnerProfessionGuard.IsUniversalRolePlayCard(
+            record.HasContentItem, record.ContentItemProfessionId);
 
-        if (!allowFreeSample
-            && !appliesToAllProfessions
-            && !string.IsNullOrEmpty(activeProfession)
-            && !string.Equals(cardProfession, activeProfession, StringComparison.Ordinal))
+        if (!LearnerProfessionGuard.CanAccessRolePlayCard(
+                learner?.ActiveProfessionId,
+                record.Card.ProfessionId,
+                record.HasContentItem,
+                record.ContentItemProfessionId))
         {
             throw ApiException.NotFound("role_play_card_not_found",
                 "That role-play card does not exist.");
@@ -275,9 +278,8 @@ public partial class LearnerService
             allowedNotes = card.AllowedNotes,
             prepTimeSeconds = card.PrepTimeSeconds,
             rolePlayTimeSeconds = card.RolePlayTimeSeconds,
-            patientEmotion = card.PatientEmotion,
-            communicationGoal = card.CommunicationGoal,
-            clinicalTopic = card.ClinicalTopic,
+            // Emotion / Goal / Topic are internal (AI patient prompt only) and
+            // never sent to learners (owner, 23 Sep 2026).
             primaryCategory = string.IsNullOrWhiteSpace(card.PrimaryCategory) ? "Other Cards" : card.PrimaryCategory,
             secondaryTags = DeserializeSecondaryTags(card.SecondaryTagsJson),
             criteriaFocus,

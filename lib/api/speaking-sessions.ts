@@ -72,6 +72,12 @@ export interface SpeakingSessionTimingDetail {
   submittedAt: string | null;
   consentVersion: string;
   card: RolePlayCardLearnerDetail;
+  /** True only when a live voice provider is configured AND probe-verified. False = recorder fallback. */
+  liveVoiceAvailable: boolean;
+  /** Server-decided: this session is the learner's designated free sample. */
+  isFreeSample: boolean;
+  /** Recording/AI-processing consent was recorded for this session (before any timer). */
+  consentAccepted: boolean;
 }
 
 export interface SpeakingSessionDetail extends SpeakingSessionTimingDetail {
@@ -301,6 +307,49 @@ export async function recordConsent(
   return apiClient.post<ConsentAckResponse>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/consent`,
     { consentVersion },
+  );
+}
+
+/**
+ * Recorder fallback (`liveVoiceAvailable=false`): upload the finished
+ * recording. Must succeed BEFORE `/end` → `/submit` → `/ai-assess`.
+ * Idempotent: a repeat upload returns 409 `recording_already_received`,
+ * which the client treats as success.
+ */
+export async function uploadSpeakingSessionRecording(
+  sessionId: string,
+  audio: Blob,
+  durationSeconds?: number,
+): Promise<void> {
+  const form = new FormData();
+  const extension = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm';
+  form.append('audio', audio, `speaking-${sessionId}.${extension}`);
+  if (durationSeconds && durationSeconds > 0) {
+    form.append('durationSeconds', String(Math.round(durationSeconds)));
+  }
+  await apiClient.request(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/recording`,
+    { method: 'POST', body: form },
+    { json: false, acceptedStatuses: [409], timeoutMs: 120_000 },
+  );
+}
+
+export type SpeakingAssessmentState = 'processing' | 'completed' | 'failed';
+
+export interface SpeakingSessionResultsStatus {
+  assessmentState: SpeakingAssessmentState | string;
+  retryable: boolean;
+  failureReason: string | null;
+}
+
+/** Grading state for the results page. Resolves null on 404 (nothing submitted yet). */
+export async function getSpeakingSessionResults(
+  sessionId: string,
+): Promise<SpeakingSessionResultsStatus | null> {
+  return apiClient.request<SpeakingSessionResultsStatus | null>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/results`,
+    { method: 'GET' },
+    { acceptedStatuses: [404] },
   );
 }
 

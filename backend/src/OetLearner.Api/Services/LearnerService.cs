@@ -3124,6 +3124,7 @@ public partial class LearnerService(
     {
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Writing model answer not found.");
+        await RequireOwnProfessionAsync(userId, item.ProfessionId, cancellationToken);
 
         var hasSubmittedAttempt = await db.Attempts.AnyAsync(attempt =>
             attempt.UserId == userId &&
@@ -3288,22 +3289,17 @@ public partial class LearnerService(
     /// Shared profession-isolation check (handoff item 2): a null
     /// <paramref name="contentProfessionId"/> means the item applies to every
     /// profession and is never blocked. Otherwise it must equal the caller's
-    /// own <c>ActiveProfessionId</c> — mismatch or a learner with no profession
-    /// yet set both 404 as "not found", never revealing that the content
-    /// exists for a different profession.
+    /// own <c>ActiveProfessionId</c> (normalised, see
+    /// <see cref="LearnerProfessionGuard"/>) — mismatch or a learner with no
+    /// profession yet set both 404 as "not found", never revealing that the
+    /// content exists for a different profession.
     /// </summary>
     private async Task RequireOwnProfessionAsync(string userId, string? contentProfessionId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(contentProfessionId)) return;
 
-        var learnerProfession = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => u.ActiveProfessionId)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (!string.Equals(contentProfessionId, learnerProfession, StringComparison.OrdinalIgnoreCase))
-        {
-            throw ApiException.NotFound("content_not_found", "Practice content not found.");
-        }
+        await LearnerProfessionGuard.RequireAsync(
+            db, userId, contentProfessionId, "content_not_found", "Practice content not found.", cancellationToken);
     }
 
     public async Task<object> GetLegacyFreeSpeakingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
@@ -3348,7 +3344,25 @@ public partial class LearnerService(
     public async Task<object> GetSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        // Profession lock (23 Sep 2026): a resumed attempt from before the
+        // lock must not hand back another profession's role card.
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Defense in depth for attempt/evaluation reads: ownership is already
+    /// checked, but attempts created before the profession lock may point at
+    /// another profession's content. 404 before the payload is built.
+    /// </summary>
+    private async Task RequireAttemptContentOwnProfessionAsync(string userId, string? contentId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(contentId)) return;
+        var contentProfession = await db.ContentItems.AsNoTracking()
+            .Where(x => x.Id == contentId)
+            .Select(x => x.ProfessionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        await RequireOwnProfessionAsync(userId, contentProfession, cancellationToken);
     }
 
     private async Task EnsureLegacyFreeSpeakingAccessAsync(string userId, string cardId, CancellationToken cancellationToken)
@@ -3544,22 +3558,67 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         await EnsureSpeakingAttemptBindingAsync(attempt, expectedContentId, expectedMockSessionId, cancellationToken);
-        if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
+
+        // Idempotent: any existing evaluation (newest first, since a retry
+        // adds a row) is the answer to a repeated submit.
+        var existing = await LatestSpeakingEvaluationAsync(attemptId, cancellationToken);
+        if (existing is not null)
         {
-            var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
-            if (existing is not null)
-            {
-                return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
-            }
-
-            await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
-
-            return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+            return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
         }
 
         await EnsureSpeakingAudioReadyForSubmissionAsync(attempt, cancellationToken);
 
+        // Two concurrent submits both got here: only the caller whose atomic
+        // state flip wins queues an evaluation; the loser returns the
+        // winner's evaluation instead of creating a duplicate.
+        if (!await TryClaimSpeakingSubmissionAsync(db, attempt.Id, attempt.State, cancellationToken))
+        {
+            for (var poll = 0; poll < 20; poll++)
+            {
+                var winner = await LatestSpeakingEvaluationAsync(attemptId, cancellationToken);
+                if (winner is not null)
+                {
+                    return new { attemptId, evaluationId = (string?)winner.Id, state = ToAsyncState(winner.State) };
+                }
+                await Task.Delay(150, cancellationToken);
+            }
+            return new { attemptId, evaluationId = (string?)null, state = "queued" };
+        }
+
         return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+    }
+
+    /// <summary>
+    /// Compare-and-swap of the attempt from the state the caller read into
+    /// <see cref="AttemptState.Evaluating"/>, as one conditional UPDATE so two
+    /// racing submits cannot both win. The InMemory provider (tests only)
+    /// cannot run ExecuteUpdate and is single-threaded there, so it always
+    /// wins. ponytail: an attempt already stuck in Evaluating with no
+    /// evaluation lets both racers through; that is a crash leftover, not a
+    /// normal double-click.
+    /// </summary>
+    public static async Task<bool> TryClaimSpeakingSubmissionAsync(
+        LearnerDbContext db,
+        string attemptId,
+        AttemptState observedState,
+        CancellationToken cancellationToken)
+    {
+        if (db.Database.IsInMemory()) return true;
+
+        var claimed = await db.Attempts
+            .Where(x => x.Id == attemptId && x.State == observedState)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.State, AttemptState.Evaluating), cancellationToken);
+        return claimed == 1;
+    }
+
+    private async Task<Evaluation?> LatestSpeakingEvaluationAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        // Ordered in memory: SQLite cannot ORDER BY a DateTimeOffset.
+        var evaluations = await db.Evaluations.AsNoTracking()
+            .Where(x => x.AttemptId == attemptId)
+            .ToListAsync(cancellationToken);
+        return evaluations.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
     }
 
     /// <summary>
@@ -3663,6 +3722,7 @@ public partial class LearnerService(
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
@@ -3721,7 +3781,10 @@ public partial class LearnerService(
             },
             statusReasonCode = evaluation.StatusReasonCode,
             statusMessage = evaluation.StatusMessage,
-            retryable = evaluation.Retryable,
+            // True only when "Try grading again" (POST /v1/speaking/attempts/
+            // {attemptId}/retry-evaluation) will be accepted; a queued row
+            // also carries Retryable=true but is not learner-retryable.
+            retryable = evaluation.State == AsyncState.Failed && evaluation.Retryable,
             retryAfterMs = evaluation.RetryAfterMs,
             // Wave 1 contract additions ↑
             generatedAt = evaluation.GeneratedAt,
@@ -3805,6 +3868,7 @@ public partial class LearnerService(
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
             ? SpeakingContentStructure.PracticeDisclaimer
@@ -7154,9 +7218,8 @@ public partial class LearnerService(
             ["warmUpQuestions"] = warmUps,
             ["prepTimeSeconds"] = prepSeconds,
             ["roleplayTimeSeconds"] = roleplaySeconds,
-            ["patientEmotion"] = Trimmed(card?.PatientEmotion) ?? SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral",
-            ["communicationGoal"] = Trimmed(card?.CommunicationGoal) ?? SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
-            ["clinicalTopic"] = Trimmed(card?.ClinicalTopic) ?? SpeakingContentStructure.ReadString(detail, "clinicalTopic") ?? item.ScenarioType ?? "roleplay",
+            // Emotion / Goal / Topic are internal (AI patient prompt only) and
+            // never sent to learners (owner, 23 Sep 2026).
             ["disclaimer"] = disclaimer,
             ["sourceAttribution"] = LearnerSafeAttribution(card?.SourceAttribution),
             ["compliance"] = new
@@ -7476,12 +7539,16 @@ public partial class LearnerService(
                     markingPolicyErrorCode = markingPolicy.ErrorCode,
                 })
         };
-        if (freeSample
-            && !await new FreeSamples.FreeSampleService(db).TryClaimAsync(
-                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, attempt.Id, cancellationToken))
+        if (freeSample)
         {
-            // Lost the once-only race (second tab) or the sample was spent meanwhile.
-            throw ApiException.Conflict("free_sample_unavailable", "Your free Speaking sample is no longer available.");
+            // Free sample retry addendum (owner 23 Sep 2026): NEW free Speaking
+            // uses run on the shared Speaking session engine
+            // (SpeakingSessionService.CreateSessionAsync binds them). The legacy
+            // recorder only resumes a free attempt already in flight (returned
+            // above as the existing in-progress attempt); it never mints a new one.
+            throw ApiException.Conflict(
+                "free_speaking_session_required",
+                "Your free Speaking sample now runs in the Speaking session player. Open it from the Speaking page.");
         }
         db.Attempts.Add(attempt);
         await LearnerWorkflowCoordinator.AttachAttemptToDiagnosticAsync(db, attempt, cancellationToken);

@@ -57,6 +57,18 @@ public class WritingLearnerVisibilityTests
         var now = DateTimeOffset.UtcNow;
 
         db.ContentItems.Add(BuildWritingContent("writing-1", ContentStatus.Published));
+        // Profession lock (23 Sep 2026): the model answer is only for a
+        // learner of the task's own profession (medicine).
+        db.Users.Add(new LearnerUser
+        {
+            Id = "learner-1",
+            DisplayName = "Learner",
+            Email = "learner-1@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
         db.Attempts.Add(BuildAttempt("other-learner", "writing-1", AttemptState.Completed, now));
         db.Attempts.Add(BuildAttempt("learner-1", "writing-1", AttemptState.InProgress, null));
         db.Attempts.Add(BuildAttempt("learner-1", "writing-1", AttemptState.Failed, now));
@@ -81,6 +93,32 @@ public class WritingLearnerVisibilityTests
         var now = DateTimeOffset.UtcNow;
 
         db.ContentItems.Add(BuildWritingContent("writing-1", ContentStatus.Archived));
+        db.Attempts.Add(BuildAttempt("learner-1", "writing-1", AttemptState.Completed, now));
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            service.GetWritingModelAnswerAsync("learner-1", "writing-1", CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status404NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetWritingModelAnswerAsync_requires_own_profession_even_after_a_prelock_attempt()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var now = DateTimeOffset.UtcNow;
+        db.ContentItems.Add(BuildWritingContent("writing-1", ContentStatus.Published));
+        db.Users.Add(new LearnerUser
+        {
+            Id = "learner-1",
+            DisplayName = "Learner",
+            Email = "learner-1@example.test",
+            ActiveProfessionId = "nursing",
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
         db.Attempts.Add(BuildAttempt("learner-1", "writing-1", AttemptState.Completed, now));
         await db.SaveChangesAsync();
 

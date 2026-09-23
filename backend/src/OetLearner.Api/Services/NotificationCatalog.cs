@@ -158,6 +158,8 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
             NotificationEventKey.ExpertPrivateSpeakingRescheduled => "A private speaking session has been rescheduled",
             NotificationEventKey.ExpertPrivateSpeakingNoShow => "A learner was marked as a no-show",
+            NotificationEventKey.ExpertPrivateSpeakingRecordingReady => "Session recording ready for review",
+            NotificationEventKey.LearnerPrivateSpeakingRecordingReceived => "We received your session recording",
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}",
             // Wave A3 — class notifications
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"You're in: {ReadToken(tokens, "classTitle", "your class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")}",
@@ -224,6 +226,8 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
             NotificationEventKey.ExpertPrivateSpeakingRescheduled => $"A private speaking session has been rescheduled to {ReadToken(tokens, "sessionTime", "the new time")}.",
             NotificationEventKey.ExpertPrivateSpeakingNoShow => ReadToken(tokens, "message", "A learner was marked as a no-show for a private speaking session."),
+            NotificationEventKey.ExpertPrivateSpeakingRecordingReady => "The recording of your live Speaking session has been received and is waiting in your review queue.",
+            NotificationEventKey.LearnerPrivateSpeakingRecordingReceived => "The recording of your live Speaking session has been received. Your tutor will review it and your feedback will appear on your session page.",
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
             // Wave A3 — class notification bodies
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"Your seat is confirmed in {ReadToken(tokens, "classTitle", "the class")} at {ReadToken(tokens, "sessionTime", "the scheduled time")}. A calendar invite is attached and the Zoom link will become active 30 minutes before the start time.",
@@ -292,6 +296,8 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "/expert/private-speaking",
             NotificationEventKey.ExpertPrivateSpeakingRescheduled => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingNoShow => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.ExpertPrivateSpeakingRecordingReady => "/expert/speaking/queue",
+            NotificationEventKey.LearnerPrivateSpeakingRecordingReceived => $"/speaking/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/results",
             NotificationEventKey.AdminPrivateSpeakingBooked => "/admin/private-speaking",
             // Wave A3 — class notification action URLs
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"/classes/{ReadToken(tokens, "classId", string.Empty)}/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/join",
@@ -358,6 +364,8 @@ public static class NotificationCatalog
             new(NotificationEventKey.ExpertPrivateSpeakingRescheduled, ApplicationUserRoles.Expert, "private_speaking", "Session Rescheduled", "Notify experts when a private speaking session is rescheduled.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.LearnerPrivateSpeakingNoShow, ApplicationUserRoles.Learner, "private_speaking", "Session No-Show", "Notify learners when they are marked as a no-show for a private speaking session.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertPrivateSpeakingNoShow, ApplicationUserRoles.Expert, "private_speaking", "Session No-Show", "Notify experts when a learner is marked as a no-show for a private speaking session.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingRecordingReady, ApplicationUserRoles.Expert, "private_speaking", "Recording Ready for Review", "Notify experts when a live tutor session recording is received and waiting for review.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPrivateSpeakingRecordingReceived, ApplicationUserRoles.Learner, "private_speaking", "Session Recording Received", "Tell learners their live tutor session recording was received and is going to review.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminPrivateSpeakingBooked, ApplicationUserRoles.Admin, "operations", "Private Speaking Booked", "Notify admins when a private speaking session is booked.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
 
             // Expanded OET lifecycle catalog

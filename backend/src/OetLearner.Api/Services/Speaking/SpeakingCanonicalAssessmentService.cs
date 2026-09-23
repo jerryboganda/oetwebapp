@@ -22,6 +22,24 @@ public interface ISpeakingCanonicalAssessmentService
     Task ExecuteQueuedAsync(string operationId, CancellationToken ct);
 
     Task AssessNowAsync(string sessionId, CancellationToken ct);
+
+    /// <summary>True when the session is scored by the v1.1 simulation
+    /// assessor rather than the classic one.</summary>
+    Task<bool> UsesV11Async(string sessionId, CancellationToken ct);
+
+    /// <summary>Learner-facing grading state for
+    /// <c>GET /v1/speaking/sessions/{id}/results</c>.</summary>
+    Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct);
+}
+
+/// <param name="AssessmentState"><c>processing</c> | <c>completed</c> | <c>failed</c>.</param>
+/// <param name="Retryable">True when <c>POST /ai-assess</c> may be called again (no extra charge).</param>
+/// <param name="FailureReason">Learner-safe reason when failed.</param>
+public sealed record SpeakingAssessmentState(string AssessmentState, bool Retryable, string? FailureReason)
+{
+    public const string Processing = "processing";
+    public const string Completed = "completed";
+    public const string Failed = "failed";
 }
 
 /// <summary>
@@ -34,10 +52,19 @@ public sealed class SpeakingCanonicalAssessmentService(
     SpeakingAiAssessmentService classic,
     SpeakingSimulationV11AssessmentService v11,
     TimeProvider clock,
-    ILogger<SpeakingCanonicalAssessmentService> logger) : ISpeakingCanonicalAssessmentService
+    ILogger<SpeakingCanonicalAssessmentService> logger,
+    IAiCreditReservationService? creditReservations = null) : ISpeakingCanonicalAssessmentService
 {
     public const string FeatureCode = AiFeatureCodes.SpeakingGrade;
     public const string PromptVersion = "speaking.score.v2";
+
+    private const string NoTranscriptErrorCode = "speaking_session_no_transcript";
+    private const string GradingFailedMessage =
+        "We couldn't finish grading this recording. Try grading again. You won't be charged twice.";
+
+    /// <summary>How long an assessment may wait for a recorder-fallback
+    /// transcript before it is reported as failed.</summary>
+    private static readonly TimeSpan TranscriptWait = TimeSpan.FromHours(1);
 
     public string ComputeIdentityHash(
         string sessionId,
@@ -138,25 +165,24 @@ public sealed class SpeakingCanonicalAssessmentService(
         if (row is null || string.IsNullOrWhiteSpace(row.ResourceId)) return;
         if (row.State is AiOperationState.Completed or AiOperationState.ProviderSucceeded) return;
 
-        await AssessNowAsync(row.ResourceId, ct);
-
-        row = await db.AiOperations.FirstOrDefaultAsync(o => o.Id == operationId, ct);
-        if (row is null) return;
-        row.State = AiOperationState.Completed;
-        row.LeaseOwner = null;
-        row.LeaseExpiresAt = null;
-        row.UpdatedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await AssessNowAsync(row.ResourceId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // AssessNowAsync already persisted the outcome (FailedTerminal or
+            // a scheduled retry) and released the lease; rethrowing would
+            // abort the worker's whole claimed batch.
+        }
     }
 
     public async Task AssessNowAsync(string sessionId, CancellationToken ct)
     {
         var ticket = await EnqueueAsync(sessionId, ct);
-        var hasV11 = await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
-            .AnyAsync(x => x.SpeakingSessionId == sessionId, ct);
         try
         {
-            if (hasV11)
+            if (await UsesV11Async(sessionId, ct))
             {
                 await v11.RunAssessmentAsync(sessionId, ct);
             }
@@ -165,18 +191,118 @@ public sealed class SpeakingCanonicalAssessmentService(
                 await classic.RunAssessmentAsync(sessionId, ct);
             }
 
-            var op = await db.AiOperations.FirstOrDefaultAsync(o => o.Id == ticket.OperationId, ct);
-            if (op is not null && op.State != AiOperationState.Completed)
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.Completed, nextAttemptAt: null, ct);
+            if (creditReservations is not null)
             {
-                op.State = AiOperationState.Completed;
-                op.UpdatedAt = clock.GetUtcNow();
-                await db.SaveChangesAsync(ct);
+                await SpeakingCreditSettlement.CommitIfGradedAsync(db, creditReservations, sessionId, ct);
             }
         }
-        catch (Exception ex)
+        catch (ApiException ex) when (ex.ErrorCode == NoTranscriptErrorCode)
+        {
+            // Recorder fallback: the transcript is still being produced. The
+            // transcription queue re-runs this assessment once it lands; the
+            // scheduled retry is only a backstop for a lost hand-off.
+            var op = await db.AiOperations.AsNoTracking().FirstOrDefaultAsync(o => o.Id == ticket.OperationId, ct);
+            var expired = op is not null && clock.GetUtcNow() - op.CreatedAt > TranscriptWait;
+            await MarkOperationAsync(
+                ticket.OperationId,
+                expired ? AiOperationState.FailedTerminal : AiOperationState.RetryScheduled,
+                expired ? null : clock.GetUtcNow().AddMinutes(1),
+                ct);
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Speaking canonical assessment failed for session {SessionId}.", sessionId);
+            // Terminal for this run but learner-retryable: POST /ai-assess
+            // re-runs it and the credit hold is still only committed once.
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.FailedTerminal, nextAttemptAt: null, ct);
             throw;
+        }
+    }
+
+    public async Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
+    {
+        // A recorder-fallback recording has no v1.1 turn evidence (that only
+        // comes from the realtime voice loop), so it is always scored by the
+        // classic assessor from its server-side transcript.
+        var recorderFallbackId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
+        return await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
+                   .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
+               && !await db.SpeakingRecordings.AsNoTracking()
+                   .AnyAsync(r => r.Id == recorderFallbackId, ct);
+    }
+
+    public async Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct)
+    {
+        if (await SpeakingCreditSettlement.IsGradedAsync(db, sessionId, ct))
+        {
+            return new SpeakingAssessmentState(SpeakingAssessmentState.Completed, false, null);
+        }
+
+        // Ordered in memory: SQLite cannot ORDER BY a DateTimeOffset, and a
+        // session only has a handful of these rows.
+        var v11Latest = (await db.SpeakingSimulationV11Assessments.AsNoTracking()
+                .Where(a => a.SpeakingSessionId == sessionId && a.AssessmentKind == "card")
+                .ToListAsync(ct))
+            .OrderByDescending(a => a.GeneratedAt)
+            .FirstOrDefault();
+        if (v11Latest is { Status: SpeakingSimulationV11AssessmentStatus.TechnicalReview or SpeakingSimulationV11AssessmentStatus.Invalid })
+        {
+            return new SpeakingAssessmentState(SpeakingAssessmentState.Failed, true,
+                "Your recording could not be scored automatically. Try grading again.");
+        }
+
+        var transcripts = await db.SpeakingTranscripts.AsNoTracking()
+            .Where(t => t.SpeakingSessionId == sessionId)
+            .ToListAsync(ct);
+        var head = transcripts.OrderByDescending(t => t.GeneratedAt).FirstOrDefault();
+        if (head is not null
+            && head.Provider == SpeakingTranscriptionPipeline.StateFailed
+            && !transcripts.Any(t => t.IsLatest))
+        {
+            var noSpeech = SpeakingTranscriptionPipeline.ReadFailureField(head.SegmentsJson, "reasonCode") == "no_speech";
+            return new SpeakingAssessmentState(
+                SpeakingAssessmentState.Failed,
+                Retryable: !noSpeech,
+                FailureReason: noSpeech
+                    ? "No speech could be detected in the recording."
+                    : "We couldn't transcribe your recording. Try grading again.");
+        }
+
+        var operation = await db.AiOperations.AsNoTracking()
+            .FirstOrDefaultAsync(o => o.FeatureCode == FeatureCode
+                && o.ResourceType == "speaking_session"
+                && o.ResourceId == sessionId, ct);
+        if (operation?.State is AiOperationState.FailedTerminal)
+        {
+            return new SpeakingAssessmentState(SpeakingAssessmentState.Failed, true, GradingFailedMessage);
+        }
+
+        return new SpeakingAssessmentState(SpeakingAssessmentState.Processing, false, null);
+    }
+
+    private async Task MarkOperationAsync(
+        string operationId,
+        AiOperationState state,
+        DateTimeOffset? nextAttemptAt,
+        CancellationToken ct)
+    {
+        try
+        {
+            var op = await db.AiOperations.FirstOrDefaultAsync(o => o.Id == operationId, ct);
+            if (op is null) return;
+            op.State = state;
+            op.NextAttemptAt = nextAttemptAt;
+            op.LeaseOwner = null;
+            op.LeaseExpiresAt = null;
+            op.UpdatedAt = clock.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Never mask the assessment outcome with a bookkeeping failure.
+            logger.LogWarning(ex, "Could not record state {State} on Speaking operation {OperationId}.", state, operationId);
         }
     }
 }

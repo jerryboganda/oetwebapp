@@ -32,9 +32,24 @@ public class ConversationService(
         if (!ent.Allowed)
             throw ApiException.Validation("ENTITLEMENT_BLOCKED", ent.Reason);
 
-        var profession = (request.Profession ?? "medicine").Trim().ToLowerInvariant();
+        // Profession lock (23 Sep 2026): the profession comes from the
+        // account, never from the client (request.Profession is ignored), and
+        // a learner with no profession fails closed.
+        var accountProfession = await LearnerProfessionGuard.GetLearnerProfessionAsync(db, userId, ct);
+        if (string.IsNullOrWhiteSpace(accountProfession))
+            throw ApiException.Forbidden("PROFESSION_REQUIRED",
+                "Select your profession before starting a Speaking conversation.");
+        var profession = FreeSamples.FreeSampleService.NormalizeProfession(accountProfession);
         var difficulty = (request.Difficulty ?? "medium").Trim().ToLowerInvariant();
         var sourceContent = await ResolvePublishedSpeakingContentAsync(request.ContentId, ct);
+        // Source content must be the learner's own profession (a null
+        // ContentItem profession is shared content, as elsewhere).
+        if (sourceContent is not null
+            && !string.IsNullOrWhiteSpace(sourceContent.ProfessionId)
+            && !LearnerProfessionGuard.Matches(profession, sourceContent.ProfessionId))
+        {
+            throw ApiException.NotFound("CONVERSATION_CONTENT_NOT_FOUND", "Conversation source content was not found.");
+        }
 
         var template = sourceContent is null
             ? await PickTemplateAsync(userId, taskType, profession, ct)
@@ -97,9 +112,27 @@ public class ConversationService(
         var session = await db.ConversationSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
+        await RequireOwnProfessionSourceAsync(userId, session.ContentId, ct);
         var turns = await GetTurnsAsync(sessionId, ct);
         var options = await conversationOptionsProvider.GetAsync(ct);
         return MapSession(session, turns, options);
+    }
+
+    /// <summary>
+    /// Profession lock for sessions created before the lock: a session built
+    /// from another profession's speaking content 404s before its scenario is
+    /// echoed. Template/fallback sessions carry no source content.
+    /// </summary>
+    private async Task RequireOwnProfessionSourceAsync(string userId, string? contentId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(contentId)) return;
+        var contentProfession = await db.ContentItems.AsNoTracking()
+            .Where(c => c.Id == contentId)
+            .Select(c => c.ProfessionId)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(contentProfession)) return;
+        await LearnerProfessionGuard.RequireAsync(db, userId, contentProfession,
+            "SESSION_NOT_FOUND", "Conversation session not found.", ct);
     }
 
     public async Task<object> ResumeSessionAsync(
@@ -111,6 +144,7 @@ public class ConversationService(
         var session = await db.ConversationSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
+        await RequireOwnProfessionSourceAsync(userId, session.ContentId, ct);
 
         var turns = await GetTurnsAsync(sessionId, ct);
         var options = await conversationOptionsProvider.GetAsync(ct);
@@ -185,6 +219,7 @@ public class ConversationService(
         var session = await db.ConversationSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
+        await RequireOwnProfessionSourceAsync(userId, session.ContentId, ct);
 
         if (session.State is "completed" or "evaluated")
             throw ApiException.Validation("ALREADY_COMPLETED", "Session is already completed.");
@@ -491,7 +526,7 @@ public class ConversationService(
     {
         id = s.Id, userId = s.UserId, contentId = s.ContentId, templateId = s.TemplateId,
         examTypeCode = s.ExamTypeCode, subtestCode = s.SubtestCode, taskTypeCode = s.TaskTypeCode,
-        profession = s.Profession, scenarioJson = s.ScenarioJson, state = s.State,
+        profession = s.Profession, scenarioJson = ToLearnerScenarioJson(s.ScenarioJson), state = s.State,
         turnCount = s.TurnCount, durationSeconds = s.DurationSeconds,
         transcriptJson = s.TranscriptJson, evaluationId = s.EvaluationId,
         audioConsentVersion = s.AudioConsentVersion,
@@ -505,6 +540,44 @@ public class ConversationService(
         createdAt = s.CreatedAt, startedAt = s.StartedAt, completedAt = s.CompletedAt,
         turns = turns is null ? Array.Empty<object>() : MapTurns(turns),
     };
+
+    // Internal-only scenario fields: Emotion / Goal / Topic (owner, 23 Sep
+    // 2026) and the hidden interlocutor material. They stay in the stored
+    // ScenarioJson for the AI patient prompt but never reach the learner.
+    private static readonly string[] LearnerHiddenScenarioKeys =
+    [
+        "patientEmotion", "communicationGoal", "clinicalTopic",
+        "expectedOutcomes", "hiddenPatientProfile", "cuePrompts",
+    ];
+
+    internal static string ToLearnerScenarioJson(string? scenarioJson)
+    {
+        System.Text.Json.Nodes.JsonObject? root;
+        try
+        {
+            root = System.Text.Json.Nodes.JsonNode.Parse(string.IsNullOrWhiteSpace(scenarioJson) ? "{}" : scenarioJson)
+                as System.Text.Json.Nodes.JsonObject;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return "{}";
+        }
+        if (root is null) return "{}";
+
+        foreach (var key in root.Select(p => p.Key).ToList())
+        {
+            if (Array.Exists(LearnerHiddenScenarioKeys, k => k.Equals(key, StringComparison.OrdinalIgnoreCase))) root.Remove(key);
+        }
+        if (root["patientVoice"] is System.Text.Json.Nodes.JsonObject voice)
+        {
+            foreach (var key in voice.Select(p => p.Key)
+                .Where(k => k.Equals("emotion", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                voice.Remove(key);
+            }
+        }
+        return root.ToJsonString();
+    }
 
     private static IEnumerable<object> MapTurns(IEnumerable<ConversationTurn> turns)
         => turns.Select(t => new

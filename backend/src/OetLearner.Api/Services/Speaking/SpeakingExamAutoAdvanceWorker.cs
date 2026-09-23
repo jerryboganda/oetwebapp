@@ -20,6 +20,8 @@ public sealed class SpeakingExamAutoAdvanceWorker(
     ILogger<SpeakingExamAutoAdvanceWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan HoldSweepInterval = TimeSpan.FromHours(1);
+    private DateTimeOffset _lastHoldSweepAt = DateTimeOffset.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -32,6 +34,19 @@ public sealed class SpeakingExamAutoAdvanceWorker(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Speaking exam auto-advance sweep failed");
+            }
+
+            if (DateTimeOffset.UtcNow - _lastHoldSweepAt >= HoldSweepInterval)
+            {
+                _lastHoldSweepAt = DateTimeOffset.UtcNow;
+                try
+                {
+                    await SettleStaleCreditHoldsAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Speaking credit-hold settlement sweep failed");
+                }
             }
 
             try
@@ -99,5 +114,21 @@ public sealed class SpeakingExamAutoAdvanceWorker(
             logger.LogInformation("Speaking exam auto-advance sweep advanced {Count} exams.", changed);
         }
         return changed;
+    }
+
+    /// <summary>Refunds Speaking credit holds whose card/exam was never graded
+    /// (abandoned or failed) and commits late-graded ones. Exposed for tests.</summary>
+    public async Task<int> SettleStaleCreditHoldsAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var reservations = scope.ServiceProvider.GetService<OetLearner.Api.Services.Ai.IAiCreditReservationService>();
+        if (reservations is null) return 0;
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var settled = await SpeakingCreditSettlement.SettleStaleHoldsAsync(db, reservations, DateTimeOffset.UtcNow, ct);
+        if (settled > 0)
+        {
+            logger.LogInformation("Settled {Count} stale Speaking credit holds.", settled);
+        }
+        return settled;
     }
 }

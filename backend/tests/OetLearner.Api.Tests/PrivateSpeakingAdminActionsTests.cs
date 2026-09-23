@@ -8,6 +8,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Tests;
 
@@ -420,6 +421,161 @@ public sealed class PrivateSpeakingAdminActionsTests
         Assert.True(audited);
     }
 
+    // ── B9: controlled unavailable + "Any available tutor" ──────────────
+
+    [Fact]
+    public async Task CreateBooking_WhenLiveKitUnavailable_Returns503BeforeDebitingCredit()
+    {
+        await using var db = CreateDb();
+        var subscription = SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 1);
+        var resolver = new FakeEntitlementResolver(subscription.Id, speakingRemaining: 1);
+        var service = CreateService(db, new FakeStripeService(), resolver,
+            new LiveKitProviderUnavailable(NullLogger<LiveKitProviderUnavailable>.Instance));
+        SeedTutorWithMondayAvailability(db);
+        SeedLearnerUser(db);
+        SeedEligiblePlan(db, "plan-1");
+        SeedSessionAddOn(db);
+        await db.SaveChangesAsync();
+
+        Assert.False(service.LiveRoomsAvailable);
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.CreateBookingAndCheckoutAsync(
+            "learner-1", "tutor-profile-1", MondaySlotUtc, 30, "UTC",
+            learnerNotes: null, professionTrack: null,
+            idempotencyKey: NewKey(), sessionFormat: null, ct: CancellationToken.None,
+            paymentMethod: "paypal"));
+
+        Assert.Equal(503, ex.StatusCode);
+        Assert.Equal("tutor_rooms_unavailable", ex.Code);
+        Assert.Equal("Live tutor sessions are temporarily unavailable.", ex.Message);
+        Assert.Equal(1, (await db.Subscriptions.FindAsync("sub-1"))!.SpeakingSessionsRemaining);
+        Assert.False(await db.PrivateSpeakingBookings.AnyAsync());
+    }
+
+    [Fact]
+    public async Task LearnerSlots_WhenLiveKitUnavailable_Returns503()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, new FakeStripeService(), null,
+            new LiveKitProviderUnavailable(NullLogger<LiveKitProviderUnavailable>.Instance));
+        SeedTutorWithMondayAvailability(db);
+        await db.SaveChangesAsync();
+
+        foreach (var tutor in new string?[] { null, "any", "tutor-profile-1" })
+        {
+            var ex = await Assert.ThrowsAsync<ApiException>(() => service.GetLearnerSlotsAsync(
+                tutor, new DateOnly(2026, 06, 08), new DateOnly(2026, 06, 08), CancellationToken.None));
+            Assert.Equal(503, ex.StatusCode);
+            Assert.Equal("tutor_rooms_unavailable", ex.Code);
+        }
+    }
+
+    [Fact]
+    public async Task LearnerSlots_Any_ReturnsUnionOfTutorsOncePerStartTime()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, new FakeStripeService());
+        SeedTwoMondayTutors(db);
+        // Tutor 1 is busy at 11:00, tutor 2 is not.
+        SeedConfirmedBooking(db, MondaySlotUtc.AddHours(2), b => b.LearnerUserId = "someone-else");
+        await db.SaveChangesAsync();
+        var monday = new DateOnly(2026, 06, 08);
+
+        var tutorOne = await service.GetLearnerSlotsAsync("tutor-profile-1", monday, monday, CancellationToken.None);
+        var any = await service.GetLearnerSlotsAsync("any", monday, monday, CancellationToken.None);
+
+        Assert.DoesNotContain(tutorOne, slot => slot.StartTimeUtc == MondaySlotUtc.AddHours(2));
+        Assert.Contains(any, slot => slot.StartTimeUtc == MondaySlotUtc.AddHours(2));
+        Assert.All(any, slot => Assert.Equal("any", slot.TutorProfileId));
+        Assert.Equal(any.Count, any.Select(slot => slot.StartTimeUtc).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task CreateBooking_AnyTutor_AssignsLeastLoadedAndNeverDoubleBooks()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, new FakeStripeService(), new PerUserEntitlementResolver());
+        SeedTwoMondayTutors(db);
+        SeedEligiblePlan(db, "plan-1");
+        SeedSessionAddOn(db);
+        // Tutor 1 already carries one upcoming session, so tutor 2 is least loaded.
+        SeedConfirmedBooking(db, MondaySlotUtc.AddHours(2), b => b.LearnerUserId = "someone-else");
+        foreach (var learner in new[] { "learner-a", "learner-b", "learner-c" })
+        {
+            SeedSubscription(db, $"sub-{learner}", learner, speakingRemaining: 1);
+        }
+        await db.SaveChangesAsync();
+
+        async Task<BookingCheckoutResult> BookAny(string learner) => await service.CreateBookingAndCheckoutAsync(
+            learner, "any", MondaySlotUtc, 30, "UTC",
+            learnerNotes: null, professionTrack: null,
+            idempotencyKey: NewKey(), sessionFormat: null, ct: CancellationToken.None);
+
+        var first = await BookAny("learner-a");
+        var second = await BookAny("learner-b");
+        var third = await BookAny("learner-c");
+
+        Assert.True(first.Success, first.Error);
+        Assert.True(second.Success, second.Error);
+        Assert.False(third.Success);
+        Assert.Equal("tutor-profile-2", (await db.PrivateSpeakingBookings.FindAsync(first.BookingId))!.TutorProfileId);
+        Assert.Equal("tutor-profile-1", (await db.PrivateSpeakingBookings.FindAsync(second.BookingId))!.TutorProfileId);
+        var atSlot = await db.PrivateSpeakingBookings.Where(b => b.SessionStartUtc == MondaySlotUtc).ToListAsync();
+        Assert.Equal(2, atSlot.Count);
+        Assert.Equal(2, atSlot.Select(b => b.TutorProfileId).Distinct().Count());
+        Assert.True(await db.PrivateSpeakingAuditLogs.AnyAsync(a =>
+            a.BookingId == first.BookingId && a.Action == "tutor_auto_assigned"));
+        Assert.Equal(1, (await db.Subscriptions.FindAsync("sub-learner-c"))!.SpeakingSessionsRemaining);
+    }
+
+    private static void SeedTwoMondayTutors(LearnerDbContext db)
+    {
+        SeedTutorWithMondayAvailability(db);
+        db.PrivateSpeakingTutorProfiles.Add(new PrivateSpeakingTutorProfile
+        {
+            Id = "tutor-profile-2",
+            ExpertUserId = "expert-2",
+            DisplayName = "Tutor Two",
+            Timezone = "UTC",
+            PriceOverrideMinorUnits = TutorPriceMinorUnits,
+            IsActive = true,
+            CreatedAt = Now.AddMonths(-2),
+            UpdatedAt = Now.AddMonths(-2)
+        });
+        db.PrivateSpeakingAvailabilityRules.Add(new PrivateSpeakingAvailabilityRule
+        {
+            Id = "psar-2",
+            TutorProfileId = "tutor-profile-2",
+            DayOfWeek = 1,
+            StartTime = "09:00",
+            EndTime = "17:00",
+            IsActive = true
+        });
+    }
+
+    private sealed class PerUserEntitlementResolver : IEffectiveEntitlementResolver
+    {
+        public Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct)
+            => Task.FromResult(new EffectiveEntitlementSnapshot(
+                UserId: userId,
+                HasEligibleSubscription: true,
+                IsTrial: false,
+                Tier: "premium",
+                SubscriptionId: $"sub-{userId}",
+                SubscriptionStatus: SubscriptionStatus.Active,
+                PlanId: "plan-1",
+                PlanVersionId: null,
+                PlanCode: null,
+                AiQuotaPlanCode: null,
+                AiQuotaPlanCodeSource: null,
+                ActiveAddOnCodes: Array.Empty<string>(),
+                IsFrozen: false,
+                Trace: Array.Empty<string>())
+            {
+                SpeakingAddonsEnabled = true,
+                SpeakingSessionsRemaining = 1
+            });
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static string NewKey() => Guid.NewGuid().ToString();
@@ -574,7 +730,8 @@ public sealed class PrivateSpeakingAdminActionsTests
     }
 
     private static PrivateSpeakingService CreateService(
-        LearnerDbContext db, IStripeService stripe, IEffectiveEntitlementResolver? resolver = null)
+        LearnerDbContext db, IStripeService stripe, IEffectiveEntitlementResolver? resolver = null,
+        ILiveKitGateway? liveKitGateway = null)
     {
         var platformLinks = new PlatformLinkService(
             TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions()),
@@ -621,7 +778,8 @@ public sealed class PrivateSpeakingAdminActionsTests
             paymentGateways: null!,
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
-            logger: NullLogger<PrivateSpeakingService>.Instance);
+            logger: NullLogger<PrivateSpeakingService>.Instance,
+            liveKitGateway: liveKitGateway);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

@@ -83,6 +83,34 @@ public sealed class SpeakingComplianceService(
         return Project(row);
     }
 
+    /// <summary>
+    /// Records the account-level consents an AI Speaking session needs
+    /// (Recording + AI processing + Retention at the current version) unless
+    /// an active row already exists. Called by the session and exam consent
+    /// endpoints so the learner consents once, before any timer starts.
+    /// </summary>
+    public async Task EnsureSessionConsentsAsync(string userId, CancellationToken ct)
+    {
+        foreach (var consentType in new[]
+                 {
+                     SpeakingComplianceConsentTypes.Recording,
+                     SpeakingComplianceConsentTypes.AiProcessing,
+                     SpeakingComplianceConsentTypes.Retention,
+                 })
+        {
+            var version = ResolveCurrentConsentVersion(consentType);
+            var active = await db.SpeakingComplianceConsents.AsNoTracking()
+                .AnyAsync(row => row.UserId == userId
+                    && row.RevokedAt == null
+                    && row.ConsentType == consentType
+                    && row.ConsentVersion == version, ct);
+            if (!active)
+            {
+                await RecordConsentAsync(userId, new RecordConsentRequest(consentType, version), null, null, ct);
+            }
+        }
+    }
+
     /// <summary>Marks every active consent of the given type as revoked.
     /// Future audio-recording surfaces refuse to record until a fresh
     /// consent is captured. Idempotent: revoking a non-existent or

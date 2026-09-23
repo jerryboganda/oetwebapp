@@ -209,6 +209,20 @@ public class WritingWave5ServiceTests
     {
         var scenarioId = Guid.NewGuid();
         var mockId = Guid.NewGuid();
+        // Profession lock (23 Sep 2026): the learner must be of the
+        // scenario's profession to list/start/submit its mock.
+        if (!await db.Users.AnyAsync(u => u.Id == UserId))
+        {
+            db.Users.Add(new LearnerUser
+            {
+                Id = UserId,
+                DisplayName = UserId,
+                Email = $"{UserId}@example.test",
+                ActiveProfessionId = "medicine",
+                CreatedAt = clock.GetUtcNow(),
+                LastActiveAt = clock.GetUtcNow(),
+            });
+        }
         db.WritingScenarios.Add(Scenario(scenarioId, "LT-RR"));
         db.WritingMocks.Add(new WritingMock
         {

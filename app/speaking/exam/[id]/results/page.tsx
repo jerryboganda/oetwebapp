@@ -20,7 +20,13 @@ import {
   type SpeakingExamResults,
 } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
-import { getSpeakingSessionTranscript, type SpeakingTranscriptPayload } from '@/lib/api/speaking-sessions';
+import {
+  getSpeakingSessionResults,
+  getSpeakingSessionTranscript,
+  runAiAssessment,
+  type SpeakingSessionResultsStatus,
+  type SpeakingTranscriptPayload,
+} from '@/lib/api/speaking-sessions';
 import {
   getSpeakingSimulationV11Assessment,
   getSpeakingSimulationV11CombinedAssessment,
@@ -33,6 +39,8 @@ import {
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
 
 const POLL_INTERVAL_MS = 4_000;
+/** ~10 minutes of polling, then "Check again" (the result persists server-side). */
+const MAX_POLLS = 150;
 
 export default function SpeakingExamResultsPage() {
   const params = useParams<{ id: string }>();
@@ -44,6 +52,9 @@ export default function SpeakingExamResultsPage() {
   const [v11Combined, setV11Combined] = useState<SpeakingSimulationV11AssessmentResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cardStatus, setCardStatus] = useState<Record<string, SpeakingSessionResultsStatus | null>>({});
+  const [pollCount, setPollCount] = useState(0);
+  const [retryingSessionId, setRetryingSessionId] = useState<string | null>(null);
   const requestedCardAssessmentsRef = useRef(new Set<string>());
   const requestedCombinedRef = useRef(false);
 
@@ -63,27 +74,32 @@ export default function SpeakingExamResultsPage() {
             assessment = await runSpeakingSimulationV11Assessment(card.sessionId).catch(() => null);
             if (assessment) requestedCardAssessmentsRef.current.add(card.sessionId);
           }
-          const [transcriptResponse, tutorOverride] = await Promise.all([
+          const [transcriptResponse, tutorOverride, gradingStatus] = await Promise.all([
             getSpeakingSessionTranscript(card.sessionId).catch(() => null),
             getSpeakingSimulationV11TutorOverride(card.sessionId).catch(() => null),
+            getSpeakingSessionResults(card.sessionId).catch(() => null),
           ]);
           return {
             sessionId: card.sessionId,
             assessment,
             transcript: transcriptResponse?.transcript ?? null,
             tutorOverride,
+            gradingStatus,
           };
         }),
       );
       const nextCards: Record<string, SpeakingSimulationV11AssessmentResponse> = {};
       const nextTranscripts: Record<string, SpeakingTranscriptPayload | null> = {};
       const nextTutorOverrides: Record<string, SpeakingSimulationV11LearnerTutorOverride | null> = {};
+      const nextStatus: Record<string, SpeakingSessionResultsStatus | null> = {};
       for (const item of cardDetails) {
         if (!item) continue;
         if (item.assessment) nextCards[item.sessionId] = item.assessment;
         nextTranscripts[item.sessionId] = item.transcript;
         nextTutorOverrides[item.sessionId] = item.tutorOverride;
+        nextStatus[item.sessionId] = item.gradingStatus;
       }
+      setCardStatus(nextStatus);
       setV11Cards(nextCards);
       setV11Transcripts(nextTranscripts);
       setV11TutorOverrides(nextTutorOverrides);
@@ -108,9 +124,66 @@ export default function SpeakingExamResultsPage() {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(interval);
   }, [refresh]);
+
+  const done = Boolean(v11Combined) || results?.overallStatus === 'scored';
+  const pollCapped = pollCount >= MAX_POLLS;
+
+  // Poll until the combined result is in, then stop; capped so a stuck grade
+  // becomes "Check again" rather than an endless spinner.
+  useEffect(() => {
+    if (done || pollCapped) return;
+    const timer = window.setTimeout(() => {
+      setPollCount((count) => count + 1);
+      void refresh();
+    }, POLL_INTERVAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [done, pollCapped, pollCount, refresh]);
+
+  const retryCard = async (sessionId: string) => {
+    setRetryingSessionId(sessionId);
+    try {
+      await runAiAssessment(sessionId);
+      setCardStatus((current) => ({ ...current, [sessionId]: { assessmentState: 'processing', retryable: false, failureReason: null } }));
+      setPollCount(0);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.userMessage : 'Could not restart grading. Please try again.');
+    } finally {
+      setRetryingSessionId(null);
+    }
+  };
+
+  const failedCards = (results?.cards ?? []).filter((card) => {
+    const status = card.sessionId ? cardStatus[card.sessionId] : null;
+    return status?.assessmentState === 'failed';
+  });
+  const gradingNotices = failedCards.length > 0 || (pollCapped && !done) ? (
+    <div className="mb-4 space-y-2" data-testid="speaking-exam-grading-notices">
+      {failedCards.map((card) => {
+        const status = cardStatus[card.sessionId];
+        return (
+          <div key={card.sessionId} className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+            <p className="font-semibold">Card {card.cardNumber === 1 ? 'A' : 'B'}: grading could not be completed</p>
+            <p className="mt-1">{status?.failureReason ?? 'Your recording is saved. No credits were used for this failed grade.'}</p>
+            {status?.retryable ? (
+              <Button className="mt-3" size="sm" onClick={() => void retryCard(card.sessionId)} disabled={retryingSessionId === card.sessionId}>
+                {retryingSessionId === card.sessionId ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                Try grading again
+              </Button>
+            ) : null}
+          </div>
+        );
+      })}
+      {pollCapped && !done ? (
+        <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+          <p>Grading is taking longer than usual. Your recordings are saved and the result will appear here.</p>
+          <Button className="mt-3" size="sm" variant="outline" onClick={() => { setPollCount(0); void refresh(); }}>
+            Check again
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  ) : null;
 
   if (loading) {
     return (
@@ -160,6 +233,7 @@ export default function SpeakingExamResultsPage() {
     const [firstV11SessionId, firstV11Card] = firstV11Entry;
     return (
       <div className="mx-auto max-w-5xl px-4 py-8">
+        {gradingNotices}
         <SpeakingSimulationV11ReportView
           sessionId={firstV11SessionId}
           response={firstV11Card}
@@ -182,6 +256,7 @@ export default function SpeakingExamResultsPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1>
+      <div className="mt-4">{gradingNotices}</div>
 
       {pending ? (
         <div className="mt-4 rounded-xl border border-border bg-surface p-5">

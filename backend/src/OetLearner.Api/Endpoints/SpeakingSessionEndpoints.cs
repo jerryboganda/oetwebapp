@@ -20,8 +20,10 @@ namespace OetLearner.Api.Endpoints;
 ///   * POST   /v1/speaking/sessions/{id}/start-roleplay
 ///   * POST   /v1/speaking/sessions/{id}/end
 ///   * POST   /v1/speaking/sessions/{id}/consent
-///   * POST   /v1/speaking/sessions/{id}/ai-assess      (sync — runs the assessor)
+///   * POST   /v1/speaking/sessions/{id}/ai-assess      (sync — runs the assessor; 202 while a fallback transcript is pending; re-runnable after a failure)
 ///   * GET    /v1/speaking/sessions/{id}/ai-assessment   (returns latest persisted row)
+///   * GET    /v1/speaking/sessions/{id}/results         (assessmentState / retryable / failureReason)
+///   * POST   /v1/speaking/sessions/{id}/recording       (recorder fallback upload, multipart field "audio")
 ///   * GET    /v1/speaking/sessions/{id}/transcript      (latest transcript snapshot)
 ///
 /// All routes require the learner policy <c>LearnerOnly</c> and are
@@ -91,8 +93,22 @@ public static class SpeakingSessionEndpoints
 
         learner.MapPost("/{id}/ai-assess", AiAssessAsync)
             .RequireRateLimiting("AiScoring")
-            .WithSummary("Synchronously score the session with the AI scorer (advisory).")
+            .WithSummary("Score the session with the AI scorer. 202 {state:\"processing\"} while a recorder-fallback transcript is pending; call again to retry a failed assessment (never charged twice).")
             .Produces<SpeakingAiAssessmentProjection>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        learner.MapGet("/{id}/results", GetResultsAsync)
+            .WithSummary("Learner-facing grading state: assessmentState (processing|completed|failed), retryable, failureReason, isFreeSample, cardId. 404 only when the session is not the caller's.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        learner.MapPost("/{id}/recording", UploadRecordingAsync)
+            .RequireRateLimiting("PerUserWrite")
+            .WithSummary("Recorder fallback: upload the role-play recording (multipart field \"audio\", optional durationSeconds). 202 {status:\"received\"}; 409 recording_already_received on a repeat.")
+            .Produces(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
@@ -246,7 +262,7 @@ public static class SpeakingSessionEndpoints
         SpeakingSessionService sessions,
         SpeakingAiAssessmentService assessor,
         SpeakingSimulationV11AssessmentService v11Assessor,
-        LearnerDbContext db,
+        SpeakingSessionRecordingService recordings,
         CancellationToken ct)
     {
         // Owner check via the session service first — returns NotFound if
@@ -255,9 +271,14 @@ public static class SpeakingSessionEndpoints
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
         var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+        if (await recordings.DeferAssessmentUntilTranscribedAsync(id, canonical, ct))
+        {
+            // Recorder fallback: the assessment runs automatically as soon as
+            // the uploaded recording is transcribed.
+            return Results.Accepted(value: new { state = SpeakingAssessmentState.Processing });
+        }
         await canonical.AssessNowAsync(id, ct);
-        if (await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
-            .AnyAsync(x => x.SpeakingSessionId == id, ct))
+        if (await canonical.UsesV11Async(id, ct))
         {
             var v11Latest = await v11Assessor.GetLatestAsync(id, ct);
             return v11Latest is null ? Results.Accepted() : Results.Ok(v11Latest);
@@ -276,13 +297,12 @@ public static class SpeakingSessionEndpoints
         SpeakingSessionService sessions,
         SpeakingAiAssessmentService assessor,
         SpeakingSimulationV11AssessmentService v11Assessor,
-        LearnerDbContext db,
         CancellationToken ct)
     {
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
-        if (await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
-            .AnyAsync(x => x.SpeakingSessionId == id, ct))
+        var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+        if (await canonical.UsesV11Async(id, ct))
         {
             var v11Latest = await v11Assessor.GetLatestAsync(id, ct);
             if (v11Latest is null)
@@ -306,6 +326,71 @@ public static class SpeakingSessionEndpoints
             });
         }
         return Results.Ok(latest);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // GET /v1/speaking/sessions/{id}/results
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> GetResultsAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        // Lean status payload: the page loads the detailed assessment from
+        // /ai-assessment, /transcript and the v1.1 endpoints. "No assessment
+        // yet" is assessmentState=processing, never a 404.
+        var userId = ResolveUserId(http);
+        var session = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+        var state = await canonical.GetStateAsync(id, ct);
+        var isFreeSample = session.IsFreeSample;
+        return Results.Ok(new
+        {
+            sessionId = id,
+            assessmentState = state.AssessmentState,
+            retryable = state.Retryable,
+            failureReason = state.FailureReason,
+            isFreeSample,
+            cardId = session.RolePlayCardId,
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/recording
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> UploadRecordingAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionRecordingService recordings,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        // ReadFormAsync (not IFormFile binding) keeps this learner upload off
+        // the antiforgery requirement, like the other upload endpoints.
+        if (!http.Request.HasFormContentType)
+        {
+            throw ApiException.Validation("speaking_recording_multipart_required",
+                "Upload the recording as multipart/form-data with an \"audio\" field.");
+        }
+
+        var form = await http.Request.ReadFormAsync(ct);
+        var audio = form.Files.GetFile("audio")
+            ?? throw ApiException.Validation("empty_audio_upload", "Attach the recording in the \"audio\" field.");
+        int? durationSeconds = int.TryParse(form["durationSeconds"].ToString(), out var parsed) ? parsed : null;
+
+        await using var stream = audio.OpenReadStream();
+        var stored = await recordings.ReceiveAsync(
+            userId, id, stream, audio.ContentType, audio.Length, durationSeconds, ct);
+        if (!stored)
+        {
+            // The client treats this as success: the first upload is kept.
+            throw ApiException.Conflict("recording_already_received",
+                "A recording has already been received for this session.");
+        }
+
+        return Results.Accepted(value: new { status = "received" });
     }
 
     // ─────────────────────────────────────────────────────────────────

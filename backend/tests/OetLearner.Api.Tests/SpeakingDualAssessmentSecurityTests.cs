@@ -87,7 +87,9 @@ public class SpeakingDualAssessmentSecurityTests : IClassFixture<TestWebApplicat
         {
             Id = sessionId,
             UserId = ownerId,
-            RolePlayCardId = "st-001",
+            // Profession lock (23 Sep 2026): the owner is a medicine learner, so
+            // the session sits on the seeded medicine card.
+            RolePlayCardId = "st-002",
             Mode = SpeakingSessionMode.AiExam,
             State = SpeakingSessionState.Finished,
             PrepStartedAt = now.AddMinutes(-10),

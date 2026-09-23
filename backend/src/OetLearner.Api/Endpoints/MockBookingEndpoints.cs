@@ -36,6 +36,7 @@ public static class MockBookingEndpoints
         group.MapGet("/bookings", async (
             HttpContext http,
             LearnerDbContext db,
+            PrivateSpeakingService speakingService,
             CancellationToken ct) =>
         {
             var userId = UserId(http);
@@ -49,6 +50,8 @@ public static class MockBookingEndpoints
             {
                 items = bookings.Select(booking => ProjectBooking(booking, booking.MockBundle)).ToArray(),
                 now = DateTimeOffset.UtcNow,
+                // B9: tutor bookings cannot open a LiveKit room while this is false.
+                liveRoomsAvailable = speakingService.LiveRoomsAvailable,
             });
         });
 
@@ -120,6 +123,13 @@ public static class MockBookingEndpoints
                 && SpeakingBookingPolicy.TutorWindowClosed(
                     enforcedTargetExamDate,
                     DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime));
+
+            // B9: every slot here is a live tutor room; refuse with 503
+            // tutor_rooms_unavailable when LiveKit is not configured.
+            if (!speakingTutorClosed)
+            {
+                speakingService.EnsureLiveRoomsAvailable();
+            }
 
             // Full Mock Speaking availability is a projection of the canonical
             // private-speaking tutor calendar. Query surrounding days so a
@@ -304,26 +314,44 @@ public static class MockBookingEndpoints
                 .FirstOrDefaultAsync(b => b.Id == body.BundleId, ct)
                 ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
 
-            // The tutor-booking sub-flow (a Full Mock Speaking session
-            // scheduled with a live tutor) only applies when the caller is
-            // actually requesting a tutor slot. General Full Mock bookings —
-            // standalone or scoped to an in-progress attempt — send no
-            // tutorProfileId and must keep working as they did before this
-            // workflow was layered on (2026-08-10).
-            PrivateSpeakingTutorProfile? tutor = null;
-            if (!string.IsNullOrWhiteSpace(body.TutorProfileId))
+            // Bundles without a Speaking section keep the general (non-tutor)
+            // booking path unchanged.
+            //
+            // One lifecycle (B9): a bundle containing Speaking is always a live
+            // tutor session on the canonical PrivateSpeakingBooking + LiveKit
+            // room — never a Zoom meeting. No tutor / "any" = the least-loaded
+            // tutor free at that slot. Checked before any entitlement debit.
+            var isSpeakingBundle = string.Equals(bundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+                || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+                    section.MockBundleId == bundle.Id
+                    && section.SubtestCode == "speaking", ct);
+            var tutorProfileId = body.TutorProfileId;
+            if (isSpeakingBundle)
             {
-                var isSpeakingBundle = string.Equals(bundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
-                    || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
-                        section.MockBundleId == bundle.Id
-                        && section.SubtestCode == "speaking", ct);
+                speakingService.EnsureLiveRoomsAvailable();
+                if (PrivateSpeakingService.IsAnyTutor(tutorProfileId))
+                {
+                    tutorProfileId = await speakingService.FindLeastLoadedAvailableTutorAsync(
+                        scheduledStartAt,
+                        bundle.EstimatedDurationMinutes > 0 ? bundle.EstimatedDurationMinutes : SlotMinutes,
+                        ct,
+                        exactDuration: false)
+                        ?? throw ApiException.Conflict(
+                            "tutor_slot_unavailable",
+                            "No tutor is available at the selected time.");
+                }
+            }
+
+            PrivateSpeakingTutorProfile? tutor = null;
+            if (!string.IsNullOrWhiteSpace(tutorProfileId))
+            {
                 if (!isSpeakingBundle)
                 {
                     throw ApiException.Validation("speaking_bundle_required", "Only Full Mock Speaking bookings use this tutor workflow.");
                 }
 
                 tutor = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
-                    .FirstOrDefaultAsync(profile => profile.Id == body.TutorProfileId && profile.IsActive, ct)
+                    .FirstOrDefaultAsync(profile => profile.Id == tutorProfileId && profile.IsActive, ct)
                     ?? throw ApiException.Conflict("tutor_unavailable", "The selected tutor is no longer available.");
                 var enforcedTargetExamDate = await db.Goals.AsNoTracking()
                     .Where(goal => goal.UserId == userId)
@@ -423,7 +451,7 @@ public static class MockBookingEndpoints
             // existing mock attempt is already paid for by that attempt and
             // must not be double-debited; a plain standalone Full Mock slot
             // booking (no tutor) predates this entitlement gate and stays free.
-            if (string.IsNullOrWhiteSpace(body.MockAttemptId) && !string.IsNullOrWhiteSpace(body.TutorProfileId))
+            if (string.IsNullOrWhiteSpace(body.MockAttemptId) && tutor is not null)
             {
                 var packageDebit = await aiPackageCreditService.DeductMockAsync(
                     userId, entitlementReferenceId, ct);
@@ -465,7 +493,7 @@ public static class MockBookingEndpoints
                 // ahead-of-time booking made outside any active mock.
                 MockAttemptId = string.IsNullOrWhiteSpace(body.MockAttemptId) ? null : body.MockAttemptId,
                 MockSectionId = string.IsNullOrWhiteSpace(body.MockSectionId) ? null : body.MockSectionId,
-                TutorProfileId = body.TutorProfileId,
+                TutorProfileId = tutor?.Id,
                 AssignedTutorId = tutor?.ExpertUserId,
                 EntitlementReferenceId = entitlementReferenceId,
                 EntitlementSource = entitlementSource,
@@ -475,7 +503,7 @@ public static class MockBookingEndpoints
                 ConsentToRecording = body.ConsentToRecording ?? false,
                 DeliveryMode = MockDeliveryModes.Computer,
                 LiveRoomState = MockLiveRoomStates.Waiting,
-                ZoomStatus = string.IsNullOrWhiteSpace(body.TutorProfileId)
+                ZoomStatus = tutor is null
                     ? MockBookingZoomStatuses.Pending
                     : null,
                 CreatedAt = now,
@@ -645,12 +673,6 @@ public static class MockBookingEndpoints
             booking.UpdatedAt = now;
 
             await liveTutorService.SyncRescheduleAsync(booking, ct);
-
-            if (string.IsNullOrWhiteSpace(booking.TutorProfileId) && booking.ZoomStatus is not null)
-            {
-                booking.ZoomStatus = MockBookingZoomStatuses.Pending;
-                MockBookingZoomProvisioner.QueueZoomCreateJob(db, booking.Id);
-            }
 
             var after = new
             {

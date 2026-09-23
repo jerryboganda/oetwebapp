@@ -421,6 +421,10 @@ public sealed class MockBookingService
             speakingContent.Remove("interlocutorCard");
             speakingContent.Remove("complianceNotes");
             speakingContent.Remove("sourceProvenance");
+            // Emotion / Goal / Topic are never sent to learners (owner, 23 Sep 2026).
+            speakingContent.Remove("patientEmotion");
+            speakingContent.Remove("communicationGoal");
+            speakingContent.Remove("clinicalTopic");
         }
 
         if (includeSpeakingPaperId)

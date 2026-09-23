@@ -29,7 +29,11 @@ public static class PrivateSpeakingEndpoints
                 config.CancellationWindowHours,
                 config.AllowReschedule,
                 config.RescheduleWindowHours,
-                config.ReservationTimeoutMinutes
+                config.ReservationTimeoutMinutes,
+                // B9: false when no LiveKit provider is configured — the UI shows
+                // "Live tutor sessions are temporarily unavailable." and slot/booking
+                // endpoints answer 503 tutor_rooms_unavailable.
+                liveRoomsAvailable = svc.LiveRoomsAvailable
             });
         });
 
@@ -61,7 +65,8 @@ public static class PrivateSpeakingEndpoints
             if ((toDate.ToDateTime(default) - fromDate.ToDateTime(default)).TotalDays > 30)
                 return Results.BadRequest(new { error = "Date range must not exceed 30 days." });
 
-            var slots = await svc.GetAvailableSlotsAsync(tutorProfileId, fromDate, toDate, ct);
+            // tutorProfileId "any" returns the union of every active tutor's slots.
+            var slots = await svc.GetLearnerSlotsAsync(tutorProfileId, fromDate, toDate, ct);
             return Results.Ok(slots);
         });
 
@@ -75,7 +80,7 @@ public static class PrivateSpeakingEndpoints
             if ((toDate.ToDateTime(default) - fromDate.ToDateTime(default)).TotalDays > 30)
                 return Results.BadRequest(new { error = "Date range must not exceed 30 days." });
 
-            var slots = await svc.GetAllAvailableSlotsAsync(fromDate, toDate, ct);
+            var slots = await svc.GetLearnerSlotsAsync(null, fromDate, toDate, ct);
             return Results.Ok(slots);
         });
 
@@ -114,7 +119,7 @@ public static class PrivateSpeakingEndpoints
             CancellationToken ct) =>
         {
             var bookings = await svc.GetLearnerBookingsAsync(http.UserId(), status, ct);
-            return Results.Ok(bookings.Select(MapLearnerBookingResponse));
+            return Results.Ok(bookings.Select(b => MapBookingSummary(b, svc.LiveRoomsAvailable)));
         });
 
         learner.MapGet("/bookings/{bookingId}", async (
@@ -127,7 +132,7 @@ public static class PrivateSpeakingEndpoints
             if (booking is null || booking.LearnerUserId != http.UserId())
                 return Results.NotFound(new { error = "NOT_FOUND" });
 
-            return Results.Ok(MapLearnerBookingDetailResponse(booking));
+            return Results.Ok(MapLearnerBookingDetailResponse(booking, svc.LiveRoomsAvailable));
         });
 
         learner.MapPost("/bookings/{bookingId}/cancel", async (
@@ -875,8 +880,6 @@ public static class PrivateSpeakingEndpoints
             ? nameof(PrivateSpeakingBookingStatus.Confirmed)
             : status.ToString();
 
-    private static object MapLearnerBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
-
     private static object MapExpertBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
 
     private static object MapAdminBookingResponse(PrivateSpeakingBooking b) => new
@@ -905,7 +908,7 @@ public static class PrivateSpeakingEndpoints
         b.CreatedAt
     };
 
-    private static object MapBookingSummary(PrivateSpeakingBooking b) => new
+    private static object MapBookingSummary(PrivateSpeakingBooking b, bool? liveRoomsAvailable = null) => new
     {
         b.Id,
         b.LearnerUserId,
@@ -931,10 +934,12 @@ public static class PrivateSpeakingEndpoints
         // Speaking module rebuild (2026-06-11): exam-format bookings + their exam id.
         b.SessionFormat,
         b.ExamSessionId,
-        b.CreatedAt
+        b.CreatedAt,
+        // B9: learner projections carry whether LiveKit rooms can run right now.
+        liveRoomsAvailable
     };
 
-    private static object MapLearnerBookingDetailResponse(PrivateSpeakingBooking b) => new
+    private static object MapLearnerBookingDetailResponse(PrivateSpeakingBooking b, bool liveRoomsAvailable) => new
     {
         b.Id,
         b.TutorProfileId,
@@ -966,7 +971,8 @@ public static class PrivateSpeakingEndpoints
         b.CancellationReason,
         b.CancelledAt,
         b.CompletedAt,
-        b.CreatedAt
+        b.CreatedAt,
+        liveRoomsAvailable
     };
 
     private static object MapExpertBookingDetailResponse(PrivateSpeakingBooking b) => new
@@ -1049,7 +1055,8 @@ public static class PrivateSpeakingEndpoints
 // ── Request DTOs ────────────────────────────────────────────────────────
 
 public record CreatePrivateSpeakingBookingRequest(
-    string TutorProfileId,
+    // null / omitted / "any" = "Any available tutor" (server assigns the least-loaded tutor).
+    string? TutorProfileId,
     DateTimeOffset SessionStartUtc,
     int DurationMinutes,
     string LearnerTimezone,

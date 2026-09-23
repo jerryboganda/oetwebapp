@@ -21,14 +21,18 @@ public record CreateSpeakingSessionRequest(
 /// <summary>Response from <c>POST /v1/speaking/sessions</c>. Carries the
 /// learner-safe role-play card projection plus the precomputed prep/
 /// role-play time windows so the client can drive the prep + countdown
-/// timers without recomputing offsets.</summary>
+/// timers without recomputing offsets. <c>IsFreeSample</c>: the server bound
+/// this session as a use of the learner's free sample (0 AI credits).</summary>
 public record CreateSpeakingSessionResponse(
     string SessionId,
     DateTimeOffset PrepStartedAt,
     DateTimeOffset PrepEndsAt,
     DateTimeOffset RolePlayEndsAt,
     string ConsentVersion,
-    object Card);
+    object Card,
+    bool IsFreeSample = false,
+    bool ConsentAccepted = false,
+    bool LiveVoiceAvailable = false);
 
 /// <summary>Response from <c>GET /v1/speaking/sessions/{id}</c>. Returns
 /// the current state of the session along with the same learner-safe
@@ -49,7 +53,10 @@ public record SpeakingSessionDetail(
     int ElapsedSeconds,
     string ConsentVersion,
     object Card,
-    string? FeedbackMessage = null);
+    string? FeedbackMessage = null,
+    bool IsFreeSample = false,
+    bool ConsentAccepted = false,
+    bool LiveVoiceAvailable = false);
 
 /// <summary>One criterion in the AI assessment per-criterion drawer.
 /// `Score`/`MaxScore` matches the canonical 0–6 linguistic / 0–3 clinical

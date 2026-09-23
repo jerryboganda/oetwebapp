@@ -1060,6 +1060,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscripti
         : sp.GetRequiredService<OetLearner.Api.Services.Speaking.SpeakingTranscriptionProviderUnavailable>();
 });
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+// Recorder fallback upload for the shared session engine (no live-voice provider).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionRecordingService>();
 // RULE_40 tone assessor — consumed by SpeakingTranscriptionEndpoints below.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingToneAssessor,
     OetLearner.Api.Services.Speaking.SpeakingToneAssessor>();
@@ -1101,6 +1103,8 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceProv
 builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryQueue>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceContentReadinessService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceService>();
+// $0 full-corpus Speaking compatibility harness (admin, rolled back, canned grader).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingCorpusCompatibilityService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryWorker>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();

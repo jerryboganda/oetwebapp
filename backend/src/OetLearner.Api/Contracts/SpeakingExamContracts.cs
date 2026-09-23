@@ -53,7 +53,15 @@ public record SpeakingExamDetail(
     DateTimeOffset? CompletedAt,
     string? MockAttemptId,
     string? MockSectionId,
-    string? LiveRoomId = null);
+    string? LiveRoomId = null,
+    bool ConsentAccepted = false,
+    bool LiveVoiceAvailable = false,
+    IReadOnlyList<SpeakingExamCardSession>? Cards = null);
+
+/// <summary>Each exam card's child Speaking session id (null until that card
+/// is revealed), used by the recorder fallback to upload per card via
+/// <c>POST /v1/speaking/sessions/{sessionId}/recording</c>.</summary>
+public record SpeakingExamCardSession(int CardNumber, string? SessionId);
 
 /// <summary>One card's result inside the exam report.</summary>
 public record SpeakingExamCardResult(

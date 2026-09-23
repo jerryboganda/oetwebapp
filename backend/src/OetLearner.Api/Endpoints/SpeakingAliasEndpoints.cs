@@ -172,9 +172,7 @@ public static class SpeakingAliasEndpoints
             if ((toDate.ToDateTime(default) - fromDate.ToDateTime(default)).TotalDays > 30)
                 return Results.BadRequest(new { error = "Date range must not exceed 30 days." });
 
-            var slots = string.IsNullOrWhiteSpace(tutorId)
-                ? await svc.GetAllAvailableSlotsAsync(fromDate, toDate, ct)
-                : await svc.GetAvailableSlotsAsync(tutorId, fromDate, toDate, ct);
+            var slots = await svc.GetLearnerSlotsAsync(tutorId, fromDate, toDate, ct);
             return Results.Ok(slots);
         });
 
@@ -418,7 +416,8 @@ public record SpeakingBookingPdfDto(
 // ── Request DTOs (only those not already declared in PrivateSpeakingEndpoints) ──
 
 public record CreateSpeakingBookingRequest(
-    string TutorProfileId,
+    // null / omitted / "any" = "Any available tutor".
+    string? TutorProfileId,
     DateTimeOffset SessionStartUtc,
     int DurationMinutes,
     string LearnerTimezone,

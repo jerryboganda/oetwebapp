@@ -78,6 +78,46 @@ public sealed class UserHardDeleteServiceTests
     }
 
     [Fact]
+    public async Task PurgeAsync_removes_the_users_free_sample_claim_and_uses()
+    {
+        var (db, conn) = NewDb();
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount { Id = "acc-1", Email = "a@x.com", NormalizedEmail = "A@X.COM", PasswordHash = "h" });
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount { Id = "acc-2", Email = "b@x.com", NormalizedEmail = "B@X.COM", PasswordHash = "h" });
+            db.Users.Add(new LearnerUser { Id = "user-1", AuthAccountId = "acc-1", DisplayName = "U1", Email = "a@x.com" });
+            db.Users.Add(new LearnerUser { Id = "user-2", AuthAccountId = "acc-2", DisplayName = "U2", Email = "b@x.com" });
+            foreach (var userId in new[] { "user-1", "user-2" })
+            {
+                db.FreeSampleClaims.Add(new FreeSampleClaim
+                {
+                    Id = $"fsc-{userId}", UserId = userId, Subtest = "writing", Profession = "medicine",
+                    ContentId = "c", ClaimedAt = now, UpdatedAt = now,
+                });
+                db.FreeSampleUses.Add(new FreeSampleUse
+                {
+                    Id = $"fsu-{userId}", ClaimId = $"fsc-{userId}", UserId = userId, Subtest = "writing",
+                    ResourceKind = FreeSampleUse.KindWritingSubmission, ResourceId = $"sub-{userId}", CreatedAt = now,
+                });
+            }
+            await db.SaveChangesAsync();
+
+            await new UserHardDeleteService(db, NullLogger<UserHardDeleteService>.Instance).PurgeAsync("user-1", default);
+
+            Assert.False(await db.FreeSampleUses.AsNoTracking().AnyAsync(u => u.UserId == "user-1"));
+            Assert.False(await db.FreeSampleClaims.AsNoTracking().AnyAsync(c => c.UserId == "user-1"));
+            Assert.True(await db.FreeSampleUses.AsNoTracking().AnyAsync(u => u.UserId == "user-2"));
+            Assert.True(await db.FreeSampleClaims.AsNoTracking().AnyAsync(c => c.UserId == "user-2"));
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            conn.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task PurgeAsync_removes_expert_profile_and_linked_account()
     {
         var (db, conn) = NewDb();

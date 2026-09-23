@@ -29,26 +29,12 @@ public sealed class LiveVoiceContentReadinessService(
         InterlocutorScript? script,
         CancellationToken ct)
     {
-        if (script is not null
-            && !string.Equals(script.ContentOrigin, ProjectionOrigin, StringComparison.OrdinalIgnoreCase))
+        if (TryResolveExisting(card, script) is { } existing)
         {
-            return new LiveVoiceContentReadiness(
-                Script: script,
-                Generated: false,
-                NeedsOwnerInput: script.NeedsOwnerInput,
-                Provenance: "authored_interlocutor_script",
-                JevValidationStatus: script.JevValidationStatus ?? "not_required");
+            return existing;
         }
 
         var sourceDigest = ComputeSourceDigest(card);
-        if (script is not null
-            && string.Equals(script.SourceDigest, sourceDigest, StringComparison.Ordinal)
-            && !script.NeedsOwnerInput
-            && string.Equals(script.JevValidationStatus, "jev_validated", StringComparison.Ordinal))
-        {
-            return ProjectGenerated(script);
-        }
-
         var generated = BuildProjection(card);
         var validationStatus = await ValidateProjectionAsync(card, generated, ct);
         var now = DateTimeOffset.UtcNow;
@@ -95,6 +81,36 @@ public sealed class LiveVoiceContentReadinessService(
 
         await db.SaveChangesAsync(ct);
         return ProjectGenerated(persisted);
+    }
+
+    /// <summary>
+    /// Read-only half of <see cref="PrepareAsync"/>: the readiness of an authored
+    /// script, or of a still-current validated projection. Null when a projection
+    /// would have to be (re)generated, which writes and may call Jev, so the
+    /// $0 corpus harness uses this and never generates.
+    /// </summary>
+    internal static LiveVoiceContentReadiness? TryResolveExisting(RolePlayCard card, InterlocutorScript? script)
+    {
+        if (script is null)
+        {
+            return null;
+        }
+
+        if (!string.Equals(script.ContentOrigin, ProjectionOrigin, StringComparison.OrdinalIgnoreCase))
+        {
+            return new LiveVoiceContentReadiness(
+                Script: script,
+                Generated: false,
+                NeedsOwnerInput: script.NeedsOwnerInput,
+                Provenance: "authored_interlocutor_script",
+                JevValidationStatus: script.JevValidationStatus ?? "not_required");
+        }
+
+        return string.Equals(script.SourceDigest, ComputeSourceDigest(card), StringComparison.Ordinal)
+            && !script.NeedsOwnerInput
+            && string.Equals(script.JevValidationStatus, "jev_validated", StringComparison.Ordinal)
+                ? ProjectGenerated(script)
+                : null;
     }
 
     private async Task<string> ValidateProjectionAsync(

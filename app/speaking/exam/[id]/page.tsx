@@ -15,20 +15,29 @@
  *
  * Card A auto-closes after its 8-minute window and Card B auto-reveals — there
  * is no bridge step and no manual advance between cards.
+ *
+ * 23 Sep 2026 owner flow: the ONE Rules + consent step sits at the intro
+ * (POST /exams/{id}/consent, before prep_a; child sessions inherit it), so
+ * no consent is asked inside a timed screen. Each active card shows the
+ * exam-style card plus ONE mic indicator; without live voice the card is
+ * recorded and uploaded to its child session before the next card opens.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { OfficialCandidateCard } from '@/components/domain/speaking/OfficialCandidateCard';
+import { SpeakingRoleCard, roleCardPropsFrom } from '@/components/domain/speaking-role-card';
 import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
 import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
+import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { LearnerLiveRoomShell } from '@/components/domain/speaking/LearnerLiveRoomShell';
+import { RECORDING_UPLOAD_FAILED } from '@/hooks/useSpeakingSessionRecorder';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking/intro-questions';
 import {
   getSpeakingExam,
   finishSpeakingExamIntro,
+  recordSpeakingExamConsent,
   startSpeakingExamCard,
   type SpeakingExamDetail,
 } from '@/lib/api/speaking-exams';
@@ -73,7 +82,7 @@ export default function SpeakingExamPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  const [aiConsentAccepted, setAiConsentAccepted] = useState(false);
+  const [introConsentAccepted, setIntroConsentAccepted] = useState(false);
   const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
   const [liveTutorConsentAccepted, setLiveTutorConsentAccepted] = useState(false);
   const [liveRoom, setLiveRoom] = useState<CreateLiveRoomResponse | null>(null);
@@ -109,9 +118,13 @@ export default function SpeakingExamPage() {
         && Boolean(detail.currentSessionId);
       if (previousAiSessionActive
         && (!nextAiSessionActive || previous?.currentSessionId !== detail.currentSessionId)) {
+        // Live: save the transcript. Fallback: upload this card's recording.
+        // Never move on (and never drop the audio) until it lands.
         const saved = await voiceStopRef.current?.() ?? true;
         if (!saved) {
-          setLoadError('The live voice transcript could not be saved. Retrying before moving to the next card.');
+          setLoadError(previous?.liveVoiceAvailable
+            ? 'The live voice transcript could not be saved. Retrying before moving to the next card.'
+            : RECORDING_UPLOAD_FAILED);
           setLoading(false);
           return;
         }
@@ -147,7 +160,6 @@ export default function SpeakingExamPage() {
   }, [examId, router]);
 
   useEffect(() => {
-    setAiConsentAccepted(false);
     setLiveTutorConsentAccepted(false);
   }, [exam?.currentSessionId]);
 
@@ -268,6 +280,17 @@ export default function SpeakingExamPage() {
     }
   }, [busy, examId]);
 
+  // Rules + consent at the intro, then straight into Card A prep.
+  const handleConsentAndBegin = useCallback(async () => {
+    try {
+      await recordSpeakingExamConsent(examId);
+    } catch (err) {
+      throw new Error(err instanceof ApiError ? err.userMessage : 'Could not record consent. Please try again.');
+    }
+    setIntroConsentAccepted(true);
+    await handleFinishIntro();
+  }, [examId, handleFinishIntro]);
+
   const handleStartCard = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -307,6 +330,8 @@ export default function SpeakingExamPage() {
   const isPrep = state === 'prep_a' || state === 'prep_b';
   const isActive = state === 'active_a' || state === 'active_b';
   const partLabel = exam.currentCardNumber === 2 ? 'Card B' : 'Card A';
+  const cardProps = exam.currentCard ? roleCardPropsFrom(exam.currentCard) : null;
+  const candidateCard = cardProps ? { ...cardProps, cardNumber: cardProps.cardNumber ?? exam.currentCardNumber } : null;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -342,9 +367,14 @@ export default function SpeakingExamPage() {
       </header>
 
       {loadError ? (
-        <p className="mb-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
-          {loadError}
-        </p>
+        <div className="mb-4 space-y-2 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+          <p>{loadError}</p>
+          {loadError === RECORDING_UPLOAD_FAILED ? (
+            <Button size="sm" variant="outline" onClick={() => void refresh()}>
+              Retry upload
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {/* ── Intro (unscored) ─────────────────────────────────────────────── */}
@@ -369,23 +399,24 @@ export default function SpeakingExamPage() {
               ))}
             </ul>
           </div>
-          <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            <FileText className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <span>
-              Before you begin, have a <strong>blank sheet of paper and a pen</strong> ready for
-              rough notes during preparation. You <strong>cannot highlight the card on screen</strong>,
-              so use your paper — and destroy it after the exam.
-            </span>
-          </div>
-          <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Begin Part 2 (Card A)
-          </Button>
+          {exam.consentAccepted || introConsentAccepted ? (
+            <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Begin Part 2 (Card A)
+            </Button>
+          ) : (
+            <SpeakingRulesConsent
+              exam
+              className="mt-5 space-y-4"
+              startLabel="Begin Part 2 (Card A)"
+              onStart={handleConsentAndBegin}
+            />
+          )}
         </section>
       )}
 
       {/* ── Prep (3 minutes) ─────────────────────────────────────────────── */}
-      {isPrep && exam.currentCard && (
+      {isPrep && candidateCard && (
         <section className="space-y-4">
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             <FileText className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -395,20 +426,7 @@ export default function SpeakingExamPage() {
               discussion begins automatically when preparation ends. Destroy your notes after the exam.
             </span>
           </div>
-          <OfficialCandidateCard
-            card={{
-              professionId: exam.currentCard.professionId,
-              setting: exam.currentCard.setting,
-              candidateRole: exam.currentCard.candidateRole,
-              background: exam.currentCard.background,
-              tasks: exam.currentCard.tasks,
-              patientName: exam.currentCard.patientName,
-              patientAge: exam.currentCard.patientAge,
-              displayCardNumber: exam.currentCard.displayCardNumber,
-              disclaimer: exam.currentCard.disclaimer,
-            }}
-            cardNumber={exam.currentCardNumber}
-          />
+          <SpeakingRoleCard {...candidateCard} />
           <Button className="w-full" onClick={handleStartCard} disabled={busy} variant="outline">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             I&apos;m ready — start the discussion now
@@ -417,22 +435,9 @@ export default function SpeakingExamPage() {
       )}
 
       {/* ── Active discussion (5 minutes) ────────────────────────────────── */}
-      {isActive && exam.currentCard && exam.currentSessionId && (
+      {isActive && candidateCard && exam.currentSessionId && (
         <section className="space-y-4">
-          <OfficialCandidateCard
-            card={{
-              professionId: exam.currentCard.professionId,
-              setting: exam.currentCard.setting,
-              candidateRole: exam.currentCard.candidateRole,
-              background: exam.currentCard.background,
-              tasks: exam.currentCard.tasks,
-              patientName: exam.currentCard.patientName,
-              patientAge: exam.currentCard.patientAge,
-              displayCardNumber: exam.currentCard.displayCardNumber,
-              disclaimer: exam.currentCard.disclaimer,
-            }}
-            cardNumber={exam.currentCardNumber}
-          />
+          <SpeakingRoleCard {...candidateCard} className="max-h-[50dvh] overflow-y-auto overscroll-contain" />
           {exam.mode === 'live_tutor' ? (
             <>
               {!liveTutorConsentAccepted ? (
@@ -475,21 +480,13 @@ export default function SpeakingExamPage() {
               )}
             </>
           ) : (
-            <>
-              {!aiConsentAccepted ? (
-                <SpeakingConsentBanner
-                  sessionMode="ai"
-                  sessionId={exam.currentSessionId}
-                  onAccepted={() => setAiConsentAccepted(true)}
-                />
-              ) : null}
-              <ExamConversationPanel
-                sessionId={exam.currentSessionId}
-                micAllowed={aiConsentAccepted}
-                requestedProvider={requestedVoiceProvider}
-                onVoiceStopReady={handleVoiceStopReady}
-              />
-            </>
+            <ExamConversationPanel
+              key={exam.currentSessionId}
+              sessionId={exam.currentSessionId}
+              liveVoiceAvailable={exam.liveVoiceAvailable}
+              requestedProvider={requestedVoiceProvider}
+              onVoiceStopReady={handleVoiceStopReady}
+            />
           )}
           {secondsLeft != null && secondsLeft <= 30 ? (
             <p className="flex items-center justify-center gap-2 text-sm font-medium text-rose-600">

@@ -240,6 +240,21 @@ public sealed class SpeakingStateMachineGuardsTests : IAsyncLifetime
         string userId,
         SpeakingSessionState state)
     {
+        // Profession lock (23 Sep 2026): the session owner must be a learner of
+        // the card's profession (cards default to nursing).
+        if (!await _db.Users.AnyAsync(u => u.Id == userId))
+        {
+            _db.Users.Add(new LearnerUser
+            {
+                Id = userId,
+                DisplayName = userId,
+                Email = $"{userId}@example.test",
+                ActiveProfessionId = "nursing",
+                CreatedAt = DateTimeOffset.UtcNow,
+                LastActiveAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         var contentItemId = $"ci-{Guid.NewGuid():N}";
         _db.ContentItems.Add(new ContentItem
         {

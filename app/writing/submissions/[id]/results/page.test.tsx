@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -26,6 +26,7 @@ const {
   publishToShowcase,
   createWritingSubmission,
   reviseWritingSubmission,
+  listFreeSamples,
 } = vi.hoisted(() => ({
   getWritingSubmission: vi.fn(),
   getWritingSubmissionGrade: vi.fn(),
@@ -40,7 +41,10 @@ const {
   // that wires either into the free review path is caught here too.
   createWritingSubmission: vi.fn(),
   reviseWritingSubmission: vi.fn(),
+  listFreeSamples: vi.fn(),
 }));
+
+vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples }));
 
 vi.mock('@/lib/writing/api', () => ({
   getWritingSubmission,
@@ -124,6 +128,7 @@ const GRADE = {
 describe('Writing results page — free review vs. new attempt (Addendum Rev5 §13)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
     getWritingSubmission.mockResolvedValue(SUBMISSION);
     getWritingSubmissionGrade.mockResolvedValue(GRADE);
     getWritingAssessmentV11.mockResolvedValue(null);
@@ -168,6 +173,61 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
 
     const practiceAgainLink = screen.getByRole('link', { name: /practiceAgain/i });
     expect(practiceAgainLink).toHaveAttribute('href', '/writing/practice/session/scenario-1');
+  });
+});
+
+describe('Writing results page — free sample revise & resubmit (retry addendum, 23 Sep 2026)', () => {
+  const FREE_ROW = {
+    professionId: 'medicine',
+    contentId: 'scenario-1',
+    state: 'retry_available',
+    route: '/writing/submissions/sub-1/revise',
+    limit: 2,
+    successfulCount: 1,
+    remaining: 1,
+    lastResultRoute: '/writing/submissions/sub-1/results',
+    lastSubmissionId: 'sub-1',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getWritingSubmission.mockResolvedValue(SUBMISSION);
+    getWritingSubmissionGrade.mockResolvedValue(GRADE);
+    getWritingAssessmentV11.mockResolvedValue(null);
+    getTutorReview.mockResolvedValue(null);
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it("retry_available on this letter: primary \"Revise & Resubmit\" CTA links to this submission's revise page", async () => {
+    listFreeSamples.mockResolvedValue([FREE_ROW]);
+    render(<WritingSubmissionResultsPage />);
+
+    const cta = await screen.findByTestId('free-sample-revise-cta');
+    expect(cta).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
+    expect(cta).toHaveTextContent('freeSample.writing.retryCta');
+    expect(listFreeSamples).toHaveBeenCalledWith('writing');
+    // Linking only — the revise itself happens on the revise page.
+    expect(reviseWritingSubmission).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('free-sample-completed')).not.toBeInTheDocument();
+  });
+
+  it('completed on this letter: shows "Free sample completed" and no revise CTA', async () => {
+    listFreeSamples.mockResolvedValue([{ ...FREE_ROW, state: 'completed', successfulCount: 2, remaining: 0 }]);
+    render(<WritingSubmissionResultsPage />);
+
+    expect(await screen.findByTestId('free-sample-completed')).toHaveTextContent('freeSample.completed');
+    expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
+  });
+
+  it('a free row for a different scenario never adds the free CTA to this letter', async () => {
+    listFreeSamples.mockResolvedValue([{ ...FREE_ROW, contentId: 'other-scenario' }]);
+    render(<WritingSubmissionResultsPage />);
+
+    await screen.findByText(/I am writing to refer this patient/);
+    await waitFor(() => expect(listFreeSamples).toHaveBeenCalled());
+    expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('free-sample-completed')).not.toBeInTheDocument();
   });
 });
 
@@ -234,6 +294,7 @@ const ASSESSMENT_V11 = {
 describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 §12.3/§12.4/§19.2/§19.4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
     getWritingSubmission.mockResolvedValue(SUBMISSION);
     getWritingSubmissionGrade.mockResolvedValue(GRADE);
     getWritingAssessmentV11.mockResolvedValue(ASSESSMENT_V11);
