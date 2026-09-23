@@ -51,11 +51,14 @@ public static class ListeningAuthoringAdminEndpoints
     /// <summary>
     /// Validates the If-Match header against the paper's RowVersion.
     /// Returns a 412 Precondition Failed result if they don't match, or null to proceed.
+    /// Accepts the weak form W/"n": the gzip reverse proxy weakens our own strong ETag in transit,
+    /// so clients echo W/"n" back and a strict parse would 412 every edit.
     /// </summary>
-    private static IResult? CheckIfMatch(HttpContext http, ContentPaper paper)
+    internal static IResult? CheckIfMatch(HttpContext http, ContentPaper paper)
     {
-        var ifMatch = http.Request.Headers.IfMatch.FirstOrDefault();
+        var ifMatch = http.Request.Headers.IfMatch.FirstOrDefault()?.Trim();
         if (string.IsNullOrEmpty(ifMatch)) return null;
+        if (ifMatch.StartsWith("W/", StringComparison.Ordinal)) ifMatch = ifMatch[2..];
         if (!int.TryParse(ifMatch.Trim('"'), out var clientVersion)
             || clientVersion != paper.RowVersion)
         {
