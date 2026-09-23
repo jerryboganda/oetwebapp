@@ -83,7 +83,7 @@ public static class LearnerSpeakingRolePlayCardEndpoints
                 throw ApiException.NotFound("role_play_card_not_found", "That role-play card does not exist.");
             }
 
-            return Results.Ok(await service.GetSpeakingRolePlayCardForLearnerAsync(userId, resolvedCardId, ct, allowFreeSample: true));
+            return Results.Ok(await service.GetSpeakingRolePlayCardForLearnerAsync(userId, resolvedCardId, ct));
         })
         .WithName("GetFreeSpeakingCard");
 

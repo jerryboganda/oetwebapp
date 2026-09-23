@@ -3124,6 +3124,7 @@ public partial class LearnerService(
     {
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "writing" && x.Status == ContentStatus.Published, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", "Writing model answer not found.");
+        await RequireOwnProfessionAsync(userId, item.ProfessionId, cancellationToken);
 
         var hasSubmittedAttempt = await db.Attempts.AnyAsync(attempt =>
             attempt.UserId == userId &&
@@ -3288,22 +3289,17 @@ public partial class LearnerService(
     /// Shared profession-isolation check (handoff item 2): a null
     /// <paramref name="contentProfessionId"/> means the item applies to every
     /// profession and is never blocked. Otherwise it must equal the caller's
-    /// own <c>ActiveProfessionId</c> — mismatch or a learner with no profession
-    /// yet set both 404 as "not found", never revealing that the content
-    /// exists for a different profession.
+    /// own <c>ActiveProfessionId</c> (normalised, see
+    /// <see cref="LearnerProfessionGuard"/>) — mismatch or a learner with no
+    /// profession yet set both 404 as "not found", never revealing that the
+    /// content exists for a different profession.
     /// </summary>
     private async Task RequireOwnProfessionAsync(string userId, string? contentProfessionId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(contentProfessionId)) return;
 
-        var learnerProfession = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => u.ActiveProfessionId)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (!string.Equals(contentProfessionId, learnerProfession, StringComparison.OrdinalIgnoreCase))
-        {
-            throw ApiException.NotFound("content_not_found", "Practice content not found.");
-        }
+        await LearnerProfessionGuard.RequireAsync(
+            db, userId, contentProfessionId, "content_not_found", "Practice content not found.", cancellationToken);
     }
 
     public async Task<object> GetLegacyFreeSpeakingTaskAsync(string userId, string contentId, CancellationToken cancellationToken)
@@ -3348,7 +3344,25 @@ public partial class LearnerService(
     public async Task<object> GetSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetSpeakingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        // Profession lock (23 Sep 2026): a resumed attempt from before the
+        // lock must not hand back another profession's role card.
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         return await GetAttemptAsync(attempt.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Defense in depth for attempt/evaluation reads: ownership is already
+    /// checked, but attempts created before the profession lock may point at
+    /// another profession's content. 404 before the payload is built.
+    /// </summary>
+    private async Task RequireAttemptContentOwnProfessionAsync(string userId, string? contentId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(contentId)) return;
+        var contentProfession = await db.ContentItems.AsNoTracking()
+            .Where(x => x.Id == contentId)
+            .Select(x => x.ProfessionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        await RequireOwnProfessionAsync(userId, contentProfession, cancellationToken);
     }
 
     private async Task EnsureLegacyFreeSpeakingAccessAsync(string userId, string cardId, CancellationToken cancellationToken)
@@ -3663,6 +3677,7 @@ public partial class LearnerService(
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
@@ -3805,6 +3820,7 @@ public partial class LearnerService(
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
             ? SpeakingContentStructure.PracticeDisclaimer
@@ -7154,9 +7170,8 @@ public partial class LearnerService(
             ["warmUpQuestions"] = warmUps,
             ["prepTimeSeconds"] = prepSeconds,
             ["roleplayTimeSeconds"] = roleplaySeconds,
-            ["patientEmotion"] = Trimmed(card?.PatientEmotion) ?? SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral",
-            ["communicationGoal"] = Trimmed(card?.CommunicationGoal) ?? SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
-            ["clinicalTopic"] = Trimmed(card?.ClinicalTopic) ?? SpeakingContentStructure.ReadString(detail, "clinicalTopic") ?? item.ScenarioType ?? "roleplay",
+            // Emotion / Goal / Topic are internal (AI patient prompt only) and
+            // never sent to learners (owner, 23 Sep 2026).
             ["disclaimer"] = disclaimer,
             ["sourceAttribution"] = LearnerSafeAttribution(card?.SourceAttribution),
             ["compliance"] = new

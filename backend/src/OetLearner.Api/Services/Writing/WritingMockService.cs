@@ -54,12 +54,33 @@ public sealed class WritingMockService(
 
     public async Task<IReadOnlyList<WritingMockTemplate>> ListAsync(string userId, CancellationToken ct)
     {
-        _ = userId;
-        var rows = await db.WritingMocks.AsNoTracking()
-            .Where(m => m.Status == "published")
-            .OrderBy(m => m.Difficulty)
+        // Profession lock (23 Sep 2026): only mocks whose scenario is the
+        // learner's own profession; a learner with no profession sees none.
+        var learnerProfession = await LearnerProfessionGuard.GetLearnerProfessionAsync(db, userId, ct);
+        var rows = await (
+            from m in db.WritingMocks.AsNoTracking()
+            join s in db.WritingScenarios.AsNoTracking() on m.ScenarioId equals s.Id
+            where m.Status == "published"
+            orderby m.Difficulty
+            select new { Mock = m, s.Profession })
             .ToListAsync(ct);
-        return rows.Select(r => new WritingMockTemplate(r.Id, r.ScenarioId, r.Title, r.Difficulty, r.Status)).ToList();
+        return rows
+            .Where(r => LearnerProfessionGuard.Matches(learnerProfession, r.Profession))
+            .Select(r => new WritingMockTemplate(r.Mock.Id, r.Mock.ScenarioId, r.Mock.Title, r.Mock.Difficulty, r.Mock.Status))
+            .ToList();
+    }
+
+    /// <summary>Profession lock: 404 (as "not found") unless the mock's
+    /// scenario is the learner's own profession — checked before a session
+    /// is created or a letter is graded.</summary>
+    private async Task RequireOwnScenarioProfessionAsync(string userId, Guid scenarioId, CancellationToken ct)
+    {
+        var profession = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == scenarioId)
+            .Select(s => (string?)s.Profession)
+            .FirstOrDefaultAsync(ct);
+        await LearnerProfessionGuard.RequireAsync(db, userId, profession,
+            "writing_mock_not_found", "Mock template was not found.", ct);
     }
 
     public async Task<WritingMockTemplate> CreateAsync(string adminId, WritingMockTemplate template, CancellationToken ct)
@@ -85,6 +106,7 @@ public sealed class WritingMockService(
     {
         var mock = await db.WritingMocks.AsNoTracking().FirstOrDefaultAsync(m => m.Id == mockId && m.Status == "published", ct)
             ?? throw ApiException.NotFound("writing_mock_not_found", "Mock template was not found.");
+        await RequireOwnScenarioProfessionAsync(userId, mock.ScenarioId, ct);
         var now = clock.GetUtcNow();
         var session = new WritingMockSession
         {
@@ -350,6 +372,9 @@ public sealed class WritingMockService(
         ArgumentNullException.ThrowIfNull(request);
         var session = await db.WritingMockSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
         if (session is null) return null;
+        // Profession lock: a session started before the lock on another
+        // profession's mock is never graded.
+        await RequireOwnScenarioProfessionAsync(userId, await ScenarioIdAsync(session.MockId, ct), ct);
         if (session.Status == "submitted")
         {
             if (session.SubmissionId is null) return null;

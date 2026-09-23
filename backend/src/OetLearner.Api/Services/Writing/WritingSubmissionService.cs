@@ -77,14 +77,8 @@ public sealed class WritingSubmissionService(
         // could submit, and be AI-graded and charged for, any OTHER
         // profession's task by id. 404s the same as "not found" so a probe
         // never learns the task exists for a different profession.
-        var learnerProfession = await db.Users.AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => u.ActiveProfessionId)
-            .FirstOrDefaultAsync(ct);
-        if (!string.Equals(scenarioProfession, learnerProfession, StringComparison.OrdinalIgnoreCase))
-        {
-            throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
-        }
+        await LearnerProfessionGuard.RequireAsync(db, userId, scenarioProfession,
+            "writing_scenario_not_found", "Scenario was not found.", ct);
 
         var mode = NormalizeMode(request.Mode);
         var startedAt = DateTimeOffset.UtcNow.AddSeconds(-Math.Max(0, request.TimeSpentSeconds));
@@ -311,6 +305,14 @@ public sealed class WritingSubmissionService(
         ArgumentNullException.ThrowIfNull(request);
         var original = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == originalSubmissionId && x.UserId == userId, ct);
         if (original is null) return null;
+        // Profession lock (23 Sep 2026): a letter written before the lock for
+        // another profession's scenario is never revised (or graded) again.
+        var scenarioProfession = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == original.ScenarioId)
+            .Select(s => (string?)s.Profession)
+            .FirstOrDefaultAsync(ct);
+        await LearnerProfessionGuard.RequireAsync(db, userId, scenarioProfession,
+            "writing_scenario_not_found", "Scenario was not found.", ct);
         var startedAt = DateTimeOffset.UtcNow.AddSeconds(-Math.Max(0, request.TimeSpentSeconds));
         // Revise path via the SubmitGrading seam: revisions intentionally
         // create new rows linked to the original (no content dedupe, no

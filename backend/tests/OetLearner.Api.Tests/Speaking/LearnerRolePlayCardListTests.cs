@@ -187,6 +187,52 @@ public sealed class LearnerRolePlayCardListTests : IAsyncLifetime
         Assert.Contains("Leakage check card", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task List_LearnerWithNoProfession_FailsClosed()
+    {
+        // Profession lock (23 Sep 2026): no profession → no cards at all
+        // (previously this listed EVERY profession's catalogue).
+        await SeedLearnerAsync("learner-none", activeProfessionId: null);
+        await SeedCardAsync(profession: "nursing", contentProfession: "nursing", status: ContentStatus.Published, title: "Nursing card");
+        await SeedCardAsync(profession: "medicine", contentProfession: "medicine", status: ContentStatus.Published, title: "Medicine card");
+
+        var result = await _learnerService.ListSpeakingRolePlayCardsForLearnerAsync(
+            "learner-none", professionId: "medicine", primaryCategory: null, CancellationToken.None);
+
+        Assert.Empty(Titles(result));
+        Assert.Equal(0, TotalCount(result));
+    }
+
+    [Fact]
+    public async Task List_OrphanCardOfAnotherProfession_IsNotTreatedAsUniversal()
+    {
+        await SeedLearnerAsync("learner-orphan", activeProfessionId: "nursing");
+        await SeedCardAsync(profession: "medicine", contentProfession: null, status: ContentStatus.Published,
+            title: "Orphan medicine card", withContentItem: false);
+
+        var result = await _learnerService.ListSpeakingRolePlayCardsForLearnerAsync(
+            "learner-orphan", professionId: null, primaryCategory: null, CancellationToken.None);
+
+        Assert.DoesNotContain("Orphan medicine card", Titles(result));
+    }
+
+    [Fact]
+    public async Task List_ProfessionComparisonIsNormalised_AndPayloadHasNoEmotionGoalTopic()
+    {
+        await SeedLearnerAsync("learner-ot", activeProfessionId: "Occupational_Therapy");
+        await SeedCardAsync(profession: "occupational-therapy", contentProfession: "occupational-therapy",
+            status: ContentStatus.Published, title: "OT card");
+
+        var result = await _learnerService.ListSpeakingRolePlayCardsForLearnerAsync(
+            "learner-ot", professionId: null, primaryCategory: null, CancellationToken.None);
+
+        Assert.Contains("OT card", Titles(result));
+        var json = JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("patientEmotion", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("communicationGoal", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("clinicalTopic", json, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static List<string> Titles(object result)
@@ -204,7 +250,7 @@ public sealed class LearnerRolePlayCardListTests : IAsyncLifetime
         return doc.RootElement.GetProperty("totalCount").GetInt32();
     }
 
-    private async Task SeedLearnerAsync(string userId, string activeProfessionId)
+    private async Task SeedLearnerAsync(string userId, string? activeProfessionId)
     {
         var now = DateTimeOffset.UtcNow;
         _db.Users.Add(new LearnerUser
@@ -225,11 +271,12 @@ public sealed class LearnerRolePlayCardListTests : IAsyncLifetime
         ContentStatus status,
         string title,
         string primaryCategory = "First Visit",
-        bool withInterlocutorScript = false)
+        bool withInterlocutorScript = false,
+        bool withContentItem = true)
     {
         var now = DateTimeOffset.UtcNow;
         var contentItemId = $"ci-{Guid.NewGuid():N}";
-        _db.ContentItems.Add(new ContentItem
+        if (withContentItem) _db.ContentItems.Add(new ContentItem
         {
             Id = contentItemId,
             ContentType = "speaking_roleplay",
