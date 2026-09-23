@@ -24538,8 +24538,8 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("CardSlot")
                         .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("character varying(2)");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -24807,8 +24807,8 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("CardSlot")
                         .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("character varying(2)");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("CardVersion")
                         .IsRequired()

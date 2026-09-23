@@ -117,7 +117,7 @@ public sealed class SpeakingSimulationV11CardTimingSnapshot
     [MaxLength(64)]
     public string SpeakingSessionId { get; set; } = default!;
 
-    [MaxLength(2)]
+    [MaxLength(16)]
     public string CardSlot { get; set; } = "standalone";
 
     public DateTimeOffset? PrepStartedAt { get; set; }

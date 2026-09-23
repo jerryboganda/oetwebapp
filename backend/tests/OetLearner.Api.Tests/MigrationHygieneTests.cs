@@ -35,6 +35,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(PlacementAccommodations), "20270102090000_PlacementAccommodations")]
     [InlineData(typeof(AddFreeSampleDesignationsAndClaims), "20270102090100_AddFreeSampleDesignationsAndClaims")]
     [InlineData(typeof(AddFreeSampleUses), "20270102090200_AddFreeSampleUses")]
+    [InlineData(typeof(WidenSpeakingV11CardSlot), "20270102090300_WidenSpeakingV11CardSlot")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();
