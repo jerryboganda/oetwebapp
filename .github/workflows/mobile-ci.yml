@@ -27,6 +27,9 @@ on:
       - 'tests/performance/**'
       - 'playwright.performance.config.ts'
       - '.github/workflows/mobile-ci.yml'
+      - '.github/android-smoke/**'
+      - 'hooks/useSpeakingSessionRecorder.ts'
+      - 'components/domain/speaking/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
   pull_request:
@@ -54,6 +57,9 @@ on:
       - 'tests/performance/**'
       - 'playwright.performance.config.ts'
       - '.github/workflows/mobile-ci.yml'
+      - '.github/android-smoke/**'
+      - 'hooks/useSpeakingSessionRecorder.ts'
+      - 'components/domain/speaking/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
   workflow_dispatch:
@@ -165,6 +171,77 @@ jobs:
           name: android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+  # ── Android microphone smoke ───────────────────────────────────
+  # The Speaking pages record through WebView getUserMedia, which Capacitor's
+  # BridgeWebChromeClient only grants when RECORD_AUDIO *and*
+  # MODIFY_AUDIO_SETTINGS are granted — an undeclared MODIFY_AUDIO_SETTINGS made
+  # every recording fail with "Microphone permission was blocked" (Sep 2026).
+  # Builds the real app shell against a local probe page and asserts the
+  # microphone opens. On manual dispatch a control variant rebuilds WITHOUT the
+  # manifest line and must reproduce the denial, proving the smoke is sensitive.
+  android-mic-smoke:
+    name: Android Microphone Smoke (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [lint, unit-tests]
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["fixed","without-modify-audio-settings"]') || fromJSON('["fixed"]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Control variant — restore the pre-fix manifest
+        if: matrix.variant == 'without-modify-audio-settings'
+        run: sed -i '/android.permission.MODIFY_AUDIO_SETTINGS/d' android/app/src/main/AndroidManifest.xml
+
+      - name: Build the app shell against the local mic probe
+        env:
+          CAPACITOR_APP_URL: http://localhost:8080/mic-probe.html
+          CAPACITOR_ALLOW_LOCAL_HTTP: 'true'
+        run: |
+          pnpm exec cap sync android
+          cd android && ./gradlew assembleDebug --no-daemon
+
+      - name: Serve the probe page
+        run: nohup python3 -m http.server 8080 --directory .github/android-smoke > /tmp/probe-server.log 2>&1 &
+
+      - name: Record through the app WebView on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          # Audio stays ON (no -no-audio): the emulator must expose a microphone.
+          emulator-options: -no-window -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: sh .github/android-smoke/run-mic-smoke.sh ${{ matrix.variant }}
+
+      - name: Probe server log
+        if: always()
+        run: cat /tmp/probe-server.log || true
 
   android-runtime-smoke:
     name: Android Emulator Runtime Smoke

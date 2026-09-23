@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mic probe</title>
+</head>
+<body>
+  <p id="result">MIC_PENDING</p>
+  <script>
+    // Loaded by the Android app (server.url) in CI: exercises exactly the path the
+    // Speaking pages use — WebView getUserMedia -> Capacitor BridgeWebChromeClient
+    // .onPermissionRequest -> Android runtime permissions — and logs one MIC_* line
+    // that .github/android-smoke/run-mic-smoke.sh reads back from logcat.
+    function report(line) {
+      document.getElementById('result').textContent = line;
+      console.log(line);
+    }
+
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+        const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+        recorder.start(250);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        recorder.stop();
+        await stopped;
+        stream.getTracks().forEach((track) => track.stop());
+        const bytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+        report(bytes > 0 ? `MIC_OK bytes=${bytes}` : 'MIC_EMPTY_RECORDING');
+      } catch (error) {
+        const name = error && error.name ? error.name : 'Error';
+        report(name === 'NotAllowedError' || name === 'SecurityError'
+          ? `MIC_DENIED ${name}`
+          : `MIC_ERROR ${name}: ${error && error.message}`);
+      }
+    })();
+  </script>
+</body>
+</html>

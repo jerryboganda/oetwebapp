@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Capacitor
+import UIKit
 
 @objc(SpeakingRecorderPlugin)
 public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -11,7 +12,8 @@ public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resume", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise)
     ]
 
     private var recorder: AVAudioRecorder?
@@ -177,6 +179,19 @@ public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
         cleanupRecorder(deleteFile: true)
         cleanupAudioSession()
         call.resolve()
+    }
+
+    /// Recovery path after a microphone denial: open this app's page in iOS Settings.
+    @objc func openAppSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                call.reject("Unable to open the app settings.")
+                return
+            }
+            UIApplication.shared.open(url) { opened in
+                opened ? call.resolve() : call.reject("Unable to open the app settings.")
+            }
+        }
     }
 
     private func cleanupRecorder(deleteFile: Bool) {

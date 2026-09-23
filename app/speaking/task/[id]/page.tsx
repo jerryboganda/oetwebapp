@@ -14,12 +14,14 @@ import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
 import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
+import { OpenAppSettingsButton } from '@/components/domain/speaking/OpenAppSettingsButton';
 import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, completeMockSection, type SpeakingComplianceCopy } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import {
   SpeakingRecorder,
   capturedSpeakingRecordingFromNativeStop,
   capturedSpeakingRecordingFromWebBlob,
+  describeMicrophoneError,
   nativeSpeakingPauseSupported,
   tryPauseNativeSpeakingRecorder,
   tryResumeNativeSpeakingRecorder,
@@ -116,6 +118,7 @@ function LiveSpeakingTaskContent() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [compliance, setCompliance] = useState<SpeakingComplianceCopy | null>(null);
   const [recordingConsentAccepted, setRecordingConsentAccepted] = useState(false);
   // CBT at-home rule: candidate must destroy (tear/cut) any scratch paper in view of the camera
@@ -378,6 +381,7 @@ function LiveSpeakingTaskContent() {
   // --- Local Recording Controls (Self/Exam Mode) ---
   const handleStartRecording = async () => {
     setSubmitError(null);
+    setMicPermissionDenied(false);
 
     if (!recordingConsentAccepted) {
       setSubmitError('Please accept the recording consent before starting.');
@@ -443,14 +447,9 @@ function LiveSpeakingTaskContent() {
 
     } catch (err) {
       console.error('Local recording failed:', err);
-      const message = err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone permission was blocked. Allow microphone access in your browser settings, then press Start recording again.'
-        : err instanceof DOMException && err.name === 'NotFoundError'
-          ? 'No microphone was detected. Connect a microphone or choose a different input device, then try again.'
-          : err instanceof Error
-            ? `Recording could not start: ${err.message}`
-            : 'Recording could not start. Check your microphone and try again.';
-      setSubmitError(message);
+      const micError = describeMicrophoneError(err, isNativeRecorder);
+      setMicPermissionDenied(micError.permissionDenied);
+      setSubmitError(micError.message);
       cleanupAudio(true);
       setRecordingState('idle');
     }
@@ -888,9 +887,12 @@ function LiveSpeakingTaskContent() {
               ) : 'Submit Recording'}
             </Button>
             {submitError ? (
-              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger bg-danger/10 px-3 py-1.5 rounded-lg border border-danger/20">
-                {submitError}
-              </p>
+              <>
+                <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger bg-danger/10 px-3 py-1.5 rounded-lg border border-danger/20">
+                  {submitError}
+                </p>
+                {micPermissionDenied && <OpenAppSettingsButton />}
+              </>
             ) : (
               <p className="text-[9px] sm:text-[10px] text-muted font-bold uppercase tracking-[0.3em] opacity-80">OET Speaking Simulation</p>
             )}

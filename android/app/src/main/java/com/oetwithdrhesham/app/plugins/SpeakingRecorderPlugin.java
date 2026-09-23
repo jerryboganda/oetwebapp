@@ -1,9 +1,12 @@
 package com.oetwithdrhesham.app.plugins;
 
 import android.Manifest;
+import android.content.Intent;
+import android.net.Uri;
 import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.Base64;
 
 import androidx.annotation.NonNull;
@@ -52,6 +55,20 @@ public class SpeakingRecorderPlugin extends Plugin {
         }
 
         call.reject("Microphone permission was denied.");
+    }
+
+    /** Recovery path after a (permanent) microphone denial: open this app's system settings page. */
+    @com.getcapacitor.PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", getContext().getPackageName(), null));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Unable to open the app settings.", error);
+        }
     }
 
     @com.getcapacitor.PluginMethod
