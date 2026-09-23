@@ -7476,12 +7476,16 @@ public partial class LearnerService(
                     markingPolicyErrorCode = markingPolicy.ErrorCode,
                 })
         };
-        if (freeSample
-            && !await new FreeSamples.FreeSampleService(db).TryClaimAsync(
-                userId, FreeSamples.FreeSampleService.Speaking, request.ContentId, attempt.Id, cancellationToken))
+        if (freeSample)
         {
-            // Lost the once-only race (second tab) or the sample was spent meanwhile.
-            throw ApiException.Conflict("free_sample_unavailable", "Your free Speaking sample is no longer available.");
+            // Free sample retry addendum (owner 23 Sep 2026): NEW free Speaking
+            // uses run on the shared Speaking session engine
+            // (SpeakingSessionService.CreateSessionAsync binds them). The legacy
+            // recorder only resumes a free attempt already in flight (returned
+            // above as the existing in-progress attempt); it never mints a new one.
+            throw ApiException.Conflict(
+                "free_speaking_session_required",
+                "Your free Speaking sample now runs in the Speaking session player. Open it from the Speaking page.");
         }
         db.Attempts.Add(attempt);
         await LearnerWorkflowCoordinator.AttachAttemptToDiagnosticAsync(db, attempt, cancellationToken);
