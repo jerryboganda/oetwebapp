@@ -92,15 +92,18 @@ public interface IListeningPartBCSourceRecoveryService
         IReadOnlyCollection<string>? approvedKeys, string adminId, CancellationToken ct);
 }
 
-/// <summary>One stored Part B/C field (stem or option) of an item with watermark residue.</summary>
-public sealed record ListeningPartBCWatermarkField(string Field, string Current, string? Proposed);
+/// <summary>One stored Part B/C field (stem or option) of an item with watermark residue.
+/// <c>Proposed</c> is <c>Current</c> with ONLY the stray letters deleted (null when no
+/// deletion reproduces the printed paper); <c>PrintedText</c> is the fresh re-read of
+/// the question paper, shown as evidence and never written.</summary>
+public sealed record ListeningPartBCWatermarkField(string Field, string Current, string? Proposed, string? PrintedText = null);
 
 /// <summary>
-/// One Part B/C item carrying a stray watermark letter. <c>verified</c>: the
-/// fresh re-read of the printed paper equals the stored text with the stray
-/// letters removed, in every field. <c>needs-review</c>: the re-read differs
-/// in some other way (e.g. a stray "A" moved an option boundary), so a human
-/// must compare. <c>no-source</c>: the paper text could not re-derive the item.
+/// One Part B/C item carrying a stray watermark letter. <c>verified</c>: in every
+/// field that differs from the printed paper, deleting the stray letters alone
+/// reproduces the printed wording. <c>needs-review</c>: some field differs in
+/// another way (e.g. a stray "A" moved an option boundary) and is never written
+/// by the repair. <c>no-source</c>: the paper text could not re-derive the item.
 /// </summary>
 public sealed record ListeningPartBCWatermarkItem(
     string Key,
@@ -727,7 +730,6 @@ public sealed class ListeningPartBCSourceRecoveryService(
         var skipByNumber = parsed.Skipped.ToDictionary(skip => skip.Number);
 
         var report = new List<ListeningPartBCWatermarkItem>();
-        var toApply = new List<ListeningPartBCSourceItem>();
         foreach (var number in numbers.Order())
         {
             var key = $"{paper.Id}:{number}";
@@ -745,33 +747,53 @@ public sealed class ListeningPartBCSourceRecoveryService(
                 continue;
             }
 
-            var changed = fields[number]
-                .Select(f => new ListeningPartBCWatermarkField(f.Field, f.Current, SourceValue(source, f.Field)))
-                .Where(f => Normalise(f.Current) != Normalise(f.Proposed))
-                .ToList();
+            // The re-read is EVIDENCE, never the replacement text: it carries its own
+            // extraction noise (ligatures "ﬁ", split words "ef forts", curly quotes) that
+            // the stored wording does not. A field is repaired only by deleting stray
+            // letters from what is stored, and only when that deletion reproduces the
+            // printed paper. A field that already matches the paper is left alone, which
+            // also filters out any legitimate letter the detector flagged.
+            var changed = new List<ListeningPartBCWatermarkField>();
+            foreach (var (field, current) in fields[number])
+            {
+                var printed = SourceValue(source, field);
+                if (Loose(current) == Loose(printed)) continue;
+                var repaired = new[]
+                    {
+                        ListeningPartBCSourceParser.StripWatermarkResidue(current),
+                        // Also catches a stray "A" after a full stop, which the detector
+                        // spares as a sentence-initial article ("teams. A What S hasn't").
+                        ListeningPartBCSourceParser.StripLoneWatermarkLetters(current),
+                    }
+                    .FirstOrDefault(candidate => Loose(candidate) == Loose(printed));
+                changed.Add(new(field, current, repaired, printed));
+            }
             if (changed.Count == 0) continue;
 
-            var status = changed.All(f => Normalise(ListeningPartBCSourceParser.StripWatermarkResidue(f.Current)) == Normalise(f.Proposed))
-                ? "verified"
-                : "needs-review";
+            var status = changed.All(f => f.Proposed is not null) ? "verified" : "needs-review";
             report.Add(new(key, paper.Id, paper.Title, number, status, changed, null));
-
-            if (approved.Contains(key)) toApply.Add(source);
         }
 
+        // Only approved AND verified items are written, and only their changed fields.
+        var toApply = report.Where(item => item.Status == "verified" && approved.Contains(item.Key)).ToList();
         if (toApply.Count == 0) return (report, 0);
 
-        foreach (var source in toApply)
+        foreach (var item in toApply)
         {
-            var question = questions.FirstOrDefault(q => q.QuestionNumber == source.Number);
-            if (question is null) continue;
-            question.Stem = source.Stem;
-            var options = optionsByQuestion.GetValueOrDefault(question.Id);
-            foreach (var (key, text) in new[] { ("A", source.OptionA), ("B", source.OptionB), ("C", source.OptionC) })
+            var question = questions.FirstOrDefault(q => q.QuestionNumber == item.Number);
+            var options = question is null ? null : optionsByQuestion.GetValueOrDefault(question.Id);
+            foreach (var field in item.Fields)
             {
-                if (options?.GetValueOrDefault(key) is not { } option || option.Text == text) continue;
-                option.Text = text;
-                option.Version += 1;
+                if (field.Field == "stem" && question is not null)
+                {
+                    question.Stem = field.Proposed!;
+                }
+                else if (field.Field.StartsWith("option", StringComparison.Ordinal)
+                    && options?.GetValueOrDefault(field.Field[^1..]) is { } option)
+                {
+                    option.Text = field.Proposed!;
+                    option.Version += 1;
+                }
             }
         }
 
@@ -783,18 +805,26 @@ public sealed class ListeningPartBCSourceRecoveryService(
             foreach (var entry in authored)
             {
                 if (entry is not JsonObject item || !TryReadNumber(item, out var number)) continue;
-                if (!byNumber.TryGetValue(number, out var source)) continue;
-                item["stem"] = source.Stem;
-                // `text` is the legacy alias the learner projection also reads.
-                if (item.ContainsKey("text")) item["text"] = source.Stem;
-                if (item["options"] is JsonArray optionArray)
-                    for (var index = 0; index < Math.Min(3, optionArray.Count); index++)
-                        optionArray[index] = source.Options[index];
+                if (!byNumber.TryGetValue(number, out var repair)) continue;
+                foreach (var field in repair.Fields)
+                {
+                    if (field.Field == "json.stem")
+                    {
+                        // `text` is the legacy alias the learner projection also reads.
+                        if (JsonString(item["stem"]) is not null) item["stem"] = field.Proposed;
+                        if (JsonString(item["text"]) is not null) item["text"] = field.Proposed;
+                    }
+                    else if (field.Field.StartsWith("json.option", StringComparison.Ordinal)
+                        && item["options"] is JsonArray optionArray)
+                    {
+                        var index = field.Field[^1] - 'A';
+                        if (index < optionArray.Count) optionArray[index] = field.Proposed;
+                    }
+                }
             }
             paper.ExtractedTextJson = root.ToJsonString();
         }
 
-        var appliedNumbers = toApply.Select(item => item.Number).ToHashSet();
         paper.UpdatedAt = DateTimeOffset.UtcNow;
         db.AuditEvents.Add(new AuditEvent
         {
@@ -806,11 +836,11 @@ public sealed class ListeningPartBCSourceRecoveryService(
             Action = "ListeningPartBCWatermarkResidueRepaired",
             ResourceType = "ContentPaper",
             ResourceId = paper.Id,
-            // The full before/after for every applied item: this IS the rollback record.
+            // The full before/after for every applied field: this IS the rollback record.
             Details = JsonSerializer.Serialize(new
             {
-                numbers = appliedNumbers.Order().ToList(),
-                items = report.Where(item => appliedNumbers.Contains(item.Number)).ToList(),
+                numbers = toApply.Select(item => item.Number).Order().ToList(),
+                items = toApply,
             }),
         });
         await db.SaveChangesAsync(ct);
@@ -825,8 +855,15 @@ public sealed class ListeningPartBCSourceRecoveryService(
         _ => source.OptionC,
     };
 
-    private static string Normalise(string? text) =>
-        string.Join(' ', (text ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    /// <summary>Comparison key that ignores PDF-extraction noise only: compatibility
+    /// forms (ligatures), quote style and all whitespace (split words, kerning gaps).
+    /// Letters themselves still have to match exactly.</summary>
+    private static string Loose(string? text)
+    {
+        var normalised = (text ?? string.Empty).Normalize(System.Text.NormalizationForm.FormKC)
+            .Replace('\u2019', '\'').Replace('\u2018', '\'').Replace('\u201C', '"').Replace('\u201D', '"');
+        return string.Concat(normalised.Where(c => !char.IsWhiteSpace(c)));
+    }
 
     private static string? JsonString(JsonNode? node) =>
         node?.GetValueKind() == JsonValueKind.String ? node.GetValue<string>() : null;

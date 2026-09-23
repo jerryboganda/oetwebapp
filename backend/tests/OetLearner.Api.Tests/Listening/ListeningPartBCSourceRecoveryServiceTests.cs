@@ -728,8 +728,9 @@ public class ListeningPartBCSourceRecoveryServiceTests
 
         var q27Item = Assert.Single(repair.Items, i => i.Number == 27);
         Assert.Equal("needs-review", q27Item.Status);
-        Assert.Contains(q27Item.Fields, f => f.Field == "optionA" && f.Proposed == Q27CleanOptions[0]);
-        Assert.Contains(q27Item.Fields, f => f.Field == "stem" && f.Proposed == Q27CleanStem);
+        // No deletion of stray letters reproduces the printed text, so nothing is proposed.
+        Assert.Contains(q27Item.Fields, f => f.Field == "optionA" && f.Proposed == null && f.PrintedText == Q27CleanOptions[0]);
+        Assert.Contains(q27Item.Fields, f => f.Field == "stem" && f.Proposed == null && f.PrintedText == Q27CleanStem);
         Assert.Equal(0, repair.Applied);
         Assert.EndsWith(" A comparing", (await db.ListeningQuestions.AsNoTracking().SingleAsync(q => q.Id == "q-27")).Stem);
 
@@ -739,5 +740,37 @@ public class ListeningPartBCSourceRecoveryServiceTests
         var noSource = await new ListeningPartBCSourceRecoveryService(db2, new StubTextExtraction(db2, "nothing printed here"))
             .RepairWatermarkResidueAsync(null, "system:audit", CancellationToken.None);
         Assert.Equal("no-source", Assert.Single(noSource.Items).Status);
+    }
+
+    [Fact]
+    public async Task Watermark_repair_only_deletes_letters_and_ignores_pdf_noise_in_the_reread()
+    {
+        await using var db = NewDb();
+        // Production shape (Atlas Test 2 Q30): a stray "A" right after a full stop looks
+        // like a sentence-initial article, so only the printed paper can confirm it.
+        await SeedWatermarkedQ27Async(db,
+            "You hear the beginning of a training session for nurses about to start work on a paediatric ward. A What is the S focus of today's session?",
+            Q27CleanOptions);
+        // The fresh re-read carries its own noise -- curly apostrophe, a ligature and a
+        // split word -- which must neither block the repair nor leak into the database.
+        var noisyPrint = QuestionPaperText
+            .Replace("today's", "today’s")
+            .Replace("organise some equipment", "organise some equip ment")
+            .Replace("different ages", "diﬀerent ages");
+        var service = new ListeningPartBCSourceRecoveryService(db, new StubTextExtraction(db, noisyPrint));
+
+        var audit = await service.RepairWatermarkResidueAsync(null, "system:audit", CancellationToken.None);
+        var item = Assert.Single(audit.Items, i => i.Number == 27);
+        Assert.Equal("verified", item.Status);
+        // Options already match the printed paper, so only the two stems are listed.
+        Assert.Equal(["stem", "json.stem"], item.Fields.Select(f => f.Field).ToArray());
+
+        await service.RepairWatermarkResidueAsync([$"{PaperId}:27"], "admin-1", CancellationToken.None);
+
+        Assert.Equal(Q27CleanStem, (await db.ListeningQuestions.AsNoTracking().SingleAsync(q => q.Id == "q-27")).Stem);
+        var options = await db.ListeningQuestionOptions.AsNoTracking()
+            .Where(o => o.ListeningQuestionId == "q-27").OrderBy(o => o.OptionKey).ToListAsync();
+        Assert.Equal(Q27CleanOptions, options.Select(o => o.Text).ToArray());
+        Assert.All(options, o => Assert.Equal(1, o.Version));
     }
 }

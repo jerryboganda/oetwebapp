@@ -529,6 +529,18 @@ public static class ListeningPartBCSourceParser
         return string.Join(' ', TokenPattern.Matches(text).Where(token => !drop.Contains(token.Index)).Select(token => token.Value));
     }
 
+    /// <summary>Delete EVERY standalone watermark letter, including the sentence-initial
+    /// "A" and allow-listed labels that <see cref="StripWatermarkResidue"/> spares. Only
+    /// safe when an independent source confirms the result (the watermark repair checks
+    /// it against the re-read printed paper).</summary>
+    public static string StripLoneWatermarkLetters(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var tokens = TokenPattern.Matches(text).Select(token => token.Value).ToList();
+        if (tokens.Count < 2) return string.Join(' ', tokens);
+        return string.Join(' ', tokens.Where(token => !WatermarkLetters.Contains(token)));
+    }
+
     private static List<Match> WatermarkResidueTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return [];
