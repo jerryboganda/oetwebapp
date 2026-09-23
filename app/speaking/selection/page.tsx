@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { LearnerSurfaceCard } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
-import { WRITING_PROFESSIONS, WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
+import { WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import {
   speakingCategoryFilterOptions,
   type SpeakingPrimaryCategory,
@@ -27,15 +27,10 @@ import {
   SPEAKING_INTRO_QUESTIONS_HREF,
 } from '@/lib/speaking-candidate-resources';
 
-// FINAL 2026-09-06 — one shared profession master list (Writing parity, no
-// separate hard-coded Speaking list) + the candidate-visible card taxonomy
-// as the main category filter. Difficulty is removed completely.
+// The candidate-visible card taxonomy is the only learner filter. Profession
+// is never a learner filter (owner, 23 Sep 2026): the server scopes the
+// library to the learner's registered profession. Difficulty is removed.
 const FILTER_GROUPS: FilterGroup[] = [
-  {
-    id: 'profession',
-    label: 'Profession',
-    options: WRITING_PROFESSIONS.map((id) => ({ id, label: WRITING_PROFESSION_LABELS[id] })),
-  },
   {
     id: 'category',
     label: 'Card type',
@@ -73,9 +68,8 @@ export default function SpeakingTaskSelection() {
     setLoading(true);
     setError(null);
     try {
-      const professionId = single(selection, 'profession');
       const primaryCategory = single(selection, 'category') as SpeakingPrimaryCategory | undefined;
-      const response = await listLearnerRolePlayCards({ professionId, primaryCategory });
+      const response = await listLearnerRolePlayCards({ primaryCategory });
       if (requestId !== requestIdRef.current) return; // superseded by a newer request
 
       if (!response || !Array.isArray(response.rolePlayCards) || typeof response.totalCount !== 'number') {
@@ -107,7 +101,7 @@ export default function SpeakingTaskSelection() {
     getFreeSpeakingCard().then(setFreeCard).catch(() => setFreeCard(null));
   }, []);
 
-  // Both groups are single-select (Writing parity): picking an option
+  // The group is single-select (Writing parity): picking an option
   // replaces the group; picking it again clears the group.
   const handleDraftChange = (groupId: string, optionId: string) => {
     setDraft((prev) => {
@@ -257,7 +251,7 @@ export default function SpeakingTaskSelection() {
             title={appliedTotal > 0 ? 'No cards available for these filters' : 'No speaking cards available'}
             description={
               appliedTotal > 0
-                ? 'No published cards match this profession and card type yet. Clear the filters to browse everything.'
+                ? 'No published cards match this card type yet. Clear the filters to browse everything.'
                 : 'Speaking role plays will appear here once they are published.'
             }
             action={appliedTotal > 0 ? { label: 'Clear all filters', onClick: handleClear } : undefined}
