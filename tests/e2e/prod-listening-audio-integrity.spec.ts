@@ -123,23 +123,25 @@ for (const paper of PAPERS) {
       try {
       await seedAuth(page, `/listening/paper/${encodeURIComponent(paper.paperId)}`);
 
-      // A leftover in-progress attempt (e.g. from an aborted earlier run) is resumed with no readiness probe:
-      // submit it and reload so this test always starts from a fresh attempt.
-      const probe = page.getByRole('button', { name: /play audio probe/i });
-      if (!(await probe.isVisible({ timeout: 15_000 }).catch(() => false))) {
+      // A leftover in-progress attempt (e.g. from an aborted earlier run) opens straight into the section tabs
+      // instead of the intro card: submit it and reload so this test always starts from a fresh attempt.
+      const startButton = page.getByRole('button', { name: /^start exam$/i });
+      const sectionTabs = page.getByRole('list', { name: /listening sub-sections/i });
+      await expect(startButton.or(sectionTabs)).toBeVisible({ timeout: 30_000 });
+      if (!(await startButton.isVisible())) {
         console.log(`[cleanup] leftover submit -> ${await submitViaUi(page)}`);
         await page.goto(`${PROD_URL}/listening/paper/${encodeURIComponent(paper.paperId)}`, { waitUntil: 'load' });
         await page.waitForTimeout(1000);
       }
 
-      // Required pre-flight: "Start exam" stays disabled until the candidate runs the audio-readiness probe
-      // (components/domain/listening/TechReadinessCheck.tsx). It also prebuffers every section's audio
-      // (verifyScoredAudioAssets -> lib/listening/audio-prebuffer, fed by IntroCard's audioUrls={scoredAudioUrls}
-      // in app/listening/paper/[paperId]/page.tsx) so mid-exam section changes never show a buffering spinner.
-      await page.getByRole('button', { name: /play audio probe/i }).click();
-      await expect(page.getByText(/audio confirmed/i)).toBeVisible({ timeout: 20_000 });
+      // Optional pre-flight: when the audio-readiness probe is shown (components/domain/listening/TechReadinessCheck.tsx),
+      // "Start exam" stays disabled until it passes. Newer intro cards go straight to "Start exam".
+      const probe = page.getByRole('button', { name: /play audio probe/i });
+      if (await probe.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await probe.click();
+        await expect(page.getByText(/audio confirmed/i)).toBeVisible({ timeout: 20_000 });
+      }
 
-      const startButton = page.getByRole('button', { name: /^start exam$/i });
       await expect(startButton).toBeEnabled({ timeout: 30_000 });
       await startButton.click();
       started = true;
