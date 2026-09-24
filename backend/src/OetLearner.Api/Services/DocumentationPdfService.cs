@@ -84,8 +84,23 @@ public sealed class DocumentationPdfService : IDocumentationPdfService
             ComposeBody(container, model);
         }).GeneratePdf();
 
-        var safeName = model.ReportName.Replace('/', '-').Replace(' ', '-');
-        return new DocumentationPdfArtifact(bytes, $"{safeName}-{model.Version}.pdf");
+        return new DocumentationPdfArtifact(bytes, $"{SanitizeForHttpFilename(model.ReportName)}-{model.Version}.pdf");
+    }
+
+    /// <summary>
+    /// Content-Disposition is a raw HTTP header, which Kestrel rejects outright if it
+    /// contains any non-ASCII character (report titles are free-text prose and may
+    /// contain an em dash, curly quote, or accented name — e.g. the Master pack's own
+    /// "...Dossier — Complete Evidence Pack" title broke every download until this was
+    /// added). Replace anything outside printable ASCII rather than only handling the
+    /// specific characters seen so far.
+    /// </summary>
+    private static string SanitizeForHttpFilename(string reportName)
+    {
+        var ascii = new string(reportName.Select(c => c is >= (char)32 and < (char)127 ? c : '-').ToArray());
+        var safe = ascii.Replace('/', '-').Replace(' ', '-');
+        while (safe.Contains("--", StringComparison.Ordinal)) safe = safe.Replace("--", "-");
+        return safe.Trim('-');
     }
 
     private static void ComposeCover(IDocumentContainer container, DocumentationPdfModel model)
