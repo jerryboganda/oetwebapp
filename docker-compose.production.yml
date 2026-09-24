@@ -104,7 +104,7 @@ x-learner-api-slot: &learner-api-slot
     LiveVoice__GeminiModelsBaseUrl: ${LIVEVOICE__GEMINIMODELSBASEURL:-https://generativelanguage.googleapis.com/v1beta/models}
     LiveVoice__GeminiWebSocketBaseUrl: ${LIVEVOICE__GEMINIWEBSOCKETBASEURL:-wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained}
     LiveVoice__GeminiModel: ${LIVEVOICE__GEMINIMODEL:-models/gemini-3.8-live}
-    LiveVoice__GeminiTokenLifetimeSeconds: ${LIVEVOICE__GEMINITOKENLIFETIMESECONDS:-90}
+    LiveVoice__GeminiTokenLifetimeSeconds: ${LIVEVOICE__GEMINITOKENLIFETIMESECONDS:-900}
     LiveVoice__GeminiNewSessionLifetimeSeconds: ${LIVEVOICE__GEMININEWSESSIONLIFETIMESECONDS:-60}
     LiveVoice__RetentionDays: ${LIVEVOICE__RETENTIONDAYS:-30}
     LiveKit__Provider: ${LIVEKIT__PROVIDER:-disabled}

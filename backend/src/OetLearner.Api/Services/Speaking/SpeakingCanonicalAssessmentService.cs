@@ -53,7 +53,8 @@ public sealed class SpeakingCanonicalAssessmentService(
     SpeakingSimulationV11AssessmentService v11,
     TimeProvider clock,
     ILogger<SpeakingCanonicalAssessmentService> logger,
-    IAiCreditReservationService? creditReservations = null) : ISpeakingCanonicalAssessmentService
+    IAiCreditReservationService? creditReservations = null,
+    SpeakingSimulationV11ReleaseGate? v11ReleaseGate = null) : ISpeakingCanonicalAssessmentService
 {
     public const string FeatureCode = AiFeatureCodes.SpeakingGrade;
     public const string PromptVersion = "speaking.score.v2";
@@ -227,10 +228,22 @@ public sealed class SpeakingCanonicalAssessmentService(
         // comes from the realtime voice loop), so it is always scored by the
         // classic assessor from its server-side transcript.
         var recorderFallbackId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
-        return await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
+        var v11Evidence = await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
                    .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
                && !await db.SpeakingRecordings.AsNoTracking()
                    .AnyAsync(r => r.Id == recorderFallbackId, ct);
+        if (!v11Evidence || v11ReleaseGate is null) return v11Evidence;
+
+        // The v1.1 scorer only runs once the owner has approved its release for
+        // the profession; until then it refuses every session (409), so a live
+        // voice role-play would never get a result. Score those from the saved
+        // live transcript with the classic rulebook assessor instead.
+        var professionId = await db.SpeakingSessions.AsNoTracking()
+            .Where(s => s.Id == sessionId)
+            .Join(db.RolePlayCards, s => s.RolePlayCardId, c => c.Id, (s, c) => c.ProfessionId)
+            .FirstOrDefaultAsync(ct);
+        return professionId is not null
+            && (await v11ReleaseGate.EvaluateAsync(professionId, ct)).IsReleased;
     }
 
     public async Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct)
