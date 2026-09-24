@@ -1,0 +1,61 @@
+name: Speaking live voice E2E (production)
+
+# Manually dispatched production smoke of the live AI patient: a real browser,
+# a fake microphone playing a scripted candidate, the real learner pages and
+# the real Gemini Live provider. Uses the dedicated QA learner account.
+on:
+  workflow_dispatch:
+    inputs:
+      card_id:
+        description: Role-play card id (must match the QA learner's profession)
+        required: true
+      speak_seconds:
+        description: Seconds of live conversation before submitting
+        default: '110'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Candidate voice (espeak-ng, 16 kHz mono, 9 s gap after each line)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng sox >/dev/null
+          i=0
+          while IFS= read -r line; do
+            espeak-ng -v en-gb -s 150 -w "l$i.wav" "$line"
+            sox "l$i.wav" -r 16000 -c 1 -b 16 "p$i.wav" pad 0 9
+            i=$((i+1))
+          done <<'LINES'
+          Good morning. My name is Doctor Smith, one of the doctors here. Please have a seat. How can I help you today?
+          I see. I am sorry to hear that. Could you tell me a little more about when this started?
+          Thank you for explaining. Have you noticed anything that makes it better or worse?
+          I understand your concern. Is it okay if I ask a few more questions about your general health?
+          Based on what you have told me, I would like to explain what may be happening, and then we can agree on a plan together.
+          Just to check I explained clearly, could you tell me in your own words what you understand so far?
+          Is there anything else you would like to ask me today?
+          Thank you for coming in today. Please book a follow-up appointment, and take care.
+          LINES
+          sox $(ls p*.wav | sort -V) candidate.wav
+          soxi candidate.wav
+      - name: Playwright Chromium
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i --no-save --silent playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Run
+        env:
+          QA_EMAIL: ${{ secrets.QA_SPEAKING_LEARNER_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_SPEAKING_LEARNER_PASSWORD }}
+          CARD_ID: ${{ inputs.card_id }}
+          SPEAK_SECONDS: ${{ inputs.speak_seconds }}
+          CANDIDATE_WAV: ${{ github.workspace }}/candidate.wav
+        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && node /tmp/pw/e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-voice-e2e
+          path: live-voice-e2e/
