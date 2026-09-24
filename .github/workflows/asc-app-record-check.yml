@@ -48,6 +48,10 @@ jobs:
           const app = apps?.data?.[0], bid = ids?.data?.find((d) => d.attributes.identifier === bundle);
           console.log(`APP_RECORD: ${app ? `EXISTS  id=${app.id} name="${app.attributes.name}" bundleId=${app.attributes.bundleId} sku=${app.attributes.sku} locale=${app.attributes.primaryLocale}` : 'NOT FOUND'}`);
           console.log(`BUNDLE_ID:  ${bid ? `REGISTERED id=${bid.id} platform=${bid.attributes.platform} name="${bid.attributes.name}" appIdPrefix(seedId)=${bid.attributes.seedId}` : 'NOT REGISTERED'}`);
+          const all = await get('/v1/apps?limit=200&fields[apps]=name,bundleId');
+          console.log('ALL_APPS: ' + (all?.data?.map((a) => a.attributes.bundleId + ' (' + a.attributes.name + ')').join(', ') || 'none'));
+          const allIds = await get('/v1/bundleIds?limit=200&fields[bundleIds]=identifier,platform');
+          console.log('ALL_BUNDLE_IDS: ' + (allIds?.data?.map((d) => d.attributes.identifier + '/' + d.attributes.platform).join(', ') || 'none'));
           if (!app || !bid) process.exit(1);
           EOF
           node asc.mjs
