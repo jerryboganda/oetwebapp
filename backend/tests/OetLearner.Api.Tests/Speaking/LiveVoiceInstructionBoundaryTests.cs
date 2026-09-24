@@ -83,4 +83,35 @@ public sealed class LiveVoiceInstructionBoundaryTests
         Assert.True(text.IndexOf("CANDIDATE FIRST", StringComparison.Ordinal)
             < text.IndexOf("[CANDIDATE CARD DATA", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Instructions_CarryTheRulebookInterlocutorRulesAndCardScriptUsage()
+    {
+        var text = Build();
+        Assert.Contains("RULE_57", text, StringComparison.Ordinal);
+        Assert.Contains("RULE_22", text, StringComparison.Ordinal);
+        Assert.Contains("RULE_44/RULE_45", text, StringComparison.Ordinal);
+        Assert.Contains("SPEAK ENGLISH ONLY", text, StringComparison.Ordinal);
+        Assert.Contains("Raise Prompt 1, Prompt 2 and Prompt 3 in that order", text, StringComparison.Ordinal);
+        // Rule text precedes the card data label; no card content leaks above it.
+        Assert.True(text.IndexOf("RULE_57", StringComparison.Ordinal) < text.IndexOf("FOR CONTEXT ONLY", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GeminiTokenSetup_UsesTheRestFieldShape()
+    {
+        // Production 25 Sep 2026: the auth_tokens endpoint rejects the SDK name
+        // liveConnectConstraints and a top-level responseModalities with 400.
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new { bidiGenerateContentSetup = LiveVoiceService.BuildGeminiSetup("models/gemini-3.8-live", "persona") });
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var setup = doc.RootElement.GetProperty("bidiGenerateContentSetup");
+        Assert.Equal("models/gemini-3.8-live", setup.GetProperty("model").GetString());
+        Assert.Equal("AUDIO", setup.GetProperty("generationConfig").GetProperty("responseModalities")[0].GetString());
+        Assert.Equal("persona", setup.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString());
+        Assert.True(setup.TryGetProperty("inputAudioTranscription", out _));
+        Assert.True(setup.TryGetProperty("outputAudioTranscription", out _));
+        Assert.False(setup.TryGetProperty("responseModalities", out _));
+        Assert.DoesNotContain("liveConnectConstraints", json, StringComparison.Ordinal);
+    }
 }

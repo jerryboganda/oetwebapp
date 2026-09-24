@@ -299,11 +299,11 @@ export function useSpeakingRealtimeVoice(
     return flushPromiseRef.current;
   }, [flushPendingTurn]);
 
-  const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string, flush: boolean) => {
+  const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string, flush: boolean, incremental = false) => {
     const normalized = text.trim();
     if (!normalized) return;
     const current = speaker === 'candidate' ? pendingCandidateRef.current : pendingPatientRef.current;
-    const delta = transcriptDelta(current, normalized);
+    const delta = incremental ? normalized : transcriptDelta(current, normalized);
     if (!delta) return;
     addCaption(speaker, delta);
     if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = Math.round(performance.now());
@@ -374,10 +374,11 @@ export function useSpeakingRealtimeVoice(
     const outputTranscription = (serverContent.outputTranscription ?? serverContent.output_transcription) as unknown;
     const inputText = providerTranscriptText(inputTranscription);
     const outputText = providerTranscriptText(outputTranscription);
-    if (inputText) captureTranscript('candidate', inputText, false);
+    // Gemini streams incremental chunks: append, never de-duplicate.
+    if (inputText) captureTranscript('candidate', inputText, false, true);
     if (outputText) {
       setPhase('speaking');
-      captureTranscript('patient', outputText, false);
+      captureTranscript('patient', outputText, false, true);
     }
 
     const modelTurn = (serverContent.modelTurn ?? serverContent.model_turn) as Record<string, unknown> | undefined;
@@ -520,24 +521,22 @@ export function useSpeakingRealtimeVoice(
     const token: LiveVoiceGeminiTokenResponse = await createGeminiLiveToken(sessionId);
     providerSessionIdRef.current = token.providerSessionId;
     const socket = new WebSocket(token.webSocketUrl);
+    // Gemini Live sends every server message as a binary frame.
+    socket.binaryType = 'arraybuffer';
     socketRef.current = socket;
     outputContextRef.current = context;
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(() => reject(new Error('Gemini Live did not connect in time.')), 15_000);
       socket.onopen = () => {
-        socket.send(JSON.stringify({
-          setup: {
-            model: token.model,
-            responseModalities: ['AUDIO'],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-          },
-        }));
+        // The ephemeral token already locks the full setup (persona, audio
+        // modality, transcription); the client may only name the model.
+        socket.send(JSON.stringify({ setup: { model: token.model } }));
         configureGeminiInput(stream, context);
       };
       socket.onmessage = (event) => {
         try {
-          const value = JSON.parse(typeof event.data === 'string' ? event.data : '') as Record<string, unknown>;
+          const raw = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data as ArrayBuffer);
+          const value = JSON.parse(raw) as Record<string, unknown>;
           handleGeminiMessage(value);
           if (value.setupComplete || value.setup_complete) {
             window.clearTimeout(timeout);
