@@ -31,6 +31,10 @@ public sealed class LiveVoiceService(
     ILogger<LiveVoiceService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // SpeakingPatientTurns.Role is varchar(16): "live_voice_session" (18) made every
+    // provider-session audit insert fail with Postgres 22001, so no live voice
+    // conversation could start in production (25 Sep 2026).
+    internal const string LiveVoiceSessionRole = "live_session";
     private readonly LiveVoiceOptions liveVoice = options.Value;
     private readonly SpeakingComplianceOptions compliance = complianceOptions.Value;
 
@@ -528,7 +532,7 @@ public sealed class LiveVoiceService(
         await patientTurns.PersistAsync(
             sessionId,
             $"live-voice-session:{Guid.NewGuid():N}",
-            "live_voice_session",
+            LiveVoiceSessionRole,
             $"{provider}:{model}",
             audit,
             ct);
@@ -547,7 +551,7 @@ public sealed class LiveVoiceService(
 
         var hash = HashProviderSession(providerSessionId);
         var audits = await db.SpeakingPatientTurns.AsNoTracking()
-            .Where(x => x.SessionId == sessionId && x.Role == "live_voice_session")
+            .Where(x => x.SessionId == sessionId && x.Role == LiveVoiceSessionRole)
             .Select(x => x.ResponseJson)
             .ToListAsync(ct);
         foreach (var json in audits)

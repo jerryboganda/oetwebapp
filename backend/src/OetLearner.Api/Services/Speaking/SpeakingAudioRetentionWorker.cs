@@ -109,7 +109,7 @@ public sealed class SpeakingAudioRetentionWorker(
         var due = await db.SpeakingPatientTurns
             .Where(turn => turn.CreatedAt < cutoff
                 && (turn.Role == "realtime_turn"
-                    || turn.Role == "live_voice_session"
+                    || turn.Role == LiveVoiceService.LiveVoiceSessionRole
                     || turn.Role == "jev_advisory"))
             .OrderBy(turn => turn.CreatedAt)
             .Take(BatchSize)

@@ -114,4 +114,15 @@ public sealed class LiveVoiceInstructionBoundaryTests
         Assert.False(setup.TryGetProperty("responseModalities", out _));
         Assert.DoesNotContain("liveConnectConstraints", json, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void LiveVoiceSessionRole_FitsTheSpeakingPatientTurnRoleColumn()
+    {
+        // In-memory tests never enforce lengths; Postgres rejected the old 18-char role.
+        var max = typeof(SpeakingPatientTurn).GetProperty(nameof(SpeakingPatientTurn.Role))!
+            .GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.MaxLengthAttribute), false)
+            .Cast<System.ComponentModel.DataAnnotations.MaxLengthAttribute>().Single().Length;
+        Assert.True(LiveVoiceService.LiveVoiceSessionRole.Length <= max);
+        Assert.True("realtime_turn".Length <= max);
+    }
 }
