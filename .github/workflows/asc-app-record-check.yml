@@ -1,0 +1,53 @@
+name: App Store Connect app record check
+
+# Read-only: confirms an App Store Connect app record and a registered bundle ID exist for
+# com.oetprep.learner before the first iOS production build. Prints app metadata only
+# (never the API key). Runs on push to its own branch or manually.
+
+on:
+  push:
+    branches: [chore/asc-app-record-check-2026-09-25]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Query App Store Connect
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY_IOS }}
+          BUNDLE_ID: com.oetprep.learner
+        run: |
+          cat > asc.mjs <<'EOF'
+          import { createSign } from 'node:crypto';
+          const { ASC_ISSUER_ID: iss, ASC_KEY_ID: kid, ASC_PRIVATE_KEY: key, BUNDLE_ID: bundle } = process.env;
+          if (!iss || !kid || !key) { console.log('Missing one of ASC_ISSUER_ID / ASC_KEY_ID_IOS / ASC_PRIVATE_KEY_IOS'); process.exit(1); }
+          const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const unsigned = `${b64({ alg: 'ES256', kid, typ: 'JWT' })}.${b64({ iss, iat: now, exp: now + 600, aud: 'appstoreconnect-v1' })}`;
+          const pem = key.includes('BEGIN') ? key.replace(/\\n/g, '\n') : `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`;
+          const sig = createSign('SHA256').update(unsigned).sign({ key: pem, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+          const jwt = `${unsigned}.${sig}`;
+          const get = async (path) => {
+            const r = await fetch(`https://api.appstoreconnect.apple.com${path}`, { headers: { Authorization: `Bearer ${jwt}` } });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) console.log(`GET ${path.split('?')[0]} -> HTTP ${r.status}: ${JSON.stringify(body.errors?.map((e) => e.detail ?? e.title) ?? body)}`);
+            return r.ok ? body : null;
+          };
+          const apps = await get(`/v1/apps?filter[bundleId]=${encodeURIComponent(bundle)}&fields[apps]=name,bundleId,sku,primaryLocale`);
+          const ids = await get(`/v1/bundleIds?filter[identifier]=${encodeURIComponent(bundle)}&fields[bundleIds]=identifier,name,platform,seedId`);
+          const app = apps?.data?.[0], bid = ids?.data?.find((d) => d.attributes.identifier === bundle);
+          console.log(`APP_RECORD: ${app ? `EXISTS  id=${app.id} name="${app.attributes.name}" bundleId=${app.attributes.bundleId} sku=${app.attributes.sku} locale=${app.attributes.primaryLocale}` : 'NOT FOUND'}`);
+          console.log(`BUNDLE_ID:  ${bid ? `REGISTERED id=${bid.id} platform=${bid.attributes.platform} name="${bid.attributes.name}" appIdPrefix(seedId)=${bid.attributes.seedId}` : 'NOT REGISTERED'}`);
+          if (!app || !bid) process.exit(1);
+          EOF
+          node asc.mjs
