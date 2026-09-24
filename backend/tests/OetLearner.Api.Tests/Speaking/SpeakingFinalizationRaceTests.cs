@@ -68,6 +68,39 @@ public sealed class SpeakingFinalizationRaceTests : IAsyncDisposable
         Assert.NotEqual(a, c);
     }
 
+    [Fact]
+    public async Task LiveVoiceSession_UsesClassicAssessor_UntilV11IsReleasedForTheProfession()
+    {
+        // Production 25 Sep 2026: every live voice session was routed to the
+        // v1.1 scorer, which refuses (409 speaking_v11_release_blocked) until
+        // the owner approves its release, so no live role-play got a result.
+        var sessionId = await SeedSessionAsync();
+        _db.RolePlayCards.Add(new RolePlayCard
+        {
+            Id = "card-1", ContentItemId = "ci-1", ProfessionId = "medicine",
+            ScenarioTitle = "t", Setting = "s", CandidateRole = "Doctor", InterlocutorRole = "Patient",
+            Background = "b", PatientEmotion = "calm", CommunicationGoal = "g", ClinicalTopic = "c",
+            Difficulty = "core", CriteriaFocusJson = "[]", Disclaimer = "d",
+            Status = ContentStatus.Published, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        _db.SpeakingSimulationV11PersonaRuntimeSnapshots.Add(new SpeakingSimulationV11PersonaRuntimeSnapshot
+        {
+            Id = "persona-1", SpeakingSessionId = sessionId, RolePlayCardId = "card-1",
+        });
+        await _db.SaveChangesAsync();
+
+        var gated = new SpeakingCanonicalAssessmentService(
+            _db, classic: null!, v11: null!, TimeProvider.System,
+            NullLogger<SpeakingCanonicalAssessmentService>.Instance,
+            v11ReleaseGate: new SpeakingSimulationV11ReleaseGate(_db));
+        Assert.False(await gated.UsesV11Async(sessionId, default));
+
+        var ungated = new SpeakingCanonicalAssessmentService(
+            _db, classic: null!, v11: null!, TimeProvider.System,
+            NullLogger<SpeakingCanonicalAssessmentService>.Instance);
+        Assert.True(await ungated.UsesV11Async(sessionId, default));
+    }
+
     private async Task<string> SeedSessionAsync()
     {
         var session = new SpeakingSession

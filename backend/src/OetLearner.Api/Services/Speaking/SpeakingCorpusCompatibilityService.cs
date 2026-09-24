@@ -625,7 +625,8 @@ public sealed class SpeakingCorpusCompatibilityService(
                 sp.GetRequiredService<SpeakingSimulationV11AssessmentService>(),
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<ILogger<SpeakingCanonicalAssessmentService>>(),
-                sp.GetService<OetLearner.Api.Services.Ai.IAiCreditReservationService>());
+                sp.GetService<OetLearner.Api.Services.Ai.IAiCreditReservationService>(),
+                sp.GetService<SpeakingSimulationV11ReleaseGate>());
 
             step = "route";
             if (await canonical.UsesV11Async(sessionId, ct))

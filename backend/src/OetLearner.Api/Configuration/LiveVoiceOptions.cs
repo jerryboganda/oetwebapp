@@ -24,7 +24,7 @@ public sealed class LiveVoiceOptions
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
     public string GeminiModel { get; set; } = "models/gemini-3.8-live";
 
-    public int GeminiTokenLifetimeSeconds { get; set; } = 90;
+    public int GeminiTokenLifetimeSeconds { get; set; } = 900;
     public int GeminiNewSessionLifetimeSeconds { get; set; } = 60;
 
     /// <summary>Days that provider transcript and connection audit metadata are retained.</summary>

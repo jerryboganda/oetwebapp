@@ -154,11 +154,13 @@ public sealed class LiveVoiceService(
         EnsureProviderConfigured(LiveVoiceProviders.Gemini);
 
         var now = clock.GetUtcNow();
-        var expiresAt = now.AddSeconds(Math.Clamp(liveVoice.GeminiTokenLifetimeSeconds, 30, 300));
-        var newSessionExpiresAt = now.AddSeconds(Math.Clamp(
-            liveVoice.GeminiNewSessionLifetimeSeconds,
-            15,
-            Math.Max(15, liveVoice.GeminiTokenLifetimeSeconds - 1)));
+        // expireTime bounds the WHOLE live conversation (Gemini closes the socket
+        // with 1011 "auth token has expired" at that instant), so it must cover
+        // the 5-minute role-play plus overrun; newSessionExpireTime is only the
+        // window to open the socket. Production 25 Sep 2026: a 90 s token cut
+        // every conversation off after ~90 s.
+        var expiresAt = now.AddSeconds(Math.Clamp(liveVoice.GeminiTokenLifetimeSeconds, 900, 1800));
+        var newSessionExpiresAt = now.AddSeconds(Math.Clamp(liveVoice.GeminiNewSessionLifetimeSeconds, 15, 120));
 
         var payload = new
         {
