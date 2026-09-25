@@ -119,10 +119,12 @@ try {
   const deadline = Date.now() + 12 * 60_000; // max-reasoning grading takes ~7-8 min
   let graded = false;
   while (Date.now() < deadline) {
+    // Let the page render (not its loading skeleton) before reading it.
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
     const text = await page.locator('body').innerText();
     if (/Try grading again/i.test(text)) throw new Error('Grading failed on the results page.');
     if (!/processing|being graded|analysing|Check again/i.test(text) && /\d{3}\s*\/\s*500|criteri/i.test(text)) { graded = true; break; }
-    await page.waitForTimeout(10_000);
+    await page.waitForTimeout(30_000); // gentle: 10 s reloads tripped the API rate limit
     await page.reload();
   }
   await shot('5-result');
