@@ -168,7 +168,10 @@ public sealed class SpeakingCanonicalAssessmentService(
 
         try
         {
-            await AssessNowAsync(row.ResourceId, ct);
+            // The worker already holds this operation's lease: run it directly,
+            // never through the direct-run claim (which would see that live
+            // lease and decline, leaving the session ungraded).
+            await AssessCoreAsync(row.ResourceId, claim: false, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -178,14 +181,17 @@ public sealed class SpeakingCanonicalAssessmentService(
         }
     }
 
-    public async Task AssessNowAsync(string sessionId, CancellationToken ct)
+    public Task AssessNowAsync(string sessionId, CancellationToken ct)
+        => AssessCoreAsync(sessionId, claim: true, ct);
+
+    private async Task AssessCoreAsync(string sessionId, bool claim, CancellationToken ct)
     {
         var ticket = await EnqueueAsync(sessionId, ct);
         // Exactly one runner per session: /submit hands the operation to the
         // worker and the page then calls /ai-assess, so both used to grade at
         // once (production 25 Sep 2026: duplicate v1.1 turn-evidence rows, 500).
         // Whoever loses the claim simply leaves the running/finished grade alone.
-        if (!await TryClaimDirectRunAsync(ticket.OperationId, ct)) return;
+        if (claim && !await TryClaimDirectRunAsync(ticket.OperationId, ct)) return;
         try
         {
             if (await UsesV11Async(sessionId, ct))
