@@ -137,13 +137,6 @@ function audioRate(mimeType: unknown): number {
   return match ? Number(match[1]) || 24_000 : 24_000;
 }
 
-function transcriptDelta(existing: string, incoming: string): string {
-  if (!existing) return incoming;
-  if (incoming === existing || existing.endsWith(incoming) || existing.startsWith(incoming)) return '';
-  if (incoming.startsWith(existing)) return incoming.slice(existing.length).trim();
-  return incoming;
-}
-
 export function useSpeakingRealtimeVoice(
   sessionId: string,
   requestedProvider?: LiveVoiceProvider,
@@ -246,34 +239,47 @@ export function useSpeakingRealtimeVoice(
     }
   }, [requestedProvider, sessionId]);
 
-  const addCaption = useCallback((speaker: RealtimeVoiceSpeaker, text: string) => {
-    const normalized = text.trim();
-    if (!normalized) return;
-    const id = `${speaker}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setCaptions((current) => [...current, { id, speaker, text: normalized }].slice(-80));
-    const now = Math.max(0, Math.round(performance.now()));
-    const startedAt = pendingStartedAtRef.current ?? now;
-    if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
-    segmentsRef.current.push({
-      speaker,
-      startMs: Math.max(0, startedAt),
-      endMs: Math.max(startedAt, now),
-      text: normalized,
+  // Consecutive fragments from one speaker extend one caption and one transcript
+  // segment, so a 5-minute conversation stays far below the server's 600-segment
+  // limit. `exact` fragments (GPT-Live deltas) carry their own spacing.
+  const addCaption = useCallback((speaker: RealtimeVoiceSpeaker, text: string, exact = false) => {
+    if (!text.trim()) return;
+    const fragment = exact ? text : text.trim();
+    const join = (existing: string) => (exact ? existing + fragment : `${existing} ${fragment}`);
+    setCaptions((current) => {
+      const last = current[current.length - 1];
+      if (last?.speaker === speaker) return [...current.slice(0, -1), { ...last, text: join(last.text) }];
+      const id = `${speaker}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      return [...current, { id, speaker, text: fragment }].slice(-80);
     });
+    const now = Math.max(0, Math.round(performance.now()));
+    if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
+    const last = segmentsRef.current[segmentsRef.current.length - 1];
+    if (last?.speaker === speaker) {
+      last.text = join(last.text);
+      last.endMs = Math.max(last.startMs, now);
+    } else {
+      segmentsRef.current.push({ speaker, startMs: now, endMs: now, text: fragment });
+    }
     if (speaker === 'candidate') setAwaitingCandidateStart(false);
   }, []);
 
-  const flushPendingTurn = useCallback(async () => {
+  // Takes the pending turn synchronously, so fragments that arrive while a save
+  // is in flight start the next turn instead of being cleared with this one.
+  const takePendingTurn = useCallback((): Parameters<typeof persistLiveVoiceTurn>[1] | null => {
     const provider = providerRef.current;
     const providerSessionId = providerSessionIdRef.current;
     const candidateText = pendingCandidateRef.current.trim();
     const patientText = pendingPatientRef.current.trim();
-    if (!provider || !providerSessionId || (!candidateText && !patientText)) return;
+    if (!provider || !providerSessionId || (!candidateText && !patientText)) return null;
 
     const startedAt = pendingStartedAtRef.current;
     const endedAt = Math.max(0, Math.round(performance.now()));
     turnIndexRef.current += 1;
-    await persistLiveVoiceTurn(sessionId, {
+    pendingCandidateRef.current = '';
+    pendingPatientRef.current = '';
+    pendingStartedAtRef.current = null;
+    return {
       provider,
       providerSessionId,
       candidateText: candidateText || null,
@@ -282,35 +288,36 @@ export function useSpeakingRealtimeVoice(
       turnIndex: turnIndexRef.current,
       startedAt: startedAt === null ? undefined : new Date(Date.now() - Math.max(0, endedAt - startedAt)).toISOString(),
       endedAt: new Date().toISOString(),
-    });
-    pendingCandidateRef.current = '';
-    pendingPatientRef.current = '';
-    pendingStartedAtRef.current = null;
-  }, [sessionId]);
+    };
+  }, []);
+
+  const flushPendingTurn = useCallback(async () => {
+    const turn = takePendingTurn();
+    if (turn) await persistLiveVoiceTurn(sessionId, turn);
+  }, [sessionId, takePendingTurn]);
 
   const queueFlush = useCallback(() => {
+    const turn = takePendingTurn();
     flushPromiseRef.current = flushPromiseRef.current
       .catch(() => undefined)
-      .then(() => flushPendingTurn())
+      .then(async () => {
+        if (turn) await persistLiveVoiceTurn(sessionId, turn);
+      })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : 'The voice transcript could not be saved.');
         throw caught;
       });
     return flushPromiseRef.current;
-  }, [flushPendingTurn]);
+  }, [sessionId, takePendingTurn]);
 
-  const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string, flush: boolean, incremental = false) => {
-    const normalized = text.trim();
-    if (!normalized) return;
-    const current = speaker === 'candidate' ? pendingCandidateRef.current : pendingPatientRef.current;
-    const delta = incremental ? normalized : transcriptDelta(current, normalized);
-    if (!delta) return;
-    addCaption(speaker, delta);
-    if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = Math.round(performance.now());
-    if (speaker === 'candidate') pendingCandidateRef.current = `${current} ${delta}`.trim();
-    else pendingPatientRef.current = `${current} ${delta}`.trim();
-    if (flush) void queueFlush();
-  }, [addCaption, queueFlush]);
+  // Gemini streams incremental chunks: append, never de-duplicate.
+  const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string) => {
+    const chunk = text.trim();
+    if (!chunk) return;
+    addCaption(speaker, chunk);
+    if (speaker === 'candidate') pendingCandidateRef.current = `${pendingCandidateRef.current} ${chunk}`.trim();
+    else pendingPatientRef.current = `${pendingPatientRef.current} ${chunk}`.trim();
+  }, [addCaption]);
 
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
@@ -331,24 +338,19 @@ export function useSpeakingRealtimeVoice(
       return;
     }
 
-    if (type.includes('response.done') || type.includes('turn.done') || type.includes('turn_complete')) {
-      void queueFlush();
-      setPhase('listening');
-      return;
-    }
-
-    const text = providerTranscriptText(value);
-    if (!text) return;
-    if (type.includes('input') && (type.includes('transcript') || type.includes('transcription'))) {
-      captureTranscript('candidate', text, false);
-      return;
-    }
-    if (type.includes('output') || type.includes('audio_transcript') || type.includes('response.audio')) {
-      setPhase('speaking');
-      captureTranscript('patient', text, false);
-      return;
-    }
-  }, [captureTranscript, queueFlush]);
+    // GPT-Live sends exact transcript fragments and no turn-complete event: a
+    // turn (candidate, then patient) closes when the candidate speaks again.
+    const speaker: RealtimeVoiceSpeaker | null = type === 'session.input_transcript.delta'
+      ? 'candidate'
+      : type === 'session.output_transcript.delta' ? 'patient' : null;
+    const delta = typeof value.delta === 'string' ? value.delta : '';
+    if (!speaker || !delta) return;
+    if (speaker === 'candidate' && pendingPatientRef.current.trim()) void queueFlush();
+    addCaption(speaker, delta, true);
+    if (speaker === 'candidate') pendingCandidateRef.current += delta;
+    else pendingPatientRef.current += delta;
+    setPhase(speaker === 'patient' ? 'speaking' : 'listening');
+  }, [addCaption, queueFlush]);
 
   const handleGeminiMessage = useCallback((value: Record<string, unknown>) => {
     if (value.setupComplete || value.setup_complete) {
@@ -374,11 +376,10 @@ export function useSpeakingRealtimeVoice(
     const outputTranscription = (serverContent.outputTranscription ?? serverContent.output_transcription) as unknown;
     const inputText = providerTranscriptText(inputTranscription);
     const outputText = providerTranscriptText(outputTranscription);
-    // Gemini streams incremental chunks: append, never de-duplicate.
-    if (inputText) captureTranscript('candidate', inputText, false, true);
+    if (inputText) captureTranscript('candidate', inputText);
     if (outputText) {
       setPhase('speaking');
-      captureTranscript('patient', outputText, false, true);
+      captureTranscript('patient', outputText);
     }
 
     const modelTurn = (serverContent.modelTurn ?? serverContent.model_turn) as Record<string, unknown> | undefined;

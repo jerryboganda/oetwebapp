@@ -2,7 +2,7 @@ name: Speaking live voice E2E (production)
 
 # Manually dispatched production smoke of the live AI patient: a real browser,
 # a fake microphone playing a scripted candidate, the real learner pages and
-# the real Gemini Live provider. Uses the dedicated QA learner account.
+# the real live voice provider (Gemini Live or OpenAI GPT-Live). Uses the dedicated QA learner account.
 on:
   workflow_dispatch:
     inputs:
@@ -12,11 +12,16 @@ on:
       speak_seconds:
         description: Seconds of live conversation before submitting
         default: '110'
+      voice_provider:
+        description: Live voice provider for this run (blank = production primary)
+        type: choice
+        options: ['', gemini, openai]
+        default: ''
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,6 +57,7 @@ jobs:
           QA_PASSWORD: ${{ secrets.QA_SPEAKING_LEARNER_PASSWORD }}
           CARD_ID: ${{ inputs.card_id }}
           SPEAK_SECONDS: ${{ inputs.speak_seconds }}
+          VOICE_PROVIDER: ${{ inputs.voice_provider }}
           CANDIDATE_WAV: ${{ github.workspace }}/candidate.wav
         run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && node /tmp/pw/e2e.mjs
       - uses: actions/upload-artifact@v4
