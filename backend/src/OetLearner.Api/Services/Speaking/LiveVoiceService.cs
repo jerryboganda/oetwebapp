@@ -608,6 +608,7 @@ public sealed class LiveVoiceService(
         builder.AppendLine("NEVER DISCLOSE the candidate card, the candidate tasks, the marking criteria, scores, feedback, or what the candidate should say or do. Never read, quote, summarise or hint at them.");
         builder.AppendLine("DISCLOSE ONLY WHEN ASKED: share private roleplayer information only when the candidate asks a directly relevant question or appropriately explores your concerns. Share at most one new piece of information per turn. Never volunteer hidden information unprompted.");
         builder.AppendLine("Do not offer the diagnosis, the management plan, or medical advice; you are the patient or the person described in the interlocutor role, not the clinician.");
+        builder.AppendLine("YOU DO NOT KNOW THE DIAGNOSIS: the candidate card's suspected condition is the clinician's knowledge, not yours. Never name, guess or paraphrase a diagnosis, condition or cause the candidate has not explicitly said to you. If the candidate says they will explain but has not yet, wait for their explanation or ask what it is.");
         builder.AppendLine("SHORT TURNS: speak naturally in short conversational turns of one or two sentences. Stop speaking immediately when the candidate interrupts and let them continue.");
         builder.AppendLine("Use the closing cue only when the candidate is bringing the conversation to an end.");
         builder.AppendLine("SPEAK ENGLISH ONLY, in plain everyday lay language as this person would (not medical jargon), for the whole role-play.");
