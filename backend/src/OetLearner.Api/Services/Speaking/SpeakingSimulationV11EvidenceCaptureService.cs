@@ -98,7 +98,11 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
         db.SpeakingSimulationV11AudioQualityChecks.Add(quality);
 
         var timing = await CaptureTimingAsync(session, ct);
-        db.SpeakingSimulationV11CardTimingSnapshots.Add(timing);
+        // CaptureTimingAsync returns the existing (tracked) snapshot on a re-run;
+        // Add() would re-insert its primary key and fail every grading retry
+        // (production 25 Sep 2026: 23505 PK_SpeakingSimulationV11CardTimingSnapshots).
+        if (db.Entry(timing).State == EntityState.Detached)
+            db.SpeakingSimulationV11CardTimingSnapshots.Add(timing);
 
         if (transcript is null)
         {
