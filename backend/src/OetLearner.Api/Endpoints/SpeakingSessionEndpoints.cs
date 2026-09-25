@@ -277,7 +277,9 @@ public static class SpeakingSessionEndpoints
             // the uploaded recording is transcribed.
             return Results.Accepted(value: new { state = SpeakingAssessmentState.Processing });
         }
-        await canonical.AssessNowAsync(id, ct);
+        // Max-reasoning grading can take minutes; a proxy/browser timeout must
+        // not cancel a grade that is already running (the page keeps polling).
+        await canonical.AssessNowAsync(id, CancellationToken.None);
         if (await canonical.UsesV11Async(id, ct))
         {
             var v11Latest = await v11Assessor.GetLatestAsync(id, ct);
