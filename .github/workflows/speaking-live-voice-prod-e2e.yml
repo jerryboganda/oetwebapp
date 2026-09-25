@@ -55,6 +55,7 @@ jobs:
         env:
           QA_EMAIL: ${{ secrets.QA_SPEAKING_LEARNER_EMAIL }}
           QA_PASSWORD: ${{ secrets.QA_SPEAKING_LEARNER_PASSWORD }}
+          QA_DEVICE_ID: ${{ secrets.QA_SPEAKING_LEARNER_DEVICE_ID }}
           CARD_ID: ${{ inputs.card_id }}
           SPEAK_SECONDS: ${{ inputs.speak_seconds }}
           VOICE_PROVIDER: ${{ inputs.voice_provider }}

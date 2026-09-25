@@ -6,7 +6,7 @@ import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
-const { QA_EMAIL, QA_PASSWORD, CARD_ID, CANDIDATE_WAV, SPEAK_SECONDS = '110', VOICE_PROVIDER = '' } = process.env;
+const { QA_EMAIL, QA_PASSWORD, QA_DEVICE_ID = '', CARD_ID, CANDIDATE_WAV, SPEAK_SECONDS = '110', VOICE_PROVIDER = '' } = process.env;
 const out = 'live-voice-e2e';
 fs.mkdirSync(out, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -23,6 +23,9 @@ const context = await browser.newContext({ ...devices['Pixel 7'], permissions: [
 // ?voiceProvider=<p> on the session page selects the provider; add it to the
 // client-side navigation into /speaking/sessions/{id}. GPT-Live talks over a
 // WebRTC data channel, so mirror its events where the test can read them.
+// A fresh CI browser is an unknown device (emailed-code verification); reuse
+// the QA learner's already-approved device identity (lib/device-id.ts).
+if (QA_DEVICE_ID) await context.addInitScript((id) => { try { localStorage.setItem('oet_device_id', id); } catch { /* cookie fallback */ } }, QA_DEVICE_ID);
 await context.addInitScript((provider) => {
   window.__voiceEvents = [];
   const createDataChannel = RTCPeerConnection.prototype.createDataChannel;
