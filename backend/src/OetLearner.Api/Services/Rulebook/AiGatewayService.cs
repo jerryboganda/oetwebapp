@@ -87,6 +87,16 @@ public sealed class AiGatewayService(
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
 
+    /// <summary>Owner directive (25 Sep 2026): learner Speaking and Writing
+    /// grading runs Claude Sonnet 5 with maximum reasoning (adaptive thinking,
+    /// effort "max"). Thinking tokens count against max_tokens, so grading gets
+    /// ample room - the old 4096 cap truncated the scored JSON.</summary>
+    internal const int GradingMaxTokens = 128_000; // claude-sonnet-5 output maximum
+
+    internal static bool GradingMaxReasoning(string featureCode)
+        => string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase);
+
     public async Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
     {
         var startedAt = DateTimeOffset.UtcNow;
@@ -723,7 +733,7 @@ public sealed class AiGatewayService(
                         SystemPrompt = request.Prompt.SystemPrompt,
                         UserPrompt = userPrompt,
                         Temperature = request.Temperature,
-                        MaxTokens = request.MaxTokens,
+                        MaxTokens = GradingMaxReasoning(featureCode) ? Math.Max(request.MaxTokens ?? 0, GradingMaxTokens) : request.MaxTokens,
                         ApiKeyOverride = resolution?.ApiKeyPlaintext,
                         BaseUrlOverride = resolution?.BaseUrlOverride,
                         AudioAttachments = request.AudioAttachments,
@@ -731,8 +741,8 @@ public sealed class AiGatewayService(
                         Tools = tools.Count == 0 ? null : tools,
                         ToolChoice = tools.Count == 0 ? null : "auto",
                         ResponseFormatJson = request.ResponseFormatJson,
-                        EnableExtendedThinking = request.EnableExtendedThinking,
-                        ThinkingEffort = request.ThinkingEffort,
+                        EnableExtendedThinking = request.EnableExtendedThinking || GradingMaxReasoning(featureCode),
+                        ThinkingEffort = GradingMaxReasoning(featureCode) ? "max" : request.ThinkingEffort,
                     },
                     circuitProviderKey,
                     circuitCredentialKey,
