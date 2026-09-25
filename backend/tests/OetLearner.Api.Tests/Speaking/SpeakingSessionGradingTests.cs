@@ -342,6 +342,39 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
 
     // ── Fakes ───────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task AssessNow_DoesNotGradeASessionTheWorkerAlreadyHolds()
+    {
+        // Production 25 Sep 2026: /submit handed grading to the worker and the
+        // page's /ai-assess graded the same session concurrently (500).
+        var gateway = new SwitchableAiGateway();
+        var canonical = BuildCanonical(gateway, reservations: null);
+        var sessions = new SpeakingSessionService(_db, compliance: BuildCompliance());
+        var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
+        var sessionId = created.SessionId;
+        await sessions.FinishWarmupAsync(UserId, sessionId, default);
+        await sessions.StartRolePlayAsync(UserId, sessionId, default);
+        await sessions.EndSessionAsync(UserId, sessionId, default);
+        SeedTranscript(sessionId);
+
+        var ticket = await canonical.EnqueueAsync(sessionId, default);
+        var op = await _db.AiOperations.SingleAsync(o => o.Id == ticket.OperationId);
+        op.State = AiOperationState.Leased;
+        op.LeaseOwner = "worker-1";
+        op.LeaseExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        await _db.SaveChangesAsync();
+
+        await canonical.AssessNowAsync(sessionId, default);
+        Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+
+        // An expired lease (crashed worker) is taken over and graded once.
+        op.LeaseExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        await _db.SaveChangesAsync();
+        await canonical.AssessNowAsync(sessionId, default);
+        await canonical.AssessNowAsync(sessionId, default);
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
     private sealed class SwitchableAiGateway : IAiGatewayService
     {
         public bool Fail { get; set; }
