@@ -99,7 +99,8 @@ try {
   await page.waitForURL(/\/speaking\/sessions\/[^/?]+(\?|$)/, { timeout: 60_000 });
   await page.getByTestId('speaking-mic-indicator').waitFor({ timeout: 60_000 });
   const start = page.getByRole('button', { name: 'Start speaking' });
-  if (await start.isVisible().catch(() => false)) await start.click();
+  // Auto-start may already be connecting (button shown but disabled); click only when needed.
+  if (await start.isEnabled({ timeout: 2_000 }).catch(() => false)) await start.click({ timeout: 5_000 }).catch(() => undefined);
   await page.getByText(/Live — the patient is listening|Patient speaking/).waitFor({ timeout: 45_000 });
   log('live voice connected');
   await shot('3-active-live');
