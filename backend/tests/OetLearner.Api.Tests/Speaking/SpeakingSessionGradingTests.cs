@@ -402,6 +402,23 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
     }
 
+    [Fact]
+    public async Task PaidPracticeCard_IsCreditFunded_SoTheAiPlanGateDoesNotRefuseGrading()
+    {
+        // Production 25 Sep 2026: a learner on the default "free" AI plan paid
+        // 2 credits for a card, then grading was refused ("Your plan does not
+        // include this AI feature"). The paid hold now authorises grading.
+        var credits = new StubPackageCredits();
+        var reservations = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, credits, TimeProvider.System);
+        var sessions = new SpeakingSessionService(_db, creditReservations: reservations);
+        var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
+        var session = await _db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == created.SessionId);
+        Assert.False(await SpeakingCreditSettlement.IsCreditFundedAsync(_db, session, default));
+
+        await sessions.FinishWarmupAsync(UserId, created.SessionId, default);
+        Assert.True(await SpeakingCreditSettlement.IsCreditFundedAsync(_db, session, default));
+    }
+
     private sealed class SwitchableAiGateway : IAiGatewayService
     {
         public bool Fail { get; set; }

@@ -219,7 +219,9 @@ Scoring rules:
                 Temperature = 0.1,
                 MaxTokens = 4096,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
-                FreeSampleGrant = freeSample,
+                // Free sample OR paid with AI credits: both skip the plan
+                // feature gate / token counters (kill switches still win).
+                FreeSampleGrant = freeSample || await SpeakingCreditSettlement.IsCreditFundedAsync(db, session, ct),
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 // Tag the assessment context for the audit trail + gateway

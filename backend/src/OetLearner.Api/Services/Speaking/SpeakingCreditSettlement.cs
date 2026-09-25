@@ -22,6 +22,27 @@ public static class SpeakingCreditSettlement
 
     public static string PracticeReference(string sessionId) => $"practice:{sessionId}";
 
+    /// <summary>True when the learner has paid for this session's grading
+    /// with AI credits: a live practice-card hold, or an exam whose card was
+    /// debited (credit hold or mock unit). Grading a paid session must not be
+    /// refused by the AI-plan feature gate (the default "free" quota plan has
+    /// no speaking.grade) - the credits are the meter.</summary>
+    public static async Task<bool> IsCreditFundedAsync(LearnerDbContext db, SpeakingSession session, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(session.ExamSessionId))
+        {
+            var reference = PracticeReference(session.Id);
+            return await db.AiCreditReservations.AsNoTracking()
+                .AnyAsync(r => r.BusinessReference == reference
+                    && (r.State == AiCreditReservationState.Reserved || r.State == AiCreditReservationState.Committed), ct);
+        }
+
+        var exam = await db.SpeakingExamSessions.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == session.ExamSessionId, ct);
+        return exam is not null
+            && (!string.IsNullOrWhiteSpace(exam.CreditARefId) || !string.IsNullOrWhiteSpace(exam.CreditBRefId));
+    }
+
     /// <summary>A session is graded once a classic AI assessment or a
     /// complete v1.1 card assessment exists for it.</summary>
     public static async Task<bool> IsGradedAsync(LearnerDbContext db, string sessionId, CancellationToken ct)
