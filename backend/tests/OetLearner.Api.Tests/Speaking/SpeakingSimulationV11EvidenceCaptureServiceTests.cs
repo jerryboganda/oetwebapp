@@ -78,6 +78,39 @@ public sealed class SpeakingSimulationV11EvidenceCaptureServiceTests
     }
 
     [Fact]
+    public async Task Capture_can_run_again_for_a_grading_retry()
+    {
+        // Production 25 Sep 2026: the second capture re-added the tracked timing
+        // snapshot (PK violation), so "Try grading again" always failed.
+        await using var db = CreateDb();
+        var card = CreateCard();
+        var session = CreateSession(card.Id);
+        db.RolePlayCards.Add(card);
+        db.SpeakingSessions.Add(session);
+        db.SpeakingSimulationV11PersonaRuntimeSnapshots.Add(new SpeakingSimulationV11PersonaRuntimeSnapshot
+        {
+            Id = "persona-1",
+            SpeakingSessionId = session.Id,
+            RolePlayCardId = card.Id,
+            CardSlot = "standalone",
+            MemoryScopeKey = "session-1",
+            SpecVersion = "speaking-simulation-v1.1",
+            CardVersion = "card-version",
+            PersonaJson = "{}",
+        });
+        await db.SaveChangesAsync();
+        var service = new SpeakingSimulationV11EvidenceCaptureService(
+            db,
+            new OetLearner.Api.Tests.InMemoryFileStorage(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SpeakingSimulationV11EvidenceCaptureService>.Instance);
+
+        await service.CaptureAsync(session.Id, CancellationToken.None);
+        await service.CaptureAsync(session.Id, CancellationToken.None);
+
+        Assert.Single(await db.SpeakingSimulationV11CardTimingSnapshots.ToListAsync());
+    }
+
+    [Fact]
     public async Task Capture_records_overlap_fillers_jargon_and_source_timestamps()
     {
         await using var db = CreateDb();
