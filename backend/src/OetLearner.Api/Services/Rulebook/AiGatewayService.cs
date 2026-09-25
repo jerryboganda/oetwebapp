@@ -91,7 +91,7 @@ public sealed class AiGatewayService(
     /// grading runs Claude Sonnet 5 with maximum reasoning (adaptive thinking,
     /// effort "max"). Thinking tokens count against max_tokens, so grading gets
     /// ample room - the old 4096 cap truncated the scored JSON.</summary>
-    internal const int GradingMaxTokens = 64_000;
+    internal const int GradingMaxTokens = 128_000; // claude-sonnet-5 output maximum
 
     internal static bool GradingMaxReasoning(string featureCode)
         => string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
