@@ -215,7 +215,8 @@ Rules:
                 MaxTokens = 6000,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 // Free sample (server-derived from the bound use, never the request).
-                FreeSampleGrant = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct),
+                FreeSampleGrant = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct)
+                    || await SpeakingCreditSettlement.IsCreditFundedAsync(db, session, ct),
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
