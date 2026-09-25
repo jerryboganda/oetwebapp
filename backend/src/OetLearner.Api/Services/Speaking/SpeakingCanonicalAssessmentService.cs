@@ -181,6 +181,11 @@ public sealed class SpeakingCanonicalAssessmentService(
     public async Task AssessNowAsync(string sessionId, CancellationToken ct)
     {
         var ticket = await EnqueueAsync(sessionId, ct);
+        // Exactly one runner per session: /submit hands the operation to the
+        // worker and the page then calls /ai-assess, so both used to grade at
+        // once (production 25 Sep 2026: duplicate v1.1 turn-evidence rows, 500).
+        // Whoever loses the claim simply leaves the running/finished grade alone.
+        if (!await TryClaimDirectRunAsync(ticket.OperationId, ct)) return;
         try
         {
             if (await UsesV11Async(sessionId, ct))
@@ -220,6 +225,44 @@ public sealed class SpeakingCanonicalAssessmentService(
             await MarkOperationAsync(ticket.OperationId, AiOperationState.FailedTerminal, nextAttemptAt: null, ct);
             throw;
         }
+    }
+
+    private async Task<bool> TryClaimDirectRunAsync(string operationId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var seen = await db.AiOperations.AsNoTracking()
+            .Where(o => o.Id == operationId)
+            .Select(o => new { o.State, o.LeaseOwner, o.LeaseExpiresAt })
+            .FirstOrDefaultAsync(ct);
+        var claimable = seen is not null
+            && (seen.State is AiOperationState.Queued or AiOperationState.RetryScheduled
+                    or AiOperationState.FailedTerminal or AiOperationState.Indeterminate
+                || (seen.State == AiOperationState.Leased && (seen.LeaseExpiresAt is null || seen.LeaseExpiresAt < now)));
+        if (!claimable) return false;
+
+        var owner = $"assess-now:{Guid.NewGuid():N}";
+        var leaseUntil = now.AddMinutes(10);
+        if (db.Database.IsRelational())
+        {
+            // Compare-and-swap on the state + lease we just read, so exactly one
+            // concurrent claimer (worker or request) wins.
+            return await db.AiOperations
+                .Where(o => o.Id == operationId && o.State == seen!.State && o.LeaseOwner == seen.LeaseOwner)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(o => o.State, AiOperationState.Leased)
+                    .SetProperty(o => o.LeaseOwner, owner)
+                    .SetProperty(o => o.LeaseExpiresAt, leaseUntil)
+                    .SetProperty(o => o.UpdatedAt, now), ct) == 1;
+        }
+
+        // In-memory test provider: no ExecuteUpdate; single-threaded anyway.
+        var op = await db.AiOperations.FirstAsync(o => o.Id == operationId, ct);
+        op.State = AiOperationState.Leased;
+        op.LeaseOwner = owner;
+        op.LeaseExpiresAt = leaseUntil;
+        op.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
