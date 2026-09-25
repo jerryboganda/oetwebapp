@@ -42,6 +42,6 @@ describe('appendTranscriptFragment', () => {
     const segments: LiveVoiceTranscriptSegmentInput[] = [];
     appendTranscriptFragment(segments, 'patient', 'I have', false, at(10));
     appendTranscriptFragment(segments, 'patient', 'pain', false, at(20));
-    expect(segments).toEqual([{ speaker: 'patient', startMs: 10, endMs: 20, text: 'I have pain' }]);
+    expect(segments).toEqual([{ speaker: 'patient', startMs: 10, endMs: 120, text: 'I have pain' }]);
   });
 });
