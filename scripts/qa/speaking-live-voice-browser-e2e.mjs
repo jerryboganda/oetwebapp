@@ -6,7 +6,7 @@ import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
-const { QA_EMAIL, QA_PASSWORD, CARD_ID, CANDIDATE_WAV, SPEAK_SECONDS = '110', VOICE_PROVIDER = '' } = process.env;
+const { QA_EMAIL, QA_PASSWORD, QA_DEVICE_ID = '', CARD_ID, CANDIDATE_WAV, SPEAK_SECONDS = '110', VOICE_PROVIDER = '' } = process.env;
 const out = 'live-voice-e2e';
 fs.mkdirSync(out, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -23,6 +23,9 @@ const context = await browser.newContext({ ...devices['Pixel 7'], permissions: [
 // ?voiceProvider=<p> on the session page selects the provider; add it to the
 // client-side navigation into /speaking/sessions/{id}. GPT-Live talks over a
 // WebRTC data channel, so mirror its events where the test can read them.
+// A fresh CI browser is an unknown device (emailed-code verification); reuse
+// the QA learner's already-approved device identity (lib/device-id.ts).
+if (QA_DEVICE_ID) await context.addInitScript((id) => { try { localStorage.setItem('oet_device_id', id); } catch { /* cookie fallback */ } }, QA_DEVICE_ID);
 await context.addInitScript((provider) => {
   window.__voiceEvents = [];
   const createDataChannel = RTCPeerConnection.prototype.createDataChannel;
@@ -96,7 +99,8 @@ try {
   await page.waitForURL(/\/speaking\/sessions\/[^/?]+(\?|$)/, { timeout: 60_000 });
   await page.getByTestId('speaking-mic-indicator').waitFor({ timeout: 60_000 });
   const start = page.getByRole('button', { name: 'Start speaking' });
-  if (await start.isVisible().catch(() => false)) await start.click();
+  // Auto-start may already be connecting (button shown but disabled); click only when needed.
+  if (await start.isEnabled({ timeout: 2_000 }).catch(() => false)) await start.click({ timeout: 5_000 }).catch(() => undefined);
   await page.getByText(/Live — the patient is listening|Patient speaking/).waitFor({ timeout: 45_000 });
   log('live voice connected');
   await shot('3-active-live');
@@ -115,10 +119,12 @@ try {
   const deadline = Date.now() + 12 * 60_000; // max-reasoning grading takes ~7-8 min
   let graded = false;
   while (Date.now() < deadline) {
+    // Let the page render (not its loading skeleton) before reading it.
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
     const text = await page.locator('body').innerText();
     if (/Try grading again/i.test(text)) throw new Error('Grading failed on the results page.');
     if (!/processing|being graded|analysing|Check again/i.test(text) && /\d{3}\s*\/\s*500|criteri/i.test(text)) { graded = true; break; }
-    await page.waitForTimeout(10_000);
+    await page.waitForTimeout(30_000); // gentle: 10 s reloads tripped the API rate limit
     await page.reload();
   }
   await shot('5-result');

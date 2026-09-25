@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
@@ -117,10 +116,8 @@ public static class SpeakingSessionEndpoints
             .Produces<SpeakingAiAssessmentProjection>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
-        learner.MapGet("/{id}/transcript", GetTranscriptAsync)
-            .WithSummary("Get the latest transcript revision for the caller's own session.")
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+        // GET /{id}/transcript is served by SpeakingTranscriptionEndpoints; a second
+        // mapping here made every transcript read fail with AmbiguousMatchException.
 
         learner.MapGet("/{id}/clock", GetClockAsync)
             .WithSummary("Authoritative server-computed session clock (WS1, §1.2/§22.5).")
@@ -393,62 +390,6 @@ public static class SpeakingSessionEndpoints
         }
 
         return Results.Accepted(value: new { status = "received" });
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // GET /v1/speaking/sessions/{id}/transcript
-    // ─────────────────────────────────────────────────────────────────
-    private static async Task<IResult> GetTranscriptAsync(
-        HttpContext http,
-        string id,
-        LearnerDbContext db,
-        SpeakingSessionService sessions,
-        CancellationToken ct)
-    {
-        var userId = ResolveUserId(http);
-        _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
-
-        var transcript = await db.SpeakingTranscripts.AsNoTracking()
-            .Where(t => t.SpeakingSessionId == id && t.IsLatest)
-            .OrderByDescending(t => t.GeneratedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (transcript is null)
-        {
-            return Results.NotFound(new
-            {
-                errorCode = "speaking_transcript_not_found",
-                message = "No transcript has been generated for this session yet.",
-            });
-        }
-
-        return Results.Ok(new
-        {
-            transcriptId = transcript.Id,
-            sessionId = transcript.SpeakingSessionId,
-            provider = transcript.Provider,
-            language = transcript.Language,
-            wordCount = transcript.WordCount,
-            meanConfidence = transcript.MeanConfidence,
-            isLatest = transcript.IsLatest,
-            generatedAt = transcript.GeneratedAt,
-            segments = ParseSegments(transcript.SegmentsJson),
-        });
-    }
-
-    private static JsonElement ParseSegments(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) json = "[]";
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
-        }
-        catch
-        {
-            using var fallback = JsonDocument.Parse("[]");
-            return fallback.RootElement.Clone();
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────

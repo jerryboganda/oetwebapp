@@ -171,6 +171,27 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         }
     }
 
+    // Two endpoints on the same method + route shape (e.g. {id} vs {sessionId})
+    // throw AmbiguousMatchException at request time: production 25 Sep 2026,
+    // every GET /v1/speaking/sessions/{id}/transcript returned 500.
+    [Fact]
+    public void SpeakingRoutes_HaveNoAmbiguousDuplicates()
+    {
+        using var client = _factory.CreateClient();
+        var duplicates = _factory.Services.GetRequiredService<IEnumerable<EndpointDataSource>>()
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => NormalizeRoutePattern(endpoint.RoutePattern.RawText).StartsWith("/v1/speaking/", StringComparison.Ordinal))
+            .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
+                .Select(method => $"{method} {System.Text.RegularExpressions.Regex.Replace(NormalizeRoutePattern(endpoint.RoutePattern.RawText), @"\{[^}]+\}", "{}")}"))
+            .GroupBy(key => key, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        Assert.Empty(duplicates);
+    }
+
     private static string NormalizeRoutePattern(string? routePattern)
         => string.IsNullOrWhiteSpace(routePattern) ? string.Empty : routePattern.TrimEnd('/');
 
