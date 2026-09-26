@@ -102,6 +102,11 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     ...mediaCdnOrigins,
     'https://video.bunnycdn.com',
     'https://*.googleapis.com',
+    // Gemini Live AI patient: the browser opens this WebSocket itself with an
+    // ephemeral token. Without it every Gemini role-play failed to connect
+    // ("The Gemini Live connection could not be established"). OpenAI GPT-Live
+    // uses WebRTC, which connect-src does not govern.
+    'wss://generativelanguage.googleapis.com',
   ].join(' ');
 
   const directives = [
