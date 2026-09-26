@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendTranscriptFragment } from '../useSpeakingRealtimeVoice';
+import { MAX_SEGMENT_CHARS, appendTranscriptFragment } from '../useSpeakingRealtimeVoice';
 import type { LiveVoiceTranscriptSegmentInput } from '@/lib/api/speaking-live-voice';
 
 const at = (startMs: number, endMs = startMs + 100) => ({ startMs, endMs });
@@ -43,5 +43,16 @@ describe('appendTranscriptFragment', () => {
     appendTranscriptFragment(segments, 'patient', 'I have', false, at(10));
     appendTranscriptFragment(segments, 'patient', 'pain', false, at(20));
     expect(segments).toEqual([{ speaker: 'patient', startMs: 10, endMs: 120, text: 'I have pain' }]);
+  });
+
+  it('starts a new segment before one exceeds the server limit', () => {
+    // Production 26 Sep 2026: a silent patient left 5 minutes of candidate
+    // speech in one segment and the transcript could not be saved.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    const sentence = 'I will now explain the next part of your care plan in some detail. ';
+    for (let i = 0; i < 100; i += 1) appendTranscriptFragment(segments, 'candidate', sentence, true, at(i * 1_000), true);
+    expect(segments.length).toBeGreaterThan(1);
+    expect(Math.max(...segments.map((s) => s.text.length))).toBeLessThanOrEqual(MAX_SEGMENT_CHARS);
+    expect(segments.map((s) => s.text).join('')).toBe(sentence.repeat(100));
   });
 });
