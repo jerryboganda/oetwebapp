@@ -53,9 +53,11 @@ public enum AiOperationReplayDecision
 ///   <see cref="AiOperationReplayDecision.CreateNewAttempt"/>; a learner
 ///   legitimately re-requesting the same action tomorrow is new work;</item>
 ///   <item><see cref="AiOperationState.FailedTerminal"/> /
-///   <see cref="AiOperationState.Cancelled"/> ⇒
+///   <see cref="AiOperationState.Cancelled"/> /
+///   <see cref="AiOperationState.BlockedBudget"/> ⇒
 ///   <see cref="AiOperationReplayDecision.CreateNewAttempt"/>; these are the
-///   two states that prove no usable result exists AND no ambiguity;</item>
+///   states that prove no usable result exists AND no ambiguity (a budget
+///   block is refused before any provider call);</item>
 ///   <item><see cref="AiOperationState.Indeterminate"/> ⇒
 ///   <see cref="AiOperationReplayDecision.Duplicate"/>, ALWAYS. An ambiguous
 ///   outcome may already have been billed, so it is never auto-retried; a
@@ -98,7 +100,14 @@ public static class AiOperationReplayPolicy
     /// </summary>
     public static bool IsSafeFailure(AiOperationState state) => state is
         AiOperationState.FailedTerminal or
-        AiOperationState.Cancelled;
+        AiOperationState.Cancelled or
+        // Set only when the budget reservation is refused BEFORE any provider
+        // call, so it can never have been billed. Treating it as final locked
+        // the resource for good: production 26 Sep 2026, a Speaking grade
+        // blocked by an exhausted daily budget stayed ungradable ("Try grading
+        // again" returned the blocked operation) even after the budget was
+        // raised. A new attempt simply re-checks the budget.
+        AiOperationState.BlockedBudget;
 
     public static AiOperationReplayDecision Decide(
         AiOperationState state,
@@ -110,7 +119,7 @@ public static class AiOperationReplayPolicy
         if (IsSafeFailure(state)) return AiOperationReplayDecision.CreateNewAttempt;
 
         // Completed is the only state where age matters. Everything else that
-        // reaches here (Indeterminate / BlockedBudget / SkippedNoEvidence) is
+        // reaches here (Indeterminate / SkippedNoEvidence) is
         // deliberately non-replayable: either it may already have been billed,
         // or a different layer (W3 budget, evidence gate) owns re-arming it.
         if (state != AiOperationState.Completed) return AiOperationReplayDecision.Duplicate;

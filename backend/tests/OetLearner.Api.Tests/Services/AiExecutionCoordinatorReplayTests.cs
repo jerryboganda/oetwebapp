@@ -219,7 +219,7 @@ public sealed class AiExecutionCoordinatorReplayTests : IAsyncDisposable
     [InlineData(AiOperationState.RetryScheduled, AiOperationReplayDecision.WaitInFlight)]
     [InlineData(AiOperationState.Completed, AiOperationReplayDecision.Duplicate)]
     [InlineData(AiOperationState.Indeterminate, AiOperationReplayDecision.Duplicate)]
-    [InlineData(AiOperationState.BlockedBudget, AiOperationReplayDecision.Duplicate)]
+    [InlineData(AiOperationState.BlockedBudget, AiOperationReplayDecision.CreateNewAttempt)]
     [InlineData(AiOperationState.SkippedNoEvidence, AiOperationReplayDecision.Duplicate)]
     [InlineData(AiOperationState.FailedTerminal, AiOperationReplayDecision.CreateNewAttempt)]
     [InlineData(AiOperationState.Cancelled, AiOperationReplayDecision.CreateNewAttempt)]
@@ -244,7 +244,8 @@ public sealed class AiExecutionCoordinatorReplayTests : IAsyncDisposable
         // Age must NEVER unlock an ambiguous or externally-owned terminal state.
         Assert.Equal(AiOperationReplayDecision.Duplicate,
             AiOperationReplayPolicy.Decide(AiOperationState.Indeterminate, ancient, now, window));
-        Assert.Equal(AiOperationReplayDecision.Duplicate,
+        // A budget block happens before any provider call: always re-checkable.
+        Assert.Equal(AiOperationReplayDecision.CreateNewAttempt,
             AiOperationReplayPolicy.Decide(AiOperationState.BlockedBudget, ancient, now, window));
     }
 
