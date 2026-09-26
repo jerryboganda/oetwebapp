@@ -79,7 +79,7 @@ public sealed class AiBudgetAdminExemptionTests
         using var db = dbFactory();
         await SeedGlobalPolicyAsync(db);
         // The platform-wide $5 daily ceiling is fully spent.
-        await SeedPeriodAsync(db, AiBudgetClasses.GlobalScope, DayKey, limitUsd: 5m, usedUsd: 5m);
+        await SeedPeriodAsync(db, AiBudgetClasses.GlobalScope, DayKey, limitUsd: AiBudgetClasses.PlatformDailyCapUsd, usedUsd: AiBudgetClasses.PlatformDailyCapUsd);
 
         var budget = new AiBudgetService(
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<AiBudgetService>.Instance);
@@ -123,7 +123,7 @@ public sealed class AiBudgetAdminExemptionTests
         await using var servicesOwner = services;
         using var db = dbFactory();
         await SeedGlobalPolicyAsync(db);
-        await SeedPeriodAsync(db, AiBudgetClasses.GlobalScope, DayKey, limitUsd: 5m, usedUsd: 5m);
+        await SeedPeriodAsync(db, AiBudgetClasses.GlobalScope, DayKey, limitUsd: AiBudgetClasses.PlatformDailyCapUsd, usedUsd: AiBudgetClasses.PlatformDailyCapUsd);
 
         var budget = new AiBudgetService(
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<AiBudgetService>.Instance);
@@ -183,8 +183,8 @@ public sealed class AiBudgetAdminExemptionTests
         await using var servicesOwner = services;
         using var db = dbFactory();
         await SeedGlobalPolicyAsync(db, monthlyBudgetUsd: 50m);
-        await SeedPeriodAsync(db, AiBudgetClasses.ScoringCriticalScope, MonthKey, limitUsd: 35m, usedUsd: 35m);
-        await SeedPeriodAsync(db, AiBudgetClasses.ScoringCriticalScope, DayKey, limitUsd: 3.5m, usedUsd: 3.5m);
+        await SeedPeriodAsync(db, AiBudgetClasses.ScoringCriticalScope, MonthKey, limitUsd: AiBudgetClasses.ScoringMonthlyLimitUsd, usedUsd: AiBudgetClasses.ScoringMonthlyLimitUsd);
+        await SeedPeriodAsync(db, AiBudgetClasses.ScoringCriticalScope, DayKey, limitUsd: AiBudgetClasses.ScoringDailyLimitUsd, usedUsd: AiBudgetClasses.ScoringDailyLimitUsd);
         await SeedPeriodAsync(db, AiBudgetClasses.InteractiveLearningScope, MonthKey, limitUsd: 10m, usedUsd: 10m);
         await SeedPeriodAsync(db, AiBudgetClasses.InteractiveLearningScope, DayKey, limitUsd: 1m, usedUsd: 1m);
 

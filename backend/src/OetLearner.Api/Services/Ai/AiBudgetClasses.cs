@@ -29,11 +29,14 @@ public static class AiBudgetClasses
     public const string InteractiveLearningScope = "class:InteractiveLearning";
     public const string AdminBatchScope = "class:AdminBatch";
 
-    public const decimal ScoringDailyLimitUsd = 3.50m;
-    public const decimal ScoringMonthlyLimitUsd = 35.00m;
+    // Owner decision 2026-09-26: max-reasoning Sonnet 5 grading costs about
+    // $0.65-0.85 per Speaking role-play, so the old $3.50/$5 day caps allowed
+    // only ~6 grades a day platform-wide. Raised to $30/day and $400/month.
+    public const decimal ScoringDailyLimitUsd = 30.00m;
+    public const decimal ScoringMonthlyLimitUsd = 400.00m;
     public const decimal InteractiveDailyLimitUsd = 1.00m;
     public const decimal InteractiveMonthlyLimitUsd = 10.00m;
-    public const decimal PlatformDailyCapUsd = 5.00m;
+    public const decimal PlatformDailyCapUsd = 30.00m;
     public const decimal PlatformMonthlyCapUsd = 50.00m;
 
     /// <summary>
