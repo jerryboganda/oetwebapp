@@ -210,22 +210,23 @@ export default function SpeakingSessionResultsPage() {
       const sessionDetail = await getSpeakingSession(sessionId);
       const visibilityDto = await getSpeakingResultVisibility(sessionDetail.card.cardId).catch(() => null);
 
+      const statusResponse = await getSpeakingSessionResults(sessionId).catch(() => null);
+      // v1.1 report endpoints exist only for v1.1-scored sessions.
+      const usesV11 = statusResponse?.usesV11 === true;
       const assessmentPromise = learnerGetDualAssessment(sessionId).catch(() => null);
-      const v11Promise = getSpeakingSimulationV11Assessment(sessionId).catch(() => null);
-      const v11TutorOverridePromise = getSpeakingSimulationV11TutorOverride(sessionId).catch(() => null);
+      const v11Promise = usesV11 ? getSpeakingSimulationV11Assessment(sessionId).catch(() => null) : null;
+      const v11TutorOverridePromise = usesV11 ? getSpeakingSimulationV11TutorOverride(sessionId).catch(() => null) : null;
       const transcriptPromise = visibilityDto?.showTranscript !== false
         ? getSpeakingSessionTranscript(sessionId).catch(() => null)
         : Promise.resolve(null);
 
-      const statusPromise = getSpeakingSessionResults(sessionId).catch(() => null);
       const freePromise = listFreeSamples('speaking').catch(() => []);
 
-      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse, statusResponse, freeRows] = await Promise.all([
+      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse, freeRows] = await Promise.all([
         v11Promise,
         assessmentPromise,
         transcriptPromise,
         v11TutorOverridePromise,
-        statusPromise,
         freePromise,
       ]);
       setStatus(statusResponse);

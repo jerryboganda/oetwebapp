@@ -353,6 +353,9 @@ public static class SpeakingSessionEndpoints
             failureReason = state.FailureReason,
             isFreeSample,
             cardId = session.RolePlayCardId,
+            // Pages call the v1.1 report endpoints only when true; otherwise
+            // they 404 on every poll.
+            usesV11 = await canonical.UsesV11Async(id, ct),
         });
     }
 

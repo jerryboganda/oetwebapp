@@ -7,12 +7,14 @@ const {
   mockAiAssess,
   mockDual,
   mockListFreeSamples,
+  mockV11Assessment,
 } = vi.hoisted(() => ({
   mockGetSession: vi.fn(),
   mockGetResults: vi.fn(),
   mockAiAssess: vi.fn(),
   mockDual: vi.fn(),
   mockListFreeSamples: vi.fn(),
+  mockV11Assessment: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'sess-1' }) }));
@@ -39,7 +41,7 @@ vi.mock('@/lib/api/speaking-sessions', () => ({
 vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples: mockListFreeSamples }));
 vi.mock('@/lib/api/speaking-result-visibility', () => ({ getSpeakingResultVisibility: vi.fn().mockResolvedValue(null) }));
 vi.mock('@/lib/api/speaking-simulation-v11', () => ({
-  getSpeakingSimulationV11Assessment: vi.fn().mockResolvedValue(null),
+  getSpeakingSimulationV11Assessment: mockV11Assessment,
   getSpeakingSimulationV11TutorOverride: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('@/lib/analytics/speaking-events', () => ({ trackSpeaking: vi.fn() }));
@@ -62,12 +64,25 @@ describe('Speaking session results: processing → result, never a dead end', ()
     mockGetResults.mockResolvedValue({ assessmentState: 'processing', retryable: false, failureReason: null });
     mockListFreeSamples.mockResolvedValue([]);
     mockAiAssess.mockResolvedValue({ state: 'processing' });
+    mockV11Assessment.mockResolvedValue(null);
   });
 
   it('shows the processing state while grading runs', async () => {
     render(<SpeakingSessionResultsPage />);
     expect(await screen.findByText('Grading your role-play…')).toBeInTheDocument();
     expect(screen.getByTestId('dual-assessment')).toBeInTheDocument();
+  });
+
+  it('never calls the v1.1 report endpoints for a classic-graded session (they 404 on every poll)', async () => {
+    render(<SpeakingSessionResultsPage />);
+    expect(await screen.findByText('Grading your role-play…')).toBeInTheDocument();
+    expect(mockV11Assessment).not.toHaveBeenCalled();
+  });
+
+  it('loads the v1.1 report when the session is v1.1-scored', async () => {
+    mockGetResults.mockResolvedValue({ assessmentState: 'processing', retryable: false, failureReason: null, usesV11: true });
+    render(<SpeakingSessionResultsPage />);
+    await waitFor(() => expect(mockV11Assessment).toHaveBeenCalledWith('sess-1'));
   });
 
   it('offers "Try grading again" on a failed, retryable grade and re-requests /ai-assess', async () => {

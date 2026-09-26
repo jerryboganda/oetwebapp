@@ -340,6 +340,8 @@ export interface SpeakingSessionResultsStatus {
   assessmentState: SpeakingAssessmentState | string;
   retryable: boolean;
   failureReason: string | null;
+  /** True when the session is scored by the v1.1 simulation assessor (its report endpoints exist). */
+  usesV11?: boolean;
 }
 
 /** Grading state for the results page. Resolves null on 404 (nothing submitted yet). */

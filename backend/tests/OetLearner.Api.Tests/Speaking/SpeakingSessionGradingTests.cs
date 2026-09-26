@@ -431,6 +431,33 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AssessNow_CallerGoneMidGrade_HandsTheGradeBackToTheWorker()
+    {
+        // Production 26 Sep 2026: the exam results page's 30 s request timeout
+        // cancelled Card B's grade, which then sat leased (stuck) for 30 minutes.
+        var gateway = new SwitchableAiGateway();
+        var canonical = BuildCanonical(gateway, reservations: null);
+        var sessions = new SpeakingSessionService(_db, compliance: BuildCompliance());
+        var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
+        var sessionId = created.SessionId;
+        await sessions.FinishWarmupAsync(UserId, sessionId, default);
+        await sessions.StartRolePlayAsync(UserId, sessionId, default);
+        await sessions.EndSessionAsync(UserId, sessionId, default);
+        SeedTranscript(sessionId);
+
+        using var aborted = new CancellationTokenSource();
+        gateway.OnComplete = aborted.Cancel;
+
+        await Assert.ThrowsAnyAsync<Exception>(() => canonical.AssessNowAsync(sessionId, aborted.Token));
+
+        var op = await _db.AiOperations.AsNoTracking()
+            .SingleAsync(o => o.ResourceId == sessionId && o.FeatureCode == AiFeatureCodes.SpeakingGrade);
+        Assert.Equal(AiOperationState.RetryScheduled, op.State);
+        Assert.Null(op.LeaseOwner);
+        Assert.NotNull(op.NextAttemptAt);
+    }
+
+    [Fact]
     public async Task PaidPracticeCard_IsCreditFunded_SoTheAiPlanGateDoesNotRefuseGrading()
     {
         // Production 25 Sep 2026: a learner on the default "free" AI plan paid
@@ -472,6 +499,7 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         {
             if (Fail) throw new InvalidOperationException("provider unreachable");
             OnComplete?.Invoke();
+            ct.ThrowIfCancellationRequested();
             return Task.FromResult(new AiGatewayResult
             {
                 Completion = ValidAssessmentJson(),

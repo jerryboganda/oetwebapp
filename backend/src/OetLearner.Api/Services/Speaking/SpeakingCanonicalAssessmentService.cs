@@ -203,7 +203,7 @@ public sealed class SpeakingCanonicalAssessmentService(
                 await classic.RunAssessmentAsync(sessionId, ct);
             }
 
-            await MarkOperationAsync(ticket.OperationId, AiOperationState.Completed, nextAttemptAt: null, ct);
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.Completed, nextAttemptAt: null, CancellationToken.None);
             if (creditReservations is not null)
             {
                 await SpeakingCreditSettlement.CommitIfGradedAsync(db, creditReservations, sessionId, ct);
@@ -223,12 +223,23 @@ public sealed class SpeakingCanonicalAssessmentService(
                 ct);
             throw;
         }
+        catch (Exception ex) when (ct.IsCancellationRequested)
+        {
+            // The caller went away mid-grade (request aborted, host shutting
+            // down). Hand the grade straight back to the worker instead of
+            // leaving it leased for 30 minutes (production 26 Sep 2026: exam
+            // Card B cancelled and stuck). The caller's token is dead, so the
+            // bookkeeping must not use it.
+            logger.LogWarning(ex, "Speaking canonical assessment interrupted for session {SessionId}; requeued.", sessionId);
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.RetryScheduled, clock.GetUtcNow(), CancellationToken.None);
+            throw;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Speaking canonical assessment failed for session {SessionId}.", sessionId);
             // Terminal for this run but learner-retryable: POST /ai-assess
             // re-runs it and the credit hold is still only committed once.
-            await MarkOperationAsync(ticket.OperationId, AiOperationState.FailedTerminal, nextAttemptAt: null, ct);
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.FailedTerminal, nextAttemptAt: null, CancellationToken.None);
             throw;
         }
     }
