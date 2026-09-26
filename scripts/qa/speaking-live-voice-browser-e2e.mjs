@@ -38,10 +38,34 @@ await context.addInitScript((provider) => {
   window.__voiceEvents = [];
   window.__audioOnsets = [];
   window.__micStartedAt = null;
+  window.__docId = Math.random().toString(36).slice(2);
+  // Speech spans [start, end] per side, from the audio itself: the candidate's
+  // mic and the patient's remote track (barge-in, talk-over, silence checks).
+  window.__micSpans = [];
+  window.__patientSpans = [];
+  const spans = (stream, list) => {
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    let open = false;
+    let lastLoud = 0;
+    setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      const now = Date.now();
+      if (Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length) > 0.01) {
+        if (!open) list.push([now, now]);
+        open = true;
+        lastLoud = now;
+        list[list.length - 1][1] = now;
+      } else if (open && now - lastLoud > 400) open = false;
+    }, 25);
+  };
   const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = async (constraints) => {
     const stream = await getUserMedia(constraints);
     window.__micStartedAt ??= Date.now();
+    try { spans(stream, window.__micSpans); } catch { /* best effort */ }
     return stream;
   };
   const chunks = [];
@@ -50,6 +74,7 @@ await context.addInitScript((provider) => {
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       recorder.start(1000);
+      spans(stream, window.__patientSpans);
       const ctx = new AudioContext();
       const analyser = ctx.createAnalyser();
       ctx.createMediaStreamSource(stream).connect(analyser);
@@ -137,7 +162,34 @@ page.on('websocket', (ws) => {
   });
   ws.on('close', () => { stability.socketCloses.push(Date.now()); log('Gemini Live socket closed'); });
 });
-page.on('console', (m) => { if (m.type() === 'error') log('console.error', m.text().replace(/access_token=[^'" ]+/g, 'access_token=REDACTED').slice(0, 600)); });
+// Every browser-side error of the run, for the "no socket / page errors" check.
+const errors = { console: [], page: [], http: [], requestFailed: [] };
+const redact = (t) => t.replace(/access_token=[^'" ]+/g, 'access_token=REDACTED').slice(0, 600);
+page.on('console', (m) => { if (m.type() === 'error') { errors.console.push(redact(m.text())); log('console.error', redact(m.text())); } });
+page.on('pageerror', (e) => { errors.page.push(redact(String(e))); log('pageerror', redact(String(e))); });
+page.on('requestfailed', (r) => {
+  const reason = r.failure()?.errorText ?? '';
+  // Navigations and polls abandoned by a page change report ERR_ABORTED; not a failure.
+  if (!/ERR_ABORTED/.test(reason)) errors.requestFailed.push(`${r.method()} ${redact(r.url())} ${reason}`);
+});
+const sessionIds = new Set();
+let examDto = null;
+page.on('response', async (r) => {
+  const url = r.url();
+  for (const m of url.matchAll(/\/sessions\/(sps_[a-f0-9]+)/g)) sessionIds.add(m[1]);
+  if (r.status() >= 400 && /oetwithdrhesham|googleapis|openai/.test(url)) errors.http.push(`${r.status()} ${r.request().method()} ${redact(url)}`);
+  if (/\/v1\/speaking\/exams\/[^/?]+$/.test(url) && r.ok()) examDto = await r.json().catch(() => examDto);
+});
+// Snapshot the page's audio spans and data-channel events every few seconds,
+// keyed by document, so nothing is lost when a card or the results page loads.
+const snapshots = {};
+const snapshot = async () => {
+  const s = await page.evaluate(() => ({
+    docId: window.__docId, events: window.__voiceEvents ?? [], mic: window.__micSpans ?? [], patient: window.__patientSpans ?? [],
+  })).catch(() => null);
+  if (s?.docId && (s.events.length || s.mic.length)) snapshots[s.docId] = s;
+};
+const snapshotTimer = setInterval(snapshot, 3_000);
 
 const readOpenAi = async () => {
   const state = await page.evaluate(() => ({ events: window.__voiceEvents ?? [], onsets: window.__audioOnsets ?? [], micStartedAt: window.__micStartedAt }))
@@ -167,6 +219,53 @@ function latencies(micStartedAt, onsets) {
 function geminiOnsets(times) {
   return times.filter((t, i) => i === 0 || t - times[i - 1] > 500);
 }
+// Conversation behaviour from the two speech tracks (candidate mic, patient audio).
+const merge = (list) => list.slice().sort((a, b) => a[0] - b[0]).reduce((acc, [s, e]) => {
+  const last = acc.at(-1);
+  if (last && s <= last[1] + 400) last[1] = Math.max(last[1], e);
+  else acc.push([s, e]);
+  return acc;
+}, []);
+function conversation(micRaw, patientRaw) {
+  const mic = merge(micRaw).filter(([s, e]) => e - s >= 300);
+  const patient = merge(patientRaw).filter(([s, e]) => e - s >= 200);
+  // Barge-in: the candidate starts while the patient has been talking >= 500 ms; the patient must stop.
+  const bargeIns = mic.flatMap(([c0]) => {
+    const p = patient.find(([p0, p1]) => p0 <= c0 - 500 && p1 > c0);
+    return p ? [{ at: c0, patientStoppedAfterMs: p[1] - c0 }] : [];
+  });
+  // Talk-over: the patient starts speaking while the candidate is mid-utterance.
+  const talkOver = patient.flatMap(([p0, p1]) => {
+    const c = mic.find(([c0, c1]) => p0 > c0 + 300 && p0 < c1 - 300);
+    return c ? [{ at: p0, overlapMs: Math.min(p1, c[1]) - p0, patientMs: p1 - p0 }] : [];
+  });
+  // Silences: candidate gaps >= 15 s; the patient must still answer the next line.
+  const silences = [];
+  for (let i = 1; i < mic.length; i += 1) {
+    const [gapStart, gapEnd] = [mic[i - 1][1], mic[i][0]];
+    if (gapEnd - gapStart < 15_000) continue;
+    const next = mic[i + 1]?.[0] ?? Infinity;
+    const reply = patient.find(([p0]) => p0 > mic[i][1] && p0 < Math.min(next, mic[i][1] + 15_000));
+    silences.push({
+      gapMs: gapEnd - gapStart,
+      patientSpokeDuringGapMs: patient.reduce((sum, [p0, p1]) => sum + Math.max(0, Math.min(p1, gapEnd) - Math.max(p0, gapStart)), 0),
+      repliedToNextLineMs: reply ? reply[0] - mic[i][1] : null,
+    });
+  }
+  const latency = mic.flatMap(([, e], i) => {
+    const next = mic[i + 1]?.[0] ?? Infinity;
+    const p = patient.find(([p0]) => p0 > e && p0 < Math.min(next, e + 15_000));
+    return p ? [p[0] - e] : [];
+  }).sort((a, b) => a - b);
+  return {
+    candidateUtterances: mic.length, patientUtterances: patient.length, bargeIns, talkOver, silences,
+    latency: { samples: latency.length, medianMs: latency[Math.floor(latency.length / 2)] ?? null, p90Ms: latency[Math.floor(latency.length * 0.9)] ?? null },
+  };
+}
+// Anything an AI assistant says that a real patient would not.
+const OUT_OF_ROLE = /medical advice|as an ai\b|language model|\bi(?:'m| am) (?:an? )?(?:ai|artificial|virtual|assistant|chatbot)\b|not a (?:real )?(?:doctor|patient)\b|consult (?:a|your) (?:doctor|healthcare|medical)|i can(?:'t|not) (?:provide|give) (?:medical|a diagnosis)|role[- ]?play|simulation|delegat/i;
+const outOfRole = (text) => text.split(/(?<=[.!?])\s+/).filter((s) => OUT_OF_ROLE.test(s));
+
 function wav(pcm, rate = 24_000) {
   const header = Buffer.alloc(44);
   header.write('RIFF', 0); header.writeUInt32LE(36 + pcm.length, 4); header.write('WAVEfmt ', 8);
@@ -258,14 +357,32 @@ try {
       await shot(`3-after-card-${card}`);
     }
     metrics.providerCalls = providerCalls;
-    metrics.providerUsage = VOICE_PROVIDER === 'openai'
+    metrics.providerUsage = providerCalls.includes('openai/offer')
       ? await openAiUsage()
       : { usageMetadataFrames: gemini.usage.length, all: gemini.usage };
     await saveOpenAiAudio('patient-audio-exam');
     log('exam submitted', page.url());
-    const text = await waitForGrade('exam', 20);
+    const text = await waitForGrade('exam', 25);
     await shot('5-result');
     log('RESULT PAGE:\n' + text.slice(0, 3000));
+    metrics.examResult = text.match(/\d{3}\s*\/\s*500[^\n]*/g) ?? [];
+    // After completion: the combined result survives a reload, and each card's
+    // own results page and transcript load.
+    const resultsUrl = page.url();
+    await page.reload();
+    metrics.examResultAfterReload = (await waitForGrade('exam (reload)', 2)).match(/\d{3}\s*\/\s*500[^\n]*/g) ?? [];
+    metrics.cards = [];
+    for (const id of sessionIds) {
+      await page.goto(`${APP}/speaking/sessions/${id}/results`);
+      const cardText = await waitForGrade(`card ${id}`, 5);
+      await page.getByText('Transcript', { exact: true }).first().click({ timeout: 10_000 }).catch(() => undefined);
+      await page.waitForTimeout(2_000);
+      const body = await page.locator('body').innerText();
+      await shot(`6-card-${id}-transcript`);
+      metrics.cards.push({ sessionId: id, score: cardText.match(/\d{3}\s*\/\s*500/)?.[0] ?? null, transcriptChars: body.length, transcriptShown: /doctor smith|how can i help|think about/i.test(body) });
+    }
+    metrics.examDto = examDto;
+    await page.goto(resultsUrl);
   } else {
     await page.goto(`${APP}/speaking/roleplay/${CARD_ID}`);
     const consent = page.getByTestId('speaking-rules-consent');
@@ -319,6 +436,29 @@ try {
   failed = error;
   await shot('failure').catch(() => undefined);
 } finally {
+  clearInterval(snapshotTimer);
+  const docs = Object.values(snapshots);
+  const events = docs.flatMap((d) => d.events);
+  if (events.length) {
+    transcript.candidate = events.filter((e) => e.type === 'session.input_transcript.delta').map((e) => e.delta ?? '').join('');
+    transcript.patient = events.filter((e) => e.type === 'session.output_transcript.delta').map((e) => e.delta ?? '').join('');
+    stability.providerErrors = events.filter((e) => String(e.type).includes('error')).map((e) => JSON.stringify(e));
+    stability.sessionClosed = events.filter((e) => e.type === 'session.closed').map((e) => ({ reason: e.reason, usage: e.usage }));
+  }
+  metrics.conversation = conversation(docs.flatMap((d) => d.mic), docs.flatMap((d) => d.patient));
+  metrics.outOfRole = outOfRole(transcript.patient);
+  metrics.errors = errors;
+  metrics.providerCalls = providerCalls;
+  const c = metrics.conversation;
+  metrics.checks = {
+    liveProviderIsDefaultOpenAi: !VOICE_PROVIDER ? providerCalls.length > 0 && providerCalls.every((p) => p === 'openai/offer') : null,
+    bargeInStopsWithin1500ms: c.bargeIns.length ? c.bargeIns.every((b) => b.patientStoppedAfterMs <= 1_500) : null,
+    noPatientTalkOver: c.talkOver.every((t) => t.overlapMs < 1_000),
+    survivesSilences: c.silences.length ? c.silences.every((s) => s.repliedToNextLineMs !== null) && !stability.providerErrors.length : null,
+    staysInRole: metrics.outOfRole.length === 0,
+    noBrowserErrors: !errors.console.length && !errors.page.length && !errors.http.length && !errors.requestFailed.length,
+  };
+  log('CHECKS', JSON.stringify(metrics.checks), 'CONVERSATION', JSON.stringify(c));
   metrics.stability = stability;
   fs.writeFileSync(`${out}/transcript.json`, JSON.stringify(transcript, null, 2));
   fs.writeFileSync(`${out}/metrics.json`, JSON.stringify(metrics, null, 2));
@@ -326,7 +466,8 @@ try {
   log('PATIENT (AI):', transcript.patient.trim().slice(0, 6000));
   await browser.close();
 }
-if (failed) {
-  console.error(failed);
+const failedChecks = Object.entries(metrics.checks ?? {}).filter(([, ok]) => ok === false).map(([name]) => name);
+if (failed || failedChecks.length) {
+  console.error(failed ?? `Checks failed: ${failedChecks.join(', ')}`);
   process.exit(1);
 }
