@@ -22,6 +22,11 @@ on:
         type: choice
         options: [short, full-lactose, generic]
         default: short
+      voice:
+        description: Candidate TTS voice (piper = natural neural en-GB; espeak = robotic)
+        type: choice
+        options: [piper, espeak]
+        default: piper
       speak_seconds:
         description: Seconds of live conversation before submitting (practice mode)
         default: '110'
@@ -40,13 +45,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Candidate voice (espeak-ng, 16 kHz mono, 8 s gap after each line) + timeline
+      - name: Candidate voice (16 kHz mono, 8 s gap after each line) + timeline
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng sox >/dev/null
+          if [ "${{ inputs.voice }}" = piper ]; then
+            # Piper: free offline neural TTS (rhasspy/piper), British English voice.
+            curl -sSL -o piper.tgz https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz
+            tar -xzf piper.tgz
+            curl -sSL -o voice.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx
+            curl -sSL -o voice.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json
+          fi
           i=0; t=0; echo '[' > timeline.json
           while IFS= read -r line; do
             [ -z "$line" ] && continue
-            espeak-ng -v en-gb -s 150 -w "l$i.wav" "$line"
+            if [ "${{ inputs.voice }}" = piper ]; then
+              echo "$line" | ./piper/piper --model voice.onnx --output_file "l$i.wav" >/dev/null 2>&1
+            else
+              espeak-ng -v en-gb -s 150 -w "l$i.wav" "$line"
+            fi
             sox "l$i.wav" -r 16000 -c 1 -b 16 "s$i.wav"
             d=$(soxi -D "s$i.wav")
             sox "s$i.wav" "p$i.wav" pad 0 8
@@ -82,3 +98,4 @@ jobs:
           path: |
             live-voice-e2e/
             timeline.json
+            candidate.wav
