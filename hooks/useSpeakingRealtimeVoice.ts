@@ -205,6 +205,7 @@ export function useSpeakingRealtimeVoice(
   const flushPromiseRef = useRef(Promise.resolve());
   const geminiReadyRef = useRef(false);
   const stoppingRef = useRef(false);
+  const openAiClosedRef = useRef<(() => void) | null>(null);
 
   const closeTransport = useCallback(() => {
     geminiReadyRef.current = false;
@@ -361,6 +362,10 @@ export function useSpeakingRealtimeVoice(
       return;
     }
     if (type.includes('session.closed') || type.includes('session.ended')) {
+      if (stoppingRef.current) {
+        openAiClosedRef.current?.();
+        return;
+      }
       setError('The OpenAI realtime voice session ended. End the role-play to save the completed transcript.');
       setConnection('error');
       return;
@@ -503,7 +508,7 @@ export function useSpeakingRealtimeVoice(
     };
     peer.onconnectionstatechange = () => {
       if (peer.connectionState === 'connected') setConnection('connected');
-      if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
+      if (!stoppingRef.current && (peer.connectionState === 'failed' || peer.connectionState === 'disconnected')) {
         setError('The OpenAI realtime voice connection was interrupted.');
         setConnection('error');
       }
@@ -645,6 +650,24 @@ export function useSpeakingRealtimeVoice(
     setMicEnabled(false);
     setPhase('idle');
     try {
+      // GPT-Live bills until the session closes and confirms final usage only
+      // on session.closed; closing first also drains the last transcript deltas.
+      const channel = dataChannelRef.current;
+      if (provider === 'openai' && channel?.readyState === 'open') {
+        await new Promise<void>((resolve) => {
+          const timer = window.setTimeout(resolve, 5_000);
+          openAiClosedRef.current = () => {
+            window.clearTimeout(timer);
+            resolve();
+          };
+          try {
+            channel.send(JSON.stringify({ type: 'session.close' }));
+          } catch {
+            openAiClosedRef.current();
+          }
+        });
+        openAiClosedRef.current = null;
+      }
       await flushPromiseRef.current;
       await flushPendingTurn();
       await persistLiveVoiceTranscript(sessionId, {

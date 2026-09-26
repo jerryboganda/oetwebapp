@@ -64,6 +64,16 @@ describe('middleware CSP — Bunny Stream hosts', () => {
     // response code: n/a").
     expect(connectSrc).toContain('https://video.bunnycdn.com');
   });
+
+  it('allows the Gemini Live WebSocket used by the live AI patient', () => {
+    const response = proxy(new NextRequest('https://app.oetwithdrhesham.co.uk/speaking/sessions/sps_1'));
+    const connectSrc = (response.headers.get('content-security-policy') ?? '')
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('connect-src')) ?? '';
+
+    expect(connectSrc).toContain('wss://generativelanguage.googleapis.com');
+  });
 });
 
 describe('middleware CSP — Firebase Phone Auth / reCAPTCHA', () => {
