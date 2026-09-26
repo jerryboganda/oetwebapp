@@ -451,6 +451,8 @@ try {
   // Timed words + speech spans, to read what was said at each barge-in / overlap.
   fs.writeFileSync(`${out}/timeline-events.json`, JSON.stringify({
     words: events.filter((e) => /transcript\.delta$/.test(e.type)).map((e) => ({ at: e.__at, who: e.type.includes('input') ? 'candidate' : 'patient', text: e.delta })),
+    eventTypes: events.reduce((acc, e) => ({ ...acc, [e.type]: (acc[e.type] ?? 0) + 1 }), {}),
+    speechEvents: events.filter((e) => /speech|interrupt|cancel|turn/i.test(e.type)).map((e) => ({ at: e.__at, type: e.type })),
     candidateSpans: merge(docs.flatMap((d) => d.mic)),
     patientSpans: merge(docs.flatMap((d) => d.patient)),
   }));
