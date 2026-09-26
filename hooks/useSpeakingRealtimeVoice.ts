@@ -137,6 +137,35 @@ function audioRate(mimeType: unknown): number {
   return match ? Number(match[1]) || 24_000 : 24_000;
 }
 
+/**
+ * Appends a transcript fragment to the segment list. Consecutive fragments from
+ * one speaker extend one segment. With a provider timeline interval (`spoken`),
+ * a fragment spoken before the other speaker's latest segment began (late
+ * transcription) joins its own speaker's previous segment instead of splitting
+ * it. Returns true for such a late fragment.
+ */
+export function appendTranscriptFragment(
+  segments: LiveVoiceTranscriptSegmentInput[],
+  speaker: RealtimeVoiceSpeaker,
+  fragment: string,
+  exact: boolean,
+  at: { startMs: number; endMs: number },
+  spoken = false,
+): boolean {
+  const last = segments[segments.length - 1];
+  const late = spoken && last !== undefined && last.speaker !== speaker && at.startMs < last.startMs;
+  const target = late
+    ? [...segments].reverse().find((segment) => segment.speaker === speaker)
+    : last?.speaker === speaker ? last : undefined;
+  if (target) {
+    target.text = exact ? target.text + fragment : `${target.text} ${fragment}`;
+    target.endMs = Math.max(target.endMs, at.endMs);
+  } else {
+    segments.push({ speaker, startMs: at.startMs, endMs: at.endMs, text: fragment });
+  }
+  return late && target !== undefined;
+}
+
 export function useSpeakingRealtimeVoice(
   sessionId: string,
   requestedProvider?: LiveVoiceProvider,
@@ -170,6 +199,7 @@ export function useSpeakingRealtimeVoice(
   const pendingCandidateRef = useRef('');
   const pendingPatientRef = useRef('');
   const pendingStartedAtRef = useRef<number | null>(null);
+  const patientStartMsRef = useRef<number | null>(null);
   const turnIndexRef = useRef(0);
   const segmentsRef = useRef<LiveVoiceTranscriptSegmentInput[]>([]);
   const flushPromiseRef = useRef(Promise.resolve());
@@ -239,28 +269,30 @@ export function useSpeakingRealtimeVoice(
     }
   }, [requestedProvider, sessionId]);
 
-  // Consecutive fragments from one speaker extend one caption and one transcript
-  // segment, so a 5-minute conversation stays far below the server's 600-segment
-  // limit. `exact` fragments (GPT-Live deltas) carry their own spacing.
-  const addCaption = useCallback((speaker: RealtimeVoiceSpeaker, text: string, exact = false) => {
+  // One caption and one transcript segment per speaker run keeps a 5-minute
+  // conversation far below the server's 600-segment limit. `exact` fragments
+  // (GPT-Live deltas) carry their own spacing and provider timing; a late one
+  // rejoins its speaker's text instead of splitting it (read as disfluency).
+  const addCaption = useCallback((
+    speaker: RealtimeVoiceSpeaker,
+    text: string,
+    exact = false,
+    spoken?: { startMs: number; endMs: number },
+  ) => {
     if (!text.trim()) return;
     const fragment = exact ? text : text.trim();
     const join = (existing: string) => (exact ? existing + fragment : `${existing} ${fragment}`);
+    const now = Math.max(0, Math.round(performance.now()));
+    if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
+    const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? { startMs: now, endMs: now }, Boolean(spoken));
     setCaptions((current) => {
-      const last = current[current.length - 1];
-      if (last?.speaker === speaker) return [...current.slice(0, -1), { ...last, text: join(last.text) }];
+      const index = late
+        ? current.map((caption) => caption.speaker).lastIndexOf(speaker)
+        : current[current.length - 1]?.speaker === speaker ? current.length - 1 : -1;
+      if (index >= 0) return current.map((caption, i) => (i === index ? { ...caption, text: join(caption.text) } : caption));
       const id = `${speaker}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return [...current, { id, speaker, text: fragment }].slice(-80);
     });
-    const now = Math.max(0, Math.round(performance.now()));
-    if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
-    const last = segmentsRef.current[segmentsRef.current.length - 1];
-    if (last?.speaker === speaker) {
-      last.text = join(last.text);
-      last.endMs = Math.max(last.startMs, now);
-    } else {
-      segmentsRef.current.push({ speaker, startMs: now, endMs: now, text: fragment });
-    }
     if (speaker === 'candidate') setAwaitingCandidateStart(false);
   }, []);
 
@@ -279,6 +311,7 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
+    patientStartMsRef.current = null;
     return {
       provider,
       providerSessionId,
@@ -345,10 +378,19 @@ export function useSpeakingRealtimeVoice(
       : type === 'session.output_transcript.delta' ? 'patient' : null;
     const delta = typeof value.delta === 'string' ? value.delta : '';
     if (!speaker || !delta) return;
-    if (speaker === 'candidate' && pendingPatientRef.current.trim()) void queueFlush();
-    addCaption(speaker, delta, true);
+    const spoken = typeof value.start_ms === 'number' && typeof value.end_ms === 'number'
+      ? { startMs: value.start_ms, endMs: value.end_ms }
+      : undefined;
+    // A late candidate fragment (spoken before the patient's reply began) still
+    // belongs to the current turn; only new candidate speech closes it.
+    const lateCandidate = spoken !== undefined && patientStartMsRef.current !== null && spoken.startMs < patientStartMsRef.current;
+    if (speaker === 'candidate' && pendingPatientRef.current.trim() && !lateCandidate) void queueFlush();
+    addCaption(speaker, delta, true, spoken);
     if (speaker === 'candidate') pendingCandidateRef.current += delta;
-    else pendingPatientRef.current += delta;
+    else {
+      if (!pendingPatientRef.current) patientStartMsRef.current = spoken?.startMs ?? null;
+      pendingPatientRef.current += delta;
+    }
     setPhase(speaker === 'patient' ? 'speaking' : 'listening');
   }, [addCaption, queueFlush]);
 
@@ -639,6 +681,7 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
+    patientStartMsRef.current = null;
     segmentsRef.current = [];
     turnIndexRef.current = 0;
     stoppingRef.current = false;
