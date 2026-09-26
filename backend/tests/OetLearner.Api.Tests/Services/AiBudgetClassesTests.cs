@@ -16,11 +16,11 @@ public sealed class AiBudgetClassesTests
     [Fact]
     public void Limits_MatchOwnerApprovedCeilings()
     {
-        Assert.Equal(3.50m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.ScoringCritical));
-        Assert.Equal(35.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.ScoringCritical));
+        Assert.Equal(30.00m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.ScoringCritical));
+        Assert.Equal(400.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.ScoringCritical));
         Assert.Equal(1.00m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.InteractiveLearning));
         Assert.Equal(10.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.InteractiveLearning));
-        Assert.Equal(5.00m, AiBudgetClasses.PlatformDailyCapUsd);
+        Assert.Equal(30.00m, AiBudgetClasses.PlatformDailyCapUsd);
         Assert.Equal(50.00m, AiBudgetClasses.PlatformMonthlyCapUsd);
     }
 
