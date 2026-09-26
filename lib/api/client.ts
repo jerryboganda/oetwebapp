@@ -193,10 +193,11 @@ export async function maybe<T>(promise: Promise<T>, fallback: T | null = null): 
   }
 }
 
-export async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[]; timeoutMs?: number }): Promise<T> {
+export async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[]; timeoutMs?: number; maxRetries?: number }): Promise<T> {
+  const maxRetries = options?.maxRetries ?? MAX_RETRIES;
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetchWithTimeout(resolveApiUrl(path), {
         ...init,
@@ -274,7 +275,7 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
         const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
 
         // Retry on 5xx/408/429, but not on 4xx client errors
-        if (retryable && attempt < MAX_RETRIES) {
+        if (retryable && attempt < maxRetries) {
           lastError = apiError;
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
           continue;
@@ -305,7 +306,7 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
       if (err instanceof DOMException && err.name === 'AbortError') {
         const timeoutError = new ApiError(408, 'request_timeout', 'The request timed out. Please try again.', true);
         lastError = timeoutError;
-        if (attempt < MAX_RETRIES) {
+        if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
           continue;
         }
@@ -314,7 +315,7 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
 
       // Network errors (TypeError from fetch) are retryable
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_RETRIES) {
+      if (attempt < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
         continue;
       }

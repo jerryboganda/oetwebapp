@@ -237,7 +237,12 @@ function conversation(micRaw, patientRaw) {
   // Talk-over: the patient starts speaking while the candidate is mid-utterance.
   const talkOver = patient.flatMap(([p0, p1]) => {
     const c = mic.find(([c0, c1]) => p0 > c0 + 300 && p0 < c1 - 300);
-    return c ? [{ at: p0, overlapMs: Math.min(p1, c[1]) - p0, patientMs: p1 - p0 }] : [];
+    if (!c) return [];
+    // A patient span resuming <700 ms after one that was cut off is the tail of
+    // an interrupted turn (barge-in latency); a short one is a backchannel.
+    const tail = patient.some(([q0, q1]) => q1 < p0 && p0 - q1 < 700 && q1 > c[0] - 300 && q0 < c[0]);
+    const kind = tail ? "barge-in tail" : p1 - p0 < 600 ? "backchannel" : "talk-over";
+    return [{ at: p0, kind, overlapMs: Math.min(p1, c[1]) - p0, patientMs: p1 - p0 }];
   });
   // Silences: candidate gaps >= 15 s; the patient must still answer the next line.
   const silences = [];
@@ -250,6 +255,7 @@ function conversation(micRaw, patientRaw) {
       gapMs: gapEnd - gapStart,
       patientSpokeDuringGapMs: patient.reduce((sum, [p0, p1]) => sum + Math.max(0, Math.min(p1, gapEnd) - Math.max(p0, gapStart)), 0),
       repliedToNextLineMs: reply ? reply[0] - mic[i][1] : null,
+      nextLineEndAt: mic[i][1],
     });
   }
   const latency = mic.flatMap(([, e], i) => {
@@ -467,10 +473,18 @@ try {
       ? c.bargeIns.map((b) => b.patientStoppedAfterMs).sort((a, b) => a - b)[Math.floor(c.bargeIns.length / 2)] <= 1_500
         && c.bargeIns.every((b) => b.patientStoppedAfterMs <= 2_500)
       : null,
-    noPatientTalkOver: c.talkOver.every((t) => t.overlapMs < 1_000),
-    survivesSilences: c.silences.length ? c.silences.every((s) => s.repliedToNextLineMs !== null) && !stability.providerErrors.length : null,
+    noPatientTalkOver: c.talkOver.every((t) => t.kind !== "talk-over"),
+    // A line that runs into the card's 5:00 end cannot be answered; skip it.
+    survivesSilences: c.silences.length
+      ? c.silences.every((s) => s.repliedToNextLineMs !== null
+        || events.some((e) => e.type === "session.closed" && e.__at >= s.nextLineEndAt && e.__at - s.nextLineEndAt < 15_000))
+        && !stability.providerErrors.length
+      : null,
     staysInRole: metrics.outOfRole.length === 0,
-    noBrowserErrors: !errors.console.length && !errors.page.length && !errors.http.length && !errors.requestFailed.length,
+    // Placement status 404s by design for learners outside its beta; "Failed to
+    // load resource" console lines duplicate the HTTP errors counted here.
+    noBrowserErrors: !errors.console.some((m) => !/^Failed to load resource/.test(m)) && !errors.page.length
+      && !errors.http.some((h) => !h.includes('/v1/placement/status')) && !errors.requestFailed.length,
   };
   log('CHECKS', JSON.stringify(metrics.checks), 'CONVERSATION', JSON.stringify(c));
   metrics.stability = stability;

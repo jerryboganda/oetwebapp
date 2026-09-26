@@ -360,9 +360,12 @@ export async function getSpeakingSessionResults(
  * twice returns the existing assessment (or the in-flight job).
  */
 export async function runAiAssessment(sessionId: string): Promise<AiAssessmentDetail> {
-  return apiClient.post<AiAssessmentDetail>(
+  // Grading runs for minutes and keeps going server-side after the browser's
+  // timeout, so a client retry only trips the rate limit (429).
+  return apiClient.request<AiAssessmentDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/ai-assess`,
-    {},
+    { method: 'POST', body: '{}' },
+    { maxRetries: 0 },
   );
 }
 

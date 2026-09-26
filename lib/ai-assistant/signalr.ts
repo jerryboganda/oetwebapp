@@ -6,6 +6,7 @@
 import type { CompanionSurfaceContext } from './surface-context';
 import type { HubConnection, HubConnectionState } from '@microsoft/signalr';
 import { env } from '@/lib/env';
+import { ensureFreshAccessToken } from '@/lib/auth-client';
 
 // ─── Connection State ───────────────────────────────────────────────────────
 
@@ -87,7 +88,9 @@ export async function createAssistantConnection(
 
   const connection = new HubConnectionBuilder()
     .withUrl(hubUrl, {
-      accessTokenFactory: () => token,
+      // Refresh on every (re)connect and long-poll: the token captured at
+      // mount expires, and a fixed one made every reconnect fail with 401.
+      accessTokenFactory: async () => (await ensureFreshAccessToken().catch(() => null)) ?? token,
       ...(transport !== undefined ? { transport } : {}),
     })
     .withAutomaticReconnect({
