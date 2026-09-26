@@ -606,6 +606,23 @@ describe('API retry logic', () => {
     expect(callCount).toBe(3);
   }, 15000);
 
+  it('does not retry when maxRetries is 0 (long-running grading kicks)', async () => {
+    let callCount = 0;
+    globalThis.fetch = vi.fn(async () => {
+      callCount++;
+      return new Response(JSON.stringify({ code: 'internal_server_error', message: 'fail', retryable: true }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { apiClient } = await import('../api');
+
+    await expect(apiClient.request('/v1/speaking/sessions/s1/ai-assess', { method: 'POST', body: '{}' }, { maxRetries: 0 }))
+      .rejects.toMatchObject({ status: 500 });
+    expect(callCount).toBe(1);
+  });
+
   it('does not retry on 4xx errors', async () => {
     let callCount = 0;
     globalThis.fetch = vi.fn(async () => {
