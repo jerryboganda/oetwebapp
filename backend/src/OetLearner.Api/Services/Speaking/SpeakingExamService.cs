@@ -708,11 +708,17 @@ public sealed class SpeakingExamService(
         // recorder fallback, which the classic assessor scores). Its complete
         // v1.1 card report counts as the card's score so the exam result is
         // reachable here instead of staying "pending" forever.
+        // Read the result from the assessor that grading actually routed to:
+        // until v1.1 is released for the profession a live-voice card is scored
+        // by the classic assessor, and looking only for a v1.1 report left every
+        // AI exam "pending" forever (production 26 Sep 2026).
         var recorderFallbackId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
-        var usesSimulationV11 = await db.SpeakingSimulationV11PersonaRuntimeSnapshots
-                .AsNoTracking()
-                .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
-            && !await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recorderFallbackId, ct);
+        var usesSimulationV11 = canonical is not null
+            ? await canonical.UsesV11Async(sessionId, ct)
+            : await db.SpeakingSimulationV11PersonaRuntimeSnapshots
+                    .AsNoTracking()
+                    .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
+                && !await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recorderFallbackId, ct);
 
         SpeakingAiAssessmentProjection? latest;
         if (usesSimulationV11)

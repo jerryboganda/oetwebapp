@@ -137,7 +137,7 @@ page.on('websocket', (ws) => {
   });
   ws.on('close', () => { stability.socketCloses.push(Date.now()); log('Gemini Live socket closed'); });
 });
-page.on('console', (m) => { if (m.type() === 'error') log('console.error', m.text().slice(0, 200)); });
+page.on('console', (m) => { if (m.type() === 'error') log('console.error', m.text().replace(/access_token=[^'" ]+/g, 'access_token=REDACTED').slice(0, 600)); });
 
 const readOpenAi = async () => {
   const state = await page.evaluate(() => ({ events: window.__voiceEvents ?? [], onsets: window.__audioOnsets ?? [], micStartedAt: window.__micStartedAt }))
@@ -232,8 +232,15 @@ try {
 
   if (MODE === 'exam') {
     await page.goto(`${APP}/speaking/exam`);
-    await page.getByRole('button', { name: 'Start AI exam' }).click();
-    await page.waitForURL(/\/speaking\/exam\/[^/?]+(\?|$)/, { timeout: 60_000 });
+    // A click before hydration is silently lost (no exam, no credits); retry
+    // once. The button disables itself while an exam is being created.
+    await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
+    const examUrl = /\/speaking\/exam\/[^/?]+(\?|$)/;
+    for (let attempt = 0; attempt < 2 && !examUrl.test(page.url()); attempt += 1) {
+      await page.getByRole('button', { name: 'Start AI exam' }).click({ timeout: 10_000 }).catch(() => undefined);
+      await page.waitForURL(examUrl, { timeout: 45_000 }).catch(() => undefined);
+    }
+    if (!examUrl.test(page.url())) throw new Error('The AI exam did not start.');
     metrics.examId = page.url().match(/exam\/([^/?]+)/)?.[1];
     const consent = page.getByTestId('speaking-rules-consent');
     await consent.waitFor({ timeout: 60_000 });

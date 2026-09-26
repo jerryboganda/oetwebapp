@@ -247,7 +247,12 @@ public sealed class SpeakingCanonicalAssessmentService(
         if (!claimable) return false;
 
         var owner = $"assess-now:{Guid.NewGuid():N}";
-        var leaseUntil = now.AddMinutes(10);
+        // Same lease as the worker: max-reasoning grading of a full 5-minute
+        // role-play takes ~11-12 min, and a 10-minute lease let the worker take
+        // over mid-grade, hit ai_operation_in_flight and mark it FailedTerminal
+        // (production 26 Sep 2026: "Grading could not be completed" shown while
+        // the original run was still finishing).
+        var leaseUntil = now.Add(AiOperationWorker.LeaseDuration);
         if (db.Database.IsRelational())
         {
             // Compare-and-swap on the state + lease we just read, so exactly one

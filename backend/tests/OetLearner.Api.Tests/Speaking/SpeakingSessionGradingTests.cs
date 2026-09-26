@@ -403,6 +403,34 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AssessNow_HoldsItsLeaseForTheWorkerLeaseDuration()
+    {
+        // Production 26 Sep 2026: a full 5-minute role-play took ~11.5 min to
+        // grade; the 10-minute direct-run lease expired mid-grade and the worker
+        // took the operation over and marked it FailedTerminal.
+        var gateway = new SwitchableAiGateway();
+        var canonical = BuildCanonical(gateway, reservations: null);
+        var sessions = new SpeakingSessionService(_db, compliance: BuildCompliance());
+        var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
+        var sessionId = created.SessionId;
+        await sessions.FinishWarmupAsync(UserId, sessionId, default);
+        await sessions.StartRolePlayAsync(UserId, sessionId, default);
+        await sessions.EndSessionAsync(UserId, sessionId, default);
+        SeedTranscript(sessionId);
+
+        DateTimeOffset? leaseDuringGrading = null;
+        gateway.OnComplete = () => leaseDuringGrading = _db.AiOperations.AsNoTracking()
+            .Single(o => o.ResourceId == sessionId && o.FeatureCode == AiFeatureCodes.SpeakingGrade).LeaseExpiresAt;
+        var started = DateTimeOffset.UtcNow;
+
+        await canonical.AssessNowAsync(sessionId, default);
+
+        Assert.NotNull(leaseDuringGrading);
+        Assert.True(leaseDuringGrading >= started.Add(AiOperationWorker.LeaseDuration).AddMinutes(-1));
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
+    [Fact]
     public async Task PaidPracticeCard_IsCreditFunded_SoTheAiPlanGateDoesNotRefuseGrading()
     {
         // Production 25 Sep 2026: a learner on the default "free" AI plan paid
@@ -422,6 +450,7 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
     private sealed class SwitchableAiGateway : IAiGatewayService
     {
         public bool Fail { get; set; }
+        public Action? OnComplete { get; set; }
 
         public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context) => new()
         {
@@ -442,6 +471,7 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
         {
             if (Fail) throw new InvalidOperationException("provider unreachable");
+            OnComplete?.Invoke();
             return Task.FromResult(new AiGatewayResult
             {
                 Completion = ValidAssessmentJson(),

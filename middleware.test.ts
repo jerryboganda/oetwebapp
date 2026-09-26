@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 
@@ -73,6 +75,9 @@ describe('middleware CSP — Bunny Stream hosts', () => {
       .find((directive) => directive.startsWith('connect-src')) ?? '';
 
     expect(connectSrc).toContain('wss://generativelanguage.googleapis.com');
+    // The layout's meta CSP is enforced too (intersection): production 26 Sep
+    // 2026 still blocked Gemini after only the header was fixed.
+    expect(readFileSync(join(process.cwd(), 'app/layout.tsx'), 'utf8')).toContain("'wss://generativelanguage.googleapis.com'");
   });
 });
 

@@ -626,6 +626,61 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AiExam_LiveVoiceCardsGradedByTheClassicAssessor_AreScored_WhileV11IsUnreleased()
+    {
+        // Production 26 Sep 2026: both live-voice cards were graded (classic
+        // assessor, v1.1 not released) but the exam result only looked for a
+        // v1.1 report because the cards had a captured persona -> "pending".
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var canonical = new SpeakingCanonicalAssessmentService(
+            _db, classic: null!, v11: null!, TimeProvider.System,
+            NullLogger<SpeakingCanonicalAssessmentService>.Instance,
+            v11ReleaseGate: new SpeakingSimulationV11ReleaseGate(_db));
+        var exams = new SpeakingExamService(
+            _db,
+            new SpeakingAiAssessmentService(_db, null!, NullLogger<SpeakingAiAssessmentService>.Instance),
+            NullLogger<SpeakingExamService>.Instance,
+            _credits,
+            canonical: canonical);
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(20), default);
+        await _db.SaveChangesAsync();
+
+        foreach (var (sessionId, scaled) in new[] { (tracked.SessionAId!, 360), (tracked.SessionBId!, 400) })
+        {
+            if (!await _db.SpeakingSimulationV11PersonaRuntimeSnapshots.AnyAsync(x => x.SpeakingSessionId == sessionId))
+            {
+                var cardId = (await _db.SpeakingSessions.FirstAsync(x => x.Id == sessionId)).RolePlayCardId;
+                _db.SpeakingSimulationV11PersonaRuntimeSnapshots.Add(new SpeakingSimulationV11PersonaRuntimeSnapshot
+                {
+                    Id = $"persona-{Guid.NewGuid():N}", SpeakingSessionId = sessionId, RolePlayCardId = cardId!,
+                });
+            }
+            _db.SpeakingAiAssessments.Add(new SpeakingAiAssessment
+            {
+                Id = $"spa_{Guid.NewGuid():N}",
+                SpeakingSessionId = sessionId,
+                TranscriptId = $"tx-{Guid.NewGuid():N}",
+                Provider = "ai_gateway",
+                ModelId = "gateway-default",
+                EstimatedScaledScore = scaled,
+                ReadinessBand = "developing",
+                GeneratedAt = DateTimeOffset.UtcNow,
+                IsAdvisory = true,
+            });
+        }
+        await _db.SaveChangesAsync();
+
+        var results = await exams.GetResultsAsync(UserId, exam.ExamId, default);
+
+        Assert.Equal("scored", results.OverallStatus);
+        Assert.Equal(380, results.CombinedScaledScore);
+    }
+
+    [Fact]
     public async Task AiExam_CancelledBeforeAResult_RefundsTheHeldCredits()
     {
         await SeedWalletAsync(speakingCredits: 5);
