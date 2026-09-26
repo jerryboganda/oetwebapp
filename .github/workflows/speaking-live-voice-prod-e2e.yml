@@ -2,15 +2,28 @@ name: Speaking live voice E2E (production)
 
 # Manually dispatched production smoke of the live AI patient: a real browser,
 # a fake microphone playing a scripted candidate, the real learner pages and
-# the real live voice provider (Gemini Live or OpenAI GPT-Live). Uses the dedicated QA learner account.
+# the real live voice provider (Gemini Live or OpenAI GPT-Live). Uses the
+# dedicated QA learner account. Emits provider usage, latency, stability and
+# the patient's audio as artifacts so providers can be compared like for like.
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: practice (one card) or exam (Card A + Card B mock)
+        type: choice
+        options: [practice, exam]
+        default: practice
       card_id:
-        description: Role-play card id (must match the QA learner's profession)
-        required: true
+        description: Role-play card id for practice mode (must match the QA learner's profession)
+        required: false
+        default: rpc-54dc0a57ec3d4a97978b690379edd2d9
+      script:
+        description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt)
+        type: choice
+        options: [short, full-lactose, generic]
+        default: short
       speak_seconds:
-        description: Seconds of live conversation before submitting
+        description: Seconds of live conversation before submitting (practice mode)
         default: '110'
       voice_provider:
         description: Live voice provider for this run (blank = production primary)
@@ -21,32 +34,31 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Candidate voice (espeak-ng, 16 kHz mono, 9 s gap after each line)
+      - name: Candidate voice (espeak-ng, 16 kHz mono, 8 s gap after each line) + timeline
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng sox >/dev/null
-          i=0
+          i=0; t=0; echo '[' > timeline.json
           while IFS= read -r line; do
+            [ -z "$line" ] && continue
             espeak-ng -v en-gb -s 150 -w "l$i.wav" "$line"
-            sox "l$i.wav" -r 16000 -c 1 -b 16 "p$i.wav" pad 0 9
+            sox "l$i.wav" -r 16000 -c 1 -b 16 "s$i.wav"
+            d=$(soxi -D "s$i.wav")
+            sox "s$i.wav" "p$i.wav" pad 0 8
+            [ $i -gt 0 ] && echo ',' >> timeline.json
+            echo "{\"start\": $t, \"end\": $(awk "BEGIN{printf \"%.3f\", $t + $d}")}" >> timeline.json
+            t=$(awk "BEGIN{printf \"%.3f\", $t + $(soxi -D "p$i.wav")}")
             i=$((i+1))
-          done <<'LINES'
-          Good morning. My name is Doctor Smith, one of the doctors here. Please have a seat. How can I help you today?
-          I see. I am sorry to hear that. Could you tell me a little more about when this started?
-          Thank you for explaining. Have you noticed anything that makes it better or worse?
-          I understand your concern. Is it okay if I ask a few more questions about your general health?
-          Based on what you have told me, I would like to explain what may be happening, and then we can agree on a plan together.
-          Just to check I explained clearly, could you tell me in your own words what you understand so far?
-          Is there anything else you would like to ask me today?
-          Thank you for coming in today. Please book a follow-up appointment, and take care.
-          LINES
+          done < "scripts/qa/speaking-candidate-scripts/${{ inputs.script }}.txt"
+          echo ']' >> timeline.json
           sox $(ls p*.wav | sort -V) candidate.wav
           soxi candidate.wav
+          node -e "JSON.parse(require('fs').readFileSync('timeline.json','utf8'))"
       - name: Playwright Chromium
         run: |
           mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i --no-save --silent playwright@1.58.2
@@ -56,13 +68,17 @@ jobs:
           QA_EMAIL: ${{ secrets.QA_SPEAKING_LEARNER_EMAIL }}
           QA_PASSWORD: ${{ secrets.QA_SPEAKING_LEARNER_PASSWORD }}
           QA_DEVICE_ID: ${{ secrets.QA_SPEAKING_LEARNER_DEVICE_ID }}
+          MODE: ${{ inputs.mode }}
           CARD_ID: ${{ inputs.card_id }}
           SPEAK_SECONDS: ${{ inputs.speak_seconds }}
           VOICE_PROVIDER: ${{ inputs.voice_provider }}
           CANDIDATE_WAV: ${{ github.workspace }}/candidate.wav
+          CANDIDATE_TIMELINE: ${{ github.workspace }}/timeline.json
         run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && node /tmp/pw/e2e.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: live-voice-e2e
-          path: live-voice-e2e/
+          path: |
+            live-voice-e2e/
+            timeline.json
