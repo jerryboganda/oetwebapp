@@ -144,6 +144,13 @@ function audioRate(mimeType: unknown): number {
  * transcription) joins its own speaker's previous segment instead of splitting
  * it. Returns true for such a late fragment.
  */
+// The server rejects any transcript segment or saved turn text over 4,000
+// characters; stay well under it. Production 26 Sep 2026: a patient that never
+// replied left the candidate's whole 5 minutes in one segment, the save failed
+// ("A transcript segment is too long") and the exam could not move on.
+export const MAX_SEGMENT_CHARS = 1_500;
+const MAX_PENDING_TURN_CHARS = 3_000;
+
 export function appendTranscriptFragment(
   segments: LiveVoiceTranscriptSegmentInput[],
   speaker: RealtimeVoiceSpeaker,
@@ -154,9 +161,10 @@ export function appendTranscriptFragment(
 ): boolean {
   const last = segments[segments.length - 1];
   const late = spoken && last !== undefined && last.speaker !== speaker && at.startMs < last.startMs;
-  const target = late
+  const candidate = late
     ? [...segments].reverse().find((segment) => segment.speaker === speaker)
     : last?.speaker === speaker ? last : undefined;
+  const target = candidate && candidate.text.length + fragment.length <= MAX_SEGMENT_CHARS ? candidate : undefined;
   if (target) {
     target.text = exact ? target.text + fragment : `${target.text} ${fragment}`;
     target.endMs = Math.max(target.endMs, at.endMs);
@@ -344,6 +352,14 @@ export function useSpeakingRealtimeVoice(
     return flushPromiseRef.current;
   }, [sessionId, takePendingTurn]);
 
+  // A turn with no reply (or a very long monologue) is saved in parts rather
+  // than growing past the server's per-turn text limit.
+  const flushIfLong = useCallback(() => {
+    if (pendingCandidateRef.current.length > MAX_PENDING_TURN_CHARS || pendingPatientRef.current.length > MAX_PENDING_TURN_CHARS) {
+      void queueFlush();
+    }
+  }, [queueFlush]);
+
   // Gemini streams incremental chunks: append, never de-duplicate.
   const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string) => {
     const chunk = text.trim();
@@ -351,7 +367,8 @@ export function useSpeakingRealtimeVoice(
     addCaption(speaker, chunk);
     if (speaker === 'candidate') pendingCandidateRef.current = `${pendingCandidateRef.current} ${chunk}`.trim();
     else pendingPatientRef.current = `${pendingPatientRef.current} ${chunk}`.trim();
-  }, [addCaption]);
+    flushIfLong();
+  }, [addCaption, flushIfLong]);
 
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
@@ -396,8 +413,9 @@ export function useSpeakingRealtimeVoice(
       if (!pendingPatientRef.current) patientStartMsRef.current = spoken?.startMs ?? null;
       pendingPatientRef.current += delta;
     }
+    flushIfLong();
     setPhase(speaker === 'patient' ? 'speaking' : 'listening');
-  }, [addCaption, queueFlush]);
+  }, [addCaption, flushIfLong, queueFlush]);
 
   const handleGeminiMessage = useCallback((value: Record<string, unknown>) => {
     if (value.setupComplete || value.setup_complete) {
