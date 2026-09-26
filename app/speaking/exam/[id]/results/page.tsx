@@ -31,7 +31,6 @@ import {
   getSpeakingSimulationV11Assessment,
   getSpeakingSimulationV11CombinedAssessment,
   getSpeakingSimulationV11TutorOverride,
-  runSpeakingSimulationV11Assessment,
   runSpeakingSimulationV11CombinedAssessment,
   type SpeakingSimulationV11AssessmentResponse,
   type SpeakingSimulationV11LearnerTutorOverride,
@@ -68,16 +67,21 @@ export default function SpeakingExamResultsPage() {
       const cardDetails = await Promise.all(
         r.cards.map(async (card) => {
           if (!card.sessionId) return null;
-          const existing = await getSpeakingSimulationV11Assessment(card.sessionId).catch(() => null);
-          let assessment = existing;
-          if (!assessment && canAssessV11 && !requestedCardAssessmentsRef.current.has(card.sessionId)) {
-            assessment = await runSpeakingSimulationV11Assessment(card.sessionId).catch(() => null);
-            if (assessment) requestedCardAssessmentsRef.current.add(card.sessionId);
+          const gradingStatus = await getSpeakingSessionResults(card.sessionId).catch(() => null);
+          // v1.1 report endpoints exist only for v1.1-scored cards.
+          const usesV11 = gradingStatus?.usesV11 === true;
+          if (canAssessV11 && gradingStatus?.assessmentState === 'processing'
+            && !requestedCardAssessmentsRef.current.has(card.sessionId)) {
+            // Make sure grading is running (idempotent; the worker normally
+            // already has it). Not awaited: grading takes minutes, and the
+            // server keeps going after the browser stops waiting.
+            requestedCardAssessmentsRef.current.add(card.sessionId);
+            void runAiAssessment(card.sessionId).catch(() => undefined);
           }
-          const [transcriptResponse, tutorOverride, gradingStatus] = await Promise.all([
+          const [assessment, transcriptResponse, tutorOverride] = await Promise.all([
+            usesV11 ? getSpeakingSimulationV11Assessment(card.sessionId).catch(() => null) : null,
             getSpeakingSessionTranscript(card.sessionId).catch(() => null),
-            getSpeakingSimulationV11TutorOverride(card.sessionId).catch(() => null),
-            getSpeakingSessionResults(card.sessionId).catch(() => null),
+            usesV11 ? getSpeakingSimulationV11TutorOverride(card.sessionId).catch(() => null) : null,
           ]);
           return {
             sessionId: card.sessionId,
@@ -85,6 +89,7 @@ export default function SpeakingExamResultsPage() {
             transcript: transcriptResponse?.transcript ?? null,
             tutorOverride,
             gradingStatus,
+            usesV11,
           };
         }),
       );
@@ -104,7 +109,8 @@ export default function SpeakingExamResultsPage() {
       setV11Transcripts(nextTranscripts);
       setV11TutorOverrides(nextTutorOverrides);
 
-      let combined = await getSpeakingSimulationV11CombinedAssessment(examId).catch(() => null);
+      const anyV11 = cardDetails.some((item) => item?.usesV11);
+      let combined = anyV11 ? await getSpeakingSimulationV11CombinedAssessment(examId).catch(() => null) : null;
       const completeCards = Object.values(nextCards).filter((item) => item.status === 'Complete');
       if (!combined && canAssessV11 && completeCards.length === 2 && !requestedCombinedRef.current) {
         const assessedCombined = await runSpeakingSimulationV11CombinedAssessment(examId).catch(() => null);

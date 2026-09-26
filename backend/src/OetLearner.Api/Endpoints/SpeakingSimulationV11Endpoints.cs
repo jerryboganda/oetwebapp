@@ -63,7 +63,9 @@ public static class SpeakingSimulationV11Endpoints
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
         var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
-        await canonical.AssessNowAsync(id, ct);
+        // Max-reasoning grading takes minutes; the browser gives up after 30 s.
+        // That must not cancel the grade (production 26 Sep 2026: exam Card B).
+        await canonical.AssessNowAsync(id, CancellationToken.None);
         var latest = await assessor.GetLatestAsync(id, ct);
         return latest is null ? Results.Accepted() : Results.Ok(latest);
     }

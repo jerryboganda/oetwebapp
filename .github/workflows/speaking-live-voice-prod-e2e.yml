@@ -20,7 +20,7 @@ on:
       script:
         description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt)
         type: choice
-        options: [short, full-lactose, generic]
+        options: [short, full-lactose, generic, smoke]
         default: short
       voice:
         description: Candidate TTS voice (piper = natural neural en-GB; espeak = robotic)
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Candidate voice (16 kHz mono, 8 s gap after each line) + timeline
+      - name: Candidate voice (16 kHz mono, 8 s gap after each line unless [after=N]) + timeline
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng sox >/dev/null
           if [ "${{ inputs.voice }}" = piper ]; then
@@ -58,6 +58,9 @@ jobs:
           i=0; t=0; echo '[' > timeline.json
           while IFS= read -r line; do
             [ -z "$line" ] && continue
+            # "[after=N] text" = N seconds of silence after this line (barge-in / pause tests).
+            gap=8
+            if [[ "$line" =~ ^\[after=([0-9.]+)\]\ *(.*)$ ]]; then gap="${BASH_REMATCH[1]}"; line="${BASH_REMATCH[2]}"; fi
             if [ "${{ inputs.voice }}" = piper ]; then
               echo "$line" | ./piper/piper --model voice.onnx --output_file "l$i.wav" >/dev/null 2>&1
             else
@@ -65,7 +68,7 @@ jobs:
             fi
             sox "l$i.wav" -r 16000 -c 1 -b 16 "s$i.wav"
             d=$(soxi -D "s$i.wav")
-            sox "s$i.wav" "p$i.wav" pad 0 8
+            sox "s$i.wav" "p$i.wav" pad 0 "$gap"
             [ $i -gt 0 ] && echo ',' >> timeline.json
             echo "{\"start\": $t, \"end\": $(awk "BEGIN{printf \"%.3f\", $t + $d}")}" >> timeline.json
             t=$(awk "BEGIN{printf \"%.3f\", $t + $(soxi -D "p$i.wav")}")
