@@ -26,7 +26,9 @@ check_for_update_on_startup = false
 project_doc_max_bytes = 0
 
 # ── Every non-trusted command goes through an approval request → the console Guard ──────────
-approval_policy = "untrusted"
+# The policy is sent per thread/turn as approvalPolicy "untrusted" (src/engines/codex-protocol.ts)
+# and pinned by requirements.toml. Codex >= 0.157 refuses to start when config.toml sets
+# approval_policy = "untrusted" ("no longer supported; remove this setting"), so it is not set here.
 sandbox_mode = "danger-full-access"
 model_reasoning_summary = "auto"
 

@@ -162,7 +162,9 @@ export function buildAgentEnv(config: AgentEnvConfig, options: AgentEnvOptions =
 
   if (config.agentDatabaseUrl) env.OET_AGENT_DATABASE_URL = config.agentDatabaseUrl;
 
-  env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = '1';
+  // No CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: Claude Code >= 2.1.28x requires bubblewrap for it
+  // and exits 1 at startup (login and every session) without it; bwrap cannot create user
+  // namespaces in this container anyway. This env is already an allow-list with no secrets.
   env.DISABLE_AUTOUPDATER = '1';
   env.DISABLE_UPDATES = '1';
   env.GIT_TERMINAL_PROMPT = '0';

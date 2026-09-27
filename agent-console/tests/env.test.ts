@@ -74,7 +74,8 @@ describe('buildAgentEnv (allow-list)', () => {
     expect(env.CODEX_HOME).toBe('/home/agent/.codex');
     expect(env.GIT_AUTHOR_NAME).toBe('OET Owner Agent');
     expect(env.ENGINE_FLAG).toBe('on');
-    expect(env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).toBe('1');
+    // Requires bubblewrap in Claude Code >= 2.1.28x; setting it makes the CLI exit 1.
+    expect(env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).toBeUndefined();
     expect(env.OET_AGENT_DATABASE_URL).toBe(config.agentDatabaseUrl);
   });
 

@@ -140,7 +140,8 @@ describe('etc/codex-config.toml and etc/codex-requirements.toml', () => {
     expect(setting(configToml, 'forced_chatgpt_workspace_id')).toBe('"__OET_CODEX_WORKSPACE_ID__"');
     expect(setting(configToml, 'cli_auth_credentials_store')).toBe('"file"');
     expect(setting(configToml, 'check_for_update_on_startup')).toBe('false');
-    expect(setting(configToml, 'approval_policy')).toBe('"untrusted"');
+    // Codex >= 0.157 rejects approval_policy = "untrusted" in config.toml; it is sent per thread.
+    expect(setting(configToml, 'approval_policy')).toBeUndefined();
     expect(setting(configToml, 'project_doc_max_bytes')).toBe('0');
     expect(configToml).not.toMatch(/approval_policy = "never"/);
     expect(configToml).toMatch(/\[projects\."\/workspace"\]\ntrust_level = "untrusted"/);
