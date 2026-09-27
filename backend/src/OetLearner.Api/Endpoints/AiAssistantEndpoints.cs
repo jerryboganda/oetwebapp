@@ -21,6 +21,12 @@ public static class AiAssistantEndpoints
             .RequireRateLimiting("AiInteractive")
             .WithTags("AI Assistant");
 
+        // Read-only GETs (thread list, model catalog, message history) never
+        // call a model, and the assistant widget fetches them on every page
+        // mount. Under the group's 6/min AiInteractive budget a learner who
+        // opened ~3 pages in a minute got 429s, so these use the general
+        // PerUser budget instead (endpoint policy overrides the group's).
+
         // Thread CRUD
         group.MapGet("/threads", async (
             [FromServices] IAiAssistantOrchestrator orchestrator,
@@ -34,7 +40,7 @@ public static class AiAssistantEndpoints
 
             var threads = await orchestrator.ListThreadsAsync(userId, skip, take, ct);
             return Results.Ok(threads);
-        });
+        }).RequireRateLimiting("PerUser");
 
         group.MapPost("/threads", async (
             [FromServices] IAiAssistantOrchestrator orchestrator,
@@ -103,7 +109,7 @@ public static class AiAssistantEndpoints
             models = AssistantModelCatalog.ClaudeApiModels
                 .Concat(AssistantModelCatalog.UbagModels)
                 .ToArray(),
-        }));
+        })).RequireRateLimiting("PerUser");
 
         group.MapGet("/threads/{threadId}/messages", async (
             string threadId,
@@ -118,7 +124,7 @@ public static class AiAssistantEndpoints
 
             var messages = await orchestrator.GetMessagesAsync(threadId, userId, skip, take, ct);
             return Results.Ok(messages);
-        });
+        }).RequireRateLimiting("PerUser");
 
         group.MapDelete("/threads/{threadId}", async (
             string threadId,
