@@ -130,6 +130,10 @@ async function startHarness(): Promise<Harness> {
         after += c.toString('latin1');
       });
       socket.on('close', () => afterNotUpgraded.push(after));
+      // Like dockerd: once the proxy closes its side, close ours. (The http
+      // server's sockets allow half-open, so without this the fake daemon kept
+      // the connection alive forever and server.close() never resolved.)
+      socket.on('end', () => socket.destroy());
       const payload = '{"message":"container is paused"}';
       socket.write(`HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: ${payload.length}\r\n\r\n${payload}`);
       return;
