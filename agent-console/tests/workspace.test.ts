@@ -66,4 +66,34 @@ describe('Workspace git runs as the agent', () => {
     expect(add?.args).toEqual(['-C', config.repoDir, 'worktree', 'add', '-b', wt.branch, wt.path, 'origin/main']);
     rmSync(root, { recursive: true, force: true });
   });
+
+  it('falls back to the last fetched base when GitHub is unreachable (private repo, no token)', async () => {
+    const root = tempDir();
+    const config = testConfig(root);
+    const calls: string[][] = [];
+    const run: Runner = async (_command, args) => {
+      calls.push([...args]);
+      if (args.includes('fetch')) return { ...ok('', 128), stderr: 'fatal: could not read Username for https://github.com' };
+      return ok();
+    };
+    const ws = new Workspace(config, run, silentLogger());
+    const wt = await ws.createWorktree('01J9ZQ4X7V3N8K2M5P6R7S8T9V', 'Offline edit', new Date('2026-09-27T00:00:00Z'));
+    expect(wt.branch).toMatch(/^agent\/20260927-offline-edit-/);
+    expect(calls.some((a) => a.includes('--verify') && a.includes('refs/remotes/origin/main'))).toBe(true);
+    expect(calls.some((a) => a.includes('worktree') && a.includes('add'))).toBe(true);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('still fails when the fetch fails and no base was ever fetched', async () => {
+    const root = tempDir();
+    const config = testConfig(root);
+    const run: Runner = async (_command, args) => {
+      if (args.includes('fetch')) return { ...ok('', 128), stderr: 'fatal: could not read Username' };
+      if (args.includes('--verify')) return ok('', 1);
+      return ok();
+    };
+    const ws = new Workspace(config, run, silentLogger());
+    await expect(ws.createWorktree('01J9ZQ4X7V3N8K2M5P6R7S8T9V', 'No base', new Date('2026-09-27T00:00:00Z'))).rejects.toThrow();
+    rmSync(root, { recursive: true, force: true });
+  });
 });

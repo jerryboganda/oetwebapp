@@ -168,17 +168,42 @@ export class Workspace implements WorkspaceApi {
       timeoutMs: 30_000,
     });
     if (probe.code !== 0) {
-      this.logger.info({ repoDir: this.config.repoDir }, 'cloning workspace repository (blobless)');
-      await this.git(['clone', '--filter=blob:none', '--no-tags', this.config.repoCloneUrl, this.config.repoDir]);
+      // Full clone (not blobless): the repo is private most of the time and the console may
+      // have no GitHub token, so every object must already be local (history, blame, diffs).
+      this.logger.info({ repoDir: this.config.repoDir }, 'cloning workspace repository');
+      await this.git(['clone', '--no-tags', this.config.repoCloneUrl, this.config.repoDir]);
     }
-    await this.git(['-C', this.config.repoDir, 'fetch', '--prune', '--no-tags', 'origin', `+refs/heads/${this.config.ship.baseBranch}:refs/remotes/origin/${this.config.ship.baseBranch}`]);
+    await this.fetchBase(true);
     await this.git(['-C', this.config.repoDir, 'worktree', 'prune']);
+  }
+
+  /**
+   * Refreshes origin/<base>. GitHub is unreachable while the repo is private and no agent
+   * token is set (owner choice: the owner commits/pushes from the dev machine), so a failed
+   * fetch falls back to the last fetched base instead of blocking every new session.
+   */
+  private async fetchBase(prune: boolean): Promise<void> {
+    const base = this.config.ship.baseBranch;
+    try {
+      await this.git(['-C', this.config.repoDir, 'fetch', ...(prune ? ['--prune'] : []), '--no-tags', 'origin', `+refs/heads/${base}:refs/remotes/origin/${base}`]);
+    } catch (error) {
+      const known = await this.run('git', ['-C', this.config.repoDir, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${base}`], {
+        asAgent: true,
+        env: this.env(),
+        timeoutMs: 30_000,
+      });
+      if (known.code !== 0) throw error;
+      this.logger.warn(
+        { base, error: error instanceof Error ? error.message.slice(0, 300) : String(error) },
+        'workspace fetch failed (private repo / no GitHub token?); using the last fetched base',
+      );
+    }
   }
 
   async createWorktree(sessionId: string, title: string, now: Date = new Date()): Promise<Worktree> {
     await this.ensureRepo();
-    // Fresh base for every session.
-    await this.git(['-C', this.config.repoDir, 'fetch', '--no-tags', 'origin', `+refs/heads/${this.config.ship.baseBranch}:refs/remotes/origin/${this.config.ship.baseBranch}`]);
+    // Fresh base for every session when GitHub is reachable.
+    await this.fetchBase(false);
     const branch = branchName(sessionId, title, now);
     const worktreePath = path.posix.join(this.config.worktreeRoot, sessionId);
     await this.git(['-C', this.config.repoDir, 'worktree', 'add', '-b', branch, worktreePath, `origin/${this.config.ship.baseBranch}`]);
