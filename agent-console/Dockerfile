@@ -16,7 +16,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* .npmrc ./
 # Optional dependencies must stay installed: they carry the SDK-bundled Claude Code binary
 # (@anthropic-ai/claude-agent-sdk-linux-*) and the Codex native binary (@openai/codex-linux-*).
 RUN if [ -f package-lock.json ]; then npm ci --no-audit; else npm install --no-audit; fi \

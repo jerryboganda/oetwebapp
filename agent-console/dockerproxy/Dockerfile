@@ -9,7 +9,7 @@ ARG NODE_IMAGE=node:22.23.3-alpine3.24@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d4
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /build
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* .npmrc ./
 RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --ignore-scripts; else npm install --no-audit --no-fund --ignore-scripts; fi
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
