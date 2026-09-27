@@ -468,6 +468,8 @@ public class WhopFawaterakGatewayTests
         Assert.DoesNotContain("card_payments", handler.LastBody);
         Assert.DoesNotContain("company_id", handler.LastBody);
         Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
+        // No Whop local-currency re-pricing (buyers in e.g. the UAE were shown AED).
+        Assert.Contains("\"adaptive_pricing_enabled\":false", handler.LastBody);
     }
 
     [Theory]
@@ -491,7 +493,7 @@ public class WhopFawaterakGatewayTests
     }
 
     [Fact]
-    public async Task WhopCreateIntent_ConvertsUnsupportedCurrencyToUsd()
+    public async Task WhopCreateIntent_ConvertsUnsupportedCurrencyToGbp()
     {
         var handler = new StubHandler
         {
@@ -508,8 +510,10 @@ public class WhopFawaterakGatewayTests
             "user-1", 10m, "AUD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
 
         Assert.Equal("ch_fx", result.GatewayTransactionId);
-        Assert.Contains("\"currency\":\"usd\"", handler.LastBody);
+        Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
         Assert.Contains("\"initial_price\":6.5", handler.LastBody);
+        Assert.Contains("\"adaptive_pricing_enabled\":false", handler.LastBody);
+        Assert.Equal(("AUD", "GBP"), (fx.LastFrom, fx.LastTo));
     }
 
     [Fact]
@@ -614,12 +618,17 @@ public class WhopFawaterakGatewayTests
     private sealed class StubFx : IFxRateService
     {
         public decimal Rate { get; set; } = 1m;
+        public string? LastFrom { get; private set; }
+        public string? LastTo { get; private set; }
 
         public Task<decimal> GetRateAsync(string fromCurrency, string toCurrency, CancellationToken ct)
            => Task.FromResult(Rate);
 
         public Task<decimal> ConvertAsync(decimal amount, string fromCurrency, string toCurrency, CancellationToken ct)
-           => Task.FromResult(decimal.Round(amount * Rate, 4));
+        {
+            (LastFrom, LastTo) = (fromCurrency, toCurrency);
+            return Task.FromResult(decimal.Round(amount * Rate, 4));
+        }
 
         public Task<int> RefreshRatesAsync(CancellationToken ct) => Task.FromResult(0);
     }
