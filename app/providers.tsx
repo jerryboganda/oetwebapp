@@ -44,9 +44,25 @@ function useServiceWorkerRegistration() {
     // registered inside every SW-capable native WebView).
     if (getAppRuntimeKind() !== 'web') return;
 
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Service worker registration failed — non-critical
-    });
+    // updateViaCache 'none': always fetch sw.js from the network so a worker fix
+    // (e.g. a CACHE_VERSION bump) reaches existing users on their next page load.
+    // Re-check when a long-lived tab becomes visible again. No forced reload on
+    // controllerchange: the worker never caches HTML, and a reload could
+    // interrupt an in-progress exam attempt.
+    let registration: ServiceWorkerRegistration | null = null;
+    const checkForUpdate = () => {
+      if (document.visibilityState === 'visible') registration?.update().catch(() => {});
+    };
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        registration = reg;
+      })
+      .catch(() => {
+        // Service worker registration failed — non-critical
+      });
+    document.addEventListener('visibilitychange', checkForUpdate);
+    return () => document.removeEventListener('visibilitychange', checkForUpdate);
   }, []);
 }
 

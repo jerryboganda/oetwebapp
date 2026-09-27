@@ -4,33 +4,36 @@
  * OET Prep — Service Worker (L15 Offline/PWA Support)
  *
  * Strategy:
- *  - CACHE_FIRST for static assets (fonts, icons, CSS, JS chunks — content-hashed, immutable)
- *  - NETWORK_FIRST for pages (HTML navigation) so a new deploy is seen immediately
- *    when online; cache is only an offline fallback. (Previously STALE_WHILE_REVALIDATE,
- *    which always rendered the *previous* build's HTML — and therefore its old chunks —
- *    leaving users one deploy behind until a second reload.)
- *  - NETWORK_FIRST for API calls (never serve stale data, but fall back to cache)
- *  - Pre-caches the app shell on install
+ *  - HTML pages are NEVER cached. Navigations go to the network; if the network
+ *    fails, a small built-in "offline — retrying" page is shown. Serving a cached
+ *    page from an earlier build loads that build's old JavaScript against today's
+ *    API — that is how users ended up on a weeks-old pre-rebrand sign-in page
+ *    whose sign-in failed with "Failed to fetch" (incident 2026-09-27).
+ *  - CACHE_FIRST only for content-hashed, immutable build assets (/_next/static/)
+ *    and font files — a hashed URL can never be stale.
+ *  - NETWORK_FIRST for every other static file (icons, manifest, images, .json),
+ *    with the cache as an offline fallback only.
+ *  - NETWORK_FIRST for API GETs; offline fallback serves a cached body only if it
+ *    is less than API_FALLBACK_MAX_AGE_MS old.
  *
- * Bump CACHE_VERSION on any deploy that must invalidate previously-cached assets:
- * the `activate` handler deletes every cache whose name doesn't match the current
- * version, so a bump purges all stale `oet-v*` caches on the next SW activation.
+ * Bump CACHE_VERSION whenever a deploy must invalidate previously-cached data:
+ * `activate` deletes every `oet-*` cache that is not one of the current names.
+ * v6 purges the v5 page cache that held pre-rebrand HTML.
  */
 
-const CACHE_VERSION = 'oet-v5';
+const CACHE_VERSION = 'oet-v6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
-const PAGES_CACHE = `${CACHE_VERSION}-pages`;
 const API_CACHE = `${CACHE_VERSION}-api`;
+const CURRENT_CACHES = [STATIC_CACHE, API_CACHE];
 
-const APP_SHELL_URLS = [
-  '/',
-  '/dashboard',
-  '/manifest.json',
-  '/icon-192.png',
-];
+// Non-HTML only: an HTML "app shell" would be a snapshot of one build.
+const PRECACHE_URLS = ['/manifest.json', '/icon-192.png'];
 
-const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|webp|ico|json)$/i;
+const IMMUTABLE_ASSET = /^\/_next\/static\//;
+const FONT_FILE = /\.(woff2?|ttf|eot|otf)$/i;
+const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|eot|otf|svg|png|jpg|jpeg|webp|gif|ico|json)$/i;
 const API_PATH = /\/v1\//;
+const API_FALLBACK_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Video Library streaming must NEVER touch SW caches:
 //  - HLS playlists/segments/keys stream from the Bunny CDN with short-lived
@@ -58,7 +61,8 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll(APP_SHELL_URLS))
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch(() => undefined) // a missing icon must never block the update
       .then(() => self.skipWaiting())
   );
 });
@@ -71,7 +75,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k.startsWith('oet-') && k !== STATIC_CACHE && k !== PAGES_CACHE && k !== API_CACHE)
+            .filter((k) => k.startsWith('oet-') && !CURRENT_CACHES.includes(k))
             .map((k) => caches.delete(k))
         )
       )
@@ -102,24 +106,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API requests → Network First (never serve stale auth-gated data without validation)
-  if (API_PATH.test(url.pathname)) {
-    // Only cache API responses that were made with valid auth context.
-    // If the cached response was for a different user or session, skip it.
-    event.respondWith(networkFirstWithAuthBoundary(request, API_CACHE));
+  // Navigation requests (HTML pages) → network only, built-in offline page on failure.
+  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(networkOnlyPage(request));
     return;
   }
 
-  // Static assets → Cache First
-  if (STATIC_EXTENSIONS.test(url.pathname)) {
+  // API requests → Network First (never serve stale auth-gated data without validation)
+  if (API_PATH.test(url.pathname)) {
+    event.respondWith(networkFirstApi(request, API_CACHE));
+    return;
+  }
+
+  // Only same-origin static files are cached.
+  if (url.origin !== self.location.origin) return;
+
+  // Content-hashed build assets and fonts → Cache First (immutable).
+  if (IMMUTABLE_ASSET.test(url.pathname) || FONT_FILE.test(url.pathname)) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));
     return;
   }
 
-  // Navigation requests (HTML pages) → Stale While Revalidate
-  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(networkFirst(request, PAGES_CACHE));
-    return;
+  // Other static files (icons, manifest, images, .json) → Network First.
+  if (STATIC_EXTENSIONS.test(url.pathname)) {
+    event.respondWith(networkFirst(request, STATIC_CACHE));
   }
 });
 
@@ -151,27 +161,58 @@ async function networkFirst(request, cacheName) {
     return response;
   } catch {
     const cached = await caches.match(request);
-    return cached || new Response(JSON.stringify({ error: 'Offline' }), {
+    return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+  }
+}
+
+async function networkOnlyPage(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    return offlinePage();
+  }
+}
+
+function offlinePage() {
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline · OET with Dr Ahmed Hesham</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#f7f7fb;color:#1f2937}main{max-width:26rem;padding:2rem;text-align:center}button{margin-top:1rem;padding:.6rem 1.2rem;border:0;border-radius:.6rem;background:#4f46e5;color:#fff;font-size:1rem;cursor:pointer}</style>
+</head><body><main><h1>You're offline</h1><p>We couldn't reach OET with Dr Ahmed Hesham. This page will reload automatically when your connection is back.</p><button onclick="location.reload()">Try again</button></main>
+<script>addEventListener('online',function(){location.reload()});setTimeout(function(){location.reload()},15000);</script>
+</body></html>`;
+  return new Response(html, {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+/**
+ * Network-first for API GETs. The offline fallback only serves a cached body
+ * younger than API_FALLBACK_MAX_AGE_MS (judged by the server's Date header), so
+ * a long-offline device never resurrects days-old data. The frontend auth layer
+ * still validates tokens and redirects if the session is invalid.
+ */
+async function networkFirstApi(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    const servedAt = cached ? Date.parse(cached.headers.get('date') || '') : NaN;
+    if (cached && Number.isFinite(servedAt) && Date.now() - servedAt < API_FALLBACK_MAX_AGE_MS) {
+      return cached;
+    }
+    return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => cached);
-
-  return cached || fetchPromise;
 }
 
 // ---------- Background Sync (placeholder for future offline submissions) ----------
@@ -183,34 +224,6 @@ self.addEventListener('sync', (event) => {
 
 async function syncOfflineSubmissions() {
   // Future: replay queued practice submissions from IndexedDB
-}
-
-/**
- * Network-first with auth boundary: caches API responses keyed by both URL
- * and a session fingerprint. When serving from cache while offline, only
- * returns cached data if the cached session matches the current session.
- * This prevents user A's cached data from being served to user B.
- */
-async function networkFirstWithAuthBoundary(request, cacheName) {
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    const cached = await caches.match(request);
-    if (cached) {
-      // Return cached API response if it exists — the frontend auth layer
-      // will handle token validation and redirect if session is invalid.
-      return cached;
-    }
-    return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
 }
 
 /**
@@ -235,7 +248,7 @@ self.addEventListener('push', (event) => {
 
   try {
     const payload = event.data.json();
-    const title = payload.title || 'OET Prep';
+    const title = payload.title || 'OET with Dr Ahmed Hesham';
     const options = {
       body: payload.body || '',
       icon: '/icon-192.png',
