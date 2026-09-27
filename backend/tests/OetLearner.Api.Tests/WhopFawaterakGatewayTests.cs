@@ -446,7 +446,7 @@ public class WhopFawaterakGatewayTests
     {
         var handler = new StubHandler
         {
-            Response = """{"id":"ch_live1","purchase_url":"https://whop.com/embedded/checkout/ch_live1/","plan":{"id":"plan_live1"}}""",
+            Response = """{"id":"ch_live1","purchase_url":"/checkout/ch_live1/","plan":{"id":"plan_live1"}}""",
         };
         var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
         {
@@ -459,7 +459,7 @@ public class WhopFawaterakGatewayTests
 
         Assert.Equal("ch_live1", result.GatewayTransactionId);
         Assert.Equal("plan_live1", result.ClientSecret);
-        Assert.Equal("https://whop.com/embedded/checkout/ch_live1/", result.CheckoutUrl);
+        Assert.Equal("https://whop.com/checkout/ch_live1/", result.CheckoutUrl);
         Assert.Equal("https://api.whop.com/api/v1/checkout_configurations", handler.LastUri?.ToString());
         Assert.StartsWith("Bearer apik_test", handler.LastAuthorization);
         Assert.Contains("\"plan_type\":\"one_time\"", handler.LastBody);
@@ -470,12 +470,32 @@ public class WhopFawaterakGatewayTests
         Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
     }
 
+    [Theory]
+    [InlineData("""{"id":"ch_x","purchase_url":"https://whop.com/checkout/ch_x/","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    [InlineData("""{"id":"ch_x","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    [InlineData("""{"id":"ch_x","purchase_url":"https://whop.com/embedded/checkout/ch_x/","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    public async Task WhopCreateIntent_HostedFallbackNeverUsesLegacyEmbeddedCheckout(string response, string expectedUrl)
+    {
+        // Whop retires the legacy /embedded/checkout/ surface on 21 Oct 2026.
+        var handler = new StubHandler { Response = response };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "GBP", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal(expectedUrl, result.CheckoutUrl);
+    }
+
     [Fact]
     public async Task WhopCreateIntent_ConvertsUnsupportedCurrencyToUsd()
     {
         var handler = new StubHandler
         {
-            Response = """{"id":"ch_fx","purchase_url":"https://whop.com/embedded/checkout/ch_fx/","plan":{"id":"plan_fx"}}""",
+            Response = """{"id":"ch_fx","purchase_url":"https://whop.com/checkout/ch_fx/","plan":{"id":"plan_fx"}}""",
         };
         var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
         {

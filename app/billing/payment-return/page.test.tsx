@@ -208,6 +208,19 @@ describe('Billing payment return page', () => {
     });
   });
 
+  it.each([
+    ['succeeded', 'Payment received. We are confirming your purchase.'],
+    ['canceled', 'You cancelled this checkout. We are confirming the final status with the provider.'],
+  ])('reads the status=%s hint Whop Elements appends to the return URL', async (whopStatus, message) => {
+    mockFetchBillingPaymentStatus.mockResolvedValue({ status: 'pending', items: [], addOnCodes: [] });
+
+    renderWithRouter(<BillingPaymentReturnPage />, {
+      searchParams: new URLSearchParams(`gateway=whop&quote=quote-123&session=ch_1&payment=pay_1&status=${whopStatus}`),
+    });
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
   it('shows a Check again action after the polling window elapses and restarts polling on click', async () => {
     // Jump the wall clock instead of replaying the full 120s window: the
     // poller compares Date.now() against its start time after every poll.

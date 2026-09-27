@@ -356,18 +356,12 @@ public partial class LearnerService
         IReadOnlyDictionary<string, object?> metadata)
     {
         var storedUrl = ReadMetadataString(metadata, "checkoutUrl");
-        if (!string.IsNullOrWhiteSpace(storedUrl))
-        {
-            return storedUrl;
-        }
-
-        if (string.Equals(pending.Gateway, PaymentGatewayNames.Whop, StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(pending.GatewayTransactionId))
-        {
-            return $"https://whop.com/embedded/checkout/{Uri.EscapeDataString(pending.GatewayTransactionId)}/";
-        }
-
-        return null;
+        // Never resume onto Whop's legacy /embedded/checkout/ URL (retired 21 Oct 2026);
+        // returning null makes the caller mint a fresh checkout configuration instead.
+        return string.IsNullOrWhiteSpace(storedUrl)
+            || storedUrl.Contains("whop.com/embedded/checkout/", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : storedUrl;
     }
 
     private static string? ReadMetadataString(IReadOnlyDictionary<string, object?> metadata, string key)

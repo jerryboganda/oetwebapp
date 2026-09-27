@@ -53,20 +53,22 @@ const bunnyOrigins = ['https://*.b-cdn.net', 'https://video.bunnycdn.com'];
 // BOTH this meta CSP and the proxy.ts header CSP (the browser enforces both).
 const geminiLiveOrigins = ['wss://generativelanguage.googleapis.com'];
 const bunnyPlayerOrigins = ['https://iframe.mediadelivery.net', 'https://player.mediadelivery.net'];
+// Whop Elements: the SDK (cdn.whop.com) loads Google Pay + Apple Pay JS into this page.
+const walletOrigins = ['https://pay.google.com', 'https://applepay.cdn-apple.com'];
 const paymentEmbedOrigins = [
-  'https://js.whop.com',
   'https://whop.com',
   'https://*.whop.com',
   'https://whop.io',
   'https://*.whop.io',
   'https://app.fawaterk.com',
   'https://*.fawaterk.com',
+  ...walletOrigins,
 ];
 
 const metaScriptSrc =
   process.env.NODE_ENV === 'production'
-    ? `script-src 'self' 'unsafe-inline' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} https://js.whop.com`
-    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} https://js.whop.com`;
+    ? `script-src 'self' 'unsafe-inline' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} https://cdn.whop.com ${walletOrigins.join(' ')}`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} https://cdn.whop.com ${walletOrigins.join(' ')}`;
 
 function getOrigin(value: string | undefined, fallback: string): string {
   try {

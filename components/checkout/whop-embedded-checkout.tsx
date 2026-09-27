@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
-
-const LOADER_SRC = 'https://js.whop.com/static/checkout/loader.js';
+import { useEffect, useRef, useState } from 'react';
+import { loadWhop } from '@whop/elements';
+import { Checkout, CheckoutElement, WhopElements } from '@whop/elements-react';
 
 export function isWhopPlanId(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.startsWith('plan_');
@@ -21,6 +21,16 @@ type WhopEmbeddedCheckoutProps = {
   onUnavailable: () => void;
 };
 
+const READY_TIMEOUT_MS = 12_000;
+
+/**
+ * Whop Elements checkout (replaces the legacy js.whop.com loader embed, retired
+ * by Whop on 21 Oct 2026). Mounted from the server-created checkout configuration
+ * (`ch_…`), so price, currency and the order_id/quote_id metadata the webhook
+ * maps back to the quote all come from the backend — the browser asserts nothing.
+ * Apple Pay / Google Pay appear inside this element once the payment domain is
+ * verified in Whop. Any load failure falls back to the hosted checkout.
+ */
 export function WhopEmbeddedCheckout({
   planId,
   checkoutUrl,
@@ -29,72 +39,64 @@ export function WhopEmbeddedCheckout({
   onComplete,
   onUnavailable,
 }: WhopEmbeddedCheckoutProps) {
-  const rawId = useId();
-  const containerId = `whop-checkout-${rawId.replace(/:/g, '')}`;
   const onCompleteRef = useRef(onComplete);
   const onUnavailableRef = useRef(onUnavailable);
   onCompleteRef.current = onComplete;
   onUnavailableRef.current = onUnavailable;
+  const readyRef = useRef(false);
+  const unavailableFiredRef = useRef(false);
+  // Only mounted after the learner presses Pay, never during SSR.
+  const [whop] = useState(() => (typeof window === 'undefined' ? null : loadWhop()));
+  const mountable = isWhopPlanId(planId) && isWhopCheckoutSessionId(sessionId);
+
+  // SDK load error, element error and the ready timeout can all fire; open the
+  // hosted checkout once.
+  const [fallBackToHosted] = useState(() => () => {
+    if (unavailableFiredRef.current) return;
+    unavailableFiredRef.current = true;
+    onUnavailableRef.current();
+  });
 
   useEffect(() => {
-    if (!isWhopPlanId(planId)) {
-      onUnavailableRef.current();
+    // Without the ch_ configuration the payment would carry no quote metadata
+    // and could not be matched to this order — use the hosted checkout instead.
+    if (!mountable) {
+      fallBackToHosted();
       return;
     }
-
-    const callbackName = `__oetWhopComplete_${containerId.replace(/-/g, '_')}`;
-    const errorName = `__oetWhopError_${containerId.replace(/-/g, '_')}`;
-    const scopedWindow = window as unknown as Window & Record<string, unknown>;
-    scopedWindow[callbackName] = () => onCompleteRef.current();
-    scopedWindow[errorName] = () => onUnavailableRef.current();
-
-    let script = document.querySelector<HTMLScriptElement>(`script[src="${LOADER_SRC}"]`);
-    if (!script) {
-      script = document.createElement('script');
-      script.src = LOADER_SRC;
-      script.async = true;
-      script.defer = true;
-      script.dataset.oetWhopLoader = 'true';
-      script.onerror = () => onUnavailableRef.current();
-      document.head.appendChild(script);
-    }
-
     const timeout = window.setTimeout(() => {
-      const host = document.getElementById(containerId);
-      if (host && !host.querySelector('iframe')) {
-        onUnavailableRef.current();
-      }
-    }, 12_000);
+      if (!readyRef.current) fallBackToHosted();
+    }, READY_TIMEOUT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [fallBackToHosted, mountable]);
 
-    return () => {
-      window.clearTimeout(timeout);
-      delete scopedWindow[callbackName];
-      delete scopedWindow[errorName];
-    };
-  }, [containerId, planId]);
-
-  if (!isWhopPlanId(planId)) {
+  if (!mountable) {
     return null;
   }
 
-  const callbackName = `__oetWhopComplete_${containerId.replace(/-/g, '_')}`;
-  const errorName = `__oetWhopError_${containerId.replace(/-/g, '_')}`;
-  const whopSession = isWhopCheckoutSessionId(sessionId) ? sessionId : undefined;
-
   return (
     <div className="mt-4" data-testid="whop-embedded-checkout">
-      <div
-        id={containerId}
-        data-whop-checkout-plan-id={planId}
-        data-whop-checkout-return-url={returnUrl}
-        data-whop-checkout-theme="light"
-        data-whop-checkout-theme-accent-color="#7c3aed"
-        data-whop-checkout-skip-redirect="true"
-        data-whop-checkout-on-complete={callbackName}
-        data-whop-checkout-on-payment-error={errorName}
-        {...(whopSession ? { 'data-whop-checkout-session': whopSession } : {})}
-        className="min-h-[480px] w-full overflow-hidden rounded-xl border border-border bg-white"
-      />
+      <WhopElements
+        elements={whop}
+        appearance={{ theme: { appearance: 'light', accentColor: 'violet' } }}
+        onLoadError={fallBackToHosted}
+      >
+        <Checkout
+          checkoutConfiguration={sessionId}
+          returnUrl={returnUrl}
+          onComplete={(payload) => {
+            if (payload.result === 'payment') onCompleteRef.current();
+          }}
+        >
+          <CheckoutElement
+            className="min-h-[480px] w-full overflow-hidden rounded-xl border border-border bg-white"
+            onReady={() => {
+              readyRef.current = true;
+            }}
+            onError={fallBackToHosted}
+          />
+        </Checkout>
+      </WhopElements>
       <p className="mt-3 text-xs leading-5 text-muted">
         Pay on this page. Access unlocks after the payment provider confirms the charge.
       </p>

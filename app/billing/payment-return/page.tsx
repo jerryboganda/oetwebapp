@@ -46,7 +46,8 @@ function BillingPaymentReturnContent() {
   const quoteId = urlRefs.quoteId ?? storedRefs?.quoteId ?? null;
   const sessionId = urlRefs.sessionId ?? storedRefs?.sessionId ?? null;
   const initialStatus = searchParams?.get('status') ?? null;
-  const cancelledHint = initialStatus === 'cancelled';
+  // Whop Elements appends US spellings (succeeded/canceled) to the return URL.
+  const cancelledHint = initialStatus === 'cancelled' || initialStatus === 'canceled';
   const storageReady = storedRefs !== undefined || Boolean(urlRefs.quoteId || urlRefs.sessionId);
   const missingReference = storageReady && !quoteId && !sessionId;
   const [phase, setPhase] = useState<Phase>('polling');
@@ -145,7 +146,7 @@ function BillingPaymentReturnContent() {
       status={status}
       error={error}
       cancelledHint={cancelledHint}
-      successHint={initialStatus === 'success'}
+      successHint={initialStatus === 'success' || initialStatus === 'succeeded'}
       onCheckAgain={() => setPollAttempt((attempt) => attempt + 1)}
     />
   );

@@ -621,7 +621,8 @@ function CheckoutReviewContent() {
                         planId={whopCheckout.planId}
                         checkoutUrl={whopCheckout.checkoutUrl}
                         sessionId={whopCheckout.checkoutSessionId}
-                        returnUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/billing/payment-return?status=success&gateway=whop&quote=${encodeURIComponent(whopCheckout.quoteId)}&session=${encodeURIComponent(whopCheckout.checkoutSessionId)}`}
+                        // No status here: Whop appends its own (succeeded/failed/canceled) after 3DS/bank steps.
+                        returnUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/billing/payment-return?gateway=whop&quote=${encodeURIComponent(whopCheckout.quoteId)}&session=${encodeURIComponent(whopCheckout.checkoutSessionId)}`}
                         onComplete={() => {
                           router.replace(
                             `/billing/payment-return?status=success&gateway=whop&quote=${encodeURIComponent(whopCheckout.quoteId)}&session=${encodeURIComponent(whopCheckout.checkoutSessionId)}`,

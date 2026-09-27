@@ -115,6 +115,8 @@
     "@tiptap/pm": "^2.8.0",
     "@tiptap/react": "^2.8.0",
     "@tiptap/starter-kit": "^2.8.0",
+    "@whop/elements": "1.1.0",
+    "@whop/elements-react": "1.1.0",
     "@zoom/meetingsdk": "^6.0.2",
     "autoprefixer": "^10.4.21",
     "capacitor-voice-recorder": "^6.0.3",

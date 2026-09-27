@@ -149,6 +149,12 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^2.8.0
         version: 2.27.2
+      '@whop/elements':
+        specifier: 1.1.0
+        version: 1.1.0
+      '@whop/elements-react':
+        specifier: 1.1.0
+        version: 1.1.0(@whop/elements@1.1.0)(react@19.2.7)
       '@zoom/meetingsdk':
         specifier: ^6.0.2
         version: 6.0.2(lodash@4.18.1)(react-dom@19.2.7(react@19.2.7))(react-redux@8.1.2(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(redux@5.0.1))(react@19.2.7)(redux-thunk@2.4.2(redux@5.0.1))(redux@5.0.1)
@@ -3199,6 +3205,15 @@ packages:
 
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
+
+  '@whop/elements-react@1.1.0':
+    resolution: {integrity: sha512-JH8sPSnaFqv5NGv75Tz42ARebqL/RxL9kWtQjz4GxuLpC+ko7dXLSp6ZlnXsiPAcqopfJGWSgb+HMYpGnROjNw==}
+    peerDependencies:
+      '@whop/elements': ^1.1.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  '@whop/elements@1.1.0':
+    resolution: {integrity: sha512-qDN+FHBIiu93ZFY9cL8+8OF8wS3UTEHhie25A92K4DnyaxUJUwGpVUIsEL2DM9xPBdwJEq35GZlqhmuwSllNBA==}
 
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
@@ -9295,6 +9310,14 @@ snapshots:
     dependencies:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
+
+  '@whop/elements-react@1.1.0(@whop/elements@1.1.0)(react@19.2.7)':
+    dependencies:
+      '@whop/elements': 1.1.0
+      react: 19.2.7
+      use-sync-external-store: 1.6.0(react@19.2.7)
+
+  '@whop/elements@1.1.0': {}
 
   '@xmldom/xmldom@0.9.10': {}
 
