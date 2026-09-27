@@ -8,7 +8,9 @@ const learnerDeepLinks = [
     path: '/reading/player/rt-001',
     assertions: async (page: Page) => {
       await expect(page).toHaveURL(/\/reading(?:\/player\/rt-001|\?|$)/, { timeout: 60000 });
-      await expect(page.getByRole('heading', { name: /reading/i })).toBeVisible({ timeout: 60000 });
+      // Scope to the page's h1 ("OET Reading"): the hub also renders h3 cards
+      // such as "One Reading credit unlocks the whole sample".
+      await expect(page.getByRole('heading', { level: 1, name: /reading/i })).toBeVisible({ timeout: 60000 });
     },
   },
   {

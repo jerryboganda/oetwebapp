@@ -17,7 +17,8 @@ test.describe('Learner player workflows @learner @smoke', () => {
       initialTimeoutMs: 15_000,
     });
     await expect(page).toHaveURL(/\/reading(?:\?|$)/, { timeout: 60000 });
-    await expect(page.getByRole('heading', { name: /reading/i })).toBeVisible({ timeout: 60000 });
+    // The hub's h1 is "OET Reading"; h3 promo cards also mention Reading.
+    await expect(page.getByRole('heading', { level: 1, name: /reading/i })).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

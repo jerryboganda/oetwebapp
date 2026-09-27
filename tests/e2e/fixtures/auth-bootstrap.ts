@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { authStatePaths, seededAccounts, type SeededRole } from './auth';
+import { authStatePaths, authStateTargets, seededAccounts, type SeededRole } from './auth';
 
 // `??` is not enough here: a workflow that forgets to set the secret leaves
 // PLAYWRIGHT_BASE_URL as an EMPTY string (not undefined), and `new URL('')`
@@ -716,12 +716,22 @@ export async function recoverBrowserSession(
   role: SeededRole,
   targetPath: string,
 ) {
-  const session = await bootstrapSessionForRole(request, role, undefined, {
+  const bootstrapSession = await bootstrapSessionForRole(request, role, undefined, {
     useDiskCache: false,
     isolateSession: true,
   });
-  const frontendCookies = await captureFrontendAuthCookies(request, role);
+  // Security spec §3.1 single-active-session: the frontend-proxy sign-in below
+  // revokes the session minted just above, so the browser must be hydrated
+  // with the proxy session (the one that owns the `oet_rt` cookie).
+  const captured = await captureFrontendAuth(request, role);
+  const session = captured.session ?? bootstrapSession;
+  const frontendCookies = captured.cookies;
   const cookies = [buildAuthIndicatorCookie(session), ...frontendCookies];
+  // This fresh sign-in has just revoked the session stored in every
+  // storage-state file for this role. Write the live one back so the next
+  // test context (and the API helpers' disk cache) do not start from a
+  // revoked session and bounce to /sign-in.
+  await writeLiveSessionForRole(role, session, frontendCookies);
   await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
   await page.context().addCookies(cookies);
   const currentOrigin = (() => {
@@ -841,11 +851,19 @@ type StorageStateBlob = {
  * but no HttpOnly `oet_rt` for the frontend origin — so the auth provider's
  * first-load refresh has nothing to send and the privileged page redirects
  * back to `/sign-in` (or hangs in `/mfa/setup`).
+ *
+ * The session body returned by that proxy sign-in (or MFA challenge) is
+ * returned too. With single-active-session enforcement (Security spec §3.1,
+ * `security.singleActiveSessionEnabled`, default on) this proxy sign-in
+ * revokes every earlier session of the account — including the one
+ * `bootstrapSessionForRole` minted just before — so callers must persist THIS
+ * session, not the earlier one, or the browser starts from a revoked access
+ * token.
  */
-async function captureFrontendAuthCookies(
+async function captureFrontendAuth(
   request: APIRequestContext,
   role: SeededRole,
-): Promise<StorageStateCookie[]> {
+): Promise<{ cookies: StorageStateCookie[]; session: AuthSessionResponse | null }> {
   const account = seededAccounts[role];
   const frontendHost = new URL(defaultAppOrigin).hostname;
 
@@ -856,6 +874,17 @@ async function captureFrontendAuthCookies(
         FRONTEND_AUTH_COOKIE_NAMES.has(cookie.name)
         && (cookie.domain === frontendHost || cookie.domain === `.${frontendHost}`),
     ) as StorageStateCookie[];
+  };
+  const withoutSession = async () => ({ cookies: await extractFrontendCookies(), session: null });
+  const readSession = async (response: Awaited<ReturnType<APIRequestContext['post']>>) => {
+    try {
+      const body = await response.json() as Partial<AuthSessionResponse>;
+      return typeof body?.accessToken === 'string' && body.accessToken.length > 0 && body.currentUser
+        ? body as AuthSessionResponse
+        : null;
+    } catch {
+      return null;
+    }
   };
 
   try {
@@ -870,7 +899,8 @@ async function captureFrontendAuthCookies(
     });
 
     if (role === 'learner') {
-      return extractFrontendCookies();
+      const session = signInResponse.ok() ? await readSession(signInResponse) : null;
+      return { cookies: await extractFrontendCookies(), session };
     }
 
     // Privileged roles (expert/admin): the proxy sign-in returns 403 with an
@@ -882,19 +912,20 @@ async function captureFrontendAuthCookies(
       // after `bootstrapSessionForRole`) or a hard failure. Fall back to
       // whatever cookies are present so the caller still gets the indicator
       // cookie + localStorage path.
-      return extractFrontendCookies();
+      const session = signInResponse.ok() ? await readSession(signInResponse) : null;
+      return { cookies: await extractFrontendCookies(), session };
     }
 
     let challenge: MfaChallengePayload;
     try {
       challenge = await signInResponse.json() as MfaChallengePayload;
     } catch {
-      return extractFrontendCookies();
+      return withoutSession();
     }
 
     const bootstrapState = await readMfaBootstrapState(role as Extract<SeededRole, 'expert' | 'admin'>);
     if (!bootstrapState?.secretKey) {
-      return extractFrontendCookies();
+      return withoutSession();
     }
 
     let lastError: unknown = null;
@@ -911,7 +942,7 @@ async function captureFrontendAuthCookies(
       });
 
       if (challengeResponse.ok()) {
-        return extractFrontendCookies();
+        return { cookies: await extractFrontendCookies(), session: await readSession(challengeResponse) };
       }
 
       lastError = await readResponseBody(challengeResponse);
@@ -920,35 +951,85 @@ async function captureFrontendAuthCookies(
       }
     }
 
-    return extractFrontendCookies();
+    return withoutSession();
   } catch {
     // Best-effort. If the frontend isn't reachable in this scenario, we still
     // return whatever cookies are present and let the caller fall back to the
     // indicator-only storage state.
-    return extractFrontendCookies().catch(() => []);
+    return { cookies: await extractFrontendCookies().catch(() => []), session: null };
   }
 }
 
+function buildStorageStateWithCookies(session: AuthSessionResponse, frontendCookies: StorageStateCookie[]) {
+  const base = buildStorageState(session) as StorageStateBlob;
+  const seen = new Set(base.cookies.map((c) => c.name));
+  for (const cookie of frontendCookies) {
+    if (!seen.has(cookie.name)) {
+      base.cookies.push(cookie);
+      seen.add(cookie.name);
+    }
+  }
+  return base;
+}
+
+/**
+ * Only one session per account can be live (single-active-session), so every
+ * storage-state file of a role must carry the SAME, newest session. Writes it
+ * to all of the role's project storage-state files and to the API helpers'
+ * session caches, so `signInApi`/`authHeadersForRole` reuse it instead of
+ * signing in again (which would revoke the browser's session).
+ */
+async function writeLiveSessionForRole(
+  role: SeededRole,
+  session: AuthSessionResponse,
+  frontendCookies: StorageStateCookie[],
+) {
+  const state = buildStorageStateWithCookies(session, frontendCookies);
+  const paths = new Set<string>([
+    authStatePaths[role],
+    ...authStateTargets.filter((target) => target.role === role).map((target) => target.path),
+  ]);
+  for (const path of paths) {
+    await writeJsonFile(path, state);
+  }
+  await writeSessionCacheState(role, session);
+  if (role !== 'learner') {
+    cachePrivilegedSession(role, session);
+  }
+}
+
+/**
+ * Persists a browser storage state for `session`. When `request` and `role`
+ * are given, the role is (re)signed in through the frontend proxy to obtain the
+ * `oet_rt`/`oet_csrf` cookies, and the proxy-issued session — the only one left
+ * alive by single-active-session enforcement — is what gets persisted and
+ * returned. `storageStatePath` may list several files (e.g. every project of
+ * the role) so they all share that one live session.
+ */
 export async function persistSessionToStorageState(
   session: AuthSessionResponse,
-  storageStatePath: string,
+  storageStatePath: string | readonly string[],
   request?: APIRequestContext,
   role?: SeededRole,
-) {
-  const base = buildStorageState(session) as StorageStateBlob;
+): Promise<AuthSessionResponse> {
+  let liveSession = session;
+  let frontendCookies: StorageStateCookie[] = [];
 
   if (request && role) {
-    const captured = await captureFrontendAuthCookies(request, role);
-    if (captured.length > 0) {
-      const seen = new Set(base.cookies.map((c) => c.name));
-      for (const cookie of captured) {
-        if (!seen.has(cookie.name)) {
-          base.cookies.push(cookie);
-          seen.add(cookie.name);
-        }
-      }
+    const captured = await captureFrontendAuth(request, role);
+    liveSession = captured.session ?? session;
+    frontendCookies = captured.cookies;
+    await writeSessionCacheState(role, liveSession);
+    if (role !== 'learner') {
+      cachePrivilegedSession(role, liveSession);
     }
   }
 
-  await writeJsonFile(storageStatePath, base);
+  const state = buildStorageStateWithCookies(liveSession, frontendCookies);
+  const paths = typeof storageStatePath === 'string' ? [storageStatePath] : storageStatePath;
+  for (const path of paths) {
+    await writeJsonFile(path, state);
+  }
+
+  return liveSession;
 }

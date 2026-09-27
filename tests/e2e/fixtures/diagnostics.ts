@@ -175,6 +175,13 @@ function shouldIgnoreClientErrorResponseText(text: string, options: DiagnosticEx
   if (text.startsWith('404 :: ') && text.includes('/api/backend/v1/placement/status')) {
     return true;
   }
+  // GET /v1/result-templates/active answers 404 by design when no active
+  // result-card template matches the learner's profession
+  // (ResultTemplatesEndpoints.cs); the report pages probe it and
+  // lib/api/result-templates.ts treats the 404 as "no template" (null).
+  if (text.startsWith('404 :: ') && /\/api\/backend\/v1\/result-templates\/active(?:\?|$)/.test(text)) {
+    return true;
+  }
 
   // During middleware auth redirects, in-flight API prefetch requests from the
   // client may receive 401 before the redirect completes. These are expected

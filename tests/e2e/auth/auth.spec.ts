@@ -87,7 +87,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('verify email page shows a recoverable notice when no email is provided', async ({ page }, testInfo) => {
+  test('verify email page redirects to sign in when no email is provided', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('unauth')) {
       test.skip();
     }
@@ -95,9 +95,13 @@ test.describe('Authentication flows @auth @smoke', () => {
     const diagnostics = observePage(page);
     await page.goto('/verify-email');
 
-    await expect(page.getByText(/a valid email address is required before verification can continue/i)).toBeVisible();
+    // app/verify-email/page.tsx: with no `email` query and no signed-in user
+    // there is nothing to verify, so the page replaces itself with the sign-in
+    // screen (AUTH_ROUTES.signIn) instead of rendering an inline notice.
+    await expect(page).toHaveURL(/\/sign-in(?:\?.*)?$/);
+    await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    expectNoSevereClientIssues(diagnostics, { allowAuthRedirectNoise: true, allowNextDevNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
