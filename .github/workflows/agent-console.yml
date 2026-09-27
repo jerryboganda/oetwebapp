@@ -58,12 +58,28 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
+        # Install in an empty directory (the same context as the Dockerfiles'
+        # WORKDIR) and link node_modules back: installing inside the repo
+        # checkout crashed npm's tree builder ("reading 'edgesOut'"). Tests
+        # still run from the checkout because some read repo-relative docs.
         run: |
+          set -euo pipefail
+          deps="$RUNNER_TEMP/deps-$(printf '%s' '${{ matrix.package }}' | tr '/' '-')"
+          mkdir -p "$deps"
+          cp package.json "$deps/"
+          if [ -f package-lock.json ]; then cp package-lock.json "$deps/"; fi
+          cd "$deps"
           if [ -f package-lock.json ]; then
             npm ci --no-audit --no-fund
           else
             npm install --no-audit --no-fund
           fi
+          cd - >/dev/null
+          rm -rf node_modules
+          ln -s "$deps/node_modules" node_modules
+      - name: npm debug log (on install failure)
+        if: failure()
+        run: tail -n 80 "$(ls -t "$HOME"/.npm/_logs/*-debug-0.log | head -n 1)" || true
       - name: Typecheck
         run: npm run --if-present typecheck
       - name: Vitest
