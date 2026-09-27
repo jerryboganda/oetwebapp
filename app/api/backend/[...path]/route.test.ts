@@ -46,4 +46,57 @@ describe('/api/backend proxy route', () => {
       fetchMock.mockRestore();
     }
   });
+
+  it('lets the owner-agent hub negotiate through with a refresh cookie and no CSRF header', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ negotiateVersion: 1, connectionId: 'c-1', availableTransports: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    try {
+      const { POST } = await import('./route');
+      const response = await POST(
+        new Request('https://app.example.test/api/backend/v1/owner-agent/hub/negotiate?negotiateVersion=1', {
+          method: 'POST',
+          headers: {
+            Cookie: 'oet_rt=active-refresh',
+            Origin: 'https://app.example.test',
+            'X-Owner-Agent-Unlock': 'unlock-ticket-fixture',
+          },
+        }),
+        { params: Promise.resolve({ path: ['v1', 'owner-agent', 'hub', 'negotiate'] }) },
+      );
+
+      expect(response.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0] ?? [];
+      expect(upstreamUrl).toBe('http://127.0.0.1:5198/v1/owner-agent/hub/negotiate?negotiateVersion=1');
+      // The unlock ticket must reach the API untouched (it is not a stripped header).
+      expect(new Headers((upstreamInit as RequestInit | undefined)?.headers).get('x-owner-agent-unlock')).toBe('unlock-ticket-fixture');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('still enforces CSRF on owner-agent REST mutations', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const { POST } = await import('./route');
+      const response = await POST(
+        new Request('https://app.example.test/api/backend/v1/owner-agent/kill-switch', {
+          method: 'POST',
+          headers: { Cookie: 'oet_rt=active-refresh; oet_csrf=cookie-token', Origin: 'https://app.example.test' },
+        }),
+        { params: Promise.resolve({ path: ['v1', 'owner-agent', 'kill-switch'] }) },
+      );
+
+      expect(response.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
 });

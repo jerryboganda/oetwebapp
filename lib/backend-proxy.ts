@@ -40,8 +40,12 @@ function isAuthBootstrapRequest(request: Request): boolean {
  * level by [Authorize] — a valid JWT bearer token is required before any
  * data is exchanged. Blocking the negotiate step here would prevent real-
  * time notifications and conversation streaming from connecting at all.
+ *
+ * `owner-agent` (Owner Agent Console) is additionally gated by the backend
+ * `OwnerAgent` policy: owner account allow-list + system_admin + a valid
+ * `X-Owner-Agent-Unlock` ticket re-checked on every forwarded batch.
  */
-const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations|ai-assistant)\/hub(\/|$|\?)/i;
+const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations|ai-assistant|owner-agent)\/hub(\/|$|\?)/i;
 
 function isSignalRHubRequest(request: Request): boolean {
   try {

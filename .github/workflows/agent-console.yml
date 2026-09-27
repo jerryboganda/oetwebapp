@@ -1,0 +1,424 @@
+name: Owner Agent Console (build + deploy)
+
+# Owner Agent Console (owner directive 2026-09-27; agent-console/CONTRACT.md).
+# Tests and builds the sidecar + its egress / Docker policy proxies on GitHub
+# Actions, pushes three images to GHCR, then rolls them out on the VPS
+# PULL-ONLY (no build/test/install on the box — AGENTS.md compute directive;
+# asserted by scripts/deploy/verify-compute-offload.sh).
+#
+# Separate from deploy.yml on purpose: own compose project (`oet-agent-console`),
+# own concurrency group, and it only recreates the console when no agent turn
+# is running (or when dispatched with apply=true — the console's "Apply update"
+# drains first). Otherwise it pulls, leaves an update-pending marker on the
+# sessions volume (/var/lib/oet-agent/update-pending in the container) and exits 0.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent-console/**'
+      - 'docker-compose.agent-console.yml'
+      - '.github/workflows/agent-console.yml'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Recreate the console even if turns are active (the console "Apply update" drains first)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: agent-console
+  cancel-in-progress: false
+
+env:
+  AGENT_CONSOLE_IMAGE: ghcr.io/${{ github.repository }}-agent-console:${{ github.sha }}
+  AGENT_EGRESS_IMAGE: ghcr.io/${{ github.repository }}-agent-console-egress:${{ github.sha }}
+  AGENT_DOCKERPROXY_IMAGE: ghcr.io/${{ github.repository }}-agent-console-dockerproxy:${{ github.sha }}
+
+jobs:
+  test:
+    name: Unit tests (${{ matrix.package }})
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [agent-console, agent-console/egress, agent-console/dockerproxy]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Typecheck
+        run: npm run --if-present typecheck
+      - name: Vitest
+        run: npx --no-install vitest run
+      - name: Codex execpolicy check (etc/oet.rules)
+        # Loading the rules validates every match/not_match example in the file;
+        # then spot-check one forbidden and one unmatched command.
+        if: matrix.package == 'agent-console'
+        run: |
+          set -euo pipefail
+          forbidden="$(npx --no-install codex execpolicy check --rules etc/oet.rules -- git push --force origin agent/ci-check)"
+          printf '%s\n' "$forbidden"
+          printf '%s' "$forbidden" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"forbidden"' \
+            || { echo "::error::etc/oet.rules no longer forbids a force push"; exit 1; }
+          allowed="$(npx --no-install codex execpolicy check --rules etc/oet.rules -- git status)"
+          printf '%s\n' "$allowed"
+          if printf '%s' "$allowed" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"forbidden"'; then
+            echo "::error::etc/oet.rules forbids 'git status'"; exit 1
+          fi
+
+  guards:
+    name: Static rollout guards
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert production rollouts are pull-only (incl. this workflow)
+        run: bash scripts/deploy/verify-compute-offload.sh
+      - name: Validate the console compose file
+        # No interpolation / path resolution: validates the schema only, needs no
+        # env file and never touches the VPS-only secret paths.
+        run: docker compose -f docker-compose.agent-console.yml config --no-interpolate --no-path-resolution --quiet
+
+  build:
+    name: Build & push ${{ matrix.image }}
+    needs: [test, guards]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: agent-console
+            context: ./agent-console
+            file: ./agent-console/Dockerfile
+          - image: agent-console-egress
+            context: ./agent-console/egress
+            file: ./agent-console/egress/Dockerfile
+          - image: agent-console-dockerproxy
+            context: ./agent-console/dockerproxy
+            file: ./agent-console/dockerproxy/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          provenance: false
+          # :latest only moves on main; branch dispatches push the SHA tag only.
+          tags: |
+            ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}-{1}:latest', github.repository, matrix.image) || '' }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  deploy:
+    name: Roll out on the VPS (pull-only)
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to VPS over SSH (pull + gated recreate)
+        env:
+          # Same prod box / key as deploy.yml's deploy job.
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLY_UPDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          REMOTE_DIR="/tmp/oet-agent-console-rollout-${GITHUB_RUN_ID}"
+          LOCAL_SCRIPT="$RUNNER_TEMP/agent-console-rollout.sh"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "rm -rf '$REMOTE_DIR'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # The remote rollout script. verify-compute-offload.sh extracts the
+          # block between the BEGIN/END markers and fails CI if it ever gains a
+          # build/test/install command or an `up` without --no-build.
+          cat > "$LOCAL_SCRIPT" <<'REMOTE_ROLLOUT'
+          # BEGIN REMOTE AGENT-CONSOLE ROLLOUT
+          set -euo pipefail
+          umask 077
+          APP_DIR=/opt/oetwebapp
+          DEPLOY_DIR="$APP_DIR/.deploy"
+          SECRETS_DIR="$DEPLOY_DIR/agent-console-secrets"
+          ENV_FILE="$APP_DIR/.env.production"
+          CONSOLE_ENV="$DEPLOY_DIR/agent-console.env"
+          COMPOSE_FILE="$APP_DIR/docker-compose.agent-console.yml"
+          CONSOLE=oet-agent-console
+          SESSIONS_VOLUME=oet-agent-console_oet_agent_sessions
+          VOLUMES="oet-agent-console_oet_agent_home oet-agent-console_oet_agent_workspace oet-agent-console_oet_agent_sessions"
+          PROXY_GID=10010
+          : "${AGENT_CONSOLE_IMAGE:?}" "${AGENT_EGRESS_IMAGE:?}" "${AGENT_DOCKERPROXY_IMAGE:?}" "${ROLLOUT_DIR:?}"
+          APPLY_UPDATE="${APPLY_UPDATE:-false}"
+          GHCR_TOKEN=""
+          IFS= read -r GHCR_TOKEN || true
+
+          log() { printf '[agent-console] %s\n' "$*"; }
+          fail() { printf '::error::agent-console rollout: %s\n' "$*"; exit 1; }
+
+          # Same parser as scripts/deploy/apply-migrations-from-ci.sh; values are
+          # never echoed.
+          read_env_value() {
+            local key="$1" line value
+            line=$(grep -E "^${key}=" "$ENV_FILE" | tail -n 1 || true)
+            [ -n "$line" ] || return 1
+            value="${line#*=}"
+            value="${value%\"}"; value="${value#\"}"
+            value="${value%\'}"; value="${value#\'}"
+            printf '%s' "$value"
+          }
+          require_hex() {
+            local name="$1" value="$2" min="$3"
+            [ "${#value}" -ge "$min" ] || fail "$name must be at least $min characters"
+            case "$value" in *[!0-9a-fA-F]*) fail "$name must be hexadecimal (generate with: openssl rand -hex 32)" ;; esac
+          }
+
+          [ -f "$ENV_FILE" ] || fail "missing $ENV_FILE"
+          enabled="$(read_env_value OWNER_AGENT__ENABLED || true)"
+          if [ "$(printf '%s' "$enabled" | tr '[:upper:]' '[:lower:]')" != "true" ]; then
+            printf '::notice::OWNER_AGENT__ENABLED is not true in .env.production; images were pushed to GHCR but the console was not rolled out.\n'
+            exit 0
+          fi
+
+          internal_token="$(read_env_value OWNER_AGENT__INTERNALTOKEN || true)"
+          proxy_token="$(read_env_value OWNER_AGENT__PROXYTOKEN || true)"
+          db_password="$(read_env_value OWNER_AGENT__DBPASSWORD || true)"
+          owner_ids="$(read_env_value OWNER_AGENT__OWNERACCOUNTIDS || true)"
+          codex_workspace="$(read_env_value OWNER_AGENT__CODEXWORKSPACEID || true)"
+          postgres_db="$(read_env_value POSTGRES_DB || true)"
+          require_hex OWNER_AGENT__INTERNALTOKEN "$internal_token" 32
+          require_hex OWNER_AGENT__PROXYTOKEN "$proxy_token" 32
+          require_hex OWNER_AGENT__DBPASSWORD "$db_password" 24
+          [ "$internal_token" != "$proxy_token" ] || fail "OWNER_AGENT__INTERNALTOKEN and OWNER_AGENT__PROXYTOKEN must be different secrets"
+          printf '%s' "$owner_ids" | grep -Eq '^[A-Za-z0-9_-]{1,64}(,[A-Za-z0-9_-]{1,64})*$' \
+            || fail "OWNER_AGENT__OWNERACCOUNTIDS must be a comma-separated list of auth account ids"
+          if [ -n "$codex_workspace" ]; then
+            printf '%s' "$codex_workspace" | grep -Eq '^[A-Za-z0-9_-]{1,128}$' || fail "OWNER_AGENT__CODEXWORKSPACEID has unexpected characters"
+          fi
+          printf '%s' "$postgres_db" | grep -Eq '^[A-Za-z0-9_]{1,63}$' || fail "POSTGRES_DB must be a plain identifier"
+
+          # Engines run as uid 10002 and see /opt/oetwebapp read-only: every
+          # secret-bearing file there must be root-only, or the agent could read
+          # the internal/proxy tokens (CONTRACT.md §6 "the agent uid can never read it").
+          install -d -m 0700 -o root -g root "$DEPLOY_DIR" "$SECRETS_DIR"
+          find "$APP_DIR" -maxdepth 1 -type f -name '.env*' -exec chmod go-rwx {} +
+
+          # --- networks / volumes (idempotent; never removed here) ---
+          ensure_internal_network() {
+            local name="$1"
+            if docker network inspect "$name" >/dev/null 2>&1; then
+              [ "$(docker network inspect -f '{{.Internal}}' "$name")" = "true" ] \
+                || fail "network $name exists but is not --internal; refusing to attach the console to it"
+            else
+              docker network create --internal --label oet.agent-console=true "$name" >/dev/null
+              log "created internal network $name"
+            fi
+          }
+          ensure_internal_network oet_agent_ctl
+          ensure_internal_network oet_agent_net
+          docker network inspect oetwebsite_internal >/dev/null 2>&1 || fail "network oetwebsite_internal is missing (main stack not deployed?)"
+          for volume in $VOLUMES; do
+            if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+              docker volume create --label oet.agent-console=true "$volume" >/dev/null
+              log "created volume $volume"
+            fi
+          done
+
+          # --- compose secrets (root-owned; proxy token group-readable by the proxies' gid only) ---
+          secrets_changed=false
+          write_secret() {
+            local name="$1" value="$2" mode="$3" group="$4" tmp
+            tmp="$(mktemp "$SECRETS_DIR/.${name}.XXXXXX")"
+            printf '%s' "$value" > "$tmp"
+            chown "root:${group}" "$tmp"
+            chmod "$mode" "$tmp"
+            if [ -f "$SECRETS_DIR/$name" ] && cmp -s "$tmp" "$SECRETS_DIR/$name"; then
+              rm -f "$tmp"
+              chown "root:${group}" "$SECRETS_DIR/$name"
+              chmod "$mode" "$SECRETS_DIR/$name"
+              return 0
+            fi
+            mv -f "$tmp" "$SECRETS_DIR/$name"
+            secrets_changed=true
+          }
+          write_secret owner_agent_internal_token "$internal_token" 0400 root
+          write_secret owner_agent_proxy_token "$proxy_token" 0440 "$PROXY_GID"
+
+          # --- compose-time environment (read via --env-file, never env_file:) ---
+          docker_gid="$(stat -c %g /var/run/docker.sock)"
+          case "$docker_gid" in ''|*[!0-9]*) fail "could not determine the docker.sock group id" ;; esac
+          tmp_env="$(mktemp "$DEPLOY_DIR/.agent-console.env.XXXXXX")"
+          {
+            printf '# Generated by .github/workflows/agent-console.yml on every rollout; do not edit.\n'
+            printf 'AGENT_CONSOLE_IMAGE=%s\n' "$AGENT_CONSOLE_IMAGE"
+            printf 'AGENT_EGRESS_IMAGE=%s\n' "$AGENT_EGRESS_IMAGE"
+            printf 'AGENT_DOCKERPROXY_IMAGE=%s\n' "$AGENT_DOCKERPROXY_IMAGE"
+            printf 'DOCKER_GID=%s\n' "$docker_gid"
+            printf 'OET_AGENT_DATABASE_URL=postgres://oet_owner_agent:%s@oet-agent-dbproxy:5432/%s\n' "$db_password" "$postgres_db"
+            printf 'OWNER_AGENT_OWNER_ACCOUNT_IDS=%s\n' "$owner_ids"
+            printf 'OWNER_AGENT_CODEX_WORKSPACE_ID=%s\n' "$codex_workspace"
+          } > "$tmp_env"
+          chmod 600 "$tmp_env"
+          mv -f "$tmp_env" "$CONSOLE_ENV"
+          install -m 0644 -o root -g root "$ROLLOUT_DIR/docker-compose.agent-console.yml" "$COMPOSE_FILE"
+
+          # --- host data protection (adds the console volumes to the protected list) ---
+          install -D -m 0755 -o root -g root "$ROLLOUT_DIR/protect-production-data.sh" "$APP_DIR/scripts/deploy/protect-production-data.sh"
+          bash "$APP_DIR/scripts/deploy/protect-production-data.sh"
+
+          # --- pull (images come from GHCR; nothing is compiled here) ---
+          compose() { docker compose --env-file "$CONSOLE_ENV" -f "$COMPOSE_FILE" "$@"; }
+          if [ -n "$GHCR_TOKEN" ]; then
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin >/dev/null
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          fi
+          pulled=false
+          delay=5
+          for attempt in 1 2 3 4 5; do
+            if compose pull --quiet; then pulled=true; break; fi
+            log "pull attempt $attempt failed; retrying in ${delay}s"
+            sleep "$delay"
+            delay=$(( delay < 30 ? delay * 2 : 30 ))
+          done
+          [ "$pulled" = true ] || fail "could not pull the console images from GHCR"
+
+          # --- recreate only when idle (or apply=true) ---
+          console_healthz() {
+            docker exec "$CONSOLE" curl -fsS -m 10 http://oet-agent-console:8410/healthz 2>/dev/null
+          }
+          state="$(docker inspect -f '{{.State.Running}}' "$CONSOLE" 2>/dev/null || echo missing)"
+          active_turns=""
+          if [ "$state" = "true" ]; then
+            for attempt in 1 2 3; do
+              if body="$(console_healthz)"; then
+                active_turns="$(printf '%s' "$body" | sed -n 's/.*"activeTurns"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+                [ -n "$active_turns" ] && break
+              fi
+              sleep 10
+            done
+          fi
+
+          recreate=false
+          if [ "$APPLY_UPDATE" = "true" ]; then
+            recreate=true; reason="dispatched with apply=true"
+          elif [ "$state" != "true" ]; then
+            recreate=true; reason="console not running (${state})"
+          elif [ -z "$active_turns" ]; then
+            recreate=true; reason="console /healthz unanswered for ~30s (treated as broken)"
+          elif [ "$active_turns" = "0" ]; then
+            recreate=true; reason="no active turns"
+          fi
+
+          sessions_mountpoint="$(docker volume inspect -f '{{.Mountpoint}}' "$SESSIONS_VOLUME")"
+          if [ "$recreate" != true ]; then
+            tmp_marker="$(mktemp "$sessions_mountpoint/.update-pending.XXXXXX")"
+            printf '{"image":"%s","egressImage":"%s","dockerproxyImage":"%s","activeTurns":%s,"createdAt":"%s","runUrl":"%s"}\n' \
+              "$AGENT_CONSOLE_IMAGE" "$AGENT_EGRESS_IMAGE" "$AGENT_DOCKERPROXY_IMAGE" "$active_turns" \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${RUN_URL:-}" > "$tmp_marker"
+            chmod 600 "$tmp_marker"
+            mv -f "$tmp_marker" "$sessions_mountpoint/update-pending"
+            [ "$secrets_changed" = true ] && log "secret files changed; they take effect on the next recreate"
+            printf '::notice::Owner Agent Console has %s active turn(s): new images are pulled and /var/lib/oet-agent/update-pending is set. Use the console "Apply update" (drain, then dispatch with apply=true) to switch.\n' "$active_turns"
+            exit 0
+          fi
+
+          log "recreating the console stack: $reason"
+          compose up -d --no-build --wait --wait-timeout 300
+          rm -f "$sessions_mountpoint/update-pending"
+
+          for container in oet-agent-console oet-agent-egress oet-agent-dockerproxy oet-agent-dbproxy; do
+            [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || echo missing)" = "true" ] || fail "$container is not running"
+            [ -z "$(docker port "$container" 2>/dev/null)" ] || fail "$container publishes host ports; the console stack must stay internal"
+          done
+          body="$(console_healthz)" || fail "oet-agent-console /healthz failed after recreate"
+          log "healthz: $(printf '%s' "$body" | tr -d '\n' | cut -c1-300)"
+
+          # Keep the three newest tags per console image (rollback window); the
+          # generic prune-stale-images.sh never touches -agent-console images.
+          used_images=",$(docker ps -a --format '{{.Image}}' | sort -u | tr '\n' ','),"
+          for repo in "${AGENT_CONSOLE_IMAGE%:*}" "${AGENT_EGRESS_IMAGE%:*}" "${AGENT_DOCKERPROXY_IMAGE%:*}"; do
+            docker images --format '{{.Repository}}:{{.Tag}}' "$repo" \
+              | grep -v -e ':latest$' -e ':<none>$' \
+              | tail -n +4 \
+              | while read -r old; do
+                  case "$used_images" in *",$old,"*) continue ;; esac
+                  docker rmi "$old" >/dev/null 2>&1 && log "removed old image $old" || true
+                done || true
+          done
+          log "console stack is live on $AGENT_CONSOLE_IMAGE"
+          # END REMOTE AGENT-CONSOLE ROLLOUT
+          REMOTE_ROLLOUT
+
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; mkdir -p '$REMOTE_DIR'; cat > '$REMOTE_DIR/rollout.sh'; chmod 700 '$REMOTE_DIR/rollout.sh'" \
+            < "$LOCAL_SCRIPT"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_DIR/docker-compose.agent-console.yml'" \
+            < docker-compose.agent-console.yml
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_DIR/protect-production-data.sh'" \
+            < scripts/deploy/protect-production-data.sh
+          # The GHCR token travels on stdin (never in argv); the script logs out on exit.
+          printf '%s\n' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "AGENT_CONSOLE_IMAGE='$AGENT_CONSOLE_IMAGE' AGENT_EGRESS_IMAGE='$AGENT_EGRESS_IMAGE' \
+             AGENT_DOCKERPROXY_IMAGE='$AGENT_DOCKERPROXY_IMAGE' GHCR_USER='$GHCR_USER' \
+             APPLY_UPDATE='$APPLY_UPDATE' RUN_URL='$RUN_URL' ROLLOUT_DIR='$REMOTE_DIR' \
+             bash '$REMOTE_DIR/rollout.sh'"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Owner Agent Console"
+            echo "- console: \`$AGENT_CONSOLE_IMAGE\`"
+            echo "- egress: \`$AGENT_EGRESS_IMAGE\`"
+            echo "- dockerproxy: \`$AGENT_DOCKERPROXY_IMAGE\`"
+            echo "- apply: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}"
+            echo "- result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"

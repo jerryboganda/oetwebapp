@@ -3,6 +3,11 @@
 # (running or stopped) references once they are older than the retention
 # window. Caps unbounded disk growth from per-SHA production deploys while
 # keeping a rollback window of recent SHAs.
+#
+# NEVER prunes the Owner Agent Console images (oetwebapp-agent-console,
+# -agent-console-egress, -agent-console-dockerproxy): a pending console update
+# can sit pulled-but-unused for days while agent turns run, and
+# .github/workflows/agent-console.yml keeps its own three-tag rollback window.
 set -euo pipefail
 
 RETENTION_HOURS="${1:-24}"
@@ -22,6 +27,7 @@ while read -r tag; do
   fi
 done < <(docker images --format '{{.Repository}}:{{.Tag}}' \
   | grep '^ghcr\.io/jerryboganda/oetwebapp-' \
+  | grep -v '^ghcr\.io/jerryboganda/oetwebapp-agent-console' \
   | grep -v ':latest$' || true)
 
 docker image prune -f >/dev/null 2>&1 || true

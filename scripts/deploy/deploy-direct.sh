@@ -92,6 +92,10 @@ compose build --no-cache "web-$target_slot"
 
 # --- Start target slot ---
 echo "--- Starting target slot containers ---"
+# The API slots join the Owner Agent Console's internal network (external in the compose file).
+docker network inspect oet_agent_ctl >/dev/null 2>&1 || docker network create --internal oet_agent_ctl >/dev/null
+# Deps stay enabled here (clamav was stopped above and must come back). Note: the
+# first run after the postgres `logging:` change recreates oet-postgres once.
 compose up -d --no-build --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup
 
 # --- Wait for health ---

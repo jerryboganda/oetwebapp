@@ -1,0 +1,21 @@
+{
+  "name": "@oet/agent-console-egress",
+  "version": "1.0.0",
+  "private": true,
+  "description": "oet-agent-egress: allowlist HTTP CONNECT / plain-HTTP forward proxy for the Owner Agent Console (agent-console/CONTRACT.md §6). Zero runtime dependencies.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node dist/main.js"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

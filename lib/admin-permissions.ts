@@ -103,6 +103,9 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/voice-design': [AdminPermission.AiConfig],
   '/admin/companion': [AdminPermission.AiConfig],
   '/admin/companion/access': [AdminPermission.AiConfig],
+  // Owner Agent Console — additionally owner-only (nav hidden unless
+  // GET /v1/owner-agent/me says isOwner; the API enforces the allow-list).
+  '/admin/agent-console': [AdminPermission.SystemAdmin],
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.Notifications],
@@ -170,6 +173,11 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-providers/ubag': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
+  // Owner Agent Console: system_admin here; owner allow-list + unlock ticket
+  // are enforced by the API (`OwnerAgent` policy) and the console gate.
+  '/admin/agent-console': [AdminPermission.SystemAdmin],
+  '/admin/agent-console/settings': [AdminPermission.SystemAdmin],
+  '/admin/agent-console/:param': [AdminPermission.SystemAdmin],
   '/admin/audit-logs': [AdminPermission.AuditLogs],
   '/admin/documentation-center': [AdminPermission.SystemAdmin],
   '/admin/documentation-center/evidence': [AdminPermission.SystemAdmin],

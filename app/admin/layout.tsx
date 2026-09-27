@@ -12,6 +12,7 @@ import {
   type AdminNavItem,
 } from '@/lib/admin-navigation';
 import {
+  AdminPermission,
   canAccessAdminRoute,
   getAdminRoutePermissions,
   hasPermission,
@@ -19,12 +20,19 @@ import {
 } from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminAlerts } from '@/hooks/use-admin-alerts';
+import { filterOwnerOnlyNavItems, useIsOwnerAgentOwner } from '@/lib/owner-agent/owner-flag';
 import { Children, isValidElement, cloneElement, useMemo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 
-function filterNavByPermissions(items: readonly AdminNavItem[], perms: string[] | null | undefined): AdminNavItem[] {
-  return items.filter((item) => {
+function filterNavByPermissions(
+  items: readonly AdminNavItem[],
+  perms: string[] | null | undefined,
+  isOwner: boolean,
+): AdminNavItem[] {
+  // Owner-only entries (Agent Console) are hidden unless /v1/owner-agent/me
+  // confirmed the viewer is the platform owner — on top of the permission check.
+  return filterOwnerOnlyNavItems(items, isOwner).filter((item) => {
     const required = item.requiredPermissions ?? sidebarPermissionMap[item.href];
     if (!required) return true; // no permission required (e.g. dashboard)
     return hasPermission(perms, ...required);
@@ -34,18 +42,20 @@ function filterNavByPermissions(items: readonly AdminNavItem[], perms: string[] 
 function filterSectionsByPermissions(
   sections: MobileMenuSection[],
   perms: string[] | null | undefined,
+  isOwner: boolean,
 ): MobileMenuSection[] {
   return sections
-    .map((s) => ({ ...s, items: filterNavByPermissions(s.items as AdminNavItem[], perms) }))
+    .map((s) => ({ ...s, items: filterNavByPermissions(s.items as AdminNavItem[], perms, isOwner) }))
     .filter((s) => s.items.length > 0);
 }
 
 function filterGroupsByPermissions(
   groups: readonly NavGroup[],
   perms: string[] | null | undefined,
+  isOwner: boolean,
 ): NavGroup[] {
   return groups
-    .map((g) => ({ ...g, items: filterNavByPermissions(g.items as AdminNavItem[], perms) }))
+    .map((g) => ({ ...g, items: filterNavByPermissions(g.items as AdminNavItem[], perms, isOwner) }))
     .filter((g) => g.items.length > 0);
 }
 
@@ -87,14 +97,20 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   // Backend-computed count of paid orders awaiting manual fulfilment + proofs
   // pending review (GET /v1/admin/alerts via the shared ref-counted store).
   const { totalAlertCount } = useAdminAlerts();
+  // Only system_admin accounts can be the owner; ask /v1/owner-agent/me once per
+  // page session (memory cache) so the owner-only Agent Console entry can show.
+  const isOwner = useIsOwnerAgentOwner(
+    user?.userId,
+    !loading && user?.role === 'admin' && (perms ?? []).includes(AdminPermission.SystemAdmin),
+  );
 
   const routePath = useMemo(() => {
     const query = searchParams?.toString();
     return query ? `${pathname ?? '/admin'}?${query}` : pathname;
   }, [pathname, searchParams]);
 
-  const filteredNavItems = useMemo(() => filterNavByPermissions(adminNavItems, perms), [perms]);
-  const filteredNavGroups = useMemo(() => filterGroupsByPermissions(adminNavGroups, perms), [perms]);
+  const filteredNavItems = useMemo(() => filterNavByPermissions(adminNavItems, perms, isOwner), [perms, isOwner]);
+  const filteredNavGroups = useMemo(() => filterGroupsByPermissions(adminNavGroups, perms, isOwner), [perms, isOwner]);
 
   // Stamp the live fulfilment count onto Billing Ops (href untouched — deep
   // links remain /admin/billing per the agreed UX). Capped at 99 to protect
@@ -109,8 +125,11 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       }))
       : filteredNavGroups
   ), [filteredNavGroups, totalAlertCount]);
-  const filteredMobileNavItems = useMemo(() => filterNavByPermissions(adminMobileNavItems, perms), [perms]);
-  const filteredMobileMenuSections = useMemo(() => filterSectionsByPermissions(adminMobileMenuSections, perms), [perms]);
+  const filteredMobileNavItems = useMemo(() => filterNavByPermissions(adminMobileNavItems, perms, isOwner), [perms, isOwner]);
+  const filteredMobileMenuSections = useMemo(
+    () => filterSectionsByPermissions(adminMobileMenuSections, perms, isOwner),
+    [perms, isOwner],
+  );
 
   const pageTitle = getAdminPageTitle(pathname);
   const requiredRoutePermissions = useMemo(() => getAdminRoutePermissions(routePath), [routePath]);

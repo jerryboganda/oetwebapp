@@ -1,0 +1,18 @@
+# Codex hard requirements for the OET Owner Agent Console.
+#
+# Rendered by bin/entrypoint.sh into /etc/codex/requirements.toml (root-owned; the agent uid
+# cannot change it). Requirements constrain security-sensitive settings and cannot be
+# overridden by config.toml, -c flags or per-thread parameters. Lines containing
+# __OET_CODEX_WORKSPACE_ID__ are dropped when no workspace id is configured.
+# Key names checked against the Codex "Managed configuration" docs (2026-09): the four sign-in
+# keys are honoured only in the local system requirements.toml, which is where this file goes.
+# VERIFY-ON-PIN: allowed value spellings for allowed_login_methods on each @openai/codex bump.
+
+# Every approval flows to the console Guard: "never" and "on-request" are not allowed.
+allowed_approval_policies = ["untrusted"]
+
+# ChatGPT sign-in only, pinned to the owner's Business workspace; credentials in a file under
+# CODEX_HOME (no OS keyring in the container).
+allowed_login_methods = ["chatgpt"]
+allowed_chatgpt_workspaces = ["__OET_CODEX_WORKSPACE_ID__"]
+cli_auth_credentials_store = "file"

@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   AdminPermission,
   canAccessAdminRoute,
+  getAdminRoutePermissions,
   hasExplicitAdminRoutePermission,
 } from '@/lib/admin-permissions';
 
@@ -40,5 +41,18 @@ describe('admin route permission metadata', () => {
     expect(canAccessAdminRoute([AdminPermission.UsersRead], '/admin/billing')).toBe(false);
     expect(canAccessAdminRoute([AdminPermission.BillingRead], '/admin/billing')).toBe(true);
     expect(canAccessAdminRoute([AdminPermission.SystemAdmin], '/admin/flags')).toBe(true);
+  });
+
+  it('limits every Agent Console route to system_admin (the API adds the owner + unlock checks)', () => {
+    for (const route of [
+      '/admin/agent-console',
+      '/admin/agent-console/settings',
+      '/admin/agent-console/01J9ZQ3V4W5X6Y7Z8A9B0C1D2E',
+    ]) {
+      expect(hasExplicitAdminRoutePermission(route)).toBe(true);
+      expect(getAdminRoutePermissions(route)).toEqual([AdminPermission.SystemAdmin]);
+      expect(canAccessAdminRoute([AdminPermission.AiConfig, AdminPermission.UsersWrite], route)).toBe(false);
+      expect(canAccessAdminRoute([AdminPermission.SystemAdmin], route)).toBe(true);
+    }
   });
 });

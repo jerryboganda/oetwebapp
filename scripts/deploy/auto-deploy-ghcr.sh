@@ -136,13 +136,26 @@ if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
   pull_with_retry "$AGENT_GATEWAY_IMAGE"
 fi
 
+# The API slots join the internal-only network shared with the separate
+# oet-agent-console compose project (docker-compose.production.yml declares it
+# external). Create it on first use so a main deploy never depends on the
+# console workflow having run first.
+echo "--- ensuring internal network oet_agent_ctl ---"
+docker network inspect oet_agent_ctl >/dev/null 2>&1 || docker network create --internal oet_agent_ctl
+if [ "$(docker network inspect -f '{{.Internal}}' oet_agent_ctl 2>/dev/null || true)" != "true" ]; then
+  echo "  WARNING: oet_agent_ctl exists but is not --internal; the owner-agent workflow will refuse to use it" >&2
+fi
+
 # Recreate ONLY the inactive web/API slot + backup sidecar.
 # Never recreate postgres. Never pass -v. Named volumes stay mounted.
+# --no-deps: compose would otherwise also recreate a *dependency* (postgres,
+# clamav) whose config diverged from the file (e.g. the postgres logging block),
+# restarting the production database mid-deploy.
 echo "--- draining outgoing ai-worker leases ---"
 docker stop -t 90 oet-ai-worker >/dev/null 2>&1 || true
 
 echo "--- starting target slot ($target_slot) ---"
-compose "$target_slot" up -d --no-build --force-recreate \
+compose "$target_slot" up -d --no-build --no-deps --force-recreate \
   "web-$target_slot" "learner-api-$target_slot" db-backup agent-gateway ai-worker
 
 # --- health gate on the target slot (prod still served by $prev_slot) ---

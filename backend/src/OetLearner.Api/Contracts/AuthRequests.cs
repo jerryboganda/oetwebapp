@@ -55,6 +55,13 @@ public record VerifyEmailOtpRequest(
 
 public record BeginAuthenticatorSetupRequest();
 
+/// <summary>
+/// Optional body of <c>POST /v1/auth/mfa/authenticator/begin</c>. Only consulted when
+/// the account already has an enabled authenticator; all fields may be omitted for a
+/// first-time enrolment (the existing <c>{}</c> / empty-body callers keep working).
+/// </summary>
+public sealed record AuthenticatorReenrolmentRequest(string? Password, string? Code, string? RecoveryCode);
+
 public record ConfirmAuthenticatorSetupRequest(string Code);
 
 public record MfaChallengeRequest(

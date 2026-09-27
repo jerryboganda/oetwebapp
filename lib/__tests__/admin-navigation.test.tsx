@@ -71,6 +71,26 @@ describe('admin navigation registry', () => {
     expect(getAdminPageTitle('/admin/content/mocks/wizard/bundle-1/reading')).toBe('Mocks');
   });
 
+  it('registers the owner-only Agent Console under AI & Automation', () => {
+    const aiGroup = adminNavGroups.find((group) => group.label === 'AI & Automation');
+    const consoleItem = aiGroup?.items.find((item) => item.href === '/admin/agent-console');
+
+    expect(consoleItem).toMatchObject({
+      label: 'Agent Console',
+      matchPrefix: '/admin/agent-console',
+      requiredPermissions: [AdminPermission.SystemAdmin],
+      ownerOnly: true,
+    });
+    expect(sidebarPermissionMap['/admin/agent-console']).toEqual([AdminPermission.SystemAdmin]);
+    // Owner-only entries never become mobile bottom-nav shortcuts.
+    expect(adminMobileNavItems.some((item) => item.ownerOnly)).toBe(false);
+    expect(adminNavItems.filter((item) => item.ownerOnly).map((item) => item.href)).toEqual(['/admin/agent-console']);
+
+    expect(getAdminPageTitle('/admin/agent-console')).toBe('Agent Console');
+    expect(getAdminPageTitle('/admin/agent-console/01J9ZQ3V4W5X6Y7Z8A9B0C1D2E')).toBe('Agent Console');
+    expect(getAdminPageTitle('/admin/agent-console/settings')).toBe('Agent Console Settings');
+  });
+
   it('uses known admin permission constants in registry metadata', () => {
     const allPermissions = Object.values(AdminPermission);
 

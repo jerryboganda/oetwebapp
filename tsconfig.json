@@ -43,6 +43,7 @@
     "node_modules",
     "OET Web App Login only screens take from here",
     "copilot-worktrees",
+    "agent-console",
     "pdf-policy-release/**/*",
     "pdf-policy-release2/**/*",
     ".storybook/**/*",

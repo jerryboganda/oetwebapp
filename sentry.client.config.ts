@@ -10,6 +10,11 @@ import {
   readSentryRelease,
   scrubPii,
 } from '@/lib/observability/sentry-shared';
+import {
+  currentBrowserPathname,
+  isOwnerAgentConsolePath,
+  isOwnerAgentSentryEvent,
+} from '@/lib/owner-agent/route-scope';
 
 const dsn = readSentryDsn();
 
@@ -21,7 +26,12 @@ if (dsn) {
 
     // Privacy pins - hard-coded so they cannot be flipped by config.
     sendDefaultPii: false,
-    beforeSend: scrubPii,
+    // The owner-only agent console (/admin/agent-console) renders production
+    // transcripts, commands and diffs: nothing from it ever leaves the browser.
+    beforeSend: (event, hint) =>
+      isOwnerAgentSentryEvent(event, currentBrowserPathname()) ? null : scrubPii(event, hint),
+    beforeSendTransaction: (event) =>
+      isOwnerAgentSentryEvent(event, currentBrowserPathname()) ? null : event,
 
     // Performance / profiling default to 0 so enabling the SDK never silently
     // turns on performance data.
@@ -43,6 +53,9 @@ if (dsn) {
               maskAllText: true,
               maskAllInputs: true,
               blockAllMedia: true,
+              // Never record the agent console, even masked.
+              beforeAddRecordingEvent: (recordingEvent) =>
+                isOwnerAgentConsolePath(currentBrowserPathname()) ? null : recordingEvent,
             }),
           ]
         : [],

@@ -33,7 +33,10 @@ public partial class AdminService(
     OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null,
     OetLearner.Api.Services.Admin.UserHardDeleteService? userHardDeleteService = null,
     ISessionRevocationService? sessionRevocationService = null,
-    IAiPackageCreditService? aiPackageCredits = null)
+    IAiPackageCreditService? aiPackageCredits = null,
+    // Owner-account protections (Owner Agent Console, plan Phase 3). Optional so
+    // hand-built test instances keep compiling; DI always supplies it.
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.OwnerAgentOptions>? ownerAgentOptions = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -89,6 +92,14 @@ public partial class AdminService(
     {
         if (tx is not null) await tx.CommitAsync(ct);
     }
+
+    /// <summary>
+    /// Owner-account protection: refuses a credential/privilege mutation that targets an
+    /// allow-listed owner account unless the acting admin is that owner (403
+    /// <c>owner_account_protected</c>). See <see cref="OwnerAgentAccountProtection"/>.
+    /// </summary>
+    private void EnsureOwnerAccountMutationAllowed(string actorId, string? targetAuthAccountId, string operation)
+        => OwnerAgentAccountProtection.EnsureMutationAllowed(ownerAgentOptions?.Value, actorId, targetAuthAccountId, operation);
 
     private async Task LogAuditAsync(string actorId, string actorName, string action,
         string resourceType, string? resourceId, string? details, CancellationToken ct)
@@ -4448,6 +4459,8 @@ public partial class AdminService(
             throw ApiException.Validation("password_reset_unavailable", "This user does not have a password-based sign-in account.");
         }
 
+        EnsureOwnerAccountMutationAllowed(adminId, target.AuthAccountId, "trigger a password reset");
+
         var challenge = await emailOtpService.RequestPasswordResetOtpAsync(target.Email, ct);
         await LogAuditAsync(adminId, adminName, "Triggered Password Reset", "User", userId, $"Triggered password reset for {target.Email}", ct);
 
@@ -4480,6 +4493,8 @@ public partial class AdminService(
         {
             throw ApiException.Validation("password_set_unavailable", "This user does not have a password-based sign-in account.");
         }
+
+        EnsureOwnerAccountMutationAllowed(adminId, target.AuthAccountId, "set the password");
 
         await GetPasswordPolicyService().EnsurePasswordAcceptableAsync(request.Password, target.Email, ct);
 
@@ -4632,6 +4647,9 @@ public partial class AdminService(
         {
             throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account.");
         }
+
+        // Clearing the owner's lockout would hand an attacker fresh password guesses.
+        EnsureOwnerAccountMutationAllowed(adminId, target.AuthAccountId, "clear the sign-in lockout");
 
         var authAccount = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == target.AuthAccountId, ct);
         if (authAccount is null)
@@ -8924,6 +8942,8 @@ public partial class AdminService(
         if (user.Role != ApplicationUserRoles.Admin)
             throw ApiException.Validation("not_admin", "User is not an admin.");
 
+        EnsureOwnerAccountMutationAllowed(actorId, user.Id, "change permissions");
+
         var invalid = request.Permissions.Except(AdminPermissions.All).ToArray();
         if (invalid.Length > 0)
             throw ApiException.Validation("invalid_permissions", $"Invalid permissions: {string.Join(", ", invalid)}");
@@ -9063,6 +9083,8 @@ public partial class AdminService(
 
         if (user.Role != ApplicationUserRoles.Admin)
             throw ApiException.Validation("not_admin", "User is not an admin.");
+
+        EnsureOwnerAccountMutationAllowed(actorId, user.Id, "change permissions");
 
         var template = await db.PermissionTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == templateId, ct)
                        ?? throw ApiException.NotFound("template_not_found", "Permission template not found.");

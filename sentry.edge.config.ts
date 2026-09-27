@@ -10,6 +10,7 @@ import {
   readSentryRelease,
   scrubPii,
 } from '@/lib/observability/sentry-shared';
+import { isOwnerAgentSentryEvent } from '@/lib/owner-agent/route-scope';
 
 const dsn = readSentryDsn();
 
@@ -20,7 +21,10 @@ if (dsn) {
     release: readSentryRelease(),
 
     sendDefaultPii: false,
-    beforeSend: scrubPii,
+    // Owner Agent Console requests (/admin/agent-console, /v1/owner-agent) carry
+    // production transcripts and unlock headers: never report them.
+    beforeSend: (event, hint) => (isOwnerAgentSentryEvent(event) ? null : scrubPii(event, hint)),
+    beforeSendTransaction: (event) => (isOwnerAgentSentryEvent(event) ? null : event),
 
     tracesSampleRate: readSampleRate('SENTRY_TRACES_SAMPLE_RATE'),
   });

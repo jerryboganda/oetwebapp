@@ -98,6 +98,30 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 | Frontend unit (vitest + lint + tsc + build) and backend `dotnet test` (sharded, Postgres/pgvector) | `.github/workflows/qa-smoke.yml` (`workflow_dispatch` enabled) |
 | Web + API build → GHCR → VPS blue/green deploy with health gate | `.github/workflows/deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |
+| Owner Agent Console sidecar + proxy images (unit tests, build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
+
+## Owner Agent Console exception (owner directive 2026-09-27)
+
+The `oet-agent-console` sidecar on the production VPS (own compose project, `docker-compose.agent-console.yml`,
+images built only by `agent-console.yml`) is an **authorized environment for owner-initiated Claude Code / Codex
+sessions** started from `/admin/agent-console`. Nothing else in this file is relaxed for any other agent, host or
+user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-console/CONTRACT.md` · policy:
+`docs/AI-USAGE-POLICY.md` §20. **For console sessions only:**
+
+- **(a) No push to `main`.** Work on an `agent/*` branch + PR; merges happen only through the console's Ship
+  executor. Ship-It fix-loops open follow-up PRs instead of pushing to `main`.
+- **(b) Visibility.** Only the Ship executor flips the repo public/private (visibility lease); sessions never run
+  `gh repo edit --visibility`. Overrides Ship-It steps 3/7 and the public-when-working flip for console sessions.
+- **(c) `.env*` edits** only through the Guard-approved `oet-env-edit` helper; values are never echoed, logged or committed.
+- **(d) Allowed:** `git`, `gh`, `psql "$OET_AGENT_DATABASE_URL"`, `docker` (via the policy proxy) on `oet-*` /
+  `oetwebsite*` only (never co-tenants), `node scripts/ship/pre-push-gate.mjs`. **Forbidden:** `pnpm`/`npm`
+  install/build/test, `dotnet`, `docker build` — dispatch `gh workflow run qa-smoke.yml` instead.
+- **(e)** Watch deploys with `gh run watch` (not `ship:watch` / `watch-deploy.ps1`).
+- **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": subscription engines are not
+  `AiProvider`s and write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts.
+- **(g)** Continuity state lives in the sidecar session volume, not `PROGRESS.md` / `.github/agent-state.local.md`.
+- **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`, `docker stop
+  oet-agent-console`) is ops, not compute.
 
 ## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)
 
@@ -254,5 +278,6 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   184-feature traceability, gap analysis and staged plan. Load `CLAUDE_ADDENDUM.md` plus the gap
   analysis before any companion work; reuse existing auth/entitlement/credit/rulebook systems and
   never invent a `TO VERIFY` value.
-- `.codex/AGENTS.md` — Codex-CLI agent operating model (host commands, production checks, commit attribution).
+- `agent-console/etc/MANUAL.md` — operating manual appended to every Owner Agent Console session;
+  load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
 - `.tools/autoskills/AGENTS.md` — scoped to `.tools/autoskills/` only (pnpm supply-chain hardening).

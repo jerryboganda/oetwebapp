@@ -42,6 +42,9 @@ export default defineConfig({
       // frontend-unit job runs vitest *before* `pnpm run build`; a developer (or
       // agent) running tests after a build sees ~88 spurious failures.
       '.next/**',
+      // Owner Agent Console sidecar + proxies: separate Node packages with
+      // their own vitest configs and dependencies, run by agent-console.yml.
+      'agent-console/**',
     ],
   },
   resolve: {

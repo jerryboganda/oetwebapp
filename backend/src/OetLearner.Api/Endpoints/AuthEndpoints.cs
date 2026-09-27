@@ -91,9 +91,17 @@ public static class AuthEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("AuthBruteforce");
 
-        auth.MapPost("/mfa/authenticator/begin", async (ClaimsPrincipal user, AuthService service, CancellationToken ct)
-                => Results.Ok(await service.BeginAuthenticatorSetupAsync(user, ct)))
-            .RequireAuthorization();
+        // Body is optional: first-time enrolment sends nothing (or {}). Replacing an
+        // already-enabled authenticator must carry the current password plus a current
+        // authenticator code or an unused recovery code (hardened re-enrolment).
+        auth.MapPost("/mfa/authenticator/begin", async (
+                ClaimsPrincipal user,
+                [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AuthenticatorReenrolmentRequest? request,
+                AuthService service,
+                CancellationToken ct)
+                => Results.Ok(await service.BeginAuthenticatorSetupAsync(user, request?.Password, request?.Code, request?.RecoveryCode, ct)))
+            .RequireAuthorization()
+            .RequireRateLimiting("AuthBruteforce");
 
         auth.MapPost("/mfa/authenticator/confirm", async (ClaimsPrincipal user, ConfirmAuthenticatorSetupRequest request, AuthService service, CancellationToken ct)
                 => Results.Ok(await service.ConfirmAuthenticatorSetupAsync(user, request, ct)))

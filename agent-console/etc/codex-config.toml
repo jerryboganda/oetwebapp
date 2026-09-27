@@ -1,0 +1,59 @@
+# Codex configuration for the OET Owner Agent Console (uid agent, CODEX_HOME=/home/agent/.codex).
+#
+# bin/entrypoint.sh renders this template on every container start into
+#   /etc/codex/managed_config.toml   (managed defaults, re-applied at each app-server start)
+#   $CODEX_HOME/config.toml          (root-owned, read-only for the agent)
+# replacing __OET_CODEX_WORKSPACE_ID__ with OWNER_AGENT_CODEX_WORKSPACE_ID (lines containing
+# the placeholder are dropped when no workspace id is configured). Hard constraints live in
+# etc/codex-requirements.toml → /etc/codex/requirements.toml.
+#
+# The console sends approvalPolicy / sandbox on every thread and turn as well
+# (src/engines/codex-protocol.ts); these values are the defaults behind them.
+
+# ── Sign-in: ChatGPT (Business workspace) only, never an API key ───────────────────────────
+forced_login_method = "chatgpt"
+forced_chatgpt_workspace_id = "__OET_CODEX_WORKSPACE_ID__"
+cli_auth_credentials_store = "file"
+
+# ── Updates are shipped by PR (pinned @openai/codex), never self-applied ────────────────────
+check_for_update_on_startup = false
+
+# ── Instructions: the console sends the operating manual, the session block, the worktree's
+#    AGENTS.md and any handoff summary as each thread's developerInstructions (like Claude's
+#    system-prompt append), so Codex does not read project AGENTS.md files on its own (that
+#    would duplicate them). $CODEX_HOME/AGENTS.md (= etc/MANUAL.md, root-owned) stays as the
+#    fallback global instructions. ────────────────────────────────────────────────────────
+project_doc_max_bytes = 0
+
+# ── Every non-trusted command goes through an approval request → the console Guard ──────────
+approval_policy = "untrusted"
+sandbox_mode = "danger-full-access"
+model_reasoning_summary = "auto"
+
+# ── Local history: the console keeps its own transcripts; Codex keeps only what resume needs ─
+[history]
+persistence = "none"
+
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+# ── Environment of the commands Codex runs ─────────────────────────────────────────────────
+# The app-server's own env is already the allow-list built by src/env.ts (proxies, DOCKER_HOST,
+# OET_AGENT_DATABASE_URL, git identity), and one app-server serves every Codex session, so
+# commands inherit it ("all"). Codex's default excludes (*KEY*, *SECRET*, *TOKEN*) stay on and
+# the vendor/console credential families are excluded explicitly as a second layer.
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = false
+exclude = ["ANTHROPIC_*", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_*", "CODEX_API_KEY", "OWNER_AGENT_*", "OWNERAGENT__*", "AGENT_CONSOLE_*", "AWS_*", "AZURE_*", "GOOGLE_*", "GH_TOKEN", "GITHUB_TOKEN"]
+
+# ── Projects: nothing under /workspace is trusted, so repo-level .codex/ config and rules
+#    in a worktree are never loaded (the repo AGENTS.md is still read as instructions). ─────
+[projects."/workspace"]
+trust_level = "untrusted"
+
+[projects."/workspace/oetwebapp"]
+trust_level = "untrusted"

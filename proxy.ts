@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildOwnerAgentConsoleCsp } from '@/lib/owner-agent/csp';
+import { isOwnerAgentConsolePath } from '@/lib/owner-agent/route-scope';
 
 // Cookie name must match AUTH_INDICATOR_COOKIE in lib/auth-storage.ts
 // Duplicated here because Edge runtime cannot import browser-only modules
@@ -257,7 +259,11 @@ export function proxy(request: NextRequest) {
   // framework <script> tags. 'strict-dynamic' lets those trusted scripts then
   // load further chunks without every chunk needing its own allowlist entry.
   const nonce = generateNonce();
-  const csp = buildCsp(nonce, API_ORIGINS.http, API_ORIGINS.ws, MEDIA_CDN_ORIGINS, isDev);
+  // The owner-only agent console gets its own strict policy (same-origin only,
+  // no frames, no third-party script/img/connect hosts) — see lib/owner-agent/csp.ts.
+  const csp = isOwnerAgentConsolePath(pathname)
+    ? buildOwnerAgentConsoleCsp(nonce, isDev)
+    : buildCsp(nonce, API_ORIGINS.http, API_ORIGINS.ws, MEDIA_CDN_ORIGINS, isDev);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(NONCE_HEADER, nonce);

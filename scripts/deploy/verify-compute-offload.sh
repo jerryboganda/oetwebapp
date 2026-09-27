@@ -82,4 +82,36 @@ if printf '%s\n' "$active_commands" | grep -Eiq \
   exit 1
 fi
 
+# Owner Agent Console (owner directive 2026-09-27): .github/workflows/agent-console.yml
+# builds on Actions and its SSH rollout (the block between the BEGIN/END
+# REMOTE AGENT-CONSOLE ROLLOUT markers) must stay pull-only as well.
+AGENT_CONSOLE_WORKFLOW="$REPO_ROOT/.github/workflows/agent-console.yml"
+AGENT_CONSOLE_COMPOSE="$REPO_ROOT/docker-compose.agent-console.yml"
+agent_console_fail() {
+  echo "[compute-guard] agent-console: $1" >&2
+  exit 1
+}
+[ -f "$AGENT_CONSOLE_WORKFLOW" ] || agent_console_fail "missing .github/workflows/agent-console.yml"
+[ -f "$AGENT_CONSOLE_COMPOSE" ] || agent_console_fail "missing docker-compose.agent-console.yml"
+agent_console_remote="$(awk '
+  /# BEGIN REMOTE AGENT-CONSOLE ROLLOUT/ { inside = 1; next }
+  /# END REMOTE AGENT-CONSOLE ROLLOUT/ { inside = 0 }
+  inside
+' "$AGENT_CONSOLE_WORKFLOW" | sed '/^[[:space:]]*#/d')"
+[ -n "$agent_console_remote" ] || agent_console_fail "rollout script markers not found in agent-console.yml"
+printf '%s\n' "$agent_console_remote" | grep -Eq 'compose[^#]*[[:space:]]pull([[:space:]]|$)' \
+  || agent_console_fail "the VPS rollout must pull prebuilt GHCR images (compose pull)"
+printf '%s\n' "$agent_console_remote" | grep -Eq '(^|[[:space:]])up[[:space:]][^#]*--no-build' \
+  || agent_console_fail "the VPS rollout must start containers with up --no-build"
+if printf '%s\n' "$agent_console_remote" | grep -E '(^|[[:space:]])up[[:space:]]+-' | grep -v -- '--no-build' | grep -q .; then
+  agent_console_fail "every compose up in the VPS rollout must pass --no-build"
+fi
+if printf '%s\n' "$agent_console_remote" | grep -Eiq \
+  'docker[[:space:]]+(build|buildx|builder)([[:space:]]|$)|docker[[:space:]]+image[[:space:]]+build|compose[^#]*[[:space:]]build([[:space:]]|$)|(^|[[:space:];|&(])(npm|npx|pnpm|yarn|node|dotnet|tsc|make)([[:space:]]|$)|git[[:space:]]+(clone|fetch|pull|checkout|reset|submodule)([[:space:]]|$)'; then
+  agent_console_fail "the VPS rollout contains a build/test/install or source-sync command"
+fi
+if grep -Eq '^[[:space:]]+build:' "$AGENT_CONSOLE_COMPOSE"; then
+  agent_console_fail "docker-compose.agent-console.yml must not declare build: sections (images come from GHCR)"
+fi
+
 echo "[compute-guard] Actions owns build, test, image-packaging, and migration generation; VPS owns only image/data/runtime gates."

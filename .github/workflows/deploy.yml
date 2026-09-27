@@ -184,6 +184,9 @@ jobs:
 
   migrate-production:
     needs: [build-web, build-api, build-backup]
+    if: github.ref == 'refs/heads/main'
+    # VPS secrets belong in Environment `production` (main only): docs/ops/OWNER-AGENT-CONSOLE.md §3.6.
+    environment: production
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -258,6 +261,8 @@ jobs:
 
   deploy:
     needs: [build-web, build-api, build-backup, build-agent-gateway, migrate-production]
+    if: github.ref == 'refs/heads/main'
+    environment: production
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4

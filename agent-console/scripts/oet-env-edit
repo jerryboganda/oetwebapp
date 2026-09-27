@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# oet-env-edit — the only sanctioned way for an Owner Agent Console session to change
+# /opt/oetwebapp/.env.production (AGENTS.md "Owner Agent Console exception" (c)).
+#
+#   oet-env-edit keys                      list key names (never values)
+#   oet-env-edit has KEY                   exit 0 if KEY is present, 1 if not
+#   oet-env-edit set KEY < value           set KEY from ONE line on stdin
+#   oet-env-edit set KEY --from-file PATH  set KEY from PATH (exactly one line)
+#   oet-env-edit unset KEY                 remove KEY
+#   oet-env-edit restore                   restore the backup taken by the last set/unset
+#
+# Guarantees:
+#   - values come from stdin or a file, never argv, and are never printed; output names keys only;
+#   - refuses to write while Build & Deploy (deploy.yml) is queued/running — the deploy rewrites
+#     this file — and fails closed when that cannot be checked;
+#   - refuses OWNER_AGENT_* / OWNERAGENT__* keys (the console's own controls);
+#   - /opt/oetwebapp is mounted read-only in the console, so the edit runs in a throwaway,
+#     network-less container through the docker policy proxy, which raises an owner approval
+#     card for the create (CONTRACT.md §6);
+#   - atomic replace (temp file + rename in the same directory), owner/mode preserved, one
+#     backup kept as .env.production.oet-env-edit.bak;
+#   - nothing is restarted: changes apply on the next deploy / recreate of the services that
+#     read the variable.
+set -euo pipefail
+
+HOST_DIR="${OET_ENV_EDIT_HOST_DIR:-/opt/oetwebapp}"
+ENV_NAME=".env.production"
+# Must already exist on the host (the proxy never pulls). oet-postgres runs this image.
+IMAGE="${OET_ENV_EDIT_IMAGE:-pgvector/pgvector:pg17}"
+REPO="${OET_ENV_EDIT_REPO:-jerryboganda/oetwebapp}"
+MAX_VALUE_CHARS=8192
+
+die() {
+  printf 'oet-env-edit: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+usage() {
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2
+  exit 64
+}
+
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed" 69; }
+
+valid_key() { [[ "$1" =~ ^[A-Z][A-Z0-9_]{0,127}$ ]]; }
+
+check_key() {
+  valid_key "$1" || die "invalid key name (expected UPPER_SNAKE_CASE): $1" 64
+  case "$1" in
+    OWNER_AGENT_* | OWNERAGENT__*) die "refusing to edit $1: console controls are changed by the owner over SSH only" 77 ;;
+  esac
+}
+
+# Fails closed: any gh error counts as "a deploy may be running".
+refuse_while_deploying() {
+  need gh
+  local status count
+  for status in in_progress queued waiting pending requested; do
+    if ! count="$(gh run list --repo "$REPO" --workflow deploy.yml --status "$status" --limit 20 --json databaseId --jq 'length' 2>/dev/null)"; then
+      die "could not check deploy.yml runs with gh; refusing to edit (fail closed)" 75
+    fi
+    if [ "$count" != "0" ]; then
+      die "Build & Deploy (deploy.yml) is $status; wait until it finishes (gh run list -w deploy.yml) and retry" 75
+    fi
+  done
+}
+
+# Script executed inside the throwaway container (POSIX sh + awk; Debian or busybox).
+# Positional args: action key env-file-name; the value (for set) arrives on stdin.
+# shellcheck disable=SC2016
+EDITOR_SCRIPT='
+set -eu
+action="$1"; key="$2"; name="$3"
+f="/target/$name"; bak="/target/$name.oet-env-edit.bak"; lock="/target/.oet-env-edit.lock"
+[ -f "$f" ] || { echo "$name not found in the deploy root" >&2; exit 66; }
+case "$action" in
+  keys) sed -n "s/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p" "$f"; exit 0 ;;
+  has) if grep -q "^$key=" "$f"; then exit 0; else exit 1; fi ;;
+esac
+mkdir "$lock" 2>/dev/null || { echo "another oet-env-edit holds /opt/oetwebapp/.oet-env-edit.lock (remove it only if no edit is running)" >&2; exit 75; }
+tmp=""
+trap '\''[ -n "$tmp" ] && rm -f "$tmp"; rmdir "$lock" 2>/dev/null || true'\'' EXIT
+tmp="$(mktemp "/target/.$name.oet-env-edit.XXXXXX")"
+case "$action" in
+  set)
+    value="$(cat)"
+    nl="$(printf "\nx")"; nl="${nl%x}"; cr="$(printf "\r")"
+    case "$value" in *"$nl"* | *"$cr"*) echo "value must be a single line" >&2; exit 65 ;; esac
+    KEY="$key" VAL="$value" awk '\''BEGIN { k = ENVIRON["KEY"]; v = ENVIRON["VAL"]; done = 0 }
+      index($0, k "=") == 1 { if (!done) { print k "=" v; done = 1 }; next }
+      { print }
+      END { if (!done) print k "=" v }'\'' "$f" >"$tmp"
+    ;;
+  unset)
+    grep -q "^$key=" "$f" || { echo "$key is not set" >&2; exit 1; }
+    KEY="$key" awk '\''index($0, ENVIRON["KEY"] "=") != 1'\'' "$f" >"$tmp"
+    ;;
+  restore)
+    [ -f "$bak" ] || { echo "no backup to restore" >&2; exit 66; }
+    cat "$bak" >"$tmp"
+    ;;
+  *) echo "unknown action" >&2; exit 64 ;;
+esac
+chown "$(stat -c %u:%g "$f")" "$tmp"
+chmod "$(stat -c %a "$f")" "$tmp"
+if [ "$action" != restore ]; then cp -p "$f" "$bak"; fi
+mv -f "$tmp" "$f"
+tmp=""
+'
+
+# Reads the whole input into $value; it must be exactly one non-empty line (use `unset` to clear).
+read_value() {
+  local data
+  data="$(cat)"
+  data="${data%$'\r'}"
+  [ -n "$data" ] || die "no value provided (use 'unset KEY' to remove a key)" 65
+  [[ "$data" != *$'\n'* && "$data" != *$'\r'* ]] || die "value must be a single line" 65
+  [ "${#data}" -le "$MAX_VALUE_CHARS" ] || die "value longer than $MAX_VALUE_CHARS characters" 65
+  value="$data"
+}
+
+run_editor() { # <action> [key]; stdin is forwarded (the value for `set`)
+  need docker
+  local session
+  session="$(basename "${DOCKER_CONFIG:-unattributed}")"
+  docker run --rm -i --pull never --network none --read-only \
+    --security-opt no-new-privileges --cap-drop ALL \
+    --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+    --user 0:0 --entrypoint /bin/sh \
+    --label oet.agent.env-edit=1 --label "oet.agent.session=$session" \
+    --volume "$HOST_DIR:/target" \
+    "$IMAGE" -c "$EDITOR_SCRIPT" oet-env-edit "$1" "${2:-}" "$ENV_NAME"
+}
+
+[ "$#" -ge 1 ] || usage
+action="$1"
+shift
+
+case "$action" in
+  keys)
+    [ "$#" -eq 0 ] || usage
+    run_editor keys </dev/null
+    ;;
+  has)
+    [ "$#" -eq 1 ] || usage
+    check_key "$1"
+    run_editor has "$1" </dev/null
+    ;;
+  set)
+    [ "$#" -eq 1 ] || [ "$#" -eq 3 ] || usage
+    key="$1"
+    check_key "$key"
+    if [ "$#" -eq 3 ]; then
+      [ "$2" = "--from-file" ] || usage
+      [ -r "$3" ] || die "cannot read $3" 66
+      read_value <"$3"
+    else
+      [ ! -t 0 ] || die "pipe the value on stdin (it is never accepted as an argument)" 64
+      read_value
+    fi
+    refuse_while_deploying
+    printf '%s' "$value" | run_editor set "$key"
+    unset value
+    echo "set $key in $ENV_NAME (value not shown); applies on the next deploy/recreate of the services that read it"
+    ;;
+  unset)
+    [ "$#" -eq 1 ] || usage
+    check_key "$1"
+    refuse_while_deploying
+    run_editor unset "$1" </dev/null
+    echo "removed $1 from $ENV_NAME; applies on the next deploy/recreate"
+    ;;
+  restore)
+    [ "$#" -eq 0 ] || usage
+    refuse_while_deploying
+    run_editor restore </dev/null
+    echo "restored $ENV_NAME from the last oet-env-edit backup"
+    ;;
+  -h | --help | help) usage ;;
+  *) usage ;;
+esac

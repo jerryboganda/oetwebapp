@@ -1,0 +1,16 @@
+# Build context of the main image is agent-console/ (.github/workflows/agent-console.yml).
+# The proxy images build from their own sub-folders with their own contexts.
+.git
+node_modules
+dist
+coverage
+tests
+egress
+dockerproxy
+*.log
+*.tsbuildinfo
+.env
+.env.*
+# Root docs are not needed in the image; etc/MANUAL.md is (engines' operating manual).
+*.md
+!etc/MANUAL.md

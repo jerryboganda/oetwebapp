@@ -49,7 +49,7 @@ server {
         if ($uri ~* "^/hubs/") {
             gzip off;
         }
-        if ($uri ~* "^/v1/(?:notifications|conversations|ai-assistant|mocks/live-room|speaking/live-rooms)/hub(?:/|$)") {
+        if ($uri ~* "^/v1/(?:notifications|conversations|ai-assistant|owner-agent|mocks/live-room|speaking/live-rooms)/hub(?:/|$)") {
             gzip off;
         }
         if ($uri ~* "^/v1/auth(?:/|$)") {
@@ -76,6 +76,32 @@ server {
         # ai-assistant hub path above is proxied straight through this
         # location. Matched to the outer timeout so this hop is never the one
         # that silently cuts a long turn off.
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    # Owner Agent Console (/v1/owner-agent/**, incl. its SignalR hub): responses
+    # mix secrets (unlock tickets, approval nonces) with attacker-influenced
+    # agent output, so never compress them (compression oracle); stream them
+    # unbuffered so hub polls and event batches are delivered as soon as the API
+    # writes them. Same upstream and timeouts as `location /`.
+    location ~* ^/v1/owner-agent(?:/|$) {
+        resolver 127.0.0.11 ipv6=off valid=10s;
+        set $api_upstream http://learner-api-${ACTIVE_SLOT}:8080;
+
+        gzip off;
+        proxy_buffering off;
+        proxy_cache off;
+
+        proxy_pass $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $public_forwarded_proto;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Accept-Encoding "";
         proxy_read_timeout 1800s;
         proxy_send_timeout 1800s;
     }

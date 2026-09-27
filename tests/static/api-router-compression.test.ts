@@ -82,7 +82,7 @@ describe.each(API_TEMPLATES)('API router compression in %s', (template) => {
     expect(server).toMatch(/if \(\$http_range != ""\) \{\s+gzip off;/);
     expect(server).toMatch(/if \(\$http_upgrade != ""\) \{\s+gzip off;/);
     expect(server).toContain('if ($uri ~* "^/hubs/")');
-    expect(server).toContain('^/v1/(?:notifications|conversations|ai-assistant|mocks/live-room|speaking/live-rooms)/hub(?:/|$)');
+    expect(server).toContain('^/v1/(?:notifications|conversations|ai-assistant|owner-agent|mocks/live-room|speaking/live-rooms)/hub(?:/|$)');
     expect(server).toContain('if ($uri ~* "^/v1/auth(?:/|$)")');
     expect(server).toContain('if ($uri ~* "^/v1/admin/runtime-settings(?:/|$)")');
     expect(server).toContain('proxy_set_header Accept-Encoding "";');
@@ -92,6 +92,7 @@ describe.each(API_TEMPLATES)('API router compression in %s', (template) => {
       '/V1/AUTH/sign-in',
       '/V1/ADMIN/RUNTIME-SETTINGS',
       '/V1/NOTIFICATIONS/HUB/negotiate',
+      '/V1/OWNER-AGENT/HUB/negotiate',
       '/HUBS/WRITING-COACH',
     ]) {
       expect(excludedRoutes.some((pattern) => pattern.test(requestPath))).toBe(true);
@@ -110,7 +111,30 @@ describe.each(API_TEMPLATES)('API router compression in %s', (template) => {
     const timeout = template.includes('api-bluegreen') ? '1800s' : '300s';
     expect(server).toContain(`proxy_read_timeout ${timeout};`);
     expect(server).toContain(`proxy_send_timeout ${timeout};`);
-    expect(server).not.toMatch(/proxy_(?:request_)?buffering\s+/);
+    // Only the Owner Agent Console location (below) opts out of proxy buffering.
+    expect(withoutOwnerAgentLocation(server)).not.toMatch(/proxy_(?:request_)?buffering\s+/);
+  });
+});
+
+function withoutOwnerAgentLocation(server: string) {
+  const start = server.indexOf('location ~* ^/v1/owner-agent(?:/|$) {');
+  if (start === -1) return server;
+  const end = server.indexOf('\n    }', start);
+  return server.slice(0, start) + server.slice(end === -1 ? server.length : end + 6);
+}
+
+describe('Owner Agent Console location in api-bluegreen', () => {
+  const server = apiServer(renderTemplate('scripts/deploy/nginx/api-bluegreen.conf.template'));
+  const start = server.indexOf('location ~* ^/v1/owner-agent(?:/|$) {');
+  const block = server.slice(start, server.indexOf('\n    }', start));
+
+  it('never compresses or buffers console responses and keeps the slot upstream', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(block).toContain('set $api_upstream http://learner-api-blue:8080;');
+    expect(block).toMatch(/^\s*gzip off;$/m);
+    expect(block).toMatch(/^\s*proxy_buffering off;$/m);
+    expect(block).toContain('proxy_set_header Accept-Encoding "";');
+    expect(block).toContain('proxy_read_timeout 1800s;');
   });
 });
 

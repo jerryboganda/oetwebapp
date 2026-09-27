@@ -49,7 +49,7 @@ server {
         if ($uri ~* "^/hubs/") {
             gzip off;
         }
-        if ($uri ~* "^/v1/(?:notifications|conversations|ai-assistant|mocks/live-room|speaking/live-rooms)/hub(?:/|$)") {
+        if ($uri ~* "^/v1/(?:notifications|conversations|ai-assistant|owner-agent|mocks/live-room|speaking/live-rooms)/hub(?:/|$)") {
             gzip off;
         }
         if ($uri ~* "^/v1/auth(?:/|$)") {

@@ -1,0 +1,2 @@
+# Policy files are installed verbatim into a Linux image: always LF.
+* text eol=lf

@@ -120,8 +120,12 @@ done
 echo "[rollout] draining outgoing ai-worker leases"
 docker stop -t 90 oet-ai-worker >/dev/null 2>&1 || true
 
+echo "[rollout] ensuring internal network oet_agent_ctl (Owner Agent Console; external in the compose file)"
+docker network inspect oet_agent_ctl >/dev/null 2>&1 || docker network create --internal oet_agent_ctl >/dev/null
+
 echo "[rollout] starting target slot from digest images"
-ACTIVE_SLOT="$target_slot" compose up -d --no-build --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup ai-worker
+# --no-deps: never recreate postgres/clamav as a side effect of a config drift.
+ACTIVE_SLOT="$target_slot" compose up -d --no-build --no-deps --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup ai-worker
 
 echo "[rollout] waiting for target slot health"
 api_container=$(ACTIVE_SLOT="$target_slot" compose ps -q "learner-api-$target_slot")

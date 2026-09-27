@@ -259,6 +259,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - oet_postgres_data:/var/lib/postgresql/data
+    # Bounded json-file logs (the owner-agent DB role logs every data-modifying
+    # statement with log_statement=mod). This ONLY takes effect the next time
+    # oet-postgres is recreated for another reason. NEVER force-recreate or
+    # restart postgres just to apply it: auto-deploy-ghcr.sh starts the app
+    # slots with --no-deps precisely so a config change here does not recreate
+    # the database as a dependency.
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -330,13 +341,37 @@ services:
       start_period: 10s
       retries: 5
 
+  # Owner Agent Console (owner directive 2026-09-27; agent-console/CONTRACT.md):
+  # ONLY the two API slots join the internal oet_agent_ctl network and carry the
+  # OwnerAgent__* settings. They are set here, NOT in the &api-env anchor, because
+  # ai-worker merges *api-env and must never be able to reach the sidecar.
+  # Both overrides replace (not extend) the anchor's lists/maps, so `internal`
+  # and `<<: *api-env` are repeated explicitly.
   learner-api-blue:
     <<: *learner-api-slot
     container_name: oet-api-blue
+    environment:
+      <<: *api-env
+      OwnerAgent__Enabled: ${OWNER_AGENT__ENABLED:-false}
+      OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
+      OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
+      OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+    networks:
+      - internal
+      - oet_agent_ctl
 
   learner-api-green:
     <<: *learner-api-slot
     container_name: oet-api-green
+    environment:
+      <<: *api-env
+      OwnerAgent__Enabled: ${OWNER_AGENT__ENABLED:-false}
+      OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
+      OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
+      OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+    networks:
+      - internal
+      - oet_agent_ctl
 
   ai-worker:
     <<: *learner-api-slot
@@ -509,3 +544,10 @@ networks:
   npm_proxy:
     external: true
     name: ${NPM_PROXY_NETWORK:-npm_proxy}
+  # Internal-only (no gateway) network shared with the separate
+  # `oet-agent-console` compose project. Created with
+  # `docker network create --internal oet_agent_ctl` by auto-deploy-ghcr.sh and
+  # .github/workflows/agent-console.yml before any `up`.
+  oet_agent_ctl:
+    external: true
+    name: oet_agent_ctl

@@ -1,0 +1,142 @@
+# OET Owner Agent Console — Codex execpolicy backstop (Starlark prefix rules).
+#
+# Installed root-owned and read-only at $CODEX_HOME/rules/oet.rules by bin/entrypoint.sh (the
+# rules/ directory holds nothing else). Only `forbidden` rules live here: they make Codex itself
+# refuse these commands even if an approval were granted. The Guard (src/guard.ts) remains the
+# primary classifier and the uid / proxy / Postgres / GitHub-ruleset boundaries remain the
+# enforcement; this file is a seatbelt for the few commands a console session must never run.
+#
+# Kept in sync with the "Bash(...)" deny rules in etc/managed-settings.json (Claude Code's
+# equivalent backstop); tests/engines/policy-files.test.ts fails when they drift.
+# Validate with: codex execpolicy check --pretty --rules etc/oet.rules -- <command>
+# Keep every `pattern = [...]` on one line with double-quoted strings (the test parses it).
+
+# ── Git: no force/mirror/delete pushes, no --all, no pushes to main (merges go through Ship) ──
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease", "--force-if-includes", "--mirror", "--delete", "-d", "--prune", "--all"]],
+    decision = "forbidden",
+    justification = "Console sessions never rewrite or delete remote history. Commit to your agent/* branch; the owner ships it with the console's Ship button.",
+    match = ["git push --force origin agent/20260927-demo", "git push -f", "git push --mirror origin"],
+    not_match = ["git push origin agent/20260927-demo", "git status"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", ["main", "HEAD:main", "refs/heads/main", "HEAD:refs/heads/main", "+main", "+HEAD:main", ":main"]],
+    decision = "forbidden",
+    justification = "Never push to main from a console session. Merges happen only through the console's Ship executor.",
+    match = ["git push origin main", "git push origin HEAD:main"],
+    not_match = ["git push origin agent/20260927-demo"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", ["-u", "--set-upstream"], "origin", ["main", "HEAD:main", "refs/heads/main"]],
+    decision = "forbidden",
+    justification = "Never push to main from a console session. Merges happen only through the console's Ship executor.",
+    match = ["git push -u origin main"],
+    not_match = ["git push -u origin agent/20260927-demo"],
+)
+
+# ── GitHub: repository settings, merges, secrets and credentials are owner/Ship-only ─────────
+
+prefix_rule(
+    pattern = ["gh", "repo", ["delete", "edit", "archive", "unarchive", "rename"]],
+    decision = "forbidden",
+    justification = "Repository settings and visibility change only through the Ship executor or the owner. Use gh repo view to read settings.",
+    match = ["gh repo edit jerryboganda/oetwebapp --visibility public", "gh repo delete jerryboganda/oetwebapp"],
+    not_match = ["gh repo view jerryboganda/oetwebapp"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "PRs are merged only by the console's Ship executor after the owner clicks Ship.",
+    match = ["gh pr merge 123 --squash"],
+    not_match = ["gh pr view 123", "gh pr create --fill"],
+)
+
+prefix_rule(
+    pattern = ["gh", ["secret", "variable"]],
+    decision = "forbidden",
+    justification = "Actions secrets and variables (including the visibility lease) are owner/Ship-only.",
+    match = ["gh secret set PROD_SSH_KEY", "gh variable set PUBLIC_WINDOW_HOLDERS"],
+    not_match = ["gh run list -w deploy.yml"],
+)
+
+prefix_rule(
+    pattern = ["gh", "auth", ["token", "login", "logout", "refresh", "setup-git", "switch"]],
+    decision = "forbidden",
+    justification = "The agent's GitHub token is managed by the console and must never be printed or replaced. gh auth status is fine.",
+    match = ["gh auth token", "gh auth logout"],
+    not_match = ["gh auth status"],
+)
+
+prefix_rule(
+    pattern = ["gh", "api", ["-X", "--method"], ["DELETE", "PATCH", "PUT"]],
+    decision = "forbidden",
+    justification = "Mutating GitHub API calls are not allowed from console sessions; use the specific gh subcommand or ask the owner.",
+    match = ["gh api -X DELETE repos/jerryboganda/oetwebapp/git/refs/heads/x", "gh api --method PATCH repos/jerryboganda/oetwebapp"],
+    not_match = ["gh api repos/jerryboganda/oetwebapp/pulls"],
+)
+
+# ── Docker: production data lives in named volumes; never prune or remove them ──────────────
+
+prefix_rule(
+    pattern = ["docker", "volume", ["rm", "remove", "prune"]],
+    decision = "forbidden",
+    justification = "Named volumes hold production data (docs/PRODUCTION-DATA-PERSISTENCE.md). Volumes are never removed or pruned from a console session.",
+    match = ["docker volume rm oetwebsite_oet_postgres_data", "docker volume prune -f"],
+    not_match = ["docker volume ls", "docker volume inspect oetwebsite_oet_postgres_data"],
+)
+
+prefix_rule(
+    pattern = ["docker", ["system", "container", "image", "network", "builder", "buildx"], "prune"],
+    decision = "forbidden",
+    justification = "Prune commands act on the whole shared VPS (co-tenants included) and can delete rollback images.",
+    match = ["docker system prune -af", "docker image prune -a"],
+    not_match = ["docker system df", "docker image ls"],
+)
+
+prefix_rule(
+    pattern = ["docker", "compose", "down", ["-v", "--volumes"]],
+    decision = "forbidden",
+    justification = "compose down -v deletes production volumes. Restart individual oet-* containers instead.",
+    match = ["docker compose down -v"],
+    not_match = ["docker compose ps"],
+)
+
+prefix_rule(
+    pattern = ["docker-compose", "down", ["-v", "--volumes"]],
+    decision = "forbidden",
+    justification = "compose down -v deletes production volumes. Restart individual oet-* containers instead.",
+    match = ["docker-compose down --volumes"],
+    not_match = ["docker-compose ps"],
+)
+
+# ── Filesystem: never wipe the deploy root, the workspace or the agent home ───────────────────
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr"], ["/", "/opt/oetwebapp", "/workspace", "/home/agent"]],
+    decision = "forbidden",
+    justification = "Recursive removal of the root, deploy root, workspace or agent home is never part of a console task.",
+    match = ["rm -rf /", "rm -fr /workspace"],
+    not_match = ["rm -rf /workspace/sessions/tmp-build"],
+)
+
+# ── Engines: no nested agents (they would run outside the console's Guard) ─────────────────
+
+prefix_rule(
+    pattern = ["claude"],
+    decision = "forbidden",
+    justification = "Do not start Claude Code from inside a console session; ask the owner to hand the session off instead.",
+    match = ["claude -p hello", "claude auth status"],
+    not_match = ["cat CLAUDE.md"],
+)
+
+prefix_rule(
+    pattern = ["codex"],
+    decision = "forbidden",
+    justification = "Do not start another Codex instance from inside a console session.",
+    match = ["codex exec hello", "codex login"],
+    not_match = ["git log"],
+)

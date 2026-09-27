@@ -56,3 +56,14 @@ One personal AI Pro subscription cannot serve all paying students at peak:
   keep `AiFeatureRouteResolver` fallbacks for overflow;
 - the gateway governor makes exhaustion visible (`/v1/quota`,
   `/v1/healthz`) instead of failing learner turns.
+
+## Related: owner subscription agents
+
+The Owner Agent Console (Claude Max + ChatGPT Business, owner-only, in
+`/admin/agent-console`) follows the **same personal-quota principle** as
+Mode B — the owner's own subscription, never in front of learner traffic —
+on a **different surface**: the vendors' own unmodified CLIs signed in
+through their own flows inside a separate owner-only sidecar, never bridged
+into this gateway or registered as an `AiProvider`. It does not change
+anything here: **Mode B stays hard-disabled in production.** Policy:
+`docs/AI-USAGE-POLICY.md` §20; runbook: `docs/ops/OWNER-AGENT-CONSOLE.md`.

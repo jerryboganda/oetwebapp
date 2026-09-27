@@ -2128,7 +2128,13 @@ public static partial class SeedData
             // TO VERIFY TV-006 / TV-007: numeric Writing/Speaking band claims by the
             // companion stay disabled until approved calibration exists. Criterion
             // feedback is always allowed. Do not enable without Pedagogy/AI QA sign-off.
-            new FeatureFlag { Id = "flg-030", Name = "Companion Score Display", Key = "companion_score_display", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "GATED (TV-006/TV-007): allow the companion to state numeric Writing/Speaking band estimates. Requires approved calibration.", Owner = "Pedagogy", CreatedAt = now, UpdatedAt = now }
+            new FeatureFlag { Id = "flg-030", Name = "Companion Score Display", Key = "companion_score_display", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "GATED (TV-006/TV-007): allow the companion to state numeric Writing/Speaking band estimates. Requires approved calibration.", Owner = "Pedagogy", CreatedAt = now, UpdatedAt = now },
+            // ── Owner Agent Console (agent-console/CONTRACT.md §5) ──
+            // Kill switch read uncached + fail-closed by OwnerAgentFeatureGate: missing or
+            // disabled row ⇒ every /v1/owner-agent route answers 503. Default OFF; the owner
+            // enables it deliberately (production has no demo seed, so create the row with
+            // this key from /admin/flags there).
+            new FeatureFlag { Id = "flg-031", Name = "Owner Agent Console", Key = "owner_agent_console", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Kill switch for the owner-only agent console (/admin/agent-console). Off = every /v1/owner-agent route returns 503.", Owner = "Owner", CreatedAt = now, UpdatedAt = now }
         );
 
         db.AIConfigVersions.AddRange(

@@ -302,6 +302,10 @@ version of this document:
   outcome (success, provider error, quota denied, kill-switch denied).
 - `AiCredentialMode=platform-only` cannot be overridden by a BYOK feature flag.
 
+Scope: these invariants govern platform AI calls made through the coordinator.
+The owner's personal subscription agents (§20) are outside that path by design
+and are governed by §20 instead.
+
 ---
 
 ## 18. GitHub Copilot / GitHub Models provider
@@ -413,3 +417,109 @@ one `AiUsageRecord`, preserving the audit invariant.
   features only with UX acceptance (browser jobs settle in 10–60s).
 - Usage figures are character-based estimates from the facade, not metered
   model tokens; quota/credits metering consumes them as reported.
+
+---
+
+## 20. Owner subscription agents
+
+The **Owner Agent Console** (`/admin/agent-console`, sidecar
+`oet-agent-console`) runs **Claude Code** and **OpenAI Codex** on the
+production VPS, signed in with the owner's **own** subscriptions (Claude Max,
+ChatGPT Business) through each vendor's own sign-in flow. It is an
+engineering/operations tool for the owner, **not** an AI feature of the
+product. Runbook: [`docs/ops/OWNER-AGENT-CONSOLE.md`](ops/OWNER-AGENT-CONSOLE.md);
+wire contract: [`agent-console/CONTRACT.md`](../agent-console/CONTRACT.md);
+repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
+
+**Who may use it**
+
+- **Owner only.** Access requires role `admin` + verified email +
+  `system_admin` + `auth_account_id` listed in `OwnerAgent:OwnerAccountIds`
+  (env only — never a runtime setting, DB row or `/admin/settings` value) +
+  a password-and-TOTP unlock ticket. Other admins, tutors, experts and
+  learners never get access, not even read-only.
+- A fresh TOTP step-up is additionally required to enable Autopilot, Ship,
+  change GitHub tokens, or connect/log out an engine.
+
+**Isolation from product AI traffic**
+
+- The engines are **never** registered as `AiProvider` rows, feature routes,
+  BYOK credentials or fallback targets. Learner traffic can reach any active
+  provider row (explicit provider pin on `/v1/ai/complete`, lowest-priority
+  fallback, assistant fallback), so registering a subscription there would
+  put learner traffic on the owner's personal quota.
+- Only the API's `OwnerAgent`-policy endpoints relay to the sidecar, over the
+  internal network `oet_agent_ctl`. No learner request, scheduled job,
+  background worker or other admin action may call it.
+- Engine output never reaches learners directly: code ships through an
+  `agent/*` PR and the owner's Ship click; database changes pass the Guard
+  (owner approval or pre-snapshot, per mode) and are audited.
+
+**Metering and audit (carve-out from §0.4 / §12)**
+
+- **No `AiUsageRecord` is written** for subscription-engine turns. They carry
+  no platform per-token cost, are not quota/credit metered, and would
+  distort learner cost reporting.
+- Evidence instead: hash-chained `AuditEvent` rows with
+  `ResourceType = "OwnerAgent"` (unlock, connect/logout, token updates,
+  session start, messages, approvals, mode changes, ship, kill switch,
+  update — never secrets, message bodies truncated to 200 chars); per-session
+  JSONL transcripts in the sidecar; Postgres `log_statement = 'mod'` on role
+  `oet_owner_agent` (best-effort — the API-side chain is authoritative).
+- The console shows engine-reported usage per session (tokens,
+  `costUsd` where the engine reports it, rate-limit windows) so the owner can
+  see exposure if a vendor starts billing headless/SDK usage separately.
+
+**Credentials**
+
+- Sign-in completes inside the container through the vendor's own flow:
+  the unmodified, SDK-bundled `claude auth login` (Anthropic URL + paste-back
+  code) and Codex ChatGPT **device-code** login. The console relays only the
+  URL/code; it never reads, copies, stores or exports the engines'
+  credential files.
+- No API keys for either engine in the sidecar: `ANTHROPIC_*`,
+  `CLAUDE_CODE_USE_*`, `OPENAI_API_KEY` and `CODEX_API_KEY` are stripped from
+  engine environments, and Codex is pinned to `forced_login_method =
+  "chatgpt"` plus the Business workspace id.
+- One credential store per machine: never copy `auth.json` or
+  `.credentials.json` between machines (stricter than the vendors require).
+- GitHub access uses two fine-grained, repo-scoped PATs (agent PAT, Ship
+  PAT). Tokens are write-only through the console and never returned.
+
+**Data protection**
+
+- **Model training is off** on both subscriptions. The owner re-checks after
+  any plan, workspace or vendor-policy change.
+- Anything a session reads (DB rows, logs, files) is sent to the vendor as
+  prompt context under the owner's subscription terms. Keep reads of
+  learner data minimal and purpose-bound (support, debugging, data repair);
+  prefer ids and aggregates; never bulk-export learner data into a session.
+  Reading learner-authored content, `docker logs`, web results or GitHub
+  comments **taints** the turn (see the runbook).
+- Transcripts are redacted of known secrets and token patterns before
+  persistence and **retained 90 days**, then purged. GDPR erasure procedure:
+  runbook → "Transcript retention and GDPR erasure".
+
+**Rule for any future non-owner use (Phase 5)**
+
+- Anything another admin — or any non-owner principal, scheduled job or
+  learner request — can trigger **must use API-key / access-token
+  credentials billed to the platform through the coordinator** (one
+  `AiUsageRecord` per physical call, grounding enforced). The owner's
+  subscriptions are never used for it.
+- Admin draft features may reach these engines only after the three leak
+  paths are closed (per-row `AllowedUserIds` / `ExcludeFromFallback`
+  enforced in `AiGatewayService.CompleteAsync` and
+  `AiAssistantGateway.ResolveProviderAsync`; learner provider pin removed
+  from `/v1/ai/complete`), and then only for owner-triggered calls.
+
+**Vendor-terms position**
+
+- Anthropic permits an end user to sign in to the unmodified Claude Code
+  binary with their own subscription, including on a hosted machine, but
+  forbids third parties from collecting or intermediating Claude.ai
+  credentials, and sizes Pro/Max limits for ordinary individual use.
+  Anthropic's announced move of Agent SDK usage to a separate credit pool
+  is **paused, not cancelled** — "$0 marginal cost" holds only while it
+  stays paused. Codex is the fallback engine. Sources and quotes: runbook →
+  "Vendor terms".

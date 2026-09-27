@@ -23,6 +23,7 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
+using OetLearner.Api.Services.OwnerAgent;
 using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -276,8 +277,15 @@ builder.Services.AddHttpClient(IpinfoIpIntelligenceService.HttpClientName, clien
 builder.Services.AddScoped<IIpIntelligenceService, IpinfoIpIntelligenceService>();
 // Spec §4.2 learner verified-email gate (toggle-backed, see EmailVerifiedGate.cs).
 builder.Services.AddScoped<IAuthorizationHandler, EmailVerifiedRequirementHandler>();
-builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, EmailVerifiedAuthorizationResultHandler>();
+// Owner Agent Console: unlock-related 403s get a { code, message } body; everything
+// else (incl. the email-verified gate) is handled by the existing result handler.
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
+    _ => new OwnerAgentAuthorizationResultHandler(new EmailVerifiedAuthorizationResultHandler()));
 builder.Services.AddScoped<AuthService>();
+// Owner Agent Console (agent-console/CONTRACT.md §5): env-only OwnerAgent options,
+// owner/unlock authorization handler, unlock + step-up tickets, hash-chained audit,
+// sidecar typed HttpClient. No hosted services.
+builder.Services.AddOwnerAgentConsole(builder.Configuration);
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
 // failure is fail-open (we do not want HIBP hiccups to block sign-ups).
@@ -400,6 +408,9 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    // Owner Agent Console hub: long-polling-only, so every poll counts against the
+    // limiter; it gets its own per-account bucket (see OwnerAgentPolicies.HubRateLimit).
+    options.AddOwnerAgentHubRateLimit();
     options.AddPolicy("AiCredentialValidate", httpContext =>
     {
         // Tight limit: this endpoint pings external providers and costs us
@@ -1004,6 +1015,10 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminLearnerWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "learner:write", "system_admin")));
+    // Owner Agent Console: "OwnerAgentOwner" (owner, no unlock) and "OwnerAgent"
+    // (owner + X-Owner-Agent-Unlock). Owner = admin + email_verified + system_admin +
+    // auth_account_id in the env-only OwnerAgent:OwnerAccountIds allow-list.
+    options.AddOwnerAgentPolicies();
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -2980,6 +2995,8 @@ app.MapCompanionAccessAdminEndpoints();
 app.MapCompanionLearnerEndpoints();
 app.MapAiMeEndpoints();
 OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
+// Owner Agent Console relay (/v1/owner-agent/*) — owner-only, unlock-gated, kill-switched.
+app.MapOwnerAgentEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapExpertAdminEndpoints();
 app.MapContentStalenessEndpoints();
@@ -3123,6 +3140,18 @@ app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub
 app.MapHub<OetLearner.Api.Hubs.WritingSubmissionHub>("/hubs/writing-submissions").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
 app.MapHub<OetLearner.Api.Hubs.WritingCoachHub>("/hubs/writing-coach").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
 app.MapHub<OetLearner.Api.Hubs.WritingTodayHub>("/hubs/writing-today").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
+// Owner Agent Console event relay. Long polling only: the Next /api/backend proxy cannot
+// upgrade WebSockets, and the unlock ticket travels in the X-Owner-Agent-Unlock header,
+// which browsers cannot attach to WebSocket/EventSource requests. Deliberately NOT on
+// the access_token query-string list in OnMessageReceived. Its own rate-limit bucket:
+// every long poll is a request (see OwnerAgentPolicies.HubRateLimit).
+app.MapHub<OetLearner.Api.Hubs.OwnerAgentHub>("/v1/owner-agent/hub", options =>
+    {
+        options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+        options.CloseOnAuthenticationExpiration = true;
+    })
+    .RequireAuthorization(OwnerAgentPolicies.Unlocked)
+    .RequireRateLimiting(OwnerAgentPolicies.HubRateLimit);
 }
 
 await using (var scope = app.Services.CreateAsyncScope())

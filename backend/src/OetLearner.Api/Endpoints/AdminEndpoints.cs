@@ -2021,8 +2021,12 @@ public static class AdminEndpoints
             return Results.Ok(new { roleId, users });
         }).WithAdminRead("AdminSystemAdmin");
 
-        admin.MapPost("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapPost("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, IOptions<OwnerAgentOptions> ownerAgentOptions, CancellationToken ct) =>
         {
+            // Owner-account hardening: only the owner may change the owner's admin role.
+            OwnerAgentAccountProtection.EnsureMutationAllowed(
+                ownerAgentOptions.Value, http.User.FindFirstValue(ClaimTypes.NameIdentifier), userId, "change the admin role");
+
             var role = AdminRoleCatalog.Find(roleId);
             if (role is null)
                 return Results.BadRequest(new { error = "BUILTIN_ROLE_NOT_FOUND", roleId });
@@ -2082,8 +2086,11 @@ public static class AdminEndpoints
             return Results.Ok(new { assigned = true, userId, roleId = role.Id, permissions = role.Permissions });
         }).WithAdminWrite("AdminSystemAdmin");
 
-        admin.MapDelete("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        admin.MapDelete("/roles/{roleId}/users/{userId}", async (string roleId, string userId, HttpContext http, LearnerDbContext db, IOptions<OwnerAgentOptions> ownerAgentOptions, CancellationToken ct) =>
         {
+            OwnerAgentAccountProtection.EnsureMutationAllowed(
+                ownerAgentOptions.Value, http.User.FindFirstValue(ClaimTypes.NameIdentifier), userId, "change the admin role");
+
             var user = await db.AdminUsers.FindAsync([userId], ct);
             if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
             if (!string.Equals(user.Role, roleId, StringComparison.OrdinalIgnoreCase))

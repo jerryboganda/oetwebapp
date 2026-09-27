@@ -4,6 +4,7 @@ import {
   Activity,
   Brain,
   Bell,
+  Bot,
   BookOpen,
   BookOpenText,
   BrainCircuit,
@@ -39,6 +40,12 @@ import {
 
 export type AdminNavItem = NavItem & {
   requiredPermissions?: string[];
+  /**
+   * Visible only to the platform owner (GET /v1/owner-agent/me → isOwner).
+   * Applied by app/admin/layout.tsx on top of `requiredPermissions`; the API
+   * enforces the owner allow-list independently.
+   */
+  ownerOnly?: boolean;
 };
 
 export type AdminNavGroup = Omit<NavGroup, 'items'> & {
@@ -326,6 +333,14 @@ export const adminNavGroups: AdminNavGroup[] = [
         matchPrefix: '/admin/webhooks',
         requiredPermissions: [AdminPermission.SystemAdmin],
       },
+      {
+        href: '/admin/agent-console',
+        label: 'Agent Console',
+        icon: <Bot className={iconClassName} />,
+        matchPrefix: '/admin/agent-console',
+        requiredPermissions: [AdminPermission.SystemAdmin],
+        ownerOnly: true,
+      },
     ],
   },
   {
@@ -556,6 +571,8 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/study-plan-templates', title: 'Study Plan Templates' },
   { prefix: '/admin/community', title: 'Community Moderation' },
   { prefix: '/admin/ai-assistant', title: 'AI Assistant' },
+  { prefix: '/admin/agent-console/settings', title: 'Agent Console Settings' },
+  { prefix: '/admin/agent-console', title: 'Agent Console' },
   { prefix: '/admin/companion', title: 'Learning Companion' },
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },

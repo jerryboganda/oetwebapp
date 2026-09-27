@@ -128,6 +128,9 @@ public static class SentryBootstrap
         "X-CSRF-Token",
         "X-XSRF-Token",
         "X-Api-Key",
+        // Owner Agent Console unlock ticket + single-use step-up token.
+        "X-Owner-Agent-Unlock",
+        "X-Owner-Agent-StepUp",
         "X-Forwarded-For",
         "X-Real-IP",
     };

@@ -123,6 +123,14 @@ public static class SecurityEventKinds
     public const string VideoFocusLost = "video.focus_lost";
     public const string VideoIntegritySignal = "video.integrity_signal";
 
+    // Authenticator step-up, hardened re-enrolment and the Owner Agent Console
+    // unlock lifecycle. Written atomically through OwnerAgentSecurityEvents (they
+    // double as durable state); aliased by Security.OwnerAgentSecurityEventKinds.
+    public const string AuthStepUpSucceeded = "auth.step_up_succeeded";
+    public const string AuthAuthenticatorReenrolled = "auth.authenticator_reenrolled";
+    public const string OwnerAgentUnlocked = "owner_agent.unlocked";
+    public const string OwnerAgentLocked = "owner_agent.locked";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         AuthSignInSucceeded, AuthSignInFailed, AuthSignOut, AuthMfaFailed,
@@ -134,6 +142,7 @@ public static class SecurityEventKinds
         AdminSessionRevoked, AdminDeviceReset, AdminDeviceLimitOverride, AdminAccountSuspended, AdminAccountReactivated, AdminPlaybackBlocked,
         VideoProtectionEngaged, VideoProtectionUnavailable, VideoCaptureDetected, VideoScreenshotDetected,
         VideoWatermarkTampered, VideoDevtoolsSuspected, VideoVisibilityHidden, VideoFocusLost, VideoIntegritySignal,
+        AuthStepUpSucceeded, AuthAuthenticatorReenrolled, OwnerAgentUnlocked, OwnerAgentLocked,
     };
 
     public static readonly IReadOnlySet<string> Severities = new HashSet<string>(StringComparer.Ordinal)
@@ -145,7 +154,7 @@ public static class SecurityEventKinds
     public static string DefaultSeverity(string kind) => kind switch
     {
         AuthSignInFailed or AuthMfaFailed or DeviceChangeBlockedCooldown or DeviceTrustRejected or RiskCountryChanged
-            or RiskStepUpRequired => "warning",
+            or RiskStepUpRequired or AuthAuthenticatorReenrolled or OwnerAgentUnlocked or OwnerAgentLocked => "warning",
         AuthRefreshReuseDetected or AuthRefreshDeviceMismatch or RiskImpossibleTravel or RiskSignInBlocked
             or AdminAccountSuspended or AdminPlaybackBlocked => "critical",
         // Matches VideoProtectionKinds.DefaultSeverity exactly — kept in sync

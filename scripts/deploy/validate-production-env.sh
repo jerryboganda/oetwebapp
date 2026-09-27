@@ -538,6 +538,51 @@ if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" 
   require_min_length TYPESAFE__APIKEY 16
 fi
 
+# Owner Agent Console (owner directive 2026-09-27) is OPTIONAL. When enabled, the
+# API slots and the oet-agent-console stack share these secrets. They must be
+# HEX (`openssl rand -hex 32` for the tokens, `openssl rand -hex 24` for the DB
+# password): hex can never contain the placeholder / mock / stub / noop markers
+# scanned above and by mock-stub-scan.sh, and the DB password is embedded in a
+# postgres:// URL without escaping.
+require_hex_value() {
+  local key="$1"
+  local value
+  value=$(read_env_value "$key" || true)
+  case "$value" in
+    *[!0-9A-Fa-f]*)
+      echo "[env] $key must be hexadecimal (generate with openssl rand -hex)" >&2
+      failed=1
+      ;;
+  esac
+}
+owner_agent_enabled=$(read_env_value OWNER_AGENT__ENABLED || true)
+if [ "$(printf '%s' "$owner_agent_enabled" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+  require_min_length OWNER_AGENT__INTERNALTOKEN 32
+  require_min_length OWNER_AGENT__PROXYTOKEN 32
+  require_min_length OWNER_AGENT__DBPASSWORD 24
+  require_hex_value OWNER_AGENT__INTERNALTOKEN
+  require_hex_value OWNER_AGENT__PROXYTOKEN
+  require_hex_value OWNER_AGENT__DBPASSWORD
+  if [ "$(read_env_value OWNER_AGENT__INTERNALTOKEN || true)" = "$(read_env_value OWNER_AGENT__PROXYTOKEN || true)" ]; then
+    echo "[env] OWNER_AGENT__INTERNALTOKEN and OWNER_AGENT__PROXYTOKEN must be different secrets" >&2
+    failed=1
+  fi
+  owner_agent_ids=$(read_env_value OWNER_AGENT__OWNERACCOUNTIDS || true)
+  if [ -z "$owner_agent_ids" ]; then
+    echo "[env] OWNER_AGENT__OWNERACCOUNTIDS is required when OWNER_AGENT__ENABLED=true" >&2
+    failed=1
+  elif ! printf '%s' "$owner_agent_ids" | grep -Eq '^[A-Za-z0-9_-]{1,64}(,[A-Za-z0-9_-]{1,64})*$'; then
+    echo "[env] OWNER_AGENT__OWNERACCOUNTIDS must be a comma-separated list of auth account ids" >&2
+    failed=1
+  fi
+  owner_agent_base_url=$(read_env_value OWNER_AGENT__BASEURL || true)
+  if [ -n "$owner_agent_base_url" ] && ! printf '%s' "$owner_agent_base_url" | grep -Eq '^http://oet-agent-console(:[0-9]{1,5})?/?$'; then
+    # The API sends the internal token to this URL; it must stay the internal sidecar.
+    echo "[env] OWNER_AGENT__BASEURL must be http://oet-agent-console:<port> (internal network only)" >&2
+    failed=1
+  fi
+fi
+
 real_provider_enabled=$(read_env_value_any CONVERSATION__REALTIMESTTALLOWREALPROVIDER Conversation__RealtimeSttAllowRealProvider || true)
 real_provider_enabled=$(printf '%s' "$real_provider_enabled" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
 if [[ "$real_provider_enabled" == "true" ]]; then

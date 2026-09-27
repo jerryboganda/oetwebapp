@@ -19,6 +19,11 @@ PROTECTED_VOLUMES=(
   oetwebsite_oet_db_backups
   oetwebsite_oet_clamav_data
   oetwebsite_oet_with_dr_hesham_storage
+  # Owner Agent Console (docker-compose.agent-console.yml): engine sign-ins,
+  # workspace/worktrees, session store + audit transcripts.
+  oet-agent-console_oet_agent_home
+  oet-agent-console_oet_agent_workspace
+  oet-agent-console_oet_agent_sessions
 )
 
 if [ ! -x "$REAL_DOCKER" ]; then
