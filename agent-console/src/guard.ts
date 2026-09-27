@@ -1273,9 +1273,38 @@ function analyzeInterpreter(name: string, args: readonly string[], ctx: ShellCtx
   f.cat('unknown');
 }
 
-function analyzePsql(args: readonly string[], io: Io, ctx: ShellCtx): void {
+/** psql short options that take a value (getopt "c:d:f:h:L:o:p:P:R:T:U:v:F:"). */
+const PSQL_VALUE_SHORT = new Set(['c', 'd', 'f', 'h', 'L', 'o', 'p', 'P', 'R', 'T', 'U', 'v', 'F']);
+
+/**
+ * getopt-style expansion of bundled short options: `-Atc SQL` → `-A -t -c SQL`, `-tcSQL` →
+ * `-t -c SQL`. Engines routinely bundle (`psql -Atc '…'`); without this the SQL was never seen
+ * and a plain SELECT was treated as interactive psql (no taint, needless snapshot).
+ */
+export function expandPsqlShortOptions(args: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const a of args) {
+    if (a.length <= 2 || a.startsWith('--') || !/^-[A-Za-z]/.test(a)) {
+      out.push(a);
+      continue;
+    }
+    for (let k = 1; k < a.length; k += 1) {
+      const ch = a[k] as string;
+      out.push(`-${ch}`);
+      if (PSQL_VALUE_SHORT.has(ch)) {
+        const attached = a.slice(k + 1);
+        if (attached) out.push(attached); // otherwise the value is the next argument
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function analyzePsql(rawArgs: readonly string[], io: Io, ctx: ShellCtx): void {
   const f = ctx.findings;
   f.dbHint = true;
+  const args = expandPsqlShortOptions(rawArgs);
   const sqls: string[] = [];
   let hasFile = false;
   let listOnly = false;
@@ -1301,9 +1330,11 @@ function analyzePsql(args: readonly string[], io: Io, ctx: ShellCtx): void {
       i += 1;
     }
   }
+  // SQL the Guard cannot see may also READ learner content: taint conservatively.
   if (hasFile) {
     f.unparse('psql -f (SQL from a file)');
     f.cat('db_write');
+    f.taint('db_read');
     f.tablesUnknown = true;
     return;
   }
@@ -1314,6 +1345,7 @@ function analyzePsql(args: readonly string[], io: Io, ctx: ShellCtx): void {
     }
     f.unparse(io.pipedFrom || io.stdinFromFile ? 'psql reading SQL from stdin' : 'interactive psql');
     f.cat('db_write');
+    f.taint('db_read');
     f.tablesUnknown = true;
     return;
   }

@@ -76,6 +76,8 @@ describe('buildAgentEnv (allow-list)', () => {
     expect(env.ENGINE_FLAG).toBe('on');
     // Requires bubblewrap in Claude Code >= 2.1.28x; setting it makes the CLI exit 1.
     expect(env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).toBeUndefined();
+    expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1');
+    expect(env.ENABLE_CLAUDEAI_MCP_SERVERS).toBe('false');
     expect(env.OET_AGENT_DATABASE_URL).toBe(config.agentDatabaseUrl);
   });
 

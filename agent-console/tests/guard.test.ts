@@ -191,6 +191,25 @@ describe('guard: unparseable ⇒ treated as destructive (plan list)', () => {
     expect(nested.unparseable).toBe(true);
   });
 
+  it('expands bundled psql short options (live E2E 2026-09-27: `psql -Atc` was unparsed)', () => {
+    // The exact command Codex ran: a plain SELECT must be a tainting read, not "interactive psql".
+    const read = cmd(`psql "$OET_AGENT_DATABASE_URL" -Atc 'SELECT "Id" FROM "ApplicationUserAccounts" LIMIT 1'`);
+    expect(read.unparseable, read.reasons.join('; ')).toBe(false);
+    expect(read.destructive).toBe(false);
+    expect(read.needsDbSnapshot).toBe(false);
+    expect(read.taintSource).toBe('db_read');
+    expect(cmd(`psql "$OET_AGENT_DATABASE_URL" -tAc "DELETE FROM scratch WHERE true"`).destructive).toBe(true);
+    expect(cmd(`psql "-tcDROP TABLE scratch"`).destructive).toBe(true);
+    expect(cmd(`psql -qAtc "SELECT count(*) FROM users"`).unparseable).toBe(false);
+    expect(cmd('psql -Atf fix.sql').unparseable).toBe(true);
+  });
+
+  it('taints on psql whose SQL cannot be read (file, stdin, interactive)', () => {
+    expect(cmd('psql -f fix.sql').taintSource).toBe('db_read');
+    expect(cmd('cat q.sql | psql "$OET_AGENT_DATABASE_URL"').taintSource).toBe('db_read');
+    expect(cmd('psql "$OET_AGENT_DATABASE_URL"').taintSource).toBe('db_read');
+  });
+
   it('marks unparseable database commands for a full pre-snapshot', () => {
     expect(cmd('psql -f fix.sql')).toMatchObject({ needsDbSnapshot: true, snapshotTables: [] });
     expect(cmd('docker exec oet-postgres psql -c "DROP TABLE x"').needsDbSnapshot).toBe(true);

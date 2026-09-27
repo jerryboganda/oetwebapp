@@ -165,6 +165,13 @@ export function buildAgentEnv(config: AgentEnvConfig, options: AgentEnvOptions =
   // No CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: Claude Code >= 2.1.28x requires bubblewrap for it
   // and exits 1 at startup (login and every session) without it; bwrap cannot create user
   // namespaces in this container anyway. This env is already an allow-list with no secrets.
+  // No telemetry/error reporting (a Datadog intake host hit the egress proxy in the live E2E),
+  // and never load the owner's claude.ai MCP connectors (Gmail, Drive, …) into agent sessions
+  // (mcp-proxy.anthropic.com was requested in the live E2E).
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+  env.DISABLE_TELEMETRY = '1';
+  env.DISABLE_ERROR_REPORTING = '1';
+  env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   env.DISABLE_AUTOUPDATER = '1';
   env.DISABLE_UPDATES = '1';
   env.GIT_TERMINAL_PROMPT = '0';
