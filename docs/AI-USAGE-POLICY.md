@@ -438,8 +438,12 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   (env only — never a runtime setting, DB row or `/admin/settings` value) +
   a password-and-TOTP unlock ticket. Other admins, tutors, experts and
   learners never get access, not even read-only.
-- A fresh TOTP step-up is additionally required to enable Autopilot, Ship,
-  change GitHub tokens, or connect/log out an engine.
+- One unlock (password + current TOTP) is valid for a fixed 60 minutes
+  (`OwnerAgent:UnlockMinutes`) on that browser, carried in an HttpOnly,
+  Secure, SameSite=Strict cookie bound to the signed-in session; it is never
+  extended and there is no per-action step-up — enabling Autopilot, Ship,
+  GitHub token changes and engine connect/logout need only the unlock (each is
+  audited). Lock, sign-out and authenticator re-enrolment revoke it early.
 
 **Isolation from product AI traffic**
 

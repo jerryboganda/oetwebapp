@@ -37,7 +37,7 @@ function useCountdown(expiresAt: string | undefined): number | null {
 }
 
 export interface ConnectEngineDialogProps {
-  /** The flow returned by POST /auth/{engine}/connect (after the step-up). */
+  /** The flow returned by POST /auth/{engine}/connect. */
   flow: ConnectFlow | null;
   onClose: () => void;
   /** Called once when the flow reaches a terminal state. */

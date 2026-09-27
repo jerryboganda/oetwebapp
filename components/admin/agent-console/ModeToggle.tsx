@@ -14,7 +14,7 @@ export const MODE_LABEL: Record<Mode, string> = {
 const MODE_HINT: Record<Mode, string> = {
   read_only: 'Reads only; every write is denied.',
   guarded: 'Destructive or unparseable actions wait for your approval.',
-  autopilot: 'Destructive actions run after a snapshot. Tainted turns still ask. Needs a fresh authenticator code.',
+  autopilot: 'Destructive actions run after a snapshot. Tainted turns still ask.',
 };
 
 const MODE_ICON: Record<Mode, typeof Eye> = {
@@ -27,7 +27,7 @@ export interface ModeToggleProps {
   value: Mode;
   onChange: (mode: Mode) => void;
   disabled?: boolean;
-  /** Hide Autopilot (e.g. when creating a session — it is enabled later with a step-up). */
+  /** Hide Autopilot (e.g. where only the safer modes should be offered). */
   allowAutopilot?: boolean;
   tainted?: boolean;
   taintReasons?: string[];
@@ -36,8 +36,8 @@ export interface ModeToggleProps {
 }
 
 /**
- * Read-only / Guarded / Autopilot segmented control with the taint badge. The
- * parent performs the step-up before switching to Autopilot.
+ * Read-only / Guarded / Autopilot segmented control with the taint badge.
+ * The parent performs the PATCH when the mode changes.
  */
 export function ModeToggle({
   value,

@@ -4,12 +4,18 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Security;
 
 namespace OetLearner.Api.Services.OwnerAgent;
 
-/// <summary>A freshly minted console unlock ticket (sent back as <c>X-Owner-Agent-Unlock</c>).</summary>
+/// <summary>
+/// A freshly minted console unlock ticket. The browser receives it as the HttpOnly
+/// <c>oet_owner_unlock</c> cookie (<see cref="OwnerAgentUnlockCookie"/>); non-browser
+/// callers may present it in the <c>X-Owner-Agent-Unlock</c> header instead.
+/// </summary>
 public sealed record OwnerAgentUnlockTicket(
     string Ticket,
     string TicketId,
@@ -39,17 +45,17 @@ public interface IOwnerAgentUnlockService
     /// <summary>Mints a new ticket family for the principal's current session (after password + TOTP).</summary>
     OwnerAgentUnlockTicket Issue(ClaimsPrincipal principal);
 
-    /// <summary>Re-mints a validated ticket: new 45-minute window, never beyond the family's absolute expiry.</summary>
+    /// <summary>
+    /// Re-mints a validated ticket with the SAME expiry. The unlock lifetime is fixed from the
+    /// original unlock (<see cref="OwnerAgentOptions.UnlockMinutes"/>); a refresh never extends it.
+    /// </summary>
     OwnerAgentUnlockTicket Refresh(OwnerAgentUnlockValidation validated);
 
     Task<OwnerAgentUnlockValidation> ValidateAsync(ClaimsPrincipal principal, string? ticket, CancellationToken cancellationToken);
 
     /// <summary>
     /// Re-checks a previously validated ticket FAMILY for a long-lived stream: same account and
-    /// session, absolute cap not reached, session alive, not locked / re-enrolled since. The
-    /// sliding 45-minute window is deliberately not re-checked here — the client re-mints the
-    /// ticket and every long-poll request re-presents the current one through the endpoint
-    /// policy, while a hub connection keeps the header it connected with.
+    /// session, fixed expiry not reached, session alive, not locked / re-enrolled since.
     /// </summary>
     Task<OwnerAgentUnlockValidation> RevalidateFamilyAsync(ClaimsPrincipal principal, OwnerAgentUnlockValidation validated, CancellationToken cancellationToken);
 
@@ -70,8 +76,9 @@ public interface IOwnerAgentUnlockService
 /// <item>Payload <c>{ id, accountId, sfam, issuedAt, exp, absExpiry }</c> protected with
 /// <c>IDataProtector.ToTimeLimitedDataProtector()</c>, purpose <see cref="Purpose"/>, using the
 /// app's shared, persisted key ring — so a ticket survives a blue/green slot switch.</item>
-/// <item>Sliding window <see cref="SlidingLifetime"/>, re-minted via <see cref="Refresh"/>, hard
-/// capped at <see cref="AbsoluteLifetime"/> from the original unlock.</item>
+/// <item>Fixed lifetime <see cref="OwnerAgentOptions.UnlockMinutes"/> (default 60, clamped 5..480)
+/// counted from the unlock: <c>exp == absExpiry == issuedAt + lifetime</c>. There is no sliding
+/// extension; <see cref="Refresh"/> re-mints with the same expiry.</item>
 /// <item>Bound to the access token's <c>auth_account_id</c> AND <c>sfam</c> (refresh-token
 /// family): it survives access-token refresh (same family) and dies with the session — both
 /// through the JWT pipeline's family check and the explicit family-alive check here, which
@@ -80,18 +87,25 @@ public interface IOwnerAgentUnlockService
 /// <c>auth.authenticator_reenrolled</c> SecurityEvent for the account is a watermark; any
 /// ticket issued before it is rejected.</item>
 /// </list>
-/// Tickets live in page memory only; the API never persists them.
+/// The browser holds the ticket only in the HttpOnly, Secure, SameSite=Strict
+/// <c>oet_owner_unlock</c> cookie (page script never sees it); the API never persists it.
 /// </summary>
 public sealed class OwnerAgentUnlockService(
     IDataProtectionProvider dataProtectionProvider,
     LearnerDbContext db,
     TimeProvider timeProvider,
-    IHttpContextAccessor httpContextAccessor) : IOwnerAgentUnlockService
+    IHttpContextAccessor httpContextAccessor,
+    IOptions<OwnerAgentOptions> options) : IOwnerAgentUnlockService
 {
     public const string Purpose = "OwnerAgent.Unlock.v1";
-    public static readonly TimeSpan SlidingLifetime = TimeSpan.FromMinutes(45);
-    public static readonly TimeSpan AbsoluteLifetime = TimeSpan.FromHours(8);
+
+    /// <summary>Lifetime used when <see cref="OwnerAgentOptions.UnlockMinutes"/> is left at its default.</summary>
+    public static readonly TimeSpan DefaultLifetime = TimeSpan.FromMinutes(OwnerAgentOptions.DefaultUnlockMinutes);
+
     private const int PayloadVersion = 1;
+
+    /// <summary>The configured (clamped) fixed unlock lifetime.</summary>
+    public TimeSpan Lifetime => options.Value.UnlockLifetime;
 
     private readonly ITimeLimitedDataProtector _protector =
         dataProtectionProvider.CreateProtector(Purpose).ToTimeLimitedDataProtector();
@@ -104,8 +118,9 @@ public sealed class OwnerAgentUnlockService(
             ?? throw ApiException.Forbidden("owner_agent_session_family_required", "Sign in again before unlocking the agent console.");
 
         var now = TruncateToMilliseconds(timeProvider.GetUtcNow());
-        var absolute = now.Add(AbsoluteLifetime);
-        var expires = Min(now.Add(SlidingLifetime), absolute);
+        // Fixed lifetime: the ticket expires exactly Lifetime after the unlock, never later.
+        var expires = now.Add(Lifetime);
+        var absolute = expires;
         var ticketId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         return Mint(new UnlockTicketPayload(PayloadVersion, ticketId, accountId, familyId.ToString("D"),
             now.ToUnixTimeMilliseconds(), expires.ToUnixTimeMilliseconds(), absolute.ToUnixTimeMilliseconds()));
@@ -125,12 +140,13 @@ public sealed class OwnerAgentUnlockService(
 
         var now = timeProvider.GetUtcNow();
         var absolute = validated.AbsoluteExpiresAt.Value;
-        if (now >= absolute)
+        // Same expiry as the original unlock: a refresh never extends the lifetime.
+        var expires = Min(validated.ExpiresAt ?? absolute, absolute);
+        if (now >= expires)
         {
             throw ApiException.Forbidden(OwnerAgentFailureCodes.UnlockExpired, OwnerAgentFailureCodes.Describe(OwnerAgentFailureCodes.UnlockExpired));
         }
 
-        var expires = Min(TruncateToMilliseconds(now).Add(SlidingLifetime), absolute);
         return Mint(new UnlockTicketPayload(PayloadVersion, validated.TicketId, validated.AccountId,
             validated.SessionFamilyId.Value.ToString("D"), validated.IssuedAt.Value.ToUnixTimeMilliseconds(),
             expires.ToUnixTimeMilliseconds(), absolute.ToUnixTimeMilliseconds()));
@@ -186,8 +202,10 @@ public sealed class OwnerAgentUnlockService(
         var expiresAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAtMs);
         var absoluteExpiresAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.AbsoluteExpiresAtMs);
         var now = timeProvider.GetUtcNow();
+        // A ticket never lives longer than the configured fixed lifetime from its unlock (this
+        // also retires tickets minted under the former 45-minute sliding / 8-hour scheme).
         if (expiresAt > absoluteExpiresAt
-            || absoluteExpiresAt - issuedAt > AbsoluteLifetime
+            || absoluteExpiresAt - issuedAt > Lifetime
             || now >= expiresAt
             || now >= absoluteExpiresAt)
         {

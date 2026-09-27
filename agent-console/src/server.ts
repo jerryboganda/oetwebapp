@@ -27,7 +27,7 @@ import { createLogger, type Logger } from './log.js';
 import { ProxyGrants } from './proxies.js';
 import { Redactor } from './redact.js';
 import { pruneEngineTranscripts, removeEngineTranscripts } from './retention.js';
-import { SessionManager } from './sessions.js';
+import { SessionManager, parseSessionListQuery } from './sessions.js';
 import { ShipExecutor } from './ship.js';
 import { SnapshotService } from './snapshot.js';
 import { parseAfter, streamSessionEvents } from './sse.js';
@@ -253,11 +253,13 @@ export function buildServer(ctx: ServerContext, options: ServerOptions = {}): Fa
 
   // ----------------------------------------------------------- sessions
 
-  app.get<{ Querystring: { includeArchived?: string } }>('/v1/sessions', async (request) =>
-    ctx.sessions.list(request.query.includeArchived === 'true'),
-  );
+  // Optional filters: q, engine, status, includeArchived, before (updatedAt cursor), limit (CONTRACT.md §3).
+  app.get('/v1/sessions', async (request) => ctx.sessions.list(parseSessionListQuery(request.query)));
 
-  app.post('/v1/sessions', async (request) => ctx.sessions.create(request.body));
+  // The onRequest hook already checked X-Oet-Owner-Account against the allow-list.
+  app.post('/v1/sessions', async (request) =>
+    ctx.sessions.create(request.body, headerValue(request, 'x-oet-owner-account')?.trim().toLowerCase()),
+  );
 
   app.get<{ Params: { id: string } }>('/v1/sessions/:id', async (request) =>
     ctx.sessions.get(requireUlid(request.params.id, 'session_not_found', 'session')),

@@ -25,7 +25,6 @@ import { RateLimitBadge } from './RateLimitBadge';
 import { SessionDiffViewer } from './SessionDiffViewer';
 import { SESSION_STATUS_BADGE } from './SessionsList';
 import { ShipPanel, isShipActive } from './ShipPanel';
-import { isStepUpCancelled, useStepUp } from './StepUpDialog';
 import { UsageMeter } from './UsageMeter';
 
 type TabId = 'conversation' | 'diff' | 'ship';
@@ -39,7 +38,6 @@ export interface SessionWorkspaceProps {
 export function SessionWorkspace({ sessionId }: SessionWorkspaceProps) {
   const router = useRouter();
   const consoleState = useOwnerAgentConsole();
-  const requestStepUp = useStepUp();
   const session = useOwnerAgentSession(sessionId, { enabled: consoleState.unlocked });
   const { detail, model } = session;
   const engines = consoleState.status?.engines ?? null;
@@ -75,7 +73,6 @@ export function SessionWorkspace({ sessionId }: SessionWorkspaceProps) {
   const taintReasons = useMemo(() => model.taints.map((t) => `${t.source}: ${t.reason}`), [model.taints]);
 
   const report = (error: unknown, fallback: string) => {
-    if (isStepUpCancelled(error)) return;
     setActionError(describeOwnerAgentError(error, fallback));
   };
 
@@ -106,12 +103,7 @@ export function SessionWorkspace({ sessionId }: SessionWorkspaceProps) {
     setPendingMode(next);
     setActionError(null);
     try {
-      if (next === 'autopilot') {
-        const token = await requestStepUp('Enable Autopilot');
-        await session.patch({ mode: next }, token);
-      } else {
-        await session.patch({ mode: next });
-      }
+      await session.patch({ mode: next });
     } catch (error) {
       report(error, 'Mode was not changed.');
     } finally {
@@ -175,10 +167,8 @@ export function SessionWorkspace({ sessionId }: SessionWorkspaceProps) {
 
   const startShip = async (body: { prTitle?: string; prBody?: string }) => {
     try {
-      const token = await requestStepUp('Ship this session');
-      setShip(await session.ship(body, token));
+      setShip(await session.ship(body));
     } catch (error) {
-      if (isStepUpCancelled(error)) return;
       throw new Error(describeOwnerAgentError(error, 'Ship failed to start.'));
     }
   };

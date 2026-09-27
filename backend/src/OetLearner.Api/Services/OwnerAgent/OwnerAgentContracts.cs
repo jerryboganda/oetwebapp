@@ -8,8 +8,6 @@ namespace OetLearner.Api.Services.OwnerAgent;
 
 public sealed record OwnerAgentUnlockRequest(string? Password, string? Code);
 
-public sealed record OwnerAgentStepUpRequest(string? Code);
-
 public sealed record OwnerAgentLeaseRequest(DateTimeOffset? ExpiresAt);
 
 public sealed record OwnerAgentConnectCodeRequest(string? FlowId, string? Code);
@@ -49,10 +47,17 @@ public sealed record OwnerAgentMeResponse(
     bool FeatureEnabled,
     DateTimeOffset? UnlockBlockedUntil);
 
+/// <summary>
+/// Unlock / refresh result. The browser authenticates with the HttpOnly <c>oet_owner_unlock</c>
+/// cookie set on the same response; <see cref="Ticket"/> is kept only for non-browser callers
+/// and back-compat (the admin UI does not read it). <see cref="ExpiresAt"/> equals
+/// <see cref="AbsoluteExpiresAt"/>: the unlock lifetime is fixed, never extended.
+/// </summary>
 public sealed record OwnerAgentUnlockResponse(string Ticket, DateTimeOffset ExpiresAt, DateTimeOffset AbsoluteExpiresAt);
-
-public sealed record OwnerAgentStepUpResponse(string StepUpToken, DateTimeOffset ExpiresAt);
 
 public sealed record OwnerAgentGithubStatusResponse(bool AgentTokenSet, bool ShipTokenSet, string? Login);
 
 public sealed record OwnerAgentApplyUpdateResponse(bool Draining, int? ActiveTurns, bool Dispatched, string Instructions);
+
+/// Owner allow-list entry for History "started by" (GET /v1/owner-agent/owners).
+public sealed record OwnerAgentOwnerDto(string AccountId, string Email);

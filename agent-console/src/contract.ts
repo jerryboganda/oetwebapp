@@ -19,6 +19,7 @@ export const MODES: readonly Mode[] = ['read_only', 'guarded', 'autopilot'];
 export const APPROVAL_DECISIONS: readonly ApprovalDecision[] = ['approve', 'deny', 'approve_session'];
 
 export type SessionStatus = 'idle' | 'running' | 'awaiting_approval' | 'interrupted' | 'error' | 'archived';
+export const SESSION_STATUSES: readonly SessionStatus[] = ['idle', 'running', 'awaiting_approval', 'interrupted', 'error', 'archived'];
 export type ResolvedBy = 'owner' | 'autopilot' | 'lease_expired' | 'kill' | 'timeout';
 export type TurnStatus = 'ok' | 'interrupted' | 'error' | 'max_turns';
 
@@ -91,6 +92,10 @@ export interface SessionSummary {
   updatedAt: string;
   lastSeq: number;
   usage: SessionUsage;
+  /** Owner account id that created the session (absent for sessions created before it was recorded). */
+  createdBy?: string;
+  /** First 200 chars of the first user message, redacted (absent until one is sent). */
+  firstMessage?: string;
 }
 
 export interface SessionDetail extends SessionSummary {

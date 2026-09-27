@@ -173,10 +173,11 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-providers/ubag': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
-  // Owner Agent Console: system_admin here; owner allow-list + unlock ticket
+  // Owner Agent Console: system_admin here; owner allow-list + unlock cookie
   // are enforced by the API (`OwnerAgent` policy) and the console gate.
   '/admin/agent-console': [AdminPermission.SystemAdmin],
   '/admin/agent-console/settings': [AdminPermission.SystemAdmin],
+  '/admin/agent-console/history': [AdminPermission.SystemAdmin],
   '/admin/agent-console/:param': [AdminPermission.SystemAdmin],
   '/admin/audit-logs': [AdminPermission.AuditLogs],
   '/admin/documentation-center': [AdminPermission.SystemAdmin],

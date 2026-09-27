@@ -32,7 +32,7 @@ export interface ShipPanelProps {
   ship: ShipState | null;
   log: readonly ShipLogEntry[];
   branch?: string;
-  /** The caller performs the step-up before calling POST /ship. */
+  /** The caller performs POST /ship. */
   onShip: (body: { prTitle?: string; prBody?: string }) => Promise<void>;
   onRefresh?: () => void;
   disabled?: boolean;
@@ -75,7 +75,7 @@ export function ShipPanel({ ship, log, branch, onShip, onRefresh, disabled = fal
         <form onSubmit={(event) => void submit(event)} className="space-y-3 rounded-lg border border-admin-border p-3">
           <p className="text-xs text-admin-fg-muted">
             Ships <span className="font-mono">{branch ?? 'the session branch'}</span> via a pull request, merges it and watches Build &amp; Deploy
-            until live health is green. Requires a fresh authenticator code.
+            until live health is green.
           </p>
           <label className="block text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-pr-title">
             PR title (optional)

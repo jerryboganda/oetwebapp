@@ -572,6 +572,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/community', title: 'Community Moderation' },
   { prefix: '/admin/ai-assistant', title: 'AI Assistant' },
   { prefix: '/admin/agent-console/settings', title: 'Agent Console Settings' },
+  { prefix: '/admin/agent-console/history', title: 'Agent Console History' },
   { prefix: '/admin/agent-console', title: 'Agent Console' },
   { prefix: '/admin/companion', title: 'Learning Companion' },
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },

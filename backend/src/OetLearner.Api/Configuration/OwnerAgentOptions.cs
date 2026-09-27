@@ -33,6 +33,25 @@ public sealed class OwnerAgentOptions
     /// <summary>Comma (or semicolon / whitespace) separated <c>auth_account_id</c> allow-list.</summary>
     public string? OwnerAccountIds { get; set; }
 
+    /// <summary>Default console unlock lifetime in minutes (owner decision: ask once, valid 1 hour).</summary>
+    public const int DefaultUnlockMinutes = 60;
+
+    /// <summary>Lower bound applied to <see cref="UnlockMinutes"/>.</summary>
+    public const int MinUnlockMinutes = 5;
+
+    /// <summary>Upper bound applied to <see cref="UnlockMinutes"/>.</summary>
+    public const int MaxUnlockMinutes = 480;
+
+    /// <summary>
+    /// Fixed lifetime of one console unlock (password + authenticator code), counted from
+    /// the unlock itself — never extended. Clamped to
+    /// [<see cref="MinUnlockMinutes"/>, <see cref="MaxUnlockMinutes"/>]; see <see cref="UnlockLifetime"/>.
+    /// </summary>
+    public int UnlockMinutes { get; set; } = DefaultUnlockMinutes;
+
+    /// <summary><see cref="UnlockMinutes"/>, clamped, as a <see cref="TimeSpan"/>.</summary>
+    public TimeSpan UnlockLifetime => TimeSpan.FromMinutes(Math.Clamp(UnlockMinutes, MinUnlockMinutes, MaxUnlockMinutes));
+
     // Single reference so concurrent readers never see a torn (source, ids) pair.
     private ParsedOwnerIds? _parsed;
 

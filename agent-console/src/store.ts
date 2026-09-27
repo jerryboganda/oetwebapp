@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import type { AgentEvent, Engine, Mode, SessionStatus, ShipState, TurnStatus } from './contract.js';
 import { ULID_PATTERN, SYSTEM_SESSION_ID } from './contract.js';
 import type { Redactor } from './redact.js';
@@ -50,9 +51,29 @@ export interface SessionRow {
   prNumber: number | null;
   prUrl: string | null;
   prState: string | null;
+  /** Owner account id (X-Oet-Owner-Account) that created the session; null for legacy rows. */
+  createdBy?: string | null;
+  /** First 200 chars of the first user_message (redacted); null until one exists. */
+  firstMessage?: string | null;
 }
 
-export type SessionPatch = Partial<Omit<SessionRow, 'id' | 'createdAt' | 'lastSeq'>>;
+export type SessionPatch = Partial<Omit<SessionRow, 'id' | 'createdAt' | 'lastSeq' | 'createdBy' | 'firstMessage'>>;
+
+/** Filters for listSessions; every field is optional (no options = every non-archived row). */
+export interface ListSessionsOptions {
+  includeArchived?: boolean;
+  /** Case-insensitive substring of the title or the first user message. */
+  q?: string;
+  engine?: Engine;
+  /** `archived` matches archived rows; any other status matches non-archived rows in that status. */
+  status?: SessionStatus;
+  /** Only rows with updated_at strictly before this ISO timestamp (paging cursor). */
+  before?: string;
+  limit?: number;
+}
+
+/** Max characters of the first user message kept on the session row. */
+export const FIRST_MESSAGE_MAX = 200;
 
 export interface TurnRow {
   id: string;
@@ -183,7 +204,15 @@ interface SessionDbRow {
   pr_number: number | null;
   pr_url: string | null;
   pr_state: string | null;
+  created_by: string | null;
+  first_message: string | null;
 }
+
+/** Columns added after the first release; migrated in place on open (idempotent). */
+const ADDED_SESSION_COLUMNS: readonly { name: string; ddl: string }[] = [
+  { name: 'created_by', ddl: 'ALTER TABLE sessions ADD COLUMN created_by TEXT' },
+  { name: 'first_message', ddl: 'ALTER TABLE sessions ADD COLUMN first_message TEXT' },
+];
 
 const PATCH_COLUMNS: Record<keyof SessionPatch, string> = {
   title: 'title',
@@ -233,6 +262,9 @@ function toSessionRow(row: SessionDbRow): SessionRow {
     prNumber: row.pr_number,
     prUrl: row.pr_url,
     prState: row.pr_state,
+    createdBy: row.created_by ?? null,
+    // '' marks "scanned, no user message yet" (see backfillFirstMessages).
+    firstMessage: row.first_message ? row.first_message : null,
   };
 }
 
@@ -263,7 +295,42 @@ export class Store {
     this.db.pragma('synchronous = NORMAL');
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA);
+    this.migrate();
     this.emitter.setMaxListeners(0);
+    this.backfillFirstMessages();
+  }
+
+  /** Adds columns introduced after the first release (checks PRAGMA table_info; safe to re-run). */
+  private migrate(): void {
+    const existing = new Set((this.db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[]).map((c) => c.name));
+    for (const column of ADDED_SESSION_COLUMNS) {
+      if (!existing.has(column.name)) this.db.exec(column.ddl);
+    }
+  }
+
+  /**
+   * Fills first_message for rows that predate the column (or were never
+   * scanned) from their JSONL log. Rows with no user_message get '' so the scan
+   * runs once; appendEvent still sets it when the first message arrives.
+   */
+  private backfillFirstMessages(): void {
+    const rows = this.db.prepare('SELECT id FROM sessions WHERE first_message IS NULL').all() as { id: string }[];
+    if (rows.length === 0) return;
+    const update = this.db.prepare('UPDATE sessions SET first_message = ? WHERE id = ? AND first_message IS NULL');
+    for (const row of rows) {
+      let text: string | null = null;
+      try {
+        if (ULID_PATTERN.test(row.id)) text = readFirstUserMessage(this.eventsFile(row.id));
+      } catch {
+        text = null;
+      }
+      update.run(text ? this.clipFirstMessage(text) : '', row.id);
+    }
+  }
+
+  /** Redacts the full text first (so a clipped secret cannot slip past a pattern), then clips. */
+  private clipFirstMessage(text: string): string {
+    return this.redactor.redact(text).replace(/\s+/g, ' ').trim().slice(0, FIRST_MESSAGE_MAX);
   }
 
   close(): void {
@@ -282,15 +349,17 @@ export class Store {
       .prepare(
         `INSERT INTO sessions (id, title, engine, model, effort, mode, status, branch, worktree, tainted, archived,
           created_at, updated_at, last_seq, input_tokens, output_tokens, cost_usd, resume_id, handoff_from,
-          seed_summary, pr_number, pr_url, pr_state)
+          seed_summary, pr_number, pr_url, pr_state, created_by, first_message)
          VALUES (@id, @title, @engine, @model, @effort, @mode, @status, @branch, @worktree, @tainted, @archived,
           @createdAt, @updatedAt, @lastSeq, @inputTokens, @outputTokens, @costUsd, @resumeId, @handoffFrom,
-          @seedSummary, @prNumber, @prUrl, @prState)`,
+          @seedSummary, @prNumber, @prUrl, @prState, @createdBy, @firstMessage)`,
       )
       .run({
         ...row,
         tainted: row.tainted ? 1 : 0,
         archived: row.archived ? 1 : 0,
+        createdBy: row.createdBy ?? null,
+        firstMessage: row.firstMessage ? this.clipFirstMessage(row.firstMessage) : null,
       });
   }
 
@@ -299,12 +368,38 @@ export class Store {
     return row ? toSessionRow(row) : null;
   }
 
-  listSessions(options: { includeArchived?: boolean } = {}): SessionRow[] {
-    const rows = (
-      options.includeArchived
-        ? this.db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC')
-        : this.db.prepare('SELECT * FROM sessions WHERE archived = 0 ORDER BY updated_at DESC')
-    ).all() as SessionDbRow[];
+  /** Newest first (updated_at DESC). No options = every non-archived row, unlimited. */
+  listSessions(options: ListSessionsOptions = {}): SessionRow[] {
+    const where: string[] = [];
+    const params: Record<string, string | number> = {};
+    if (options.status === 'archived') {
+      where.push('archived = 1');
+    } else if (options.status) {
+      where.push('archived = 0', 'status = @status');
+      params.status = options.status;
+    } else if (!options.includeArchived) {
+      where.push('archived = 0');
+    }
+    if (options.engine) {
+      where.push('engine = @engine');
+      params.engine = options.engine;
+    }
+    if (options.q) {
+      // instr() instead of LIKE: no wildcard escaping needed; lower() folds ASCII case.
+      where.push(`(instr(lower(title), lower(@q)) > 0 OR instr(lower(COALESCE(first_message, '')), lower(@q)) > 0)`);
+      params.q = options.q;
+    }
+    if (options.before) {
+      where.push('updated_at < @before');
+      params.before = options.before;
+    }
+    let sql = `SELECT * FROM sessions${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY updated_at DESC, id DESC`;
+    if (options.limit !== undefined) {
+      sql += ' LIMIT @limit';
+      params.limit = Math.max(0, Math.trunc(options.limit));
+    }
+    const statement = this.db.prepare(sql);
+    const rows = (Object.keys(params).length > 0 ? statement.all(params) : statement.all()) as SessionDbRow[];
     return rows.map(toSessionRow);
   }
 
@@ -539,7 +634,15 @@ export class Store {
     appendFileSync(file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
     this.seqs.set(sessionId, seq);
     if (sessionId === SYSTEM_SESSION_ID) this.setKv(SYSTEM_SEQ_KEY, seq);
-    else this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, event.ts, sessionId);
+    else {
+      this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, event.ts, sessionId);
+      const text = event.data.text;
+      if (type === 'user_message' && typeof text === 'string' && text.trim() !== '') {
+        this.db
+          .prepare(`UPDATE sessions SET first_message = ? WHERE id = ? AND (first_message IS NULL OR first_message = '')`)
+          .run(this.clipFirstMessage(text), sessionId);
+      }
+    }
     this.emitter.emit(sessionId, event);
     return event;
   }
@@ -646,6 +749,42 @@ function parseEventLine(line: string): AgentEvent | null {
     return parsed as AgentEvent;
   } catch {
     return null;
+  }
+}
+
+function userMessageText(event: AgentEvent | null): string | null {
+  if (!event || event.type !== 'user_message') return null;
+  const text = (event.data as Record<string, unknown> | undefined)?.text;
+  return typeof text === 'string' && text.trim() !== '' ? text : null;
+}
+
+/**
+ * Text of the first `user_message` event in a JSONL log, reading forward in
+ * chunks and stopping at the first match (it is usually near the top).
+ */
+function readFirstUserMessage(file: string): string | null {
+  if (!existsSync(file)) return null;
+  const fd = openSync(file, 'r');
+  try {
+    const size = fstatSync(fd).size;
+    const decoder = new StringDecoder('utf8');
+    const buffer = Buffer.alloc(64 * 1024);
+    let position = 0;
+    let carry = '';
+    while (position < size) {
+      const read = readSync(fd, buffer, 0, Math.min(buffer.length, size - position), position);
+      if (read <= 0) break;
+      position += read;
+      const lines = (carry + decoder.write(buffer.subarray(0, read))).split('\n');
+      carry = lines.pop() ?? '';
+      for (const line of lines) {
+        const text = userMessageText(parseEventLine(line));
+        if (text) return text;
+      }
+    }
+    return userMessageText(parseEventLine(carry + decoder.end()));
+  } finally {
+    closeSync(fd);
   }
 }
 

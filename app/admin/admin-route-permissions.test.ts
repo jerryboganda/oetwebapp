@@ -47,6 +47,7 @@ describe('admin route permission metadata', () => {
     for (const route of [
       '/admin/agent-console',
       '/admin/agent-console/settings',
+      '/admin/agent-console/history',
       '/admin/agent-console/01J9ZQ3V4W5X6Y7Z8A9B0C1D2E',
     ]) {
       expect(hasExplicitAdminRoutePermission(route)).toBe(true);

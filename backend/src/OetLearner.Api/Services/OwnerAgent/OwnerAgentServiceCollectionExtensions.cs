@@ -23,8 +23,6 @@ public static class OwnerAgentServiceCollectionExtensions
         services.AddScoped<IAuthorizationHandler, OwnerAgentAuthorizationHandler>();
         services.AddScoped<IOwnerAgentFeatureGate, OwnerAgentFeatureGate>();
         services.AddScoped<IOwnerAgentUnlockService, OwnerAgentUnlockService>();
-        services.AddScoped<IOwnerAgentStepUpService, OwnerAgentStepUpService>();
-        services.AddSingleton<OwnerAgentStepUpReplayCache>();
         services.AddScoped<IOwnerAgentAuditService, OwnerAgentAuditService>();
 
         services.AddHttpClient<OwnerAgentClient>((serviceProvider, client) =>

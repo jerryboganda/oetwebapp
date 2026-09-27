@@ -1089,16 +1089,6 @@ public sealed class AuthService(
         return VerifyAuthenticatorStepUpCoreAsync(principal, password, code, "unlock", cancellationToken);
     }
 
-    /// <summary>
-    /// TOTP-only variant for per-action step-up while the caller already holds a
-    /// password+TOTP console unlock. Same replay, failure-budget and recovery-code rules.
-    /// </summary>
-    public Task<AuthenticatorStepUpResult> VerifyAuthenticatorCodeStepUpAsync(
-        ClaimsPrincipal principal,
-        string? code,
-        CancellationToken cancellationToken = default)
-        => VerifyAuthenticatorStepUpCoreAsync(principal, password: null, code, "step_up", cancellationToken);
-
     private async Task<AuthenticatorStepUpResult> VerifyAuthenticatorStepUpCoreAsync(
         ClaimsPrincipal principal,
         string? password,

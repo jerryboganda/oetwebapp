@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Text.Json;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
@@ -8,102 +7,10 @@ using OetLearner.Api.Services.OwnerAgent;
 
 namespace OetLearner.Api.Tests.OwnerAgent;
 
-/// <summary>Step-up token single use / binding, and the hash-chained, sanitized audit.</summary>
-public sealed class OwnerAgentStepUpAndAuditTests
+/// <summary>The hash-chained, sanitized Owner Agent audit trail.</summary>
+public sealed class OwnerAgentAuditTests
 {
-    private const string AccountId = "auth_step_up_unit_owner";
-
-    private static OwnerAgentUnlockValidation Unlock(Guid familyId, string ticketId = "ticket-family-1", DateTimeOffset? expiresAt = null)
-        => new(true, null, AccountId, familyId, ticketId, DateTimeOffset.UtcNow, expiresAt ?? DateTimeOffset.UtcNow.AddMinutes(45), DateTimeOffset.UtcNow.AddHours(8));
-
-    [Fact]
-    public void StepUpToken_CanBeConsumedExactlyOnce()
-    {
-        var clock = new OwnerAgentTestClock();
-        var service = new OwnerAgentStepUpService(new EphemeralDataProtectionProvider(), new OwnerAgentStepUpReplayCache(), clock);
-        var familyId = Guid.NewGuid();
-        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, familyId);
-        var unlock = Unlock(familyId);
-
-        var token = service.Issue(principal, unlock);
-
-        Assert.True(service.Consume(principal, unlock, token.Token).IsValid);
-        var replay = service.Consume(principal, unlock, token.Token);
-        Assert.False(replay.IsValid);
-        Assert.Equal(OwnerAgentStepUpFailureCodes.AlreadyUsed, replay.FailureCode);
-    }
-
-    [Fact]
-    public void StepUpToken_IsSingleUseAcrossServiceInstancesOnTheSameSlot()
-    {
-        // Scoped services share the singleton replay cache.
-        var clock = new OwnerAgentTestClock();
-        var keys = new EphemeralDataProtectionProvider();
-        var cache = new OwnerAgentStepUpReplayCache();
-        var familyId = Guid.NewGuid();
-        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, familyId);
-        var unlock = Unlock(familyId);
-        var token = new OwnerAgentStepUpService(keys, cache, clock).Issue(principal, unlock);
-
-        Assert.True(new OwnerAgentStepUpService(keys, cache, clock).Consume(principal, unlock, token.Token).IsValid);
-        Assert.False(new OwnerAgentStepUpService(keys, cache, clock).Consume(principal, unlock, token.Token).IsValid);
-    }
-
-    [Fact]
-    public void StepUpToken_ExpiresAfterFiveMinutes()
-    {
-        var clock = new OwnerAgentTestClock();
-        var service = new OwnerAgentStepUpService(new EphemeralDataProtectionProvider(), new OwnerAgentStepUpReplayCache(), clock);
-        var familyId = Guid.NewGuid();
-        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, familyId);
-        var unlock = Unlock(familyId);
-        var token = service.Issue(principal, unlock);
-
-        Assert.True(token.ExpiresAt <= clock.GetUtcNow() + OwnerAgentStepUpService.Lifetime);
-        clock.Advance(OwnerAgentStepUpService.Lifetime + TimeSpan.FromSeconds(1));
-
-        var result = service.Consume(principal, unlock, token.Token);
-        Assert.Equal(OwnerAgentStepUpFailureCodes.Expired, result.FailureCode);
-    }
-
-    [Fact]
-    public void StepUpToken_IsBoundToSessionFamilyAndUnlockFamily()
-    {
-        var clock = new OwnerAgentTestClock();
-        var service = new OwnerAgentStepUpService(new EphemeralDataProtectionProvider(), new OwnerAgentStepUpReplayCache(), clock);
-        var familyId = Guid.NewGuid();
-        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, familyId);
-        var token = service.Issue(principal, Unlock(familyId, "unlock-a")).Token;
-
-        // Another session (different sfam) cannot use it.
-        var otherSession = OwnerAgentWebApplicationFactory.Principal(AccountId, Guid.NewGuid());
-        Assert.Equal(OwnerAgentStepUpFailureCodes.Invalid, service.Consume(otherSession, Unlock(familyId, "unlock-a"), token).FailureCode);
-
-        // A re-unlocked console (new unlock ticket family) cannot use it.
-        Assert.Equal(OwnerAgentStepUpFailureCodes.Invalid, service.Consume(principal, Unlock(familyId, "unlock-b"), token).FailureCode);
-
-        // Missing header.
-        Assert.Equal(OwnerAgentStepUpFailureCodes.Required, service.Consume(principal, Unlock(familyId, "unlock-a"), null).FailureCode);
-
-        // The genuine binding still works (the failed attempts above did not burn it).
-        Assert.True(service.Consume(principal, Unlock(familyId, "unlock-a"), token).IsValid);
-    }
-
-    [Fact]
-    public void StepUpToken_NeverOutlivesTheUnlock()
-    {
-        var clock = new OwnerAgentTestClock();
-        var service = new OwnerAgentStepUpService(new EphemeralDataProtectionProvider(), new OwnerAgentStepUpReplayCache(), clock);
-        var familyId = Guid.NewGuid();
-        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, familyId);
-        var unlockExpires = clock.GetUtcNow().AddMinutes(2);
-
-        var token = service.Issue(principal, Unlock(familyId, expiresAt: unlockExpires));
-
-        Assert.True(token.ExpiresAt <= unlockExpires);
-    }
-
-    // ── Audit ───────────────────────────────────────────────────────────────
+    private const string AccountId = "auth_audit_unit_owner";
 
     private static (LearnerDbContext Db, OwnerAgentAuditService Audit) CreateAudit()
     {

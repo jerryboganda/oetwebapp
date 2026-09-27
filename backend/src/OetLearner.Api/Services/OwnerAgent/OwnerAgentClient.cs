@@ -418,5 +418,93 @@ public static class OwnerAgentSidecarRoutes
     public static string SessionShip(string sessionId) => $"{Session(sessionId)}/ship";
     public static string SessionEvents(string sessionId, long afterSeq) => $"{Session(sessionId)}/events?after={afterSeq.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 
+    public const int SessionListMaxQueryChars = 100;
+    public const int SessionListMaxLimit = 200;
+    public static readonly IReadOnlySet<string> SessionStatuses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "idle", "running", "awaiting_approval", "interrupted", "error", "archived",
+    };
+
+    /// <summary>
+    /// <c>GET v1/sessions</c> with the caller's list filters (CONTRACT.md §3 v1.2). Only the
+    /// whitelisted keys <c>q</c>, <c>engine</c>, <c>status</c>, <c>includeArchived</c>, <c>before</c>
+    /// and <c>limit</c> are forwarded — each validated, normalized and URL-encoded; any other key is
+    /// dropped. A bad value is a 400 <c>invalid_{key}</c>. No filters ⇒ plain <c>v1/sessions</c>.
+    /// </summary>
+    public static string SessionsList(IQueryCollection query)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var forwarded = new List<string>();
+
+        string? ReadOne(string key)
+        {
+            if (!query.TryGetValue(key, out var values) || values.Count == 0)
+            {
+                return null;
+            }
+            if (values.Count > 1)
+            {
+                throw ApiException.Validation($"invalid_{key}", $"'{key}' may be given only once.");
+            }
+            var value = values[0]?.Trim();
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        void Add(string key, string value) => forwarded.Add($"{key}={Escape(value)}");
+
+        if (ReadOne("q") is { } q)
+        {
+            if (q.Length > SessionListMaxQueryChars || q.Any(char.IsControl))
+            {
+                throw ApiException.Validation("invalid_q", $"'q' must be at most {SessionListMaxQueryChars} printable characters.");
+            }
+            Add("q", q);
+        }
+        if (ReadOne("engine") is { } engine)
+        {
+            Add("engine", OwnerAgentIds.RequireEngine(engine));
+        }
+        if (ReadOne("status") is { } status)
+        {
+            if (!SessionStatuses.Contains(status))
+            {
+                throw ApiException.Validation("invalid_status", $"'status' must be one of: {string.Join(", ", SessionStatuses)}.");
+            }
+            Add("status", status);
+        }
+        if (ReadOne("includeArchived") is { } includeArchived)
+        {
+            if (!bool.TryParse(includeArchived, out var include))
+            {
+                throw ApiException.Validation("invalid_includeArchived", "'includeArchived' must be true or false.");
+            }
+            Add("includeArchived", include ? "true" : "false");
+        }
+        if (ReadOne("before") is { } before)
+        {
+            if (before.Length > 40 || !DateTimeOffset.TryParse(
+                    before,
+                    invariant,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var cursor))
+            {
+                throw ApiException.Validation("invalid_before", "'before' must be an ISO-8601 timestamp.");
+            }
+            // The sidecar stores updatedAt as JS toISOString() (UTC, millisecond precision).
+            Add("before", cursor.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", invariant));
+        }
+        if (ReadOne("limit") is { } limitText)
+        {
+            if (!int.TryParse(limitText, System.Globalization.NumberStyles.None, invariant, out var limit)
+                || limit < 1 || limit > SessionListMaxLimit)
+            {
+                throw ApiException.Validation("invalid_limit", $"'limit' must be an integer from 1 to {SessionListMaxLimit}.");
+            }
+            Add("limit", limit.ToString(invariant));
+        }
+
+        return forwarded.Count == 0 ? Sessions : $"{Sessions}?{string.Join('&', forwarded)}";
+    }
+
     private static string Escape(string value) => Uri.EscapeDataString(value);
 }

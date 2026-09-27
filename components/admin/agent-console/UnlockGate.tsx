@@ -9,9 +9,8 @@ import type { UnlockClearReason } from '@/lib/owner-agent/unlock-store';
 
 const CLEARED_MESSAGE: Record<UnlockClearReason, string> = {
   locked: 'The console was locked.',
-  expired: 'The unlock expired. Unlock again to continue.',
-  server_locked: 'The server ended the unlock (revoked or expired).',
-  refresh_failed: 'The unlock could not be renewed. Unlock again to continue.',
+  expired: 'The 1-hour unlock ended. Unlock again to continue.',
+  server_locked: 'The server ended the unlock (locked, revoked or expired).',
 };
 
 export interface UnlockGateProps {
@@ -32,9 +31,10 @@ function formatBlockedUntil(value: string | null | undefined, now: number = Date
 }
 
 /**
- * Password + 6-digit authenticator code → in-memory unlock ticket. Inputs are
- * cleared after every attempt; nothing is persisted. Recovery codes cannot
- * unlock (enforced server-side).
+ * Password + 6-digit authenticator code → the API sets an HttpOnly unlock
+ * cookie valid for 1 hour in this browser (reloads and new tabs stay
+ * unlocked). Inputs are cleared after every attempt; nothing is persisted by
+ * the page. Recovery codes cannot unlock (enforced server-side).
  */
 export function UnlockGate({ onUnlock, clearedReason, blockedUntil }: UnlockGateProps) {
   const blockedLabel = formatBlockedUntil(blockedUntil);
@@ -78,7 +78,7 @@ export function UnlockGate({ onUnlock, clearedReason, blockedUntil }: UnlockGate
             <Lock className="h-4 w-4" aria-hidden="true" /> Unlock the agent console
           </CardTitle>
           <CardDescription>
-            Owner only. Confirm your password and a fresh authenticator code. The unlock lives in this tab only.
+            Owner only. Confirm your password and a fresh authenticator code. Unlocks this console for 1 hour in this browser.
           </CardDescription>
         </CardHeader>
         <CardContent>

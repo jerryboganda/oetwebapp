@@ -22,7 +22,8 @@ namespace OetLearner.Api.Hubs;
 ///
 /// <para>
 /// Authorization: the negotiate request and every long-poll request pass the endpoint
-/// policy (owner + <c>X-Owner-Agent-Unlock</c> header, never a query-string token).
+/// policy (owner + unlock ticket from the <c>X-Owner-Agent-Unlock</c> header or the
+/// HttpOnly <c>oet_owner_unlock</c> cookie, never a query-string token).
 /// In addition the stream re-validates the unlock, the owner allow-list and the kill
 /// switch at least every <see cref="RevalidationInterval"/> of forwarded events
 /// (heartbeats included, so idle streams are re-checked too), and the connection is
@@ -91,11 +92,11 @@ public sealed class OwnerAgentHub(
     }
 
     /// <summary>
-    /// Stream start (<paramref name="initial"/> null): full ticket validation of the header the
-    /// connection presented. Every later batch: owner allow-list + kill switch + ticket-FAMILY
-    /// re-validation (absolute cap, session alive, not locked / re-enrolled). The sliding window
-    /// is enforced on each long-poll request by the endpoint policy with the client's current
-    /// ticket, so a connection that outlives its connect-time ticket is not cut off wrongly.
+    /// Stream start (<paramref name="initial"/> null): full validation of the ticket the
+    /// connection presented (header, else the <c>oet_owner_unlock</c> cookie). Every later batch:
+    /// owner allow-list + kill switch + ticket-FAMILY re-validation (fixed expiry, session alive,
+    /// not locked / re-enrolled), so a stream stops when the unlock's fixed lifetime ends.
+    /// Each long-poll request is also authorized by the endpoint policy.
     /// Fresh DI scope per check so a long stream never holds one DbContext for hours.
     /// Throws <see cref="HubException"/> (message = stable code) when the caller must stop.
     /// </summary>
@@ -119,7 +120,7 @@ public sealed class OwnerAgentHub(
 
         var unlock = scope.ServiceProvider.GetRequiredService<IOwnerAgentUnlockService>();
         var validation = initial is null
-            ? await unlock.ValidateAsync(principal, OwnerAgentHeaders.Read(Context.GetHttpContext(), OwnerAgentHeaders.Unlock), cancellationToken)
+            ? await unlock.ValidateAsync(principal, OwnerAgentHeaders.ReadUnlockTicket(Context.GetHttpContext()), cancellationToken)
             : await unlock.RevalidateFamilyAsync(principal, initial, cancellationToken);
         if (!validation.IsValid || validation.AccountId is null)
         {

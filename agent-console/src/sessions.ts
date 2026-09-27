@@ -13,7 +13,7 @@ import type {
   SessionSummary,
   TurnStatus,
 } from './contract.js';
-import { APPROVAL_DECISIONS, ENGINES, MODES, SYSTEM_SESSION_ID } from './contract.js';
+import { APPROVAL_DECISIONS, ENGINES, MODES, SESSION_STATUSES, SYSTEM_SESSION_ID } from './contract.js';
 import type {
   EngineAdapter,
   EngineEvent,
@@ -30,7 +30,7 @@ import { applyTaint, classifyToolCall, decide, type Classification } from './gua
 import type { ControlState, LeaseManager } from './lease.js';
 import type { Logger } from './log.js';
 import type { SnapshotResult } from './snapshot.js';
-import type { SessionRow, Store } from './store.js';
+import type { ListSessionsOptions, SessionRow, Store } from './store.js';
 import { asObject, optBoolean, optEnum, optOpaqueId, optString, reqEnum, reqOpaqueId, reqString } from './validate.js';
 import type { WorkspaceApi } from './workspace.js';
 
@@ -115,6 +115,75 @@ const MAX_MESSAGE = 200_000;
 const MAX_TOOL_OUTPUT = 64 * 1024;
 const MAX_SYSTEM_PROMPT = 256 * 1024;
 const PROXY_SNAPSHOT_REUSE_MS = 120_000;
+
+/** GET /v1/sessions paging (CONTRACT.md §3). No `limit` → the max, so the plain list is unchanged. */
+export const SESSION_LIST_MAX_LIMIT = 200;
+export const SESSION_LIST_DEFAULT_LIMIT = 200;
+export const SESSION_LIST_MAX_QUERY = 100;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Validates the GET /v1/sessions query string (400 `bad_request` on bad values).
+ * Unknown keys are ignored. Every filter is optional.
+ */
+export function parseSessionListQuery(query: unknown): ListSessionsOptions {
+  const raw = query && typeof query === 'object' ? (query as Record<string, unknown>) : {};
+  const single = (key: string): string | undefined => {
+    const value = raw[key];
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== 'string') throw badRequest('bad_request', `${key} must be given once.`);
+    return value;
+  };
+  const options: ListSessionsOptions = { limit: SESSION_LIST_DEFAULT_LIMIT };
+
+  const q = single('q')?.trim();
+  if (q !== undefined && q !== '') {
+    if (q.length > SESSION_LIST_MAX_QUERY) throw badRequest('bad_request', `q is longer than ${SESSION_LIST_MAX_QUERY} characters.`);
+    if (/[\u0000-\u001f\u007f]/.test(q)) throw badRequest('bad_request', 'q contains control characters.');
+    options.q = q;
+  }
+
+  const engine = single('engine');
+  if (engine !== undefined && engine !== '') {
+    if (!(ENGINES as readonly string[]).includes(engine)) throw badRequest('bad_request', `engine must be one of: ${ENGINES.join(', ')}.`);
+    options.engine = engine as Engine;
+  }
+
+  const status = single('status');
+  if (status !== undefined && status !== '') {
+    if (!(SESSION_STATUSES as readonly string[]).includes(status)) {
+      throw badRequest('bad_request', `status must be one of: ${SESSION_STATUSES.join(', ')}.`);
+    }
+    options.status = status as SessionStatus;
+  }
+
+  const includeArchived = single('includeArchived');
+  if (includeArchived !== undefined && includeArchived !== '') {
+    const normalized = includeArchived.toLowerCase();
+    if (normalized !== 'true' && normalized !== 'false') throw badRequest('bad_request', 'includeArchived must be true or false.');
+    options.includeArchived = normalized === 'true';
+  }
+
+  const before = single('before');
+  if (before !== undefined && before !== '') {
+    const ms = Date.parse(before);
+    if (before.length > 40 || !ISO_TIMESTAMP.test(before) || Number.isNaN(ms)) {
+      throw badRequest('bad_request', 'before must be an ISO-8601 timestamp (the last updatedAt of the previous page).');
+    }
+    // Stored timestamps are toISOString() values, so compare in that exact form.
+    options.before = new Date(ms).toISOString();
+  }
+
+  const limit = single('limit');
+  if (limit !== undefined && limit !== '') {
+    const n = /^\d{1,4}$/.test(limit) ? Number(limit) : Number.NaN;
+    if (!Number.isInteger(n) || n < 1 || n > SESSION_LIST_MAX_LIMIT) {
+      throw badRequest('bad_request', `limit must be an integer from 1 to ${SESSION_LIST_MAX_LIMIT}.`);
+    }
+    options.limit = n;
+  }
+  return options;
+}
 
 const TAINT_REASONS: Record<string, string> = {
   db_read: 'read application rows from the database (may contain learner-authored content)',
@@ -208,8 +277,10 @@ export class SessionManager {
 
   // ---------------------------------------------------------------- queries
 
-  list(includeArchived = false): SessionSummary[] {
-    return this.deps.store.listSessions({ includeArchived }).map((row) => this.toSummary(row));
+  /** `true`/`false` keeps the original call shape; an options object applies the GET /v1/sessions filters. */
+  list(options: boolean | ListSessionsOptions = false): SessionSummary[] {
+    const filters: ListSessionsOptions = typeof options === 'boolean' ? { includeArchived: options } : options;
+    return this.deps.store.listSessions(filters).map((row) => this.toSummary(row));
   }
 
   get(id: string): SessionDetail {
@@ -234,7 +305,8 @@ export class SessionManager {
 
   // -------------------------------------------------------------- mutations
 
-  async create(body: unknown): Promise<SessionDetail> {
+  /** `createdBy` is the (already allow-listed) X-Oet-Owner-Account of the request. */
+  async create(body: unknown, createdBy?: string): Promise<SessionDetail> {
     const input = this.parseCreate(body);
     this.assertOperational();
     if ((input.mode === 'autopilot' || input.initialMessage) && !this.deps.lease.isActive()) {
@@ -283,6 +355,8 @@ export class SessionManager {
       prNumber: null,
       prUrl: null,
       prState: null,
+      createdBy: createdBy?.trim().toLowerCase() || null,
+      firstMessage: null,
     });
     if (input.initialMessage) await this.sendMessage(id, { text: input.initialMessage });
     return this.get(id);
@@ -431,6 +505,9 @@ export class SessionManager {
       prNumber: source.prNumber,
       prUrl: source.prUrl,
       prState: source.prState,
+      // Same conversation continued on another engine: keep who started it and what it was about.
+      createdBy: source.createdBy ?? null,
+      firstMessage: source.firstMessage ?? null,
     });
     this.emit(newId, 'text', { messageId: 'handoff', text: `Handed off from session ${id} (${source.engine}).\n\n${summary}` });
     if (source.tainted) this.emit(newId, 'taint', { reason: 'inherited from the handed-off session', source: 'handoff' });
@@ -680,6 +757,8 @@ export class SessionManager {
     };
     if (row.effort) summary.effort = row.effort;
     if (row.costUsd !== null) summary.usage.costUsd = row.costUsd;
+    if (row.createdBy) summary.createdBy = row.createdBy;
+    if (row.firstMessage) summary.firstMessage = row.firstMessage;
     return summary;
   }
 

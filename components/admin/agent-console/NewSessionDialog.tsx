@@ -12,24 +12,20 @@ import {
   type EngineModelEffortValue,
 } from './EngineModelEffortPicker';
 import { ModeToggle } from './ModeToggle';
-import { isStepUpCancelled, useStepUp } from './StepUpDialog';
 
 export interface NewSessionDialogProps {
   open: boolean;
   engines: EngineCapabilities;
   onClose: () => void;
-  /** `stepUpToken` is supplied (and required) when starting in Autopilot. */
-  onCreate: (body: CreateSession, stepUpToken?: string) => Promise<SessionDetail>;
+  onCreate: (body: CreateSession) => Promise<SessionDetail>;
   onCreated?: (session: SessionDetail) => void;
 }
 
 /**
  * Engine/model/effort (from live capabilities), mode, title and an optional
- * first message. Starting in Autopilot asks for a fresh authenticator code
- * first (the API consumes a step-up for it, like switching to Autopilot).
+ * first message. Any mode (including Autopilot) only needs the console unlock.
  */
 export function NewSessionDialog({ open, engines, onClose, onCreate, onCreated }: NewSessionDialogProps) {
-  const requestStepUp = useStepUp();
   const [picker, setPicker] = useState<EngineModelEffortValue | null>(null);
   const [mode, setMode] = useState<Mode>('guarded');
   const [title, setTitle] = useState('');
@@ -53,13 +49,12 @@ export function NewSessionDialog({ open, engines, onClose, onCreate, onCreated }
       if (picker.effort) body.effort = picker.effort;
       if (title.trim()) body.title = title.trim().slice(0, 200);
       if (message.trim()) body.initialMessage = message;
-      const stepUpToken = mode === 'autopilot' ? await requestStepUp('Start in Autopilot') : undefined;
-      const session = await onCreate(body, stepUpToken);
+      const session = await onCreate(body);
       setTitle('');
       setMessage('');
       onCreated?.(session);
     } catch (err) {
-      if (!isStepUpCancelled(err)) setError(describeOwnerAgentError(err, 'Could not start the session.'));
+      setError(describeOwnerAgentError(err, 'Could not start the session.'));
     } finally {
       setBusy(false);
     }

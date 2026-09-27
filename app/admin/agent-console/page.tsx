@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, Plus, Settings } from 'lucide-react';
+import { History as HistoryIcon, Plus } from 'lucide-react';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Button, buttonClassName } from '@/components/ui/button';
 import { ConsoleStatusStrip } from '@/components/admin/agent-console/ConsoleStatusStrip';
@@ -29,17 +29,16 @@ export default function AgentConsolePage() {
           <Button variant="primary" size="sm" onClick={() => setCreating(true)} disabled={!engines || blocked}>
             <Plus className="h-4 w-4" aria-hidden="true" /> New session
           </Button>
-          <Link href="/admin/agent-console/settings" className={buttonClassName({ variant: 'outline', size: 'sm' })}>
-            <Settings className="h-4 w-4" aria-hidden="true" /> Settings
+          <Link href="/admin/agent-console/history" className={buttonClassName({ variant: 'outline', size: 'sm' })}>
+            <HistoryIcon className="h-4 w-4" aria-hidden="true" /> History
           </Link>
-          <Button variant="ghost" size="sm" onClick={() => void consoleState.lockConsole()}>
-            <Lock className="h-4 w-4" aria-hidden="true" /> Lock
-          </Button>
         </div>
       }
       kpis={
         <ConsoleStatusStrip
           status={consoleState.status}
+          unlockExpiresAt={consoleState.unlock.expiresAt}
+          onLockNow={consoleState.lockConsole}
           statusError={consoleState.statusError}
           leaseExpiresAt={consoleState.leaseExpiresAt}
           leaseError={consoleState.leaseError}

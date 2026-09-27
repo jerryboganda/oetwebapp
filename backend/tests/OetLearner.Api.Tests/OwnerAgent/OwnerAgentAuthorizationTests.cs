@@ -302,14 +302,19 @@ public sealed class OwnerAgentAuthorizationTests
 
     // ── Hub ─────────────────────────────────────────────────────────────────
 
-    private static HubConnection CreateHubConnection(OwnerAgentWebApplicationFactory factory, string accessToken, string? ticket)
+    private static HubConnection CreateHubConnection(OwnerAgentWebApplicationFactory factory, string accessToken, string? ticket, bool asCookie = false)
         => new HubConnectionBuilder()
             .WithUrl(new Uri(factory.Server.BaseAddress!, "/v1/owner-agent/hub"), options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
                 options.Transports = HttpTransportType.LongPolling;
                 options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
-                if (ticket is not null)
+                if (ticket is not null && asCookie)
+                {
+                    // What the browser sends through the Next proxy: only the HttpOnly cookie.
+                    options.Headers["Cookie"] = $"{OwnerAgentUnlockCookie.Name}={ticket}";
+                }
+                else if (ticket is not null)
                 {
                     options.Headers[OwnerAgentHeaders.Unlock] = ticket;
                 }
@@ -345,8 +350,10 @@ public sealed class OwnerAgentAuthorizationTests
         await Assert.ThrowsAnyAsync<Exception>(() => connection.StartAsync());
     }
 
-    [Fact]
-    public async Task Hub_OwnerWithUnlock_StreamsTheSidecarEvents()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Hub_OwnerWithUnlock_StreamsTheSidecarEvents(bool asCookie)
     {
         await using var factory = new OwnerAgentWebApplicationFactory();
         await factory.SetFeatureFlagAsync(true);
@@ -354,7 +361,7 @@ public sealed class OwnerAgentAuthorizationTests
         using var client = factory.CreateBearerClient(owner.AccessToken);
         var ticket = await OwnerAgentWebApplicationFactory.UnlockAsync(client, owner);
 
-        await using var connection = CreateHubConnection(factory, owner.AccessToken, ticket);
+        await using var connection = CreateHubConnection(factory, owner.AccessToken, ticket, asCookie);
         await connection.StartAsync();
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));

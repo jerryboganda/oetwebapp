@@ -4,20 +4,25 @@
  * React state for the Owner Agent Console (/admin/agent-console).
  *
  * `useOwnerAgent()` — console level, mounted once by the console shell:
- *   owner/unlock state (/me + in-memory ticket), status polling, sessions list,
- *   a 60 s lease heartbeat while mounted and unlocked (lapse ⇒ the sidecar drops
- *   Autopilot to Guarded and starts no new turns), and console-wide actions.
+ *   owner/unlock state (GET /me is the source of truth; the unlock itself is
+ *   the HttpOnly `oet_owner_unlock` cookie, valid a fixed 60 minutes), status
+ *   polling, sessions list, a 60 s lease heartbeat while mounted and unlocked
+ *   (lapse ⇒ the sidecar drops Autopilot to Guarded and starts no new turns),
+ *   and console-wide actions.
  *
  * `useOwnerAgentSession(sessionId)` — one session (or the "system" approval
  *   queue): detail, the resumable hub stream folded through the event reducer
  *   into a render model, and the per-session actions (send, interrupt, approve,
  *   patch, handoff, ship, diff).
  *
+ * `useOwnerAgentHistory(filters)` — the searchable, paged session history
+ *   (GET /sessions with q/engine/status/includeArchived/before/limit).
+ *
  * Modeled on hooks/use-ai-assistant.ts; REST via lib/owner-agent/api.ts
  * (apiClient), streaming via lib/owner-agent/signalr.ts.
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import * as ownerAgentApi from '@/lib/owner-agent/api';
 import {
   createInitialRenderModel,
@@ -29,12 +34,15 @@ import {
   type OwnerAgentConnectionState,
 } from '@/lib/owner-agent/signalr';
 import {
-  getServerUnlockSnapshot,
-  getUnlockSnapshot,
-  getUnlockTicket,
-  isSnapshotUnlocked,
-  subscribeUnlock,
+  applyMeUnlock,
   clearUnlock,
+  getServerUnlockSnapshot,
+  getUnlockGeneration,
+  getUnlockKey,
+  getUnlockSnapshot,
+  isSnapshotUnlocked,
+  isUnlocked,
+  subscribeUnlock,
   type UnlockSnapshot,
 } from '@/lib/owner-agent/unlock-store';
 import {
@@ -47,10 +55,12 @@ import {
   type CreateSession,
   type Engine,
   type KillSwitchResult,
+  type ListSessionsParams,
   type OwnerAgentMe,
   type SessionDetail,
   type SessionDiff,
   type SessionPatch,
+  type SessionStatus,
   type SessionSummary,
   type ShipState,
 } from '@/lib/owner-agent/types';
@@ -73,7 +83,7 @@ function isDocumentHidden(): boolean {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
-/** Read the in-memory unlock store from React. */
+/** Read the in-memory unlock-state store from React (never a credential). */
 export function useOwnerAgentUnlock(): UnlockSnapshot {
   return useSyncExternalStore(subscribeUnlock, getUnlockSnapshot, getServerUnlockSnapshot);
 }
@@ -94,8 +104,9 @@ export interface UseOwnerAgentReturn {
   meError: string | null;
   isOwner: boolean;
   featureEnabled: boolean;
-  /** True when a valid ticket is held and the server has not reported it locked. */
+  /** True while /me (or the unlock response) says unlocked and the 60-minute expiry has not passed. */
   unlocked: boolean;
+  /** Unlock state: `{ unlocked, expiresAt, clearedReason }` — never a credential. */
   unlock: UnlockSnapshot;
 
   status: ConsoleStatus | null;
@@ -114,10 +125,11 @@ export interface UseOwnerAgentReturn {
   refreshMe: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   refreshSessions: () => Promise<void>;
+  /** Password + TOTP → unlock cookie (1 hour), then re-read /me. */
   unlockConsole: (password: string, code: string) => Promise<void>;
+  /** "Lock now": POST /lock (clears the cookie server-side) and forget the state. */
   lockConsole: () => Promise<void>;
-  /** `stepUpToken` is required when `body.mode` is autopilot. */
-  createSession: (body: CreateSession, stepUpToken?: string) => Promise<SessionDetail>;
+  createSession: (body: CreateSession) => Promise<SessionDetail>;
   killSwitch: () => Promise<KillSwitchResult>;
   applyUpdate: () => Promise<ApplyUpdateResult>;
   /** Undo the kill switch / a drain (API POST /resume). */
@@ -132,8 +144,6 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
 
   const unlock = useOwnerAgentUnlock();
   const [me, setMe] = useState<OwnerAgentMe | null>(null);
-  /** The ticket that was attached to the request that produced `me`. */
-  const [meTicket, setMeTicket] = useState<string | null>(null);
   const [meState, setMeState] = useState<LoadState>('idle');
   const [meError, setMeError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConsoleStatus | null>(null);
@@ -156,25 +166,23 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
 
   const isOwner = me?.isOwner === true;
   const featureEnabled = me?.featureEnabled !== false;
-  // `me.unlocked` only describes the ticket that was sent with that /me call; an
-  // answer for an older (or no) ticket says nothing about the current one.
-  const serverRejectedTicket = me?.unlocked === false && meTicket !== null && meTicket === unlock.ticket;
-  const unlocked = isOwner && isSnapshotUnlocked(unlock) && !serverRejectedTicket;
+  const unlocked = isOwner && isSnapshotUnlocked(unlock);
 
+  /**
+   * GET /me is the source of truth for the unlock state: the HttpOnly cookie
+   * survives reloads, new tabs and the console's CSP reload, so /me comes back
+   * `unlocked: true` with its expiry until the 60 minutes are up.
+   */
   const refreshMe = useCallback(async () => {
     if (!enabled) return;
-    const sentTicket = getUnlockTicket();
+    const generation = getUnlockGeneration();
     setMeState((prev) => (prev === 'ready' ? prev : 'loading'));
     try {
       const next = await ownerAgentApi.getMe();
       if (!mountedRef.current) return;
-      const currentTicket = getUnlockTicket();
-      // The server no longer honours the ticket we sent (revoked, sfam changed…).
-      if (next && next.unlocked === false && sentTicket && currentTicket === sentTicket) {
-        clearUnlock('server_locked');
-      }
+      // Skip a late answer that raced an unlock / lock done meanwhile.
+      if (getUnlockGeneration() === generation) applyMeUnlock(next);
       setMe(next ?? null);
-      setMeTicket(sentTicket);
       setMeError(null);
       setMeState('ready');
     } catch (error) {
@@ -185,7 +193,7 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
   }, [enabled]);
 
   const refreshStatus = useCallback(async () => {
-    if (!enabled || !getUnlockTicket()) return;
+    if (!enabled || !isUnlocked()) return;
     setStatusState((prev) => (prev === 'ready' ? prev : 'loading'));
     try {
       const next = await ownerAgentApi.getStatus();
@@ -201,10 +209,10 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
   }, [enabled]);
 
   const refreshSessions = useCallback(async () => {
-    if (!enabled || !getUnlockTicket()) return;
+    if (!enabled || !isUnlocked()) return;
     setSessionsState((prev) => (prev === 'ready' ? prev : 'loading'));
     try {
-      const rows = await ownerAgentApi.listSessions(includeArchived);
+      const rows = await ownerAgentApi.listSessions({ includeArchived });
       if (!mountedRef.current) return;
       // The system approval queue is a pseudo-session, never a row.
       setSessions(rows.filter((row) => row && row.id !== SYSTEM_QUEUE_SESSION_ID));
@@ -217,7 +225,7 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
     }
   }, [enabled, includeArchived]);
 
-  // /me: on mount and every minute (detects server-side lock / revocation).
+  // /me: on mount and every minute (detects server-side lock / revocation / expiry).
   useEffect(() => {
     if (!enabled) return;
     void refreshMe();
@@ -226,13 +234,6 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
     }, ME_POLL_MS);
     return () => clearInterval(id);
   }, [enabled, refreshMe]);
-
-  // When the ticket changes (unlock / relock) re-ask /me so `unlocked` is current.
-  const ticket = unlock.ticket;
-  useEffect(() => {
-    if (!enabled || !ticket) return;
-    void refreshMe();
-  }, [enabled, ticket, refreshMe]);
 
   // Status polling while unlocked and visible.
   useEffect(() => {
@@ -282,14 +283,16 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
     };
   }, [enabled, unlocked, leaseIntervalMs]);
 
-  // The ticket-change effect above re-reads /me once the new ticket is stored.
+  // The API sets the unlock cookie; /me is then re-read so the state (and its
+  // expiry) comes from the source of truth, exactly as after a reload.
   const unlockConsole = useCallback(async (password: string, code: string) => {
     await ownerAgentApi.unlock({ password, code });
-  }, []);
+    await refreshMe();
+  }, [refreshMe]);
 
   const lockConsole = useCallback(async () => {
     try {
-      await ownerAgentApi.lock();
+      await ownerAgentApi.lockNow();
     } finally {
       if (mountedRef.current) {
         setStatus(null);
@@ -300,8 +303,8 @@ export function useOwnerAgent(options: UseOwnerAgentOptions = {}): UseOwnerAgent
     }
   }, []);
 
-  const createSession = useCallback(async (body: CreateSession, stepUpToken?: string) => {
-    const detail = await ownerAgentApi.createSession(body, stepUpToken);
+  const createSession = useCallback(async (body: CreateSession) => {
+    const detail = await ownerAgentApi.createSession(body);
     void refreshSessions();
     return detail;
   }, [refreshSessions]);
@@ -378,9 +381,9 @@ export interface UseOwnerAgentSessionReturn {
   send: (text: string, turn?: { model?: string; effort?: string }) => Promise<string | null>;
   interrupt: () => Promise<void>;
   decide: (approval: ApprovalRequest, decision: ApprovalDecision, note?: string) => Promise<void>;
-  patch: (patch: SessionPatch, stepUpToken?: string) => Promise<SessionDetail>;
+  patch: (patch: SessionPatch) => Promise<SessionDetail>;
   handoff: (engine: Engine, model: string, effort?: string) => Promise<SessionDetail>;
-  ship: (body: { prTitle?: string; prBody?: string }, stepUpToken: string) => Promise<ShipState>;
+  ship: (body: { prTitle?: string; prBody?: string }) => Promise<ShipState>;
   loadShip: () => Promise<ShipState | null>;
   loadDiff: () => Promise<SessionDiff>;
 }
@@ -458,7 +461,7 @@ export function useOwnerAgentSession(
     const stream = openOwnerAgentEventStream({
       sessionId,
       afterSeq,
-      getUnlockTicket,
+      getUnlockKey,
       onEvent: (event) => {
         buffer.push(event);
         if (flushTimer === null) flushTimer = setTimeout(flush, EVENT_FLUSH_MS);
@@ -468,9 +471,9 @@ export function useOwnerAgentSession(
         if (state === 'connected') setStreamError(null);
       },
       onError: (error) => setStreamError(error.message || 'Stream interrupted; reconnecting.'),
-      // The hub refused the ticket and no newer one is held: show the unlock screen.
+      // The hub refused the unlock and the owner has not unlocked again: show the unlock screen.
       onUnlockRejected: (rejected) => {
-        if (rejected && getUnlockTicket() === rejected) clearUnlock('server_locked');
+        if (rejected && getUnlockKey() === rejected) clearUnlock('server_locked');
       },
     });
     return () => {
@@ -513,8 +516,8 @@ export function useOwnerAgentSession(
     await ownerAgentApi.decideApproval(requireId(), approval.approvalId, { decision, nonce: approval.nonce, note });
   }, [requireId]);
 
-  const patch = useCallback(async (body: SessionPatch, stepUpToken?: string) => {
-    const next = await ownerAgentApi.patchSession(requireId(), body, stepUpToken);
+  const patch = useCallback(async (body: SessionPatch) => {
+    const next = await ownerAgentApi.patchSession(requireId(), body);
     if (mountedRef.current) {
       setDetail(next);
       setDetailState('ready');
@@ -526,8 +529,8 @@ export function useOwnerAgentSession(
     return ownerAgentApi.handoffSession(requireId(), { engine, model: targetModel, effort });
   }, [requireId]);
 
-  const ship = useCallback(async (body: { prTitle?: string; prBody?: string }, stepUpToken: string) => {
-    return ownerAgentApi.shipSession(requireId(), body, stepUpToken);
+  const ship = useCallback(async (body: { prTitle?: string; prBody?: string }) => {
+    return ownerAgentApi.shipSession(requireId(), body);
   }, [requireId]);
 
   const loadShip = useCallback(async () => ownerAgentApi.getShipState(requireId()), [requireId]);
@@ -554,4 +557,146 @@ export function useOwnerAgentSession(
     loadShip,
     loadDiff,
   };
+}
+
+// ─── History hook ───────────────────────────────────────────────────────────
+
+export const OWNER_AGENT_HISTORY_PAGE_SIZE = 50;
+
+export interface OwnerAgentHistoryFilters {
+  /** Search text (title / first message); already debounced by the caller. */
+  q: string;
+  engine: Engine | '';
+  status: SessionStatus | '';
+  includeArchived: boolean;
+}
+
+export interface UseOwnerAgentHistoryOptions {
+  /** Load only while true (e.g. console unlocked). */
+  enabled: boolean;
+  pageSize?: number;
+}
+
+export interface UseOwnerAgentHistoryReturn {
+  rows: SessionSummary[];
+  state: LoadState;
+  error: string | null;
+  /** The last page was full, so older sessions may exist. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  /** Next page: `before` = the last row's `updatedAt`. */
+  loadMore: () => Promise<void>;
+  /** Reload the first page with the current filters. */
+  refresh: () => Promise<void>;
+}
+
+/** Build the GET /sessions params for a history filter set (empty filters are omitted). */
+export function historyParams(filters: OwnerAgentHistoryFilters, pageSize: number = OWNER_AGENT_HISTORY_PAGE_SIZE): ListSessionsParams {
+  const params: ListSessionsParams = { includeArchived: filters.includeArchived, limit: pageSize };
+  const q = filters.q.trim();
+  if (q) params.q = q;
+  if (filters.engine) params.engine = filters.engine;
+  if (filters.status) params.status = filters.status;
+  return params;
+}
+
+function withoutSystemQueue(rows: readonly SessionSummary[]): SessionSummary[] {
+  return rows.filter((row) => row && row.id !== SYSTEM_QUEUE_SESSION_ID);
+}
+
+/**
+ * Searchable, paged session history. A filter change reloads the first page
+ * (late answers for older filters are dropped); `loadMore()` appends the next
+ * page using the last row's `updatedAt` as the `before` cursor.
+ */
+export function useOwnerAgentHistory(
+  filters: OwnerAgentHistoryFilters,
+  options: UseOwnerAgentHistoryOptions,
+): UseOwnerAgentHistoryReturn {
+  const { enabled } = options;
+  const pageSize = options.pageSize ?? OWNER_AGENT_HISTORY_PAGE_SIZE;
+  const { q, engine, status, includeArchived } = filters;
+  const params = useMemo(
+    () => historyParams({ q, engine, status, includeArchived }, pageSize),
+    [q, engine, status, includeArchived, pageSize],
+  );
+
+  const [rows, setRows] = useState<SessionSummary[]>([]);
+  const [state, setState] = useState<LoadState>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const rowsRef = useRef<SessionSummary[]>([]);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  /** Bumped per first-page load; stale answers (older filters) are ignored. */
+  const requestRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+    const requestId = ++requestRef.current;
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+    setState('loading');
+    setError(null);
+    try {
+      const page = await ownerAgentApi.listSessions(params);
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      const next = withoutSystemQueue(Array.isArray(page) ? page : []);
+      rowsRef.current = next;
+      hasMoreRef.current = (page?.length ?? 0) >= pageSize;
+      setRows(next);
+      setHasMore(hasMoreRef.current);
+      setState('ready');
+    } catch (err) {
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      setError(describeOwnerAgentError(err, 'Session history unavailable.'));
+      setState('error');
+    }
+  }, [enabled, params, pageSize]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const loadMore = useCallback(async () => {
+    if (!enabled || loadingMoreRef.current || !hasMoreRef.current) return;
+    const last = rowsRef.current[rowsRef.current.length - 1];
+    if (!last || !last.updatedAt) return;
+    const requestId = requestRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await ownerAgentApi.listSessions({ ...params, before: last.updatedAt });
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      const seen = new Set(rowsRef.current.map((row) => row.id));
+      const merged = [
+        ...rowsRef.current,
+        ...withoutSystemQueue(Array.isArray(page) ? page : []).filter((row) => !seen.has(row.id)),
+      ];
+      rowsRef.current = merged;
+      hasMoreRef.current = (page?.length ?? 0) >= pageSize;
+      setRows(merged);
+      setHasMore(hasMoreRef.current);
+      setError(null);
+    } catch (err) {
+      if (!mountedRef.current || requestId !== requestRef.current) return;
+      setError(describeOwnerAgentError(err, 'Older sessions could not be loaded.'));
+    } finally {
+      if (mountedRef.current && requestId === requestRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [enabled, params, pageSize]);
+
+  return { rows, state, error, hasMore, loadingMore, loadMore, refresh };
 }

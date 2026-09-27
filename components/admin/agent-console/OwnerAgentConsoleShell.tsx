@@ -5,7 +5,7 @@ import { Bot, Loader2, PowerOff, ShieldAlert } from 'lucide-react';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { useOwnerAgent, type UseOwnerAgentReturn } from '@/hooks/use-owner-agent';
 import { isOwnerAgentConsolePath } from '@/lib/owner-agent/route-scope';
-import { StepUpProvider } from './StepUpDialog';
+import { ConsoleNav } from './ConsoleNav';
 import { UnlockGate } from './UnlockGate';
 
 const OwnerAgentConsoleContext = createContext<UseOwnerAgentReturn | null>(null);
@@ -33,8 +33,9 @@ function loadedOutsideConsole(): boolean {
  * The strict CSP (proxy.ts) applies per document. App Router navigations are
  * client-side, so arriving from another admin page would keep that page's
  * broader policy — reload once to get the console's own document. Leaving the
- * console reloads too, so other admin pages get their normal policy back (and
- * the in-memory unlock ticket is dropped with the document).
+ * console reloads too, so other admin pages get their normal policy back. The
+ * unlock survives these reloads: it is an HttpOnly cookie, and the shell
+ * re-reads GET /me on load, so the console comes back already unlocked.
  */
 function useStrictConsoleDocument(): boolean {
   const [ready, setReady] = useState(false);
@@ -99,13 +100,23 @@ function ConsoleGate({ state, children }: { state: UseOwnerAgentReturn; children
       />
     );
   }
-  return <>{children}</>;
+  return (
+    <>
+      {/* Same container as AdminPageShell so the tabs line up with the page header. */}
+      <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 sm:px-6 lg:px-8">
+        <ConsoleNav />
+      </div>
+      {children}
+    </>
+  );
 }
 
 /**
  * Wraps every /admin/agent-console page: strict-document boundary, owner and
- * feature checks, the password + TOTP unlock gate, the step-up modal, and the
- * single `useOwnerAgent()` instance (so polling and the lease heartbeat run once).
+ * feature checks, the password + TOTP unlock gate (1-hour HttpOnly cookie; the
+ * state is re-read from /me on every load), the Sessions / History / Settings
+ * tabs, and the single `useOwnerAgent()` instance (so polling and the lease
+ * heartbeat run once).
  */
 export function OwnerAgentConsoleShell({ children }: { children: ReactNode }) {
   const ready = useStrictConsoleDocument();
@@ -123,9 +134,7 @@ function OwnerAgentConsoleRuntime({ children }: { children: ReactNode }) {
   const state = useOwnerAgent();
   return (
     <OwnerAgentConsoleContext.Provider value={state}>
-      <StepUpProvider>
-        <ConsoleGate state={state}>{children}</ConsoleGate>
-      </StepUpProvider>
+      <ConsoleGate state={state}>{children}</ConsoleGate>
     </OwnerAgentConsoleContext.Provider>
   );
 }

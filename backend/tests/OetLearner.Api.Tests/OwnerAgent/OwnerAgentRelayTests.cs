@@ -8,13 +8,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services.OwnerAgent;
 
 namespace OetLearner.Api.Tests.OwnerAgent;
 
 /// <summary>
 /// The API ⇄ sidecar relay: fresh requests with only the internal headers, id validation
-/// before URL building, step-up enforcement, secret hygiene, failure mapping.
+/// before URL building, one unlock (header or HttpOnly cookie) covering every action with no
+/// per-action step-up, the unlock cookie lifecycle, secret hygiene, failure mapping.
 /// </summary>
 public sealed class OwnerAgentRelayTests
 {
@@ -103,63 +105,283 @@ public sealed class OwnerAgentRelayTests
         Assert.Empty(factory.Sidecar.Requests);
     }
 
-    public static IEnumerable<object[]> StepUpRoutes()
+    /// <summary>The six actions that used to demand a per-action TOTP step-up.</summary>
+    public static IEnumerable<object?[]> FormerStepUpRoutes()
     {
         yield return ["PUT", "/v1/owner-agent/github-tokens", """{"agentToken":"agent-token-value-for-tests-only"}"""];
-        yield return ["POST", "/v1/owner-agent/auth/claude/connect", null!];
-        yield return ["POST", "/v1/owner-agent/auth/codex/logout", null!];
+        yield return ["POST", "/v1/owner-agent/auth/claude/connect", null];
+        yield return ["POST", "/v1/owner-agent/auth/codex/logout", null];
         yield return ["POST", $"/v1/owner-agent/sessions/{FakeSidecarHandler.SessionId}/ship", """{"prTitle":"t"}"""];
         yield return ["PATCH", $"/v1/owner-agent/sessions/{FakeSidecarHandler.SessionId}", """{"mode":"autopilot"}"""];
         yield return ["POST", "/v1/owner-agent/sessions", """{"engine":"claude","model":"opaque-model","mode":"autopilot"}"""];
     }
 
+    public static IEnumerable<object?[]> FormerStepUpRoutesByPresentation()
+    {
+        foreach (var route in FormerStepUpRoutes())
+        {
+            yield return [.. route, false];
+            yield return [.. route, true];
+        }
+    }
+
+    private static HttpRequestMessage Build(string method, string url, string? json, string? ticket, bool asCookie)
+    {
+        var request = ticket is null
+            ? new HttpRequestMessage(new HttpMethod(method), url)
+            : asCookie
+                ? OwnerAgentWebApplicationFactory.WithUnlockCookie(new HttpMethod(method), url, ticket)
+                : OwnerAgentWebApplicationFactory.Unlocked(new HttpMethod(method), url, ticket);
+        if (json is not null)
+        {
+            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        }
+
+        return request;
+    }
+
     [Theory]
-    [MemberData(nameof(StepUpRoutes))]
-    public async Task HighRiskActions_RequireAFreshSingleUseStepUp(string method, string url, string? json)
+    [MemberData(nameof(FormerStepUpRoutesByPresentation))]
+    public async Task FormerStepUpActions_SucceedWithOnlyTheUnlock(string method, string url, string? json, bool asCookie)
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        // No X-Owner-Agent-StepUp header anywhere: the unlock alone is enough, every time.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            using var request = Build(method, url, json, ticket, asCookie);
+            var response = await client.SendAsync(request);
+            Assert.True(response.StatusCode == HttpStatusCode.OK,
+                $"{method} {url} (cookie={asCookie}) => {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        }
+
+        Assert.Equal(2, factory.Sidecar.Requests.Count);
+    }
+
+    [Theory]
+    [MemberData(nameof(FormerStepUpRoutes))]
+    public async Task FormerStepUpActions_WithoutAnyUnlock_Are403_AndNeverReachTheSidecar(string method, string url, string? json)
+    {
+        var (factory, owner, client, _) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+        // A fresh client: no header, no cookie.
+        using var bare = factory.CreateBearerClient(owner.AccessToken);
+
+        using var request = Build(method, url, json, ticket: null, asCookie: false);
+        var response = await bare.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockRequired, await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+        Assert.Empty(factory.Sidecar.Requests);
+    }
+
+    [Fact]
+    public async Task StepUpRoute_IsGone()
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        using var request = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Post, "/v1/owner-agent/step-up", ticket, new { code = "123456" });
+        var response = await client.SendAsync(request);
+
+        Assert.True(response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed, $"=> {(int)response.StatusCode}");
+    }
+
+    // ── Unlock cookie (oet_owner_unlock) ────────────────────────────────────
+
+    [Fact]
+    public async Task Unlock_SetsAnHttpOnlySecureStrictCookie_ForTheFixedSixtyMinutes()
+    {
+        await using var factory = new OwnerAgentWebApplicationFactory();
+        await factory.SetFeatureFlagAsync(true);
+        var owner = await factory.SeedOwnerAsync();
+        using var client = factory.CreateBearerClient(owner.AccessToken);
+
+        var before = DateTimeOffset.UtcNow;
+        var response = await client.PostAsJsonAsync("/v1/owner-agent/unlock", new
+        {
+            password = owner.Password,
+            code = TestWebApplicationFactoryCodes.Now(owner),
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var ticket = document.RootElement.GetProperty("ticket").GetString()!;
+        var expiresAt = document.RootElement.GetProperty("expiresAt").GetDateTimeOffset();
+        var absoluteExpiresAt = document.RootElement.GetProperty("absoluteExpiresAt").GetDateTimeOffset();
+        Assert.Equal(expiresAt, absoluteExpiresAt);
+        Assert.InRange(expiresAt, before.AddMinutes(60).AddSeconds(-5), DateTimeOffset.UtcNow.AddMinutes(60).AddSeconds(5));
+
+        var setCookie = Assert.Single(OwnerAgentWebApplicationFactory.UnlockSetCookies(response));
+        Assert.StartsWith($"{OwnerAgentUnlockCookie.Name}={ticket};", setCookie, StringComparison.Ordinal);
+        var attributes = setCookie.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Skip(1).ToList();
+        Assert.Contains(attributes, a => a.Equals("httponly", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(attributes, a => a.Equals("secure", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(attributes, a => a.Equals("samesite=strict", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(attributes, a => a.Equals("path=/", StringComparison.OrdinalIgnoreCase));
+        var maxAge = attributes.Single(a => a.StartsWith("max-age=", StringComparison.OrdinalIgnoreCase));
+        Assert.InRange(int.Parse(maxAge["max-age=".Length..], System.Globalization.CultureInfo.InvariantCulture), 3_590, 3_600);
+    }
+
+    [Fact]
+    public async Task UnlockMinutesOption_DrivesTheCookieMaxAge()
+    {
+        await using var factory = new OwnerAgentWebApplicationFactory { UnlockMinutes = 15 };
+        await factory.SetFeatureFlagAsync(true);
+        var owner = await factory.SeedOwnerAsync();
+        using var client = factory.CreateBearerClient(owner.AccessToken);
+
+        var response = await client.PostAsJsonAsync("/v1/owner-agent/unlock", new
+        {
+            password = owner.Password,
+            code = TestWebApplicationFactoryCodes.Now(owner),
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var setCookie = Assert.Single(OwnerAgentWebApplicationFactory.UnlockSetCookies(response));
+        var maxAge = setCookie.Split(';', StringSplitOptions.TrimEntries)
+            .Single(a => a.StartsWith("max-age=", StringComparison.OrdinalIgnoreCase));
+        Assert.InRange(int.Parse(maxAge["max-age=".Length..], System.Globalization.CultureInfo.InvariantCulture), 890, 900);
+    }
+
+    [Fact]
+    public async Task CookieOnly_Authorizes_AndMeReportsUnlocked()
     {
         var (factory, owner, client, ticket) = await UnlockedAsync();
         await using var __ = factory;
         using var ___ = client;
+        // What a reload / new tab looks like: a new client that only has the cookie.
+        using var browser = factory.CreateBearerClient(owner.AccessToken);
 
-        HttpRequestMessage Build(string? stepUp)
+        using (var status = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Get, "/v1/owner-agent/status", ticket))
         {
-            var request = OwnerAgentWebApplicationFactory.Unlocked(new HttpMethod(method), url, ticket, stepUp: stepUp);
-            if (json is not null)
-            {
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-            }
-
-            return request;
+            Assert.Equal(HttpStatusCode.OK, (await browser.SendAsync(status)).StatusCode);
         }
 
-        using (var withoutStepUp = Build(null))
-        {
-            var denied = await client.SendAsync(withoutStepUp);
-            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-            Assert.Equal(OwnerAgentStepUpFailureCodes.Required, await OwnerAgentWebApplicationFactory.ReadCodeAsync(denied));
-        }
+        using var me = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Get, "/v1/owner-agent/me", ticket);
+        var meResponse = await browser.SendAsync(me);
+        var meBody = await meResponse.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(meBody);
+        Assert.True(document.RootElement.GetProperty("unlocked").GetBoolean());
+        Assert.Equal(
+            document.RootElement.GetProperty("absoluteExpiresAt").GetDateTimeOffset(),
+            document.RootElement.GetProperty("unlockExpiresAt").GetDateTimeOffset());
+        Assert.DoesNotContain(ticket, meBody, StringComparison.Ordinal);
 
-        Assert.Empty(factory.Sidecar.Requests);
-
-        var stepUp = await OwnerAgentWebApplicationFactory.StepUpAsync(client, owner, ticket);
-        using (var first = Build(stepUp))
-        {
-            var allowed = await client.SendAsync(first);
-            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
-        }
-
-        using (var replay = Build(stepUp))
-        {
-            var reused = await client.SendAsync(replay);
-            Assert.Equal(HttpStatusCode.Forbidden, reused.StatusCode);
-            Assert.Equal(OwnerAgentStepUpFailureCodes.AlreadyUsed, await OwnerAgentWebApplicationFactory.ReadCodeAsync(reused));
-        }
-
-        Assert.Single(factory.Sidecar.Requests);
+        // The cookie is never forwarded to the sidecar.
+        Assert.All(factory.Sidecar.Requests, r =>
+            Assert.DoesNotContain(ticket, string.Join("|", r.Headers.Values), StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task NonAutopilotModeChange_DoesNotNeedStepUp_ButIsAudited()
+    public async Task HeaderOnly_StillAuthorizes()
+    {
+        var (factory, owner, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+        using var scripted = factory.CreateBearerClient(owner.AccessToken);
+
+        using var status = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Get, "/v1/owner-agent/status", ticket);
+        Assert.Equal(HttpStatusCode.OK, (await scripted.SendAsync(status)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Header_TakesPrecedenceOverTheCookie()
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        using var request = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Get, "/v1/owner-agent/status", ticket);
+        request.Headers.Add(OwnerAgentHeaders.Unlock, "not-a-ticket");
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockInvalid, await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+        Assert.Empty(factory.Sidecar.Requests);
+    }
+
+    [Fact]
+    public async Task NeitherHeaderNorCookie_Is403_UnlockRequired()
+    {
+        var (factory, owner, client, _) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+        using var bare = factory.CreateBearerClient(owner.AccessToken);
+
+        var response = await bare.GetAsync("/v1/owner-agent/status");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockRequired, await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+        Assert.Empty(factory.Sidecar.Requests);
+    }
+
+    [Fact]
+    public async Task Lock_ClearsTheCookie_AndRevokesTheTicket()
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        using (var lockRequest = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Post, "/v1/owner-agent/lock", ticket))
+        {
+            var locked = await client.SendAsync(lockRequest);
+            Assert.Equal(HttpStatusCode.OK, locked.StatusCode);
+            var cleared = Assert.Single(OwnerAgentWebApplicationFactory.UnlockSetCookies(locked));
+            Assert.StartsWith($"{OwnerAgentUnlockCookie.Name}=;", cleared, StringComparison.Ordinal);
+            Assert.Contains("expires=Thu, 01 Jan 1970", cleared, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("path=/", cleared, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Even a browser that kept the old cookie is locked out (durable watermark).
+        using var status = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Get, "/v1/owner-agent/status", ticket);
+        var response = await client.SendAsync(status);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockRevoked, await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task UnlockRefresh_NeverExtendsTheExpiry()
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        using var me = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Get, "/v1/owner-agent/me", ticket);
+        using var meDocument = JsonDocument.Parse(await (await client.SendAsync(me)).Content.ReadAsStringAsync());
+        var expiresAt = meDocument.RootElement.GetProperty("unlockExpiresAt").GetDateTimeOffset();
+
+        using var refresh = OwnerAgentWebApplicationFactory.WithUnlockCookie(HttpMethod.Post, "/v1/owner-agent/unlock/refresh", ticket);
+        var refreshResponse = await client.SendAsync(refresh);
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+        using var refreshDocument = JsonDocument.Parse(await refreshResponse.Content.ReadAsStringAsync());
+        Assert.Equal(expiresAt, refreshDocument.RootElement.GetProperty("expiresAt").GetDateTimeOffset());
+        Assert.Equal(expiresAt, refreshDocument.RootElement.GetProperty("absoluteExpiresAt").GetDateTimeOffset());
+        Assert.Single(OwnerAgentWebApplicationFactory.UnlockSetCookies(refreshResponse));
+    }
+
+    [Fact]
+    public async Task SignOut_ClearsTheUnlockCookie()
+    {
+        // (The ticket itself dies with the revoked session family — see
+        // OwnerAgentAuthorizationTests.Unlock_SurvivesAccessTokenRefresh_ButDiesWhenTheSessionFamilyIsRevoked.)
+        var (factory, _, client, _) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        var signOut = await client.PostAsJsonAsync("/v1/auth/sign-out", new { refreshToken = (string?)null });
+        Assert.Equal(HttpStatusCode.NoContent, signOut.StatusCode);
+        var cleared = Assert.Single(OwnerAgentWebApplicationFactory.UnlockSetCookies(signOut));
+        Assert.StartsWith($"{OwnerAgentUnlockCookie.Name}=;", cleared, StringComparison.Ordinal);
+        Assert.Contains("expires=Thu, 01 Jan 1970", cleared, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task NonAutopilotModeChange_IsAudited()
     {
         var (factory, _, client, ticket) = await UnlockedAsync();
         await using var __ = factory;
@@ -179,15 +401,14 @@ public sealed class OwnerAgentRelayTests
     [Fact]
     public async Task GithubTokens_AreWriteOnly_NeverEchoed_NorAudited()
     {
-        var (factory, owner, client, ticket) = await UnlockedAsync();
+        var (factory, _, client, ticket) = await UnlockedAsync();
         await using var __ = factory;
         using var ___ = client;
         const string agentToken = "agent-token-value-for-tests-only";
         const string shipToken = "ship-token-value-for-tests-only";
 
-        var stepUp = await OwnerAgentWebApplicationFactory.StepUpAsync(client, owner, ticket);
         using var request = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Put, "/v1/owner-agent/github-tokens", ticket,
-            new { agentToken, shipToken }, stepUp);
+            new { agentToken, shipToken });
         var response = await client.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
 

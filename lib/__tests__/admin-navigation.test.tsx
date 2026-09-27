@@ -89,6 +89,9 @@ describe('admin navigation registry', () => {
     expect(getAdminPageTitle('/admin/agent-console')).toBe('Agent Console');
     expect(getAdminPageTitle('/admin/agent-console/01J9ZQ3V4W5X6Y7Z8A9B0C1D2E')).toBe('Agent Console');
     expect(getAdminPageTitle('/admin/agent-console/settings')).toBe('Agent Console Settings');
+    expect(getAdminPageTitle('/admin/agent-console/history')).toBe('Agent Console History');
+    // Console tabs (History, Settings) live inside the console, not in the sidebar.
+    expect(adminNavItems.some((item) => item.href === '/admin/agent-console/history')).toBe(false);
   });
 
   it('uses known admin permission constants in registry metadata', () => {

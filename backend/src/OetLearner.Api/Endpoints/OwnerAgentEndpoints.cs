@@ -2,8 +2,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Data;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.OwnerAgent;
@@ -17,8 +19,9 @@ namespace OetLearner.Api.Endpoints;
 /// <list type="bullet">
 /// <item><c>GET /me</c> — any signed-in user; non-owners only ever see <c>isOwner:false</c>.</item>
 /// <item><c>POST /unlock</c> — policy <c>OwnerAgentOwner</c> (owner, no unlock yet).</item>
-/// <item>Everything else — policy <c>OwnerAgent</c> (owner + valid <c>X-Owner-Agent-Unlock</c>).</item>
-/// <item>High-risk actions additionally consume a single-use <c>X-Owner-Agent-StepUp</c> token.</item>
+/// <item>Everything else — policy <c>OwnerAgent</c> (owner + a valid unlock ticket from the
+/// <c>X-Owner-Agent-Unlock</c> header or the HttpOnly <c>oet_owner_unlock</c> cookie). One unlock
+/// covers every action for its fixed lifetime (default 60 min); there is no per-action step-up.</item>
 /// <item>Kill switch: env <c>OwnerAgent:Enabled</c> + feature flag <c>owner_agent_console</c>,
 /// read uncached and fail-closed; off ⇒ 503 on every route except <c>/me</c>. Authorization
 /// runs first, so a non-owner gets 403 whether or not the console is enabled.</item>
@@ -26,8 +29,10 @@ namespace OetLearner.Api.Endpoints;
 ///
 /// CSRF: browser mutations reach this API through the Next <c>/api/backend</c> proxy, which
 /// enforces the <c>x-csrf-token</c> double-submit (lib/backend-proxy.ts) before forwarding
-/// with a Bearer token; the API itself authenticates by Bearer header only, like every other
-/// admin mutation, so there is nothing cookie-based here to forge.
+/// with a Bearer token. The API authenticates the caller by Bearer header only, like every
+/// other admin mutation; the <c>oet_owner_unlock</c> cookie only carries the unlock ticket
+/// (bound to that Bearer session's <c>sfam</c>), is SameSite=Strict, and authorizes nothing
+/// on its own.
 /// </summary>
 public static partial class OwnerAgentEndpoints
 {
@@ -75,7 +80,6 @@ public static partial class OwnerAgentEndpoints
 
         // ── Unlock lifecycle ────────────────────────────────────────────────
         console.MapPost("/unlock/refresh", RefreshUnlock).RequireRateLimiting("PerUserWrite");
-        console.MapPost("/step-up", StepUpAsync).RequireRateLimiting("AuthBruteforce");
         console.MapPost("/lock", LockAsync).RequireRateLimiting("PerUserWrite");
 
         // ── Status / lease ──────────────────────────────────────────────────
@@ -96,8 +100,9 @@ public static partial class OwnerAgentEndpoints
         console.MapPut("/github-tokens", UpdateGithubTokensAsync).RequireRateLimiting("PerUserWrite");
 
         // ── Sessions ────────────────────────────────────────────────────────
-        console.MapGet("/sessions", (HttpContext http, OwnerAgentClient client, [FromQuery] bool? includeArchived)
-            => RelayResultAsync(client, http, HttpMethod.Get, OwnerAgentSidecarRoutes.SessionsList(includeArchived == true), null));
+        // Whitelisted list filters (q, engine, status, includeArchived, before, limit) are validated and forwarded.
+        console.MapGet("/sessions", (HttpContext http, OwnerAgentClient client)
+            => RelayResultAsync(client, http, HttpMethod.Get, OwnerAgentSidecarRoutes.SessionsList(http.Request.Query), null));
         console.MapPost("/sessions", CreateSessionAsync).RequireRateLimiting("PerUserWrite");
         console.MapGet("/sessions/{sessionId}", (string sessionId, HttpContext http, OwnerAgentClient client)
             => RelayResultAsync(client, http, HttpMethod.Get, OwnerAgentSidecarRoutes.Session(OwnerAgentIds.RequireUlid(sessionId, "sessionId")), null));
@@ -123,6 +128,17 @@ public static partial class OwnerAgentEndpoints
         // Undo a kill switch / drain: sidecar POST /v1/admin/drain {draining:false}
         // (which also clears the kill-switch state). Additive to CONTRACT §5.
         console.MapPost("/resume", ResumeAsync).RequireRateLimiting("PerUserWrite");
+        // Owner allow-list → emails, so History can show which admin account started a session
+        // (sessions carry the creator's auth account id as `createdBy`).
+        console.MapGet("/owners", async (IOptions<OwnerAgentOptions> options, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var ids = OwnerAgentOptions.ParseOwnerAccountIds(options.Value.OwnerAccountIds).ToList();
+            var items = await db.ApplicationUserAccounts.AsNoTracking()
+                .Where(a => ids.Contains(a.Id))
+                .Select(a => new OwnerAgentOwnerDto(a.Id, a.Email))
+                .ToListAsync(ct);
+            return Results.Ok(new { items });
+        });
         // "Latest AuditEvent rows" (CONTRACT §5) as { items, chainIntact } (newest first), the
         // shape lib/owner-agent/api.ts reads. Chain integrity of the returned window is reported
         // per row (hashValid), in chainIntact and in X-Owner-Agent-Audit-Chain.
@@ -155,7 +171,8 @@ public static partial class OwnerAgentEndpoints
         var ct = http.RequestAborted;
         var accountId = OwnerAccountId(http);
         var availability = await gate.GetAvailabilityAsync(ct);
-        var ticket = OwnerAgentHeaders.Read(http, OwnerAgentHeaders.Unlock);
+        // Header first, else the HttpOnly cookie — so a reload / new tab reports "unlocked".
+        var ticket = OwnerAgentHeaders.ReadUnlockTicket(http);
         var validation = ticket is null ? null : await unlock.ValidateAsync(http.User, ticket, ct);
         var unlocked = validation is { IsValid: true };
         var blockedUntil = await unlock.GetUnlockBlockedUntilAsync(accountId, ct);
@@ -174,7 +191,8 @@ public static partial class OwnerAgentEndpoints
         OwnerAgentUnlockRequest? request,
         AuthService authService,
         IOwnerAgentUnlockService unlock,
-        IOwnerAgentAuditService audit)
+        IOwnerAgentAuditService audit,
+        TimeProvider timeProvider)
     {
         var ct = http.RequestAborted;
         var accountId = OwnerAccountId(http);
@@ -223,26 +241,22 @@ public static partial class OwnerAgentEndpoints
             ["absoluteExpiresAt"] = ticket.AbsoluteExpiresAt,
         }, ct);
 
+        // The browser carries the ticket in an HttpOnly cookie for the unlock's fixed lifetime
+        // (reloads, new tabs and other admin pages stay unlocked; page script never sees it).
+        OwnerAgentUnlockCookie.Append(http, ticket.Ticket, ticket.ExpiresAt, timeProvider.GetUtcNow());
         http.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new OwnerAgentUnlockResponse(ticket.Ticket, ticket.ExpiresAt, ticket.AbsoluteExpiresAt));
     }
 
-    private static IResult RefreshUnlock(HttpContext http, IOwnerAgentUnlockService unlock)
+    /// <summary>
+    /// Re-mints the current ticket with the SAME fixed expiry (never extends the unlock) and
+    /// re-sets the cookie. Kept for back-compat; the admin UI no longer needs to call it.
+    /// </summary>
+    private static IResult RefreshUnlock(HttpContext http, IOwnerAgentUnlockService unlock, TimeProvider timeProvider)
     {
         var refreshed = unlock.Refresh(CurrentUnlock(http));
+        OwnerAgentUnlockCookie.Append(http, refreshed.Ticket, refreshed.ExpiresAt, timeProvider.GetUtcNow());
         return Results.Ok(new OwnerAgentUnlockResponse(refreshed.Ticket, refreshed.ExpiresAt, refreshed.AbsoluteExpiresAt));
-    }
-
-    private static async Task<IResult> StepUpAsync(
-        HttpContext http,
-        OwnerAgentStepUpRequest? request,
-        AuthService authService,
-        IOwnerAgentStepUpService stepUp)
-    {
-        var current = CurrentUnlock(http);
-        await authService.VerifyAuthenticatorCodeStepUpAsync(http.User, request?.Code, http.RequestAborted);
-        var token = stepUp.Issue(http.User, current);
-        return Results.Ok(new OwnerAgentStepUpResponse(token.Token, token.ExpiresAt));
     }
 
     private static async Task<IResult> LockAsync(
@@ -251,7 +265,10 @@ public static partial class OwnerAgentEndpoints
         IOwnerAgentAuditService audit)
     {
         var current = CurrentUnlock(http);
+        // Durable revocation watermark (every ticket issued before now dies, in every tab and
+        // session) plus an explicit cookie expiry for this browser.
         await unlock.LockAsync(current.AccountId!, current.SessionFamilyId, "owner_lock", http.RequestAborted);
+        OwnerAgentUnlockCookie.Clear(http);
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.Lock, null, new Dictionary<string, object?>
         {
             ["ticketId"] = current.TicketId,
@@ -290,15 +307,9 @@ public static partial class OwnerAgentEndpoints
         string engine,
         HttpContext http,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var validEngine = OwnerAgentIds.RequireEngine(engine);
-        if (ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
-        }
-
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.AuthConnect(validEngine), null);
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineConnect, validEngine, new Dictionary<string, object?>
         {
@@ -337,15 +348,9 @@ public static partial class OwnerAgentEndpoints
         string engine,
         HttpContext http,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var validEngine = OwnerAgentIds.RequireEngine(engine);
-        if (ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
-        }
-
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.AuthLogout(validEngine), null);
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineLogout, validEngine, new Dictionary<string, object?>
         {
@@ -359,7 +364,6 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentGithubTokensRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var agentToken = ValidateGithubToken(request?.AgentToken, "agentToken");
@@ -367,11 +371,6 @@ public static partial class OwnerAgentEndpoints
         if (agentToken is null && shipToken is null)
         {
             throw ApiException.Validation("github_token_required", "Provide agentToken and/or shipToken.");
-        }
-
-        if (ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
         }
 
         var relay = await RelayAsync(client, http, HttpMethod.Put, OwnerAgentSidecarRoutes.GithubTokens, new { agentToken, shipToken });
@@ -411,7 +410,6 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentCreateSessionRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var engine = OwnerAgentIds.RequireEngine(request?.Engine);
@@ -420,13 +418,6 @@ public static partial class OwnerAgentEndpoints
         var mode = OwnerAgentIds.RequireMode(request?.Mode);
         var title = OwnerAgentIds.OptionalText(request?.Title, "title", MaxTitleChars);
         var initialMessage = OwnerAgentIds.OptionalText(request?.InitialMessage, "initialMessage", MaxMessageChars);
-
-        // Starting directly in Autopilot is the same privilege escalation as switching
-        // to it, so it needs the same fresh step-up (see report: additive to CONTRACT §5).
-        if (mode == OwnerAgentIds.AutopilotMode && ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
-        }
 
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.Sessions,
             new { engine, model, effort, mode, title, initialMessage });
@@ -449,7 +440,6 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentUpdateSessionRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var id = OwnerAgentIds.RequireUlid(sessionId, "sessionId");
@@ -461,11 +451,6 @@ public static partial class OwnerAgentEndpoints
         if (title is null && mode is null && model is null && effort is null && archived is null)
         {
             throw ApiException.Validation("session_update_empty", "Provide at least one of title, mode, model, effort or archived.");
-        }
-
-        if (mode == OwnerAgentIds.AutopilotMode && ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
         }
 
         var relay = await RelayAsync(client, http, HttpMethod.Patch, OwnerAgentSidecarRoutes.Session(id),
@@ -569,17 +554,11 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentShipRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentStepUpService stepUp,
         IOwnerAgentAuditService audit)
     {
         var id = OwnerAgentIds.RequireUlid(sessionId, "sessionId");
         var prTitle = OwnerAgentIds.OptionalText(request?.PrTitle, "prTitle", MaxPrTitleChars);
         var prBody = OwnerAgentIds.OptionalText(request?.PrBody, "prBody", MaxPrBodyChars);
-        if (ConsumeStepUp(http, stepUp) is { } denied)
-        {
-            return denied;
-        }
-
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.SessionShip(id),
             new { prTitle, prBody }, OwnerAgentClient.AdminTimeout);
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.ShipStarted, id, new Dictionary<string, object?>
@@ -768,14 +747,6 @@ public static partial class OwnerAgentEndpoints
 
     private static IResult Error(HttpContext http, int statusCode, string code, string message, bool retryable)
         => Results.Json(new { code, message, retryable, correlationId = CorrelationId(http) }, statusCode: statusCode);
-
-    private static IResult? ConsumeStepUp(HttpContext http, IOwnerAgentStepUpService stepUp)
-    {
-        var result = stepUp.Consume(http.User, CurrentUnlock(http), OwnerAgentHeaders.Read(http, OwnerAgentHeaders.StepUp));
-        return result.IsValid
-            ? null
-            : Error(http, StatusCodes.Status403Forbidden, result.FailureCode!, OwnerAgentStepUpFailureCodes.Describe(result.FailureCode!), retryable: false);
-    }
 
     private static OwnerAgentUnlockValidation CurrentUnlock(HttpContext http)
         => http.Items.TryGetValue(OwnerAgentUnlockValidation.HttpContextItemKey, out var value)

@@ -49,7 +49,7 @@ Errors: `{ "error": { "code": string, "message": string } }` with 400/401/403/40
 | POST | `/v1/auth/:engine/cancel` | `{ flowId }` | `ConnectFlow` |
 | POST | `/v1/auth/:engine/logout` | – | `EngineAuth` |
 | PUT | `/v1/github-tokens` | `{ agentToken?: string, shipToken?: string }` | `GithubStatus` (tokens are write-only, never returned) |
-| GET | `/v1/sessions?includeArchived=false` | – | `SessionSummary[]` |
+| GET | `/v1/sessions?q=&engine=&status=&includeArchived=false&before=&limit=` | – | `SessionSummary[]`, newest `updatedAt` first (filters below) |
 | POST | `/v1/sessions` | `CreateSession` | `SessionDetail` |
 | GET | `/v1/sessions/:id` | – | `SessionDetail` |
 | PATCH | `/v1/sessions/:id` | `{ title?, mode?, model?, effort?, archived? }` | `SessionDetail` |
@@ -71,6 +71,21 @@ Additive (v1.1): `ConsoleStatus` also carries `systemApprovals: ApprovalRequest[
 queue, valid for `…/approvals/:approvalId` and `…/events` only. A wrong approval nonce is
 409 `approval_nonce_mismatch`: the sidecar never answers 401/403 except for the API's own
 credentials.
+
+Additive (v1.2) — `GET /v1/sessions` query parameters, all optional (no parameters = every
+non-archived session, as before). Unknown keys are ignored; a bad value (or a repeated key) is
+400 `bad_request` in the usual envelope. Results are ordered `updatedAt` DESC (ties: `id` DESC).
+
+| Param | Values | Meaning |
+|---|---|---|
+| `q` | ≤ 100 chars after trim, no control characters | case-insensitive (ASCII) substring of `title` or `firstMessage`; empty = no filter |
+| `engine` | `claude` \| `codex` | only that engine |
+| `status` | `idle` \| `running` \| `awaiting_approval` \| `interrupted` \| `error` \| `archived` | `archived` = archived sessions only (regardless of `includeArchived`); any other value = non-archived sessions in that status |
+| `includeArchived` | `true` \| `false` (case-insensitive) | also return archived sessions (default `false`) |
+| `before` | ISO-8601 timestamp | only sessions with `updatedAt` strictly earlier — pass the last item's `updatedAt` to fetch the next page |
+| `limit` | integer 1..200 | page size; default 200 when omitted |
+
+A page shorter than `limit` is the last page.
 
 ### Shapes
 
@@ -116,6 +131,8 @@ type SessionSummary = {
   status: SessionStatus; branch: string; tainted: boolean;
   createdAt: string; updatedAt: string; lastSeq: number;
   usage: { inputTokens: number; outputTokens: number; costUsd?: number };
+  createdBy?: string;      // v1.2: owner account id (X-Oet-Owner-Account, lower-cased) that created it; absent for older sessions
+  firstMessage?: string;   // v1.2: first 200 chars of the first user_message, redacted, whitespace collapsed; absent until one is sent
 };
 type SessionDetail = SessionSummary & {
   pendingApprovals: ApprovalRequest[];
@@ -182,23 +199,30 @@ Policy `OwnerAgent`: role `admin` + `email_verified` + permission `system_admin`
 | Method | Path | Extra requirement | Behaviour |
 |---|---|---|---|
 | GET | `/me` | owner (no unlock) | `{ isOwner, unlocked, unlockExpiresAt?, absoluteExpiresAt?, featureEnabled }` — non-owners get `{ isOwner:false }` with 200 so the nav can hide the entry |
-| POST | `/unlock` | owner (no unlock) | body `{ password, code }` ⇒ `{ ticket, expiresAt, absoluteExpiresAt }` |
-| POST | `/unlock/refresh` | unlock | ⇒ `{ ticket, expiresAt, absoluteExpiresAt }` (45-min sliding, capped at absolute +8 h) |
-| POST | `/step-up` | unlock | body `{ code }` ⇒ `{ stepUpToken, expiresAt }` (5 min, single use) |
-| POST | `/lock` | unlock | revokes the ticket family |
+| POST | `/unlock` | owner (no unlock) | body `{ password, code }` ⇒ `{ ticket, expiresAt, absoluteExpiresAt }` + `Set-Cookie: oet_owner_unlock=<ticket>; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=<remaining s>`. Fixed lifetime `OwnerAgent:UnlockMinutes` (default 60, clamped 5..480) from the unlock; `expiresAt == absoluteExpiresAt`. `ticket` stays in the body for non-browser callers only — the admin UI never reads it |
+| POST | `/unlock/refresh` | unlock | ⇒ same shape; re-mints with the SAME expiry (never extends) and re-sets the cookie. Back-compat only |
+| POST | `/lock` | unlock | durable revocation watermark (every ticket issued before it dies) + `Set-Cookie` expiring `oet_owner_unlock` |
 | * | every sidecar route in §3 under `/v1/owner-agent/…` (minus `/healthz`, `/v1` prefix dropped: e.g. `GET /v1/owner-agent/status`, `POST /v1/owner-agent/sessions/{id}/messages`, `POST /v1/owner-agent/kill-switch` → `/v1/admin/stop-all`, `POST /v1/owner-agent/apply-update` → drain + dispatch `agent-console.yml`) | unlock | pass-through JSON |
 | GET | `/audit?take=100` | unlock | `{ items, chainIntact }` — latest `AuditEvent` rows with `ResourceType = "OwnerAgent"` (newest first, `details` as a JSON object) |
 | POST | `/resume` | unlock | → `/v1/admin/drain {draining:false}`; undoes the kill switch / a drain |
 
 Additive (v1.1): `POST /apply-update` → sidecar `/v1/admin/apply-update`, answered as
-`{ draining, activeTurns, dispatched, instructions }`; `POST /sessions` with
-`mode:"autopilot"` also consumes `X-Owner-Agent-StepUp`; `/me` adds `unlockBlockedUntil`.
+`{ draining, activeTurns, dispatched, instructions }`; `/me` adds `unlockBlockedUntil`.
+v1.2: the per-action TOTP step-up (`POST /step-up`, `X-Owner-Agent-StepUp`) is removed —
+one unlock covers every action (engine connect/logout, GitHub tokens, Autopilot, Ship) for its lifetime.
 Sidecar 4xx bodies are relayed as `{ code, message, retryable, correlationId, error: { code, message } }`
 (flat for the app's shared API client, nested per §3); sidecar 401/403/5xx become 502.
 
-Headers from the browser: `X-Owner-Agent-Unlock: <ticket>` on every call after unlock; `X-Owner-Agent-StepUp: <stepUpToken>` additionally on: `PATCH /sessions/{id}` switching `mode` to `autopilot`, `POST /sessions/{id}/ship`, `PUT /github-tokens`, `POST /auth/{engine}/connect|logout`. Mutations also carry the app's normal `x-csrf-token`.
+Unlock ticket presentation: the API reads the `X-Owner-Agent-Unlock` header first, else the
+`oet_owner_unlock` cookie (never a query string). The browser relies on the HttpOnly cookie only
+(sent through the same-origin Next `/api/backend` proxy, `credentials: 'include'`), so reloads, new
+tabs and other admin pages stay unlocked until the fixed expiry; `/me` reports
+`unlocked`/`unlockExpiresAt` from the cookie. The ticket is bound to the session's `sfam` and
+account, so sign-out (session-family revocation; `/v1/auth/sign-out` also expires the cookie),
+`/lock` and an authenticator re-enrolment all revoke it. Mutations also carry the app's normal
+`x-csrf-token`; SameSite=Strict keeps the cookie off cross-site requests.
 
-Hub: `/v1/owner-agent/hub`, single server-streaming method `Stream(string sessionId, long afterSeq)` → `IAsyncEnumerable<AgentEvent>`; the client supplies `X-Owner-Agent-Unlock` through the SignalR `headers` option; the unlock is re-validated per forwarded batch.
+Hub: `/v1/owner-agent/hub`, single server-streaming method `Stream(string sessionId, long afterSeq)` → `IAsyncEnumerable<AgentEvent>`; negotiate and every long-poll request carry the unlock cookie (or the `X-Owner-Agent-Unlock` header via the SignalR `headers` option); the unlock is re-validated per forwarded batch and the stream ends at the fixed expiry.
 
 ## 6. Proxies ↔ sidecar (network `oet_agent_net`)
 

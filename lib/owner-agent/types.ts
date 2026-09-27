@@ -3,7 +3,7 @@
  *
  * Mirrors agent-console/CONTRACT.md §3 (sidecar shapes, passed through the .NET
  * API verbatim), §4 (AgentEvent envelope + event payloads) and §5 (public API
- * extras: /me, /unlock, /step-up, /audit). All JSON is camelCase; timestamps are
+ * extras: /me, /unlock, /lock, /audit). All JSON is camelCase; timestamps are
  * ISO-8601 UTC strings; ids are ULIDs unless stated otherwise.
  *
  * Model and effort ids are OPAQUE strings reported by the engines at runtime —
@@ -136,7 +136,40 @@ export interface SessionSummary {
   updatedAt: string;
   lastSeq: number;
   usage: SessionUsage;
+  /** Auth account id of the admin who started the session (absent on older sessions). */
+  createdBy?: string | null;
+  /** First ~200 chars of the first user message, redacted by the sidecar. */
+  firstMessage?: string | null;
 }
+
+export const OWNER_AGENT_SESSION_STATUSES: readonly SessionStatus[] = [
+  'idle',
+  'running',
+  'awaiting_approval',
+  'interrupted',
+  'error',
+  'archived',
+];
+
+export function isSessionStatus(value: unknown): value is SessionStatus {
+  return typeof value === 'string' && (OWNER_AGENT_SESSION_STATUSES as readonly string[]).includes(value);
+}
+
+/** GET /sessions query (CONTRACT §3). Every field is optional. */
+export interface ListSessionsParams {
+  /** Title / first-message contains (at most 100 chars). */
+  q?: string;
+  engine?: Engine;
+  status?: SessionStatus;
+  includeArchived?: boolean;
+  /** Paging cursor: only sessions whose `updatedAt` is before this ISO timestamp. */
+  before?: string;
+  /** Page size, 1..200 (sidecar default 50). */
+  limit?: number;
+}
+
+export const OWNER_AGENT_SESSIONS_MAX_LIMIT = 200;
+export const OWNER_AGENT_SESSIONS_QUERY_MAX = 100;
 
 export interface ApprovalRequest {
   approvalId: string;
@@ -344,17 +377,14 @@ export interface UnlockBody {
   code: string;
 }
 
-/** POST /unlock and POST /unlock/refresh. */
+/**
+ * POST /unlock. The unlock itself travels as the HttpOnly `oet_owner_unlock`
+ * cookie; the body only reports the fixed 60-minute expiry. (Any `ticket`
+ * field the API still returns is deliberately not typed and never read.)
+ */
 export interface UnlockResponse {
-  ticket: string;
   expiresAt: string;
-  absoluteExpiresAt: string;
-}
-
-/** POST /step-up — 5 minutes, single use. */
-export interface StepUpResponse {
-  stepUpToken: string;
-  expiresAt: string;
+  absoluteExpiresAt?: string | null;
 }
 
 /** POST /apply-update — drain + dispatch of agent-console.yml (shape owned by the API). */
@@ -398,8 +428,6 @@ export interface OwnerAgentAuditPage {
 
 export const OWNER_AGENT_API_BASE = '/v1/owner-agent';
 export const OWNER_AGENT_HUB_PATH = '/v1/owner-agent/hub';
-export const OWNER_AGENT_UNLOCK_HEADER = 'X-Owner-Agent-Unlock';
-export const OWNER_AGENT_STEP_UP_HEADER = 'X-Owner-Agent-StepUp';
 
 /**
  * Pseudo-session id carrying the global "system" approval queue (proxy

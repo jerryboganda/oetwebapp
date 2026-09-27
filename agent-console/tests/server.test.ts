@@ -144,6 +144,71 @@ describe('control server', () => {
       expect((await app.inject({ method: 'GET', url: '/v1/sessions/01J9ZQ4X7V3N8K2M5P6R7S8T9V', headers: authHeaders })).statusCode).toBe(404);
     });
 
+    it('records the creating owner account as createdBy (lower-cased)', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/v1/sessions',
+        headers: { ...authHeaders, 'x-oet-owner-account': OWNER_ID.toUpperCase() },
+        payload: { engine: 'claude', model: 'model-a', mode: 'guarded', title: 'Mine' },
+      });
+      expect(created.statusCode).toBe(200);
+      const id = created.json().id as string;
+      expect(created.json().createdBy).toBe(OWNER_ID.toLowerCase());
+      expect(created.json().firstMessage).toBeUndefined();
+      expect(h.store.getSession(id)?.createdBy).toBe(OWNER_ID.toLowerCase());
+
+      const list = await app.inject({ method: 'GET', url: '/v1/sessions', headers: authHeaders });
+      expect(list.json()).toEqual([expect.objectContaining({ id, createdBy: OWNER_ID.toLowerCase() })]);
+    });
+
+    it('filters and pages GET /v1/sessions', async () => {
+      const make = async (title: string, engine: 'claude' | 'codex'): Promise<string> => {
+        const res = await app.inject({ method: 'POST', url: '/v1/sessions', headers: authHeaders, payload: { engine, model: 'model-a', mode: 'guarded', title } });
+        expect(res.statusCode).toBe(200);
+        return res.json().id as string;
+      };
+      const a = await make('Fix T3 login', 'claude');
+      const b = await make('Docs tweak', 'codex');
+      const c = await make('Another t3 thing', 'claude');
+      // Deterministic order: c newest, then b, then a.
+      h.store.updateSession(a, { updatedAt: '2026-09-01T10:00:00.000Z' });
+      h.store.updateSession(b, { updatedAt: '2026-09-02T10:00:00.000Z' });
+      h.store.updateSession(c, { updatedAt: '2026-09-03T10:00:00.000Z' });
+
+      const get = async (qs: string): Promise<string[]> => {
+        const res = await app.inject({ method: 'GET', url: `/v1/sessions${qs}`, headers: authHeaders });
+        expect(res.statusCode).toBe(200);
+        return (res.json() as { id: string }[]).map((s) => s.id);
+      };
+      expect(await get('')).toEqual([c, b, a]);
+      expect(await get('?q=t3')).toEqual([c, a]);
+      expect(await get('?engine=codex')).toEqual([b]);
+      expect(await get('?status=idle&engine=claude')).toEqual([c, a]);
+      expect(await get('?limit=2')).toEqual([c, b]);
+      expect(await get(`?limit=2&before=${encodeURIComponent('2026-09-02T10:00:00.000Z')}`)).toEqual([a]);
+      expect(await get('?unknown=1')).toEqual([c, b, a]);
+    });
+
+    it('rejects invalid GET /v1/sessions query values with 400', async () => {
+      for (const qs of [
+        '?limit=0',
+        '?limit=201',
+        '?limit=abc',
+        '?limit=1.5',
+        '?status=done',
+        '?engine=gemini',
+        '?includeArchived=yes',
+        '?before=yesterday',
+        `?q=${'x'.repeat(101)}`,
+        '?status=idle&status=error',
+      ]) {
+        const res = await app.inject({ method: 'GET', url: `/v1/sessions${qs}`, headers: authHeaders });
+        expect(res.statusCode, qs).toBe(400);
+        expect(res.json()).toEqual({ error: { code: 'bad_request', message: expect.any(String) } });
+      }
+      expect((await app.inject({ method: 'GET', url: '/v1/sessions?limit=200&includeArchived=TRUE&status=archived', headers: authHeaders })).statusCode).toBe(200);
+    });
+
     it('returns 423 for new turns while draining and after stop-all; drain:false resumes', async () => {
       activateLease(h);
       const created = await app.inject({ method: 'POST', url: '/v1/sessions', headers: authHeaders, payload: { engine: 'claude', model: 'model-a', mode: 'guarded' } });

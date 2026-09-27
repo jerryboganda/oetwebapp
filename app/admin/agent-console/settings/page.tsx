@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Lock, LogOut, Plug } from 'lucide-react';
+import { LogOut, Plug } from 'lucide-react';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,6 @@ import { ENGINE_LABEL } from '@/components/admin/agent-console/EngineModelEffort
 import { GithubTokensCard } from '@/components/admin/agent-console/GithubTokensCard';
 import { useOwnerAgentConsole } from '@/components/admin/agent-console/OwnerAgentConsoleShell';
 import { RateLimitBadge } from '@/components/admin/agent-console/RateLimitBadge';
-import { isStepUpCancelled, useStepUp } from '@/components/admin/agent-console/StepUpDialog';
 import {
   connectEngine,
   describeOwnerAgentError,
@@ -32,7 +31,6 @@ const SIGN_IN_HELP: Record<Engine, string> = {
 
 export default function AgentConsoleSettingsPage() {
   const consoleState = useOwnerAgentConsole();
-  const requestStepUp = useStepUp();
   const [flow, setFlow] = useState<ConnectFlow | null>(null);
   const [busyEngine, setBusyEngine] = useState<Engine | null>(null);
   const [confirmLogout, setConfirmLogout] = useState<Engine | null>(null);
@@ -43,10 +41,9 @@ export default function AgentConsoleSettingsPage() {
     setBusyEngine(engine);
     setError(null);
     try {
-      const token = await requestStepUp(`Connect ${ENGINE_LABEL[engine]}`);
-      setFlow(await connectEngine(engine, token));
+      setFlow(await connectEngine(engine));
     } catch (err) {
-      if (!isStepUpCancelled(err)) setError(describeOwnerAgentError(err, 'Could not start the sign-in.'));
+      setError(describeOwnerAgentError(err, 'Could not start the sign-in.'));
     } finally {
       setBusyEngine(null);
     }
@@ -57,26 +54,18 @@ export default function AgentConsoleSettingsPage() {
     setBusyEngine(engine);
     setError(null);
     try {
-      const token = await requestStepUp(`Sign ${ENGINE_LABEL[engine]} out`);
-      await logoutEngine(engine, token);
+      await logoutEngine(engine);
       await consoleState.refreshStatus();
     } catch (err) {
-      if (!isStepUpCancelled(err)) setError(describeOwnerAgentError(err, 'Sign-out failed.'));
+      setError(describeOwnerAgentError(err, 'Sign-out failed.'));
     } finally {
       setBusyEngine(null);
     }
   };
 
   const saveTokens = async (tokens: { agentToken?: string; shipToken?: string }) => {
-    let token: string;
     try {
-      token = await requestStepUp('Change GitHub tokens');
-    } catch (err) {
-      if (isStepUpCancelled(err)) throw new Error('Cancelled; tokens were not saved.');
-      throw err;
-    }
-    try {
-      await putGithubTokens(tokens, token);
+      await putGithubTokens(tokens);
     } catch (err) {
       throw new Error(describeOwnerAgentError(err, 'Tokens were not saved.'));
     }
@@ -89,14 +78,11 @@ export default function AgentConsoleSettingsPage() {
       eyebrow="Owner only"
       breadcrumbs={[{ label: 'Agent Console', href: '/admin/agent-console' }, { label: 'Settings' }]}
       description="Engine sign-in, GitHub tokens, kill switch and the audit trail."
-      actions={
-        <Button variant="ghost" size="sm" onClick={() => void consoleState.lockConsole()}>
-          <Lock className="h-4 w-4" aria-hidden="true" /> Lock
-        </Button>
-      }
       kpis={
         <ConsoleStatusStrip
           status={status}
+          unlockExpiresAt={consoleState.unlock.expiresAt}
+          onLockNow={consoleState.lockConsole}
           statusError={consoleState.statusError}
           leaseExpiresAt={consoleState.leaseExpiresAt}
           leaseError={consoleState.leaseError}

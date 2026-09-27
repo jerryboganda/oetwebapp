@@ -1,6 +1,9 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Security;
@@ -10,7 +13,8 @@ using OetLearner.Api.Services.OwnerAgent;
 namespace OetLearner.Api.Tests.OwnerAgent;
 
 /// <summary>
-/// Unlock tickets: sfam + account binding, 45-minute sliding window, +8 h absolute cap,
+/// Unlock tickets: sfam + account binding, ONE fixed lifetime from the unlock (default 60 min,
+/// <c>OwnerAgent:UnlockMinutes</c>, clamped 5..480) that a refresh never extends,
 /// lock / re-enrolment watermark, session-family liveness, tamper resistance.
 /// Pure unit tests (in-memory DB, ephemeral key ring, mutable clock).
 /// </summary>
@@ -42,11 +46,27 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private OwnerAgentUnlockService CreateService()
-        => new(_dataProtection, _db, _clock, new HttpContextAccessor());
+    private OwnerAgentUnlockService CreateService(int? unlockMinutes = null)
+    {
+        var options = new OwnerAgentOptions();
+        if (unlockMinutes is { } minutes)
+        {
+            options.UnlockMinutes = minutes;
+        }
+
+        return new OwnerAgentUnlockService(_dataProtection, _db, _clock, new HttpContextAccessor(), Options.Create(options));
+    }
 
     [Fact]
-    public async Task Issue_ThenValidate_WithSameAccountAndFamily_IsValid()
+    public void DefaultLifetime_IsSixtyMinutes()
+    {
+        Assert.Equal(60, new OwnerAgentOptions().UnlockMinutes);
+        Assert.Equal(TimeSpan.FromMinutes(60), OwnerAgentUnlockService.DefaultLifetime);
+        Assert.Equal(TimeSpan.FromMinutes(60), CreateService().Lifetime);
+    }
+
+    [Fact]
+    public async Task Issue_ThenValidate_WithSameAccountAndFamily_IsValid_ForAFixedSixtyMinutes()
     {
         var service = CreateService();
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
@@ -58,8 +78,11 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
         Assert.Equal(AccountId, validation.AccountId);
         Assert.Equal(_familyId, validation.SessionFamilyId);
         Assert.Equal(ticket.TicketId, validation.TicketId);
-        Assert.Equal(ticket.IssuedAt + OwnerAgentUnlockService.SlidingLifetime, validation.ExpiresAt);
-        Assert.Equal(ticket.IssuedAt + OwnerAgentUnlockService.AbsoluteLifetime, validation.AbsoluteExpiresAt);
+        Assert.Equal(ticket.IssuedAt + TimeSpan.FromMinutes(60), ticket.ExpiresAt);
+        // Fixed lifetime: the expiry and the absolute expiry are one and the same.
+        Assert.Equal(ticket.ExpiresAt, ticket.AbsoluteExpiresAt);
+        Assert.Equal(ticket.ExpiresAt, validation.ExpiresAt);
+        Assert.Equal(ticket.AbsoluteExpiresAt, validation.AbsoluteExpiresAt);
     }
 
     [Fact]
@@ -110,46 +133,45 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Validate_AfterSlidingWindow_IsExpired()
+    public async Task Validate_IsStillValidAt59Minutes_AndExpiredAt61Minutes()
     {
         var service = CreateService();
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
         var ticket = service.Issue(principal);
 
-        _clock.Advance(OwnerAgentUnlockService.SlidingLifetime + TimeSpan.FromSeconds(1));
-        var validation = await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(59));
+        Assert.True((await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None)).IsValid);
 
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        var validation = await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None);
         Assert.False(validation.IsValid);
         Assert.Equal(OwnerAgentFailureCodes.UnlockExpired, validation.FailureCode);
     }
 
     [Fact]
-    public async Task Refresh_SlidesWindow_ButNeverPastAbsoluteCap()
+    public async Task Refresh_NeverExtendsTheUnlock()
     {
         var service = CreateService();
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
         var first = service.Issue(principal);
         var current = first.Ticket;
 
-        // Re-mint every 40 minutes for 7h20m: each hop must still be valid.
-        for (var hop = 0; hop < 11; hop++)
+        // Re-mint every 10 minutes: expiry and absolute expiry never move.
+        for (var hop = 0; hop < 5; hop++)
         {
-            _clock.Advance(TimeSpan.FromMinutes(40));
+            _clock.Advance(TimeSpan.FromMinutes(10));
             var validation = await service.ValidateAsync(principal, current, CancellationToken.None);
             Assert.True(validation.IsValid, $"hop {hop}: {validation.FailureCode}");
             var refreshed = service.Refresh(validation);
-            Assert.Equal(first.AbsoluteExpiresAt, refreshed.AbsoluteExpiresAt);
             Assert.Equal(first.TicketId, refreshed.TicketId);
-            Assert.True(refreshed.ExpiresAt <= refreshed.AbsoluteExpiresAt);
+            Assert.Equal(first.IssuedAt, refreshed.IssuedAt);
+            Assert.Equal(first.ExpiresAt, refreshed.ExpiresAt);
+            Assert.Equal(first.AbsoluteExpiresAt, refreshed.AbsoluteExpiresAt);
             current = refreshed.Ticket;
         }
 
-        // At 7h20m the 45-minute window is clipped to the absolute cap (8h).
-        var last = await service.ValidateAsync(principal, current, CancellationToken.None);
-        Assert.True(last.IsValid);
-        Assert.Equal(first.AbsoluteExpiresAt, last.ExpiresAt);
-
-        _clock.Advance(TimeSpan.FromMinutes(41));
+        // 61 minutes after the ORIGINAL unlock the refreshed ticket is dead too.
+        _clock.Advance(TimeSpan.FromMinutes(11));
         var expired = await service.ValidateAsync(principal, current, CancellationToken.None);
         Assert.False(expired.IsValid);
         Assert.Equal(OwnerAgentFailureCodes.UnlockExpired, expired.FailureCode);
@@ -162,11 +184,80 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
         var ticket = service.Issue(principal);
 
-        _clock.Advance(TimeSpan.FromMinutes(46));
+        _clock.Advance(TimeSpan.FromMinutes(61));
         var validation = await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None);
 
         Assert.False(validation.IsValid);
         Assert.Throws<ApiException>(() => service.Refresh(validation));
+    }
+
+    [Fact]
+    public async Task UnlockMinutesOption_IsHonoured()
+    {
+        var service = CreateService(unlockMinutes: 15);
+        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
+        var ticket = service.Issue(principal);
+
+        Assert.Equal(TimeSpan.FromMinutes(15), service.Lifetime);
+        Assert.Equal(ticket.IssuedAt + TimeSpan.FromMinutes(15), ticket.ExpiresAt);
+        Assert.Equal(ticket.ExpiresAt, ticket.AbsoluteExpiresAt);
+
+        _clock.Advance(TimeSpan.FromMinutes(14));
+        Assert.True((await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None)).IsValid);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal(OwnerAgentFailureCodes.UnlockExpired,
+            (await service.ValidateAsync(principal, ticket.Ticket, CancellationToken.None)).FailureCode);
+    }
+
+    [Theory]
+    [InlineData(0, 5)]
+    [InlineData(1, 5)]
+    [InlineData(5, 5)]
+    [InlineData(90, 90)]
+    [InlineData(480, 480)]
+    [InlineData(10_000, 480)]
+    [InlineData(-30, 5)]
+    public void UnlockMinutesOption_IsClampedTo5Through480(int configured, int expected)
+    {
+        Assert.Equal(TimeSpan.FromMinutes(expected), new OwnerAgentOptions { UnlockMinutes = configured }.UnlockLifetime);
+        Assert.Equal(TimeSpan.FromMinutes(expected), CreateService(configured).Lifetime);
+    }
+
+    [Fact]
+    public async Task Ticket_LongerThanTheConfiguredLifetime_IsRejected()
+    {
+        // e.g. minted before UnlockMinutes was lowered.
+        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
+        var longLived = CreateService(unlockMinutes: 120).Issue(principal);
+
+        var validation = await CreateService(unlockMinutes: 60).ValidateAsync(principal, longLived.Ticket, CancellationToken.None);
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockExpired, validation.FailureCode);
+    }
+
+    [Fact]
+    public async Task LegacySlidingTicket_WithAnEightHourAbsoluteCap_IsRejected()
+    {
+        // Shape minted by the former 45-minute sliding / 8-hour absolute scheme.
+        var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(_clock.GetUtcNow().ToUnixTimeMilliseconds());
+        var legacy = Protect(OwnerAgentUnlockService.Purpose, new
+        {
+            v = 1,
+            id = "legacy-ticket",
+            a = AccountId,
+            f = _familyId.ToString("D"),
+            iat = now.ToUnixTimeMilliseconds(),
+            exp = now.AddMinutes(45).ToUnixTimeMilliseconds(),
+            abs = now.AddHours(8).ToUnixTimeMilliseconds(),
+        }, now.AddMinutes(45));
+
+        var validation = await CreateService().ValidateAsync(principal, legacy, CancellationToken.None);
+
+        Assert.False(validation.IsValid);
+        Assert.Equal(OwnerAgentFailureCodes.UnlockExpired, validation.FailureCode);
     }
 
     [Fact]
@@ -212,15 +303,13 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StreamRevalidation_IgnoresTheSlidingWindow_ButHonoursLockAndAbsoluteCap()
+    public async Task StreamRevalidation_HonoursSessionBindingAndLock()
     {
         var service = CreateService();
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
         var initial = await service.ValidateAsync(principal, service.Issue(principal).Ticket, CancellationToken.None);
         Assert.True(initial.IsValid);
 
-        // Past the connect-time ticket's 45 minutes: the family is still unlocked (the client
-        // re-mints; each long poll re-presents the fresh ticket to the endpoint policy).
         _clock.Advance(TimeSpan.FromMinutes(50));
         Assert.True((await service.RevalidateFamilyAsync(principal, initial, CancellationToken.None)).IsValid);
 
@@ -235,13 +324,13 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StreamRevalidation_StopsAtTheAbsoluteCap()
+    public async Task StreamRevalidation_StopsAtTheFixedExpiry()
     {
         var service = CreateService();
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
         var initial = await service.ValidateAsync(principal, service.Issue(principal).Ticket, CancellationToken.None);
 
-        _clock.Advance(OwnerAgentUnlockService.AbsoluteLifetime + TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromMinutes(61));
         Assert.Equal(OwnerAgentFailureCodes.UnlockExpired,
             (await service.RevalidateFamilyAsync(principal, initial, CancellationToken.None)).FailureCode);
     }
@@ -280,13 +369,25 @@ public sealed class OwnerAgentUnlockServiceTests : IDisposable
     public async Task Validate_TicketFromAnotherPurpose_IsRejected()
     {
         var service = CreateService();
-        // A step-up token (different DataProtection purpose) must never pass as an unlock ticket.
-        var stepUp = new OwnerAgentStepUpService(_dataProtection, new OwnerAgentStepUpReplayCache(), _clock);
         var principal = OwnerAgentWebApplicationFactory.Principal(AccountId, _familyId);
-        var unlock = await service.ValidateAsync(principal, service.Issue(principal).Ticket, CancellationToken.None);
-        var foreign = stepUp.Issue(principal, unlock).Token;
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(_clock.GetUtcNow().ToUnixTimeMilliseconds());
+        // A well-formed payload protected under a DIFFERENT DataProtection purpose must never pass.
+        var foreign = Protect("OwnerAgent.SomethingElse.v1", new
+        {
+            v = 1,
+            id = "foreign-ticket",
+            a = AccountId,
+            f = _familyId.ToString("D"),
+            iat = now.ToUnixTimeMilliseconds(),
+            exp = now.AddMinutes(30).ToUnixTimeMilliseconds(),
+            abs = now.AddMinutes(30).ToUnixTimeMilliseconds(),
+        }, now.AddMinutes(30));
 
         var validation = await service.ValidateAsync(principal, foreign, CancellationToken.None);
         Assert.Equal(OwnerAgentFailureCodes.UnlockInvalid, validation.FailureCode);
     }
+
+    private string Protect(string purpose, object payload, DateTimeOffset expiresAt)
+        => _dataProtection.CreateProtector(purpose).ToTimeLimitedDataProtector()
+            .Protect(JsonSerializer.Serialize(payload), expiresAt);
 }

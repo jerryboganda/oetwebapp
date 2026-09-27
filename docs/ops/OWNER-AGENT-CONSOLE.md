@@ -107,7 +107,13 @@ Complete every item before first enablement. Vendor UI paths are as of
 - [ ] **TOTP enabled** on the owner's OET account (the one whose
       `auth_account_id` will be allow-listed). The console unlock requires
       password + a fresh authenticator code; recovery codes **cannot** unlock
-      the console.
+      the console. One unlock is valid for a fixed **60 minutes**
+      (API option `OwnerAgent:UnlockMinutes`, clamped 5–480; production
+      uses the default — the compose file does not map it) on that browser — it
+      survives reloads, new tabs and other admin pages (HttpOnly
+      `oet_owner_unlock` cookie), is never extended, and nothing else in the
+      console asks for a code again (there is no per-action step-up). **Lock
+      now** or signing out ends it early.
 - [ ] Recovery codes stored offline.
 - [ ] Note: once the console ships, re-enrolling the authenticator requires
       the current code (or a recovery code) + password, revokes unlock
@@ -142,8 +148,8 @@ Metadata: Read is added automatically. Grant nothing else.
 | **Agent PAT** (`oet-agent-console-agent`) | Contents **RW**, Pull requests **RW**, Actions **RW**, Workflows **RW**. **No Administration**, no Variables, no Secrets, no Issues. | uid agent (git credential helper + `gh auth`) |
 | **Ship PAT** (`oet-agent-console-ship`) | Contents **RW**, Pull requests **RW**, Actions **RW**, Workflows **RW**, **Administration RW** (visibility flips), **Variables RW** (the `PUBLIC_WINDOW_HOLDERS` visibility lease). | control plane only (`/var/lib/oet-agent/ship-token`, 0400 root) |
 
-Both are entered **only** in the console (Settings → GitHub tokens, TOTP
-step-up). They are write-only: the console never shows them again.
+Both are entered **only** in the unlocked console (Settings → GitHub
+tokens). They are write-only: the console never shows them again.
 
 ### 3.5 GitHub — `main` ruleset
 
@@ -335,7 +341,7 @@ docker network inspect oet_agent_ctl --format '{{range .Containers}}{{.Name}} {{
 
 ## 5. Connect and re-auth flows
 
-Both flows need the console unlocked plus a TOTP step-up. The sidecar runs
+Both flows need only the console unlocked (no extra code). The sidecar runs
 the vendor's own sign-in **inside the container as uid agent**; the browser
 only ever sees a vendor URL and a code. The console never reads, copies or
 exports the engines' credential files.
@@ -367,7 +373,7 @@ exports the engines' credential files.
 
 - Re-auth when an engine shows `signed_out` / `error`, or turns fail with an
   auth error: repeat §5.1 / §5.2 (it replaces the stored credentials).
-- **Logout** (Settings, TOTP step-up) signs the engine out inside the
+- **Logout** (Settings) signs the engine out inside the
   container. To also kill the vendor-side session, sign out of all devices
   / revoke sessions in the vendor's account settings.
 - Rate limits show `unknown` until the first rate-limit event of a turn;
@@ -397,7 +403,8 @@ exports the engines' credential files.
 - **Unparseable is treated as destructive**: `psql -f`, heredocs,
   `docker exec … psql`, `sh|bash -c`, `node|python -e|-c`, `| sh`, base64
   pipes, `env X=… cmd`, absolute binary paths.
-- Switching to **Autopilot** needs a TOTP step-up. Read-only runs Claude in
+- Switching to **Autopilot** needs only the console unlock (audited as
+  `mode_changed`). Read-only runs Claude in
   `dontAsk` with read-only tools; Guarded/Autopilot never use
   `bypassPermissions` / `acceptEdits`, and Codex never runs with approval
   policy `never`.
@@ -610,12 +617,12 @@ out of the container, never paste tokens into the console, chat or tickets.
 
 | Secret | Rotate when | Procedure |
 |---|---|---|
-| Agent PAT / Ship PAT | every 90 days, on suspicion, on expiry warning | Create the new PAT (§3.4) → console Settings → GitHub tokens (TOTP) → verify status → **revoke the old PAT on GitHub**. |
+| Agent PAT / Ship PAT | every 90 days, on suspicion, on expiry warning | Create the new PAT (§3.4) → console Settings → GitHub tokens → verify status → **revoke the old PAT on GitHub**. |
 | Internal token (`OWNER_AGENT__INTERNALTOKEN`) | yearly, on suspicion | New value in `.env.production` → `gh workflow run agent-console.yml -f apply=true` → Build & Deploy to recreate the API slots. Expect console 502/401 between the two steps. |
 | Proxy token | yearly, on suspicion | New value in `.env.production` → `agent-console.yml` with `apply=true` (all four containers recreate together). |
 | DB role password | yearly, on suspicion | New value in `.env.production` → re-run §4.3 (idempotent; resets the password) → `agent-console.yml` with `apply=true`. |
 | Claude / ChatGPT sign-in | on suspicion, plan change, owner device loss | Settings → Logout → vendor-side "sign out all sessions" → Connect again (§5). |
-| Unlock ticket | on suspicion | Console **Lock**, or sign out all sessions of the owner account (revokes the token family). |
+| Unlock ticket | on suspicion | Console **Lock now** (revokes every earlier ticket and expires the `oet_owner_unlock` cookie), or sign out all sessions of the owner account (revokes the token family). Otherwise it lapses by itself 60 min after the unlock. |
 
 Never print old or new values. Compare configuration by length or hash only,
 e.g. `printf %s "$VALUE" | sha256sum`.

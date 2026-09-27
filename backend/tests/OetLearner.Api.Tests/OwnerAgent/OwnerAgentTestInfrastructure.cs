@@ -8,6 +8,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,6 +47,9 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
     /// <summary>Env switch; set before the first request.</summary>
     public bool OwnerAgentEnabled { get; init; } = true;
 
+    /// <summary><c>OwnerAgent:UnlockMinutes</c>; null keeps the default (60).</summary>
+    public int? UnlockMinutes { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
@@ -57,6 +61,10 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
                 options.BaseUrl = SidecarBaseUrl;
                 options.InternalToken = InternalToken;
                 options.OwnerAccountIds = $"{OwnerAccountId}, {SecondOwnerAccountId}";
+                if (UnlockMinutes is { } minutes)
+                {
+                    options.UnlockMinutes = minutes;
+                }
             });
 
             // Same typed client, primary handler swapped for the in-process fake.
@@ -198,9 +206,14 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Bearer client WITHOUT a cookie jar: the unlock cookie is never replayed implicitly, so
+    /// every test states exactly how the ticket is presented (header via <see cref="Unlocked"/>,
+    /// cookie via <see cref="WithUnlockCookie"/>).
+    /// </summary>
     public HttpClient CreateBearerClient(string accessToken)
     {
-        var client = CreateClient();
+        var client = CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         return client;
     }
@@ -235,30 +248,11 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
         return document.RootElement.GetProperty("ticket").GetString()!;
     }
 
-    /// <summary>POST /step-up with the NEXT time-step's code (the unlock burned the current one).</summary>
-    public static async Task<string> StepUpAsync(HttpClient client, OwnerSeed owner, string ticket)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/owner-agent/step-up")
-        {
-            Content = JsonContent.Create(new { code = GenerateTotpCode(owner.SecretKey, DateTimeOffset.UtcNow.AddSeconds(30)) }),
-        };
-        request.Headers.Add(OwnerAgentHeaders.Unlock, ticket);
-        var response = await client.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(response.StatusCode == HttpStatusCode.OK, $"step-up failed: {(int)response.StatusCode} {body}");
-        using var document = JsonDocument.Parse(body);
-        return document.RootElement.GetProperty("stepUpToken").GetString()!;
-    }
-
-    public static HttpRequestMessage Unlocked(HttpMethod method, string url, string ticket, object? body = null, string? stepUp = null)
+    /// <summary>A request presenting the unlock ticket in the <c>X-Owner-Agent-Unlock</c> header.</summary>
+    public static HttpRequestMessage Unlocked(HttpMethod method, string url, string ticket, object? body = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Add(OwnerAgentHeaders.Unlock, ticket);
-        if (stepUp is not null)
-        {
-            request.Headers.Add(OwnerAgentHeaders.StepUp, stepUp);
-        }
-
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);
@@ -266,6 +260,28 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
 
         return request;
     }
+
+    /// <summary>
+    /// A request presenting the unlock ticket ONLY as the browser does: the HttpOnly
+    /// <c>oet_owner_unlock</c> cookie (no <c>X-Owner-Agent-Unlock</c> header).
+    /// </summary>
+    public static HttpRequestMessage WithUnlockCookie(HttpMethod method, string url, string ticket, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Add("Cookie", $"{OwnerAgentUnlockCookie.Name}={ticket}");
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        return request;
+    }
+
+    /// <summary>All <c>Set-Cookie</c> header values for the unlock cookie on a response.</summary>
+    public static IReadOnlyList<string> UnlockSetCookies(HttpResponseMessage response)
+        => response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.Where(v => v.StartsWith(OwnerAgentUnlockCookie.Name + "=", StringComparison.Ordinal)).ToList()
+            : [];
 
     public static async Task<string?> ReadCodeAsync(HttpResponseMessage response)
     {

@@ -5,25 +5,23 @@
  * - hub path `/v1/owner-agent/hub` (allow-listed in lib/backend-proxy.ts);
  * - long polling through the same-origin `/api/backend` proxy (it cannot
  *   upgrade WebSockets);
- * - the unlock ticket travels as `X-Owner-Agent-Unlock` on EVERY hub request.
- *   The contract asks for SignalR's `headers` option, which we set, but the
- *   long-polling transport snapshots `headers` once per connect while the
- *   ticket is re-minted every ~40 minutes — so a thin HttpClient wrapper also
- *   stamps the *current* ticket onto negotiate, poll, send and close requests.
+ * - no unlock header: the HttpOnly `oet_owner_unlock` cookie rides along on
+ *   every same-origin negotiate / poll / send / close request
+ *   (`withCredentials: true`), and the API re-checks it on every batch;
  * - one server-streaming method `Stream(sessionId, afterSeq)`; when the stream
  *   errors or the connection drops, it resubscribes with the last seq it saw so
  *   nothing is lost and nothing is replayed twice.
- * - hub errors are stable codes (HubException message). An unlock error while
- *   the client already holds a newer ticket (the server may re-validate the
- *   ticket captured when the connection started) recycles the connection with
- *   the current ticket; any other terminal error (unlock gone, not the owner,
- *   invalid id) stops the stream instead of retrying forever.
+ * - hub errors are stable codes (HubException message). An unlock error after
+ *   the owner has unlocked again (a different unlock than the one the
+ *   connection started under) recycles the connection; any other terminal
+ *   error (unlock gone, not the owner, invalid id) stops the stream instead of
+ *   retrying forever.
  */
 
-import type { HttpRequest, HttpResponse, HubConnection, HubConnectionState, ISubscription } from '@microsoft/signalr';
+import type { HubConnection, HubConnectionState, ISubscription } from '@microsoft/signalr';
 import { env } from '@/lib/env';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { OWNER_AGENT_HUB_PATH, OWNER_AGENT_UNLOCK_HEADER, type AgentEvent } from './types';
+import { OWNER_AGENT_HUB_PATH, type AgentEvent } from './types';
 
 export type OwnerAgentConnectionState =
   | 'disconnected'
@@ -65,8 +63,6 @@ export function resolveOwnerAgentHubUrl(): string {
 }
 
 export interface OwnerAgentConnectionOptions {
-  /** Current unlock ticket; read on every hub HTTP request. */
-  getUnlockTicket: () => string | null;
   onReconnecting?: (error?: Error) => void;
   onReconnected?: (connectionId?: string) => void;
   onClose?: (error?: Error) => void;
@@ -75,37 +71,17 @@ export interface OwnerAgentConnectionOptions {
 /**
  * Create (not start) a HubConnection to the owner-agent hub.
  */
-export async function createOwnerAgentConnection(options: OwnerAgentConnectionOptions): Promise<HubConnection> {
+export async function createOwnerAgentConnection(options: OwnerAgentConnectionOptions = {}): Promise<HubConnection> {
   const signalR = await import('@microsoft/signalr');
-  const { HubConnectionBuilder, HttpTransportType, LogLevel, HttpClient, DefaultHttpClient, NullLogger } = signalR;
+  const { HubConnectionBuilder, HttpTransportType, LogLevel } = signalR;
   const hubUrl = resolveOwnerAgentHubUrl();
   const transport = hubUrl.startsWith('/') ? HttpTransportType.LongPolling : undefined;
 
-  class UnlockHeaderHttpClient extends HttpClient {
-    private readonly inner = new DefaultHttpClient(NullLogger.instance);
-
-    override send(request: HttpRequest): Promise<HttpResponse> {
-      const ticket = options.getUnlockTicket();
-      const headers: Record<string, string> = { ...(request.headers ?? {}) };
-      if (ticket) {
-        headers[OWNER_AGENT_UNLOCK_HEADER] = ticket;
-      } else {
-        delete headers[OWNER_AGENT_UNLOCK_HEADER];
-      }
-      return this.inner.send({ ...request, headers });
-    }
-
-    override getCookieString(url: string): string {
-      return this.inner.getCookieString(url);
-    }
-  }
-
-  const initialTicket = options.getUnlockTicket();
   const connection = new HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory: async () => (await ensureFreshAccessToken().catch(() => null)) ?? '',
-      headers: initialTicket ? { [OWNER_AGENT_UNLOCK_HEADER]: initialTicket } : {},
-      httpClient: new UnlockHeaderHttpClient(),
+      // The unlock is the HttpOnly cookie; make sure every hub request carries it.
+      withCredentials: true,
       ...(transport !== undefined ? { transport } : {}),
     })
     .withAutomaticReconnect({
@@ -156,7 +132,7 @@ function errorText(error: unknown): string {
   return typeof error === 'string' ? error : '';
 }
 
-/** The hub rejected the unlock ticket (e.g. "… HubException: owner_agent_unlock_expired"). */
+/** The hub rejected the unlock (e.g. "… HubException: owner_agent_unlock_expired"). */
 export function isUnlockStreamError(error: unknown): boolean {
   return UNLOCK_ERROR.test(errorText(error));
 }
@@ -172,16 +148,22 @@ export interface OwnerAgentEventStreamOptions {
   sessionId: string;
   /** Resume point: every persisted event with seq > afterSeq is replayed, then live. */
   afterSeq?: number;
-  getUnlockTicket: () => string | null;
+  /**
+   * Opaque identity of the current unlock (null while locked), e.g.
+   * `getUnlockKey` from ./unlock-store. It changes when the owner unlocks
+   * again. Never the unlock credential — that is an HttpOnly cookie.
+   */
+  getUnlockKey: () => string | null;
   onEvent: (event: AgentEvent) => void;
   onStateChange?: (state: OwnerAgentConnectionState) => void;
   onError?: (error: Error) => void;
   /**
-   * The hub rejected the unlock ticket this connection was started with, and
-   * no newer ticket is held. The stream has stopped; `ticket` lets the caller
-   * drop exactly that ticket (a concurrent re-unlock must survive).
+   * The hub rejected the unlock this connection was started under, and the
+   * owner has not unlocked again since. The stream has stopped; `unlockKey`
+   * lets the caller clear exactly that unlock (a concurrent re-unlock must
+   * survive).
    */
-  onUnlockRejected?: (ticket: string | null) => void;
+  onUnlockRejected?: (unlockKey: string | null) => void;
   /** Injection point for tests; defaults to createOwnerAgentConnection. */
   connectionFactory?: (options: OwnerAgentConnectionOptions) => Promise<HubConnection>;
   /** Injection point for tests; defaults to setTimeout. */
@@ -205,7 +187,7 @@ function toError(value: unknown): Error {
  * - stream error/complete while the connection is up → resubscribe (backoff);
  * - connection reconnecting → wait; reconnected → resubscribe from lastSeq;
  * - connection closed for good → start a new connection (backoff);
- * - unlock rejected but a newer ticket is held → new connection with it;
+ * - unlock rejected but the owner has unlocked again since → new connection;
  * - any other terminal error → stop (no further retries until re-opened).
  */
 export function openOwnerAgentEventStream(options: OwnerAgentEventStreamOptions): OwnerAgentEventStream {
@@ -218,8 +200,8 @@ export function openOwnerAgentEventStream(options: OwnerAgentEventStreamOptions)
   let stopped = false;
   let lastSeq = Math.max(0, Math.trunc(options.afterSeq ?? 0));
   let connection: HubConnection | null = null;
-  /** Ticket held when the current connection was started (what the server saw at connect). */
-  let connectionTicket: string | null = null;
+  /** Unlock the current connection was started under (what the server saw at connect). */
+  let connectionUnlockKey: string | null = null;
   let subscription: ISubscription<AgentEvent> | null = null;
   let retryHandle: unknown = null;
   let attempt = 0;
@@ -262,15 +244,15 @@ export function openOwnerAgentEventStream(options: OwnerAgentEventStreamOptions)
   const handleTerminal = (error: unknown): boolean => {
     if (!isTerminalStreamError(error)) return false;
     if (isUnlockStreamError(error)) {
-      const current = options.getUnlockTicket();
-      if (current && current !== connectionTicket) {
-        // The server judged an older ticket; reconnect so it sees the current one.
+      const current = options.getUnlockKey();
+      if (current && current !== connectionUnlockKey) {
+        // The server judged an older unlock; reconnect so it sees the current cookie.
         discardConnection();
         setState('disconnected');
         scheduleRecovery();
         return true;
       }
-      options.onUnlockRejected?.(connectionTicket);
+      options.onUnlockRejected?.(connectionUnlockKey);
     }
     stopped = true;
     clearRetry();
@@ -318,14 +300,13 @@ export function openOwnerAgentEventStream(options: OwnerAgentEventStreamOptions)
         let created: HubConnection | null = null;
         const isCurrent = () => created !== null && connection === created;
         created = await factory({
-          getUnlockTicket: options.getUnlockTicket,
           onReconnecting: () => {
             if (isCurrent()) setState('reconnecting');
           },
           onReconnected: () => {
             if (closed || stopped || !isCurrent()) return;
-            // Automatic reconnect renegotiated with the ticket held right now.
-            connectionTicket = options.getUnlockTicket();
+            // Automatic reconnect renegotiated with the unlock cookie held right now.
+            connectionUnlockKey = options.getUnlockKey();
             setState('connected');
             attempt = 0;
             subscribe();
@@ -351,7 +332,7 @@ export function openOwnerAgentEventStream(options: OwnerAgentEventStreamOptions)
       const current = connection;
       if (mapHubState(current.state) === 'disconnected') {
         setState('connecting');
-        connectionTicket = options.getUnlockTicket();
+        connectionUnlockKey = options.getUnlockKey();
         await current.start();
       }
       if (closed || stopped) {

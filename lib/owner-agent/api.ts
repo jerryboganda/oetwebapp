@@ -2,32 +2,33 @@
  * Owner Agent Console REST client — every `/v1/owner-agent/*` call (CONTRACT §5).
  *
  * - All traffic goes through the shared `apiClient` (bearer, x-csrf-token,
- *   device id, ApiError mapping stay consistent with the rest of the app).
- * - `X-Owner-Agent-Unlock` is attached from the in-memory unlock store on every
- *   call; `X-Owner-Agent-StepUp` only where the contract requires it (Autopilot,
- *   Ship, GitHub tokens, engine connect/logout) — those helpers take the token
- *   as a required argument so a call site cannot forget it.
- * - Retries are disabled (`maxRetries: 0`): unlock/step-up must never be
- *   replayed against the brute-force counters, and mutations such as "send
- *   message" or "approve" must never be double-submitted. Polling callers retry
- *   on their own schedule.
- * - The unlock ticket is re-minted shortly before its sliding expiry and is
- *   dropped at its absolute expiry; nothing here is persisted.
+ *   device id, ApiError mapping stay consistent with the rest of the app) with
+ *   `credentials: 'include'`, so the HttpOnly `oet_owner_unlock` cookie set by
+ *   POST /unlock rides along through the same-origin `/api/backend` proxy.
+ *   No unlock or step-up header is ever attached: the cookie is the only
+ *   unlock credential, and there is no step-up any more.
+ * - Retries are disabled (`maxRetries: 0`): unlock must never be replayed
+ *   against the brute-force counters, and mutations such as "send message" or
+ *   "approve" must never be double-submitted. Polling callers retry on their
+ *   own schedule.
+ * - The unlock lasts a fixed 60 minutes (no refresh). The unlock store
+ *   (./unlock-store) keeps only `{ unlocked, expiresAt }` from /unlock and /me
+ *   and flips back to the unlock screen at `expiresAt`.
  */
 
 import { apiClient } from '@/lib/api';
 import {
   clearUnlock,
-  getUnlockSnapshot,
-  getUnlockTicket,
-  setUnlock,
+  getUnlockGeneration,
+  setUnlocked,
 } from './unlock-store';
 import {
   OWNER_AGENT_API_BASE,
-  OWNER_AGENT_STEP_UP_HEADER,
-  OWNER_AGENT_UNLOCK_HEADER,
+  OWNER_AGENT_SESSIONS_MAX_LIMIT,
+  OWNER_AGENT_SESSIONS_QUERY_MAX,
   SYSTEM_QUEUE_SESSION_ID,
   isEngine,
+  isSessionStatus,
   type ApplyUpdateResult,
   type ApprovalDecisionBody,
   type ConnectFlow,
@@ -40,6 +41,7 @@ import {
   type HandoffBody,
   type KillSwitchResult,
   type LeaseResponse,
+  type ListSessionsParams,
   type OwnerAgentAuditEvent,
   type OwnerAgentAuditPage,
   type OwnerAgentMe,
@@ -50,7 +52,6 @@ import {
   type SessionSummary,
   type ShipBody,
   type ShipState,
-  type StepUpResponse,
   type UnlockBody,
   type UnlockResponse,
 } from './types';
@@ -58,16 +59,15 @@ import {
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
 
 interface OwnerAgentRequestOptions {
-  stepUpToken?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
 
 /**
- * Error codes the API uses when the unlock ticket is missing, expired or
+ * Error codes the API uses when the unlock is missing, expired or
  * revoked (backend `OwnerAgentFailureCodes.UnlockCodes`, 403 `{ code, message }`
- * on REST and the HubException message on the hub). Any of them drops the
- * in-memory ticket so the unlock screen shows.
+ * on REST and the HubException message on the hub). Any of them clears the
+ * unlock state so the unlock screen shows.
  */
 export const OWNER_AGENT_LOCK_ERROR_CODES: readonly string[] = [
   'owner_agent_unlock_required',
@@ -182,13 +182,6 @@ function engineSegment(engine: Engine): Engine {
   return engine;
 }
 
-function requireStepUp(token: string | null | undefined, action: string): string {
-  if (typeof token !== 'string' || token.trim().length === 0) {
-    throw new OwnerAgentClientError(`${action} requires a fresh authenticator code.`);
-  }
-  return token;
-}
-
 // ─── Core request ───────────────────────────────────────────────────────────
 
 async function ownerAgentRequest<T>(
@@ -197,23 +190,20 @@ async function ownerAgentRequest<T>(
   body?: unknown,
   options: OwnerAgentRequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = {};
-  const ticket = getUnlockTicket();
-  if (ticket) headers[OWNER_AGENT_UNLOCK_HEADER] = ticket;
-  if (options.stepUpToken) headers[OWNER_AGENT_STEP_UP_HEADER] = options.stepUpToken;
-
-  const init: RequestInit = { method, headers };
+  // The unlock cookie is HttpOnly and travels on its own; nothing to attach.
+  const init: RequestInit = { method, credentials: 'include' };
   if (options.signal) init.signal = options.signal;
   if (body !== undefined) init.body = JSON.stringify(body);
 
+  const generation = getUnlockGeneration();
   try {
     return await apiClient.request<T>(`${OWNER_AGENT_API_BASE}${path}`, init, {
       maxRetries: 0,
       ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     });
   } catch (error) {
-    // Only drop the ticket we actually sent — a concurrent re-unlock must survive.
-    if (ticket && isOwnerAgentLockError(error) && getUnlockTicket() === ticket) {
+    // Only drop the unlock this request ran under — a concurrent re-unlock must survive.
+    if (isOwnerAgentLockError(error) && getUnlockGeneration() === generation) {
       clearUnlock('server_locked');
     }
     throw error;
@@ -222,131 +212,32 @@ async function ownerAgentRequest<T>(
 
 // ─── Unlock lifecycle ───────────────────────────────────────────────────────
 
-/** Re-mint this long before the sliding expiry. */
-const REFRESH_LEAD_MS = 5 * 60_000;
-const MIN_REFRESH_DELAY_MS = 5_000;
-const REFRESH_RETRY_MS = 30_000;
-const MAX_TIMER_MS = 2_147_483_000;
-
-let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-function cancelUnlockRefresh(): void {
-  if (refreshTimer !== null) {
-    clearTimeout(refreshTimer);
-    refreshTimer = null;
-  }
-}
-
-function parseTime(value: string | null): number | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 /**
- * Arm the timer that keeps the ticket alive: refresh REFRESH_LEAD_MS before the
- * sliding expiry, or — when the absolute (+8 h) cap arrives first — simply lock
- * at that moment, because the API will not re-mint past it.
+ * Password + TOTP → the API sets the HttpOnly unlock cookie (60 minutes). Only
+ * the expiry from the body is kept; callers re-read /me afterwards.
  */
-export function scheduleUnlockRefresh(now: number = Date.now()): void {
-  cancelUnlockRefresh();
-  const snapshot = getUnlockSnapshot();
-  if (!snapshot.ticket) return;
-
-  const expiresAt = parseTime(snapshot.expiresAt);
-  const absolute = parseTime(snapshot.absoluteExpiresAt);
-  const hardStop = Math.min(expiresAt ?? Number.POSITIVE_INFINITY, absolute ?? Number.POSITIVE_INFINITY);
-  if (hardStop <= now) {
-    clearUnlock('expired');
-    return;
-  }
-
-  const absoluteLeavesRoom = absolute === null || absolute - now > REFRESH_LEAD_MS;
-  if (expiresAt === null || !absoluteLeavesRoom) {
-    if (Number.isFinite(hardStop)) {
-      refreshTimer = setTimeout(() => {
-        refreshTimer = null;
-        clearUnlock('expired');
-      }, Math.min(Math.max(hardStop - now, 0), MAX_TIMER_MS));
-    }
-    return;
-  }
-
-  const delay = Math.min(Math.max(expiresAt - REFRESH_LEAD_MS - now, MIN_REFRESH_DELAY_MS), MAX_TIMER_MS);
-  refreshTimer = setTimeout(() => {
-    refreshTimer = null;
-    void refreshUnlock().catch(() => {
-      // refreshUnlock already rescheduled or cleared; nothing else to do.
-    });
-  }, delay);
-}
-
 export async function unlock(body: UnlockBody): Promise<UnlockResponse> {
   const response = await ownerAgentRequest<UnlockResponse>('POST', '/unlock', {
     password: body.password,
     code: body.code,
   });
-  setUnlock(response);
-  scheduleUnlockRefresh();
+  if (response && typeof response.expiresAt === 'string') {
+    setUnlocked({ expiresAt: response.expiresAt, absoluteExpiresAt: response.absoluteExpiresAt ?? null });
+  }
   return response;
 }
 
-export async function refreshUnlock(): Promise<UnlockResponse | null> {
-  const sent = getUnlockTicket();
-  if (!sent) {
-    cancelUnlockRefresh();
-    return null;
-  }
+/**
+ * "Lock now": POST /lock revokes the unlock server-side and clears the cookie.
+ * Always sent (the cookie is invisible to JS, so local state cannot tell), and
+ * the local state is cleared even if the call fails.
+ */
+export async function lockNow(): Promise<void> {
   try {
-    const response = await ownerAgentRequest<UnlockResponse>('POST', '/unlock/refresh');
-    // Ignore a late answer for a ticket that was replaced or locked meanwhile.
-    if (getUnlockTicket() !== sent) return null;
-    setUnlock(response);
-    scheduleUnlockRefresh();
-    return response;
-  } catch (error) {
-    if (getUnlockTicket() !== sent) throw error;
-    const status = errorStatus(error);
-    if (isOwnerAgentLockError(error) || status === 401 || status === 403) {
-      clearUnlock('refresh_failed');
-      cancelUnlockRefresh();
-      throw error;
-    }
-    // Transient failure: retry while the current ticket is still valid.
-    const expiresAt = parseTime(getUnlockSnapshot().expiresAt);
-    if (expiresAt !== null && expiresAt - Date.now() > REFRESH_RETRY_MS) {
-      cancelUnlockRefresh();
-      refreshTimer = setTimeout(() => {
-        refreshTimer = null;
-        void refreshUnlock().catch(() => undefined);
-      }, REFRESH_RETRY_MS);
-    } else {
-      scheduleUnlockRefresh();
-    }
-    throw error;
-  }
-}
-
-/** Revoke the ticket family server-side (best effort) and forget it locally. */
-export async function lock(): Promise<void> {
-  try {
-    if (getUnlockTicket()) {
-      await ownerAgentRequest<unknown>('POST', '/lock');
-    }
+    await ownerAgentRequest<unknown>('POST', '/lock');
   } finally {
-    cancelUnlockRefresh();
     clearUnlock('locked');
   }
-}
-
-/** Exchange a fresh TOTP code for a single-use, 5-minute step-up token. */
-export function stepUp(code: string): Promise<StepUpResponse> {
-  return ownerAgentRequest<StepUpResponse>('POST', '/step-up', { code });
-}
-
-/** Test hook: stop the refresh timer between specs. */
-export function resetOwnerAgentApiForTests(): void {
-  cancelUnlockRefresh();
 }
 
 // ─── Identity + status ──────────────────────────────────────────────────────
@@ -391,14 +282,21 @@ export async function getAudit(take = 100): Promise<OwnerAgentAuditPage> {
   return { items: [], chainIntact: false };
 }
 
+/** GET /owners → allow-listed admin accounts (`accountId` → `email`) for History "started by". */
+export async function listOwners(): Promise<{ accountId: string; email: string }[]> {
+  const page = await ownerAgentRequest<{ items?: { accountId?: unknown; email?: unknown }[] } | null>('GET', '/owners');
+  const items = Array.isArray(page?.items) ? page.items : [];
+  return items.flatMap((o) =>
+    typeof o.accountId === 'string' && typeof o.email === 'string' ? [{ accountId: o.accountId, email: o.email }] : [],
+  );
+}
+
 // ─── Engine sign-in ─────────────────────────────────────────────────────────
 
 // Helpers below are `async` so validation failures surface as rejected promises.
 
-export async function connectEngine(engine: Engine, stepUpToken: string): Promise<ConnectFlow> {
-  return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/connect`, undefined, {
-    stepUpToken: requireStepUp(stepUpToken, 'Connecting an engine'),
-  });
+export async function connectEngine(engine: Engine): Promise<ConnectFlow> {
+  return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/connect`);
 }
 
 export async function getConnectFlow(engine: Engine, flowId: string): Promise<ConnectFlow> {
@@ -419,57 +317,61 @@ export async function cancelConnect(engine: Engine, flowId: string): Promise<Con
   return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/cancel`, { flowId });
 }
 
-export async function logoutEngine(engine: Engine, stepUpToken: string): Promise<EngineAuth> {
-  return ownerAgentRequest<EngineAuth>('POST', `/auth/${engineSegment(engine)}/logout`, undefined, {
-    stepUpToken: requireStepUp(stepUpToken, 'Signing an engine out'),
-  });
+export async function logoutEngine(engine: Engine): Promise<EngineAuth> {
+  return ownerAgentRequest<EngineAuth>('POST', `/auth/${engineSegment(engine)}/logout`);
 }
 
 /** Write-only: tokens are never returned by the API. Blank fields are omitted. */
-export async function putGithubTokens(body: GithubTokensBody, stepUpToken: string): Promise<GithubStatus> {
+export async function putGithubTokens(body: GithubTokensBody): Promise<GithubStatus> {
   const payload: GithubTokensBody = {};
   if (body.agentToken && body.agentToken.trim()) payload.agentToken = body.agentToken.trim();
   if (body.shipToken && body.shipToken.trim()) payload.shipToken = body.shipToken.trim();
   if (!payload.agentToken && !payload.shipToken) {
     throw new OwnerAgentClientError('Enter at least one token.');
   }
-  return ownerAgentRequest<GithubStatus>('PUT', '/github-tokens', payload, {
-    stepUpToken: requireStepUp(stepUpToken, 'Changing GitHub tokens'),
-  });
+  return ownerAgentRequest<GithubStatus>('PUT', '/github-tokens', payload);
 }
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
 
-export async function listSessions(includeArchived = false): Promise<SessionSummary[]> {
-  const rows = await ownerAgentRequest<SessionSummary[]>(
-    'GET',
-    `/sessions?includeArchived=${includeArchived ? 'true' : 'false'}`,
-  );
+/**
+ * Build the GET /sessions query string. Invalid values are dropped rather than
+ * sent (the API validates too): `q` is trimmed and capped at 100 chars, the
+ * engine/status must be known values, `before` must parse as a date and
+ * `limit` is clamped to 1..200. `includeArchived` is always explicit.
+ */
+export function buildSessionsQuery(params: ListSessionsParams = {}): string {
+  const query = new URLSearchParams();
+  const q = typeof params.q === 'string' ? params.q.trim().slice(0, OWNER_AGENT_SESSIONS_QUERY_MAX) : '';
+  if (q) query.set('q', q);
+  if (params.engine !== undefined && isEngine(params.engine)) query.set('engine', params.engine);
+  if (params.status !== undefined && isSessionStatus(params.status)) query.set('status', params.status);
+  query.set('includeArchived', params.includeArchived ? 'true' : 'false');
+  if (typeof params.before === 'string' && params.before && Number.isFinite(Date.parse(params.before))) {
+    query.set('before', params.before);
+  }
+  if (typeof params.limit === 'number' && Number.isFinite(params.limit)) {
+    const limit = Math.min(Math.max(Math.trunc(params.limit), 1), OWNER_AGENT_SESSIONS_MAX_LIMIT);
+    query.set('limit', String(limit));
+  }
+  return query.toString();
+}
+
+export async function listSessions(params: ListSessionsParams = {}): Promise<SessionSummary[]> {
+  const rows = await ownerAgentRequest<SessionSummary[]>('GET', `/sessions?${buildSessionsQuery(params)}`);
   return Array.isArray(rows) ? rows : [];
 }
 
-/**
- * POST /sessions. Starting directly in Autopilot is the same escalation as
- * switching to it, so the API (additively to CONTRACT §5) consumes a step-up
- * token for `mode: "autopilot"`; the helper refuses to send without one.
- */
-export async function createSession(body: CreateSession, stepUpToken?: string): Promise<SessionDetail> {
-  const needsStepUp = body.mode === 'autopilot';
-  return ownerAgentRequest<SessionDetail>('POST', '/sessions', body, {
-    stepUpToken: needsStepUp ? requireStepUp(stepUpToken, 'Starting in Autopilot') : undefined,
-  });
+export async function createSession(body: CreateSession): Promise<SessionDetail> {
+  return ownerAgentRequest<SessionDetail>('POST', '/sessions', body);
 }
 
 export async function getSession(sessionId: string): Promise<SessionDetail> {
   return ownerAgentRequest<SessionDetail>('GET', `/sessions/${sessionSegment(sessionId)}`);
 }
 
-/** PATCH /sessions/{id}; switching `mode` to autopilot requires a step-up token. */
-export async function patchSession(sessionId: string, patch: SessionPatch, stepUpToken?: string): Promise<SessionDetail> {
-  const needsStepUp = patch.mode === 'autopilot';
-  return ownerAgentRequest<SessionDetail>('PATCH', `/sessions/${sessionSegment(sessionId)}`, patch, {
-    stepUpToken: needsStepUp ? requireStepUp(stepUpToken, 'Enabling Autopilot') : undefined,
-  });
+export async function patchSession(sessionId: string, patch: SessionPatch): Promise<SessionDetail> {
+  return ownerAgentRequest<SessionDetail>('PATCH', `/sessions/${sessionSegment(sessionId)}`, patch);
 }
 
 export async function sendMessage(sessionId: string, body: SendMessageBody): Promise<{ turnId: string }> {
@@ -511,13 +413,11 @@ export async function getSessionDiff(sessionId: string): Promise<SessionDiff> {
   });
 }
 
-export async function shipSession(sessionId: string, body: ShipBody, stepUpToken: string): Promise<ShipState> {
+export async function shipSession(sessionId: string, body: ShipBody): Promise<ShipState> {
   const payload: ShipBody = {};
   if (body.prTitle && body.prTitle.trim()) payload.prTitle = body.prTitle.trim();
   if (body.prBody && body.prBody.trim()) payload.prBody = body.prBody;
-  return ownerAgentRequest<ShipState>('POST', `/sessions/${sessionSegment(sessionId)}/ship`, payload, {
-    stepUpToken: requireStepUp(stepUpToken, 'Ship'),
-  });
+  return ownerAgentRequest<ShipState>('POST', `/sessions/${sessionSegment(sessionId)}/ship`, payload);
 }
 
 export async function getShipState(sessionId: string): Promise<ShipState | null> {

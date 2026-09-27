@@ -7,6 +7,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import {
+  buildSessionsQuery,
   connectEngine,
   createSession,
   decideApproval,
@@ -17,14 +18,14 @@ import {
   isOwnerAgentLockMessage,
   isOwnerAgentSessionId,
   isOwnerAgentUserSessionId,
+  listSessions,
   logoutEngine,
   patchSession,
   putGithubTokens,
-  resetOwnerAgentApiForTests,
   sendMessage,
   shipSession,
 } from '../api';
-import { getUnlockTicket, resetUnlockStoreForTests, setUnlock } from '../unlock-store';
+import { isUnlocked, resetUnlockStoreForTests, setUnlocked } from '../unlock-store';
 import { SYSTEM_QUEUE_SESSION_ID } from '../types';
 
 const SESSION = '01J9ZQ3V4W5X6Y7Z8A9B0C1D2E';
@@ -34,8 +35,12 @@ function lastCall(): { path: string; init: RequestInit; options: Record<string, 
   return { path: call[0] as string, init: call[1] as RequestInit, options: call[2] as Record<string, unknown> };
 }
 
-function headers(): Record<string, string> {
-  return (lastCall().init.headers ?? {}) as Record<string, string>;
+function sentHeaderNames(): string[] {
+  return mockRequest.mock.calls.flatMap((call) => {
+    const headers = (call[1] as RequestInit | undefined)?.headers;
+    if (!headers) return [];
+    return Object.keys(headers as Record<string, string>).map((name) => name.toLowerCase());
+  });
 }
 
 describe('owner-agent REST client', () => {
@@ -43,71 +48,92 @@ describe('owner-agent REST client', () => {
     mockRequest.mockReset();
     mockRequest.mockResolvedValue({ ok: true });
     resetUnlockStoreForTests();
-    setUnlock({
-      ticket: 'unlock-fixture',
-      expiresAt: new Date(Date.now() + 45 * 60_000).toISOString(),
-      absoluteExpiresAt: new Date(Date.now() + 8 * 60 * 60_000).toISOString(),
-    });
+    setUnlocked({ expiresAt: new Date(Date.now() + 60 * 60_000).toISOString() });
   });
 
   afterEach(() => {
-    resetOwnerAgentApiForTests();
     resetUnlockStoreForTests();
   });
 
-  it('attaches the unlock ticket to every call and disables retries', async () => {
+  it('relies on the unlock cookie: credentials included, no unlock header, retries disabled', async () => {
     await getStatus();
     expect(lastCall().path).toBe('/v1/owner-agent/status');
     expect(lastCall().init.method).toBe('GET');
-    expect(headers()['X-Owner-Agent-Unlock']).toBe('unlock-fixture');
-    expect(headers()['X-Owner-Agent-StepUp']).toBeUndefined();
+    expect(lastCall().init.credentials).toBe('include');
+    expect(lastCall().init.headers).toBeUndefined();
     expect(lastCall().options).toMatchObject({ maxRetries: 0 });
   });
 
-  it('sends the step-up token only where the contract requires it', async () => {
-    await patchSession(SESSION, { mode: 'autopilot' }, 'step-up-fixture');
+  it('sends no step-up header anywhere — the former step-up actions need only the unlock', async () => {
+    await patchSession(SESSION, { mode: 'autopilot' });
     expect(lastCall().init.method).toBe('PATCH');
-    expect(headers()['X-Owner-Agent-StepUp']).toBe('step-up-fixture');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ mode: 'autopilot' });
 
-    await patchSession(SESSION, { mode: 'guarded' });
-    expect(headers()['X-Owner-Agent-StepUp']).toBeUndefined();
-
-    await shipSession(SESSION, { prTitle: 'Fix' }, 'step-up-ship');
+    await shipSession(SESSION, { prTitle: 'Fix' });
     expect(lastCall().path).toBe(`/v1/owner-agent/sessions/${SESSION}/ship`);
-    expect(headers()['X-Owner-Agent-StepUp']).toBe('step-up-ship');
 
-    await connectEngine('claude', 'step-up-connect');
+    await connectEngine('claude');
     expect(lastCall().path).toBe('/v1/owner-agent/auth/claude/connect');
-    expect(headers()['X-Owner-Agent-StepUp']).toBe('step-up-connect');
 
-    await logoutEngine('codex', 'step-up-logout');
+    await logoutEngine('codex');
     expect(lastCall().path).toBe('/v1/owner-agent/auth/codex/logout');
 
-    await putGithubTokens({ agentToken: ' agent-token-fixture ' }, 'step-up-tokens');
+    await putGithubTokens({ agentToken: ' agent-token-fixture ' });
     expect(lastCall().init.method).toBe('PUT');
     expect(JSON.parse(String(lastCall().init.body))).toEqual({ agentToken: 'agent-token-fixture' });
-  });
 
-  it('refuses protected actions without a step-up token', async () => {
-    await expect(patchSession(SESSION, { mode: 'autopilot' })).rejects.toThrow(/authenticator/i);
-    await expect(shipSession(SESSION, {}, '')).rejects.toThrow(/authenticator/i);
-    await expect(connectEngine('claude', '')).rejects.toThrow(/authenticator/i);
-    await expect(putGithubTokens({ shipToken: 'x' }, '')).rejects.toThrow(/authenticator/i);
-    expect(mockRequest).not.toHaveBeenCalled();
-  });
-
-  it('requires a step-up to create a session directly in Autopilot', async () => {
-    await expect(
-      createSession({ engine: 'claude', model: 'opaque', mode: 'autopilot' }),
-    ).rejects.toThrow(/Autopilot.*authenticator/);
-    expect(mockRequest).not.toHaveBeenCalled();
-
-    await createSession({ engine: 'claude', model: 'opaque', mode: 'autopilot' }, 'step-up-create');
+    await createSession({ engine: 'claude', model: 'opaque', mode: 'autopilot' });
     expect(lastCall().path).toBe('/v1/owner-agent/sessions');
-    expect(headers()['X-Owner-Agent-StepUp']).toBe('step-up-create');
 
-    await createSession({ engine: 'codex', model: 'opaque', mode: 'guarded' });
-    expect(headers()['X-Owner-Agent-StepUp']).toBeUndefined();
+    expect(mockRequest).toHaveBeenCalledTimes(6);
+    for (const call of mockRequest.mock.calls) {
+      expect((call[1] as RequestInit).credentials).toBe('include');
+      expect(String(call[0])).not.toContain('/step-up');
+    }
+    expect(sentHeaderNames().filter((name) => name.startsWith('x-owner-agent'))).toEqual([]);
+  });
+
+  it('encodes the session list filters and paging cursor', async () => {
+    mockRequest.mockResolvedValueOnce([]);
+    await listSessions();
+    expect(lastCall().path).toBe('/v1/owner-agent/sessions?includeArchived=false');
+
+    mockRequest.mockResolvedValueOnce([{ id: SESSION }]);
+    const rows = await listSessions({
+      q: '  fix T3 & deploy?  ',
+      engine: 'codex',
+      status: 'archived',
+      includeArchived: true,
+      before: '2026-09-27T10:00:00.000Z',
+      limit: 50,
+    });
+    expect(rows).toEqual([{ id: SESSION }]);
+    const url = new URL(lastCall().path, 'https://app.example.test');
+    expect(url.pathname).toBe('/v1/owner-agent/sessions');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: 'fix T3 & deploy?',
+      engine: 'codex',
+      status: 'archived',
+      includeArchived: 'true',
+      before: '2026-09-27T10:00:00.000Z',
+      limit: '50',
+    });
+  });
+
+  it('drops invalid list params instead of sending them', () => {
+    const query = new URLSearchParams(buildSessionsQuery({
+      q: 'x'.repeat(250),
+      engine: 'gpt' as never,
+      status: 'deleted' as never,
+      before: 'not-a-date',
+      limit: 5000,
+    }));
+    expect(query.get('q')).toHaveLength(100);
+    expect(query.has('engine')).toBe(false);
+    expect(query.has('status')).toBe(false);
+    expect(query.has('before')).toBe(false);
+    expect(query.get('limit')).toBe('200');
+    expect(new URLSearchParams(buildSessionsQuery({ q: '   ', limit: 0 })).toString()).toBe('includeArchived=false&limit=1');
   });
 
   it('reads the audit page shape and tolerates a bare array', async () => {
@@ -167,10 +193,21 @@ describe('owner-agent REST client', () => {
     expect(JSON.parse(String(lastCall().init.body))).toEqual({ text: 'do it', model: 'opaque-model', effort: 'opaque-effort' });
   });
 
-  it('drops the unlock ticket when the API reports it locked', async () => {
+  it('clears the unlock state when the API reports it locked', async () => {
     mockRequest.mockRejectedValueOnce(Object.assign(new Error('locked'), { status: 403, code: 'owner_agent_unlock_required' }));
     await expect(getStatus()).rejects.toThrow('locked');
-    expect(getUnlockTicket()).toBeNull();
+    expect(isUnlocked()).toBe(false);
+  });
+
+  it('keeps a newer unlock when a request started under the old one comes back locked', async () => {
+    let reject: (error: unknown) => void = () => undefined;
+    mockRequest.mockImplementationOnce(() => new Promise((_resolve, rej) => { reject = rej; }));
+    const pending = getStatus();
+    // The owner unlocks again while the old request is in flight.
+    setUnlocked({ expiresAt: new Date(Date.now() + 59 * 60_000).toISOString() });
+    reject(Object.assign(new Error('locked'), { status: 403, code: 'owner_agent_unlock_expired' }));
+    await expect(pending).rejects.toThrow('locked');
+    expect(isUnlocked()).toBe(true);
   });
 
   it('explains pass-through sidecar statuses the shared client cannot parse', () => {
@@ -180,9 +217,9 @@ describe('owner-agent REST client', () => {
     expect(describeOwnerAgentError(flat)).toBe('Session is busy.');
   });
 
-  it('keeps the ticket on unrelated failures', async () => {
+  it('keeps the unlock state on unrelated failures', async () => {
     mockRequest.mockRejectedValueOnce(Object.assign(new Error('busy'), { status: 429, code: 'rate_limited' }));
     await expect(getStatus()).rejects.toThrow('busy');
-    expect(getUnlockTicket()).toBe('unlock-fixture');
+    expect(isUnlocked()).toBe(true);
   });
 });

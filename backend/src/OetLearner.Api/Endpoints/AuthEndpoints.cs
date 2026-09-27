@@ -163,6 +163,9 @@ public static class AuthEndpoints
                 var safeRequest = request ?? new SignOutRequest(null);
                 csrfGuard.ValidateCookieBackedAuthMutation(httpContext, safeRequest.RefreshToken);
                 await service.SignOutAsync(safeRequest, ct);
+                // The session-family revocation above already kills any Owner Agent Console
+                // unlock ticket bound to it; also drop the unlock cookie from this browser.
+                OwnerAgentUnlockCookie.Clear(httpContext);
                 return Results.NoContent();
             })
             .AllowAnonymous()

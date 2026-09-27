@@ -119,7 +119,7 @@ describe('owner-agent hub stream', () => {
     const stream = openOwnerAgentEventStream({
       sessionId: SESSION,
       afterSeq: 3,
-      getUnlockTicket: () => 'ticket',
+      getUnlockKey: () => 'unlock-1',
       onEvent: (e) => received.push(e.seq),
       connectionFactory: fake.factory,
     });
@@ -149,7 +149,7 @@ describe('owner-agent hub stream', () => {
     const states: string[] = [];
     const stream = openOwnerAgentEventStream({
       sessionId: SESSION,
-      getUnlockTicket: () => 'ticket',
+      getUnlockKey: () => 'unlock-1',
       onEvent: () => undefined,
       onStateChange: (state) => states.push(state),
       connectionFactory: fake.factory,
@@ -173,13 +173,13 @@ describe('owner-agent hub stream', () => {
     await stream.close();
   });
 
-  it('stops (no retry storm) when the hub rejects the unlock and no newer ticket is held', async () => {
+  it('stops (no retry storm) when the hub rejects the unlock and the owner has not unlocked again', async () => {
     const fake = createFakeConnection();
     const onUnlockRejected = vi.fn();
     const onError = vi.fn();
     const stream = openOwnerAgentEventStream({
       sessionId: SESSION,
-      getUnlockTicket: () => 'ticket-a',
+      getUnlockKey: () => 'unlock-a',
       onEvent: () => undefined,
       onError,
       onUnlockRejected,
@@ -189,7 +189,7 @@ describe('owner-agent hub stream', () => {
     fake.subscribers[0].error(new Error('An error occurred on the server while streaming results. HubException: owner_agent_unlock_expired'));
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onUnlockRejected).toHaveBeenCalledWith('ticket-a');
+    expect(onUnlockRejected).toHaveBeenCalledWith('unlock-a');
     expect(fake.connection.stop).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(fake.streamCalls).toHaveLength(1);
@@ -198,13 +198,13 @@ describe('owner-agent hub stream', () => {
     await stream.close();
   });
 
-  it('reconnects with the current ticket when the hub rejected an older one', async () => {
+  it('reconnects when the hub rejected an older unlock and a newer one is held', async () => {
     const fake = createFakeConnection();
-    let ticket = 'ticket-a';
+    let unlockKey = 'unlock-a';
     const onUnlockRejected = vi.fn();
     const stream = openOwnerAgentEventStream({
       sessionId: SESSION,
-      getUnlockTicket: () => ticket,
+      getUnlockKey: () => unlockKey,
       onEvent: () => undefined,
       onUnlockRejected,
       connectionFactory: fake.factory,
@@ -212,7 +212,7 @@ describe('owner-agent hub stream', () => {
     await vi.advanceTimersByTimeAsync(0);
     fake.subscribers[0].next(event(7));
 
-    ticket = 'ticket-b'; // re-minted by the refresh scheduler
+    unlockKey = 'unlock-b'; // the owner unlocked again meanwhile
     fake.subscribers[0].error(new Error('HubException: owner_agent_unlock_expired'));
     await vi.advanceTimersByTimeAsync(1_000);
 
@@ -227,7 +227,7 @@ describe('owner-agent hub stream', () => {
     const fake = createFakeConnection();
     const stream = openOwnerAgentEventStream({
       sessionId: SESSION,
-      getUnlockTicket: () => 'ticket',
+      getUnlockKey: () => 'unlock-1',
       onEvent: () => undefined,
       connectionFactory: fake.factory,
     });
@@ -241,7 +241,7 @@ describe('owner-agent hub stream', () => {
   it('does not deliver events after close', async () => {
     const fake = createFakeConnection();
     const onEvent = vi.fn();
-    const stream = openOwnerAgentEventStream({ sessionId: SESSION, getUnlockTicket: () => null, onEvent, connectionFactory: fake.factory });
+    const stream = openOwnerAgentEventStream({ sessionId: SESSION, getUnlockKey: () => null, onEvent, connectionFactory: fake.factory });
     await vi.advanceTimersByTimeAsync(0);
     await stream.close();
     fake.subscribers[0].next(event(1));
@@ -250,27 +250,22 @@ describe('owner-agent hub stream', () => {
 });
 
 describe('owner-agent hub connection builder', () => {
-  it('targets the owner-agent hub over long polling and stamps the current unlock ticket on every request', async () => {
+  it('targets the owner-agent hub over long polling with cookies and never an unlock header', async () => {
     signalrState.withUrlCalls.length = 0;
     signalrState.innerSends.length = 0;
-    let ticket: string | null = 'ticket-1';
 
-    await createOwnerAgentConnection({ getUnlockTicket: () => ticket });
+    await createOwnerAgentConnection();
 
     expect(resolveOwnerAgentHubUrl()).toBe('/api/backend/v1/owner-agent/hub');
     const { url, options } = signalrState.withUrlCalls[0];
     expect(url).toBe('/api/backend/v1/owner-agent/hub');
     expect(options.transport).toBe(4);
-    expect(options.headers).toEqual({ 'X-Owner-Agent-Unlock': 'ticket-1' });
-
-    const httpClient = options.httpClient as { send: (r: Record<string, unknown>) => Promise<unknown> };
-    ticket = 'ticket-2';
-    await httpClient.send({ method: 'GET', url: '/poll', headers: { 'X-Owner-Agent-Unlock': 'ticket-1', Other: 'x' } });
-    expect(signalrState.innerSends[0].headers).toEqual({ 'X-Owner-Agent-Unlock': 'ticket-2', Other: 'x' });
-
-    ticket = null;
-    await httpClient.send({ method: 'POST', url: '/send', headers: { 'X-Owner-Agent-Unlock': 'stale' } });
-    expect(signalrState.innerSends[1].headers).toEqual({});
+    // The unlock is the HttpOnly `oet_owner_unlock` cookie: every hub request must carry cookies…
+    expect(options.withCredentials).toBe(true);
+    // …and nothing unlock- or step-up-related is set by JavaScript.
+    expect(options.headers).toBeUndefined();
+    expect(options.httpClient).toBeUndefined();
+    expect(JSON.stringify(options)).not.toMatch(/X-Owner-Agent/i);
 
     const accessTokenFactory = options.accessTokenFactory as () => Promise<string>;
     await expect(accessTokenFactory()).resolves.toBe('access-token-fixture');

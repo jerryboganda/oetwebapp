@@ -8,7 +8,7 @@ import type { GithubStatus } from '@/lib/owner-agent/types';
 
 export interface GithubTokensCardProps {
   github: GithubStatus | null | undefined;
-  /** Caller performs the step-up and PUT /github-tokens. */
+  /** Caller performs PUT /github-tokens. */
   onSave: (tokens: { agentToken?: string; shipToken?: string }) => Promise<void>;
 }
 
