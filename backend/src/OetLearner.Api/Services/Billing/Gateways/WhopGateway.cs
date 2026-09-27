@@ -110,9 +110,15 @@ public sealed class WhopGateway : IPaymentGateway
         var data = root.TryGetProperty("data", out var nested) ? nested : root;
         var configId = ReadString(data, "id") ?? throw new InvalidOperationException("Whop response missing checkout configuration id.");
         var planId = ReadNestedString(data, "plan", "id") ?? configId;
-        var checkoutUrl = ReadString(data, "purchase_url")
-            ?? ReadString(data, "url")
-            ?? $"https://whop.com/embedded/checkout/{Uri.EscapeDataString(configId)}/";
+        // Hosted-checkout fallback only; the page embeds Whop Elements from configId.
+        // purchase_url may be relative ("/checkout/ch_…/"). Never the legacy
+        // /embedded/checkout/ URL, which Whop retires on 21 Oct 2026.
+        var purchaseUrl = ReadString(data, "purchase_url") ?? ReadString(data, "url");
+        var checkoutUrl = purchaseUrl is not null
+            && !purchaseUrl.Contains("/embedded/checkout/", StringComparison.OrdinalIgnoreCase)
+            && Uri.TryCreate(new Uri("https://whop.com/"), purchaseUrl, out var resolved)
+            ? resolved.ToString()
+            : $"https://whop.com/checkout/{Uri.EscapeDataString(configId)}/";
 
         return new PaymentIntentResult(
             GatewayTransactionId: configId,

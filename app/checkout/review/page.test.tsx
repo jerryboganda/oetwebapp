@@ -1,10 +1,31 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockFetchBillingQuote, mockCreateBillingCheckoutSession, mockOpenCheckoutUrl } = vi.hoisted(() => ({
+const {
+  mockFetchBillingQuote,
+  mockCreateBillingCheckoutSession,
+  mockOpenCheckoutUrl,
+  mockWhopCheckoutProps,
+  mockWhopElementProps,
+} = vi.hoisted(() => ({
   mockFetchBillingQuote: vi.fn(),
   mockCreateBillingCheckoutSession: vi.fn(),
   mockOpenCheckoutUrl: vi.fn(),
+  mockWhopCheckoutProps: vi.fn(),
+  mockWhopElementProps: vi.fn(),
+}));
+
+vi.mock('@whop/elements', () => ({ loadWhop: vi.fn(() => new Promise(() => {})) }));
+vi.mock('@whop/elements-react', () => ({
+  WhopElements: ({ children }: { children: React.ReactNode }) => <div data-testid="whop-elements">{children}</div>,
+  Checkout: (props: { children: React.ReactNode }) => {
+    mockWhopCheckoutProps(props);
+    return <div>{props.children}</div>;
+  },
+  CheckoutElement: (props: object) => {
+    mockWhopElementProps(props);
+    return null;
+  },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -146,22 +167,71 @@ describe('Checkout review page', () => {
     expect(cta.getAttribute('href')).toContain('region=egypt');
   });
 
-  it('renders official Whop embed instead of a raw purchase-url iframe', async () => {
-    mockCreateBillingCheckoutSession.mockResolvedValue({
-      checkoutUrl: 'https://whop.com/embedded/checkout/ch_live1/',
-      checkoutSessionId: 'chcfg_live1',
-      quoteId: 'quote-1',
-      clientSecret: 'plan_live1',
-      gateway: 'whop',
-    });
+  const whopSession = {
+    checkoutUrl: 'https://whop.com/checkout/ch_live1/',
+    checkoutSessionId: 'ch_live1',
+    quoteId: 'quote-1',
+    clientSecret: 'plan_live1',
+    gateway: 'whop',
+  };
+
+  it('mounts Whop Elements from the server checkout configuration, not the legacy loader', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue(whopSession);
     const user = userEvent.setup();
     renderWithRouter(<CheckoutReviewPage />, { searchParams });
 
     await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
 
     expect(await screen.findByTestId('whop-embedded-checkout')).toBeInTheDocument();
+    const props = mockWhopCheckoutProps.mock.calls.at(-1)?.[0];
+    // The ch_ configuration carries price + order_id/quote_id metadata; the browser asserts no plan/amount.
+    expect(props.checkoutConfiguration).toBe('ch_live1');
+    expect(props.plan).toBeUndefined();
+    expect(props.returnUrl).toMatch(/\/billing\/payment-return\?gateway=whop&quote=quote-1&session=ch_live1$/);
+    expect(document.querySelector('script[src*="js.whop.com"]')).toBeNull();
     expect(document.querySelector('iframe[title="Secure payment"]')).not.toBeInTheDocument();
     expect(mockOpenCheckoutUrl).not.toHaveBeenCalled();
+  });
+
+  it('falls back to hosted Whop checkout once when the element fails to load', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue(whopSession);
+    mockOpenCheckoutUrl.mockResolvedValue('window-assign');
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+    await screen.findByTestId('whop-embedded-checkout');
+    const { onError } = mockWhopElementProps.mock.calls.at(-1)?.[0];
+    onError({ message: 'boom' });
+    onError({ message: 'boom again' });
+
+    await waitFor(() => expect(mockOpenCheckoutUrl).toHaveBeenCalledWith('https://whop.com/checkout/ch_live1/'));
+    expect(mockOpenCheckoutUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses hosted checkout when no ch_ configuration came back (payment could not be mapped)', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue({ ...whopSession, checkoutSessionId: 'whop_sandbox_1' });
+    mockOpenCheckoutUrl.mockResolvedValue('window-assign');
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    await waitFor(() => expect(mockOpenCheckoutUrl).toHaveBeenCalledWith('https://whop.com/checkout/ch_live1/'));
+    expect(mockWhopCheckoutProps).not.toHaveBeenCalled();
+  });
+
+  it('routes a completed Whop payment to payment-return with a success hint', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue(whopSession);
+    const replace = vi.fn();
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams, router: { replace } });
+
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+    await screen.findByTestId('whop-embedded-checkout');
+    mockWhopCheckoutProps.mock.calls.at(-1)?.[0].onComplete({ result: 'payment', sessionId: 'chs_1', paymentId: 'pay_1' });
+
+    expect(replace).toHaveBeenCalledWith('/billing/payment-return?status=success&gateway=whop&quote=quote-1&session=ch_live1');
   });
 
   it('embeds Fawaterak in an on-page iframe after a method switch', async () => {

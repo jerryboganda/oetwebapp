@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { NextRequest } from 'next/server';
@@ -9,11 +10,19 @@ describe('middleware mobile association files', () => {
   it.each([
     '/.well-known/apple-app-site-association',
     '/.well-known/assetlinks.json',
+    '/.well-known/apple-developer-merchantid-domain-association',
   ])('allows %s without authentication', (pathname) => {
     const response = proxy(new NextRequest(`https://app.oetwithdrhesham.co.uk${pathname}`));
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('ships the Whop Apple Pay domain-association file byte-for-byte', () => {
+    // Issued by Whop for app.oetwithdrhesham.co.uk; any edit breaks wallet domain verification.
+    const file = readFileSync(join(process.cwd(), 'public/.well-known/apple-developer-merchantid-domain-association'));
+    expect(file.length).toBe(228);
+    expect(createHash('sha256').update(file).digest('hex')).toBe('5d3b5ecee0a3778d40f056bf81bb80dbd36f47e83435a5b41b963f5d414def4c');
   });
 });
 
@@ -118,7 +127,7 @@ describe('middleware auth bounce', () => {
 });
 
 describe('middleware CSP — Whop and Fawaterak checkout', () => {
-  it('allows official Whop embed and Fawaterak iframe hosts', () => {
+  it('allows Whop Elements, its wallet SDKs and Fawaterak iframe hosts', () => {
     const response = proxy(new NextRequest('https://app.oetwithdrhesham.co.uk/checkout/review'));
     const csp = response.headers.get('content-security-policy') ?? '';
     const scriptSrc = csp
@@ -134,11 +143,20 @@ describe('middleware CSP — Whop and Fawaterak checkout', () => {
       .map((directive) => directive.trim())
       .find((directive) => directive.startsWith('connect-src')) ?? '';
 
-    expect(scriptSrc).toContain('https://js.whop.com');
-    expect(frameSrc).toContain('https://js.whop.com');
+    expect(scriptSrc).toContain('https://cdn.whop.com');
+    // The Elements SDK injects the wallet SDKs into this page; blocked = no Apple/Google Pay.
+    expect(scriptSrc).toContain('https://pay.google.com');
+    expect(scriptSrc).toContain('https://applepay.cdn-apple.com');
+    // The legacy loader (retired by Whop 21 Oct 2026) must not come back.
+    expect(scriptSrc).not.toContain('https://js.whop.com');
     expect(frameSrc).toContain('https://*.whop.com');
+    expect(frameSrc).toContain('https://pay.google.com');
     expect(frameSrc).toContain('https://app.fawaterk.com');
-    expect(connectSrc).toContain('https://js.whop.com');
+    expect(connectSrc).toContain('https://*.whop.com');
     expect(connectSrc).toContain('https://app.fawaterk.com');
+    // The layout meta CSP is enforced too (intersection).
+    const layout = readFileSync(join(process.cwd(), 'app/layout.tsx'), 'utf8');
+    expect(layout).toContain('https://cdn.whop.com');
+    expect(layout).toContain("'https://pay.google.com', 'https://applepay.cdn-apple.com'");
   });
 });

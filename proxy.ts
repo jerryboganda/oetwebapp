@@ -65,16 +65,19 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     'https://apis.google.com',
     'https://*.firebaseapp.com',
   ];
-  // Whop embedded checkout (js.whop.com loader + whop.com / whop.io iframes).
+  // Whop Elements checkout: SDK from cdn.whop.com, element iframes/API on *.whop.com.
+  // The SDK loads Google Pay (pay.google.com) and Apple Pay (applepay.cdn-apple.com)
+  // JS into THIS page for the wallet sheets — without them wallets never appear.
   // Fawaterak on-page invoice iframe lives on app.fawaterk.com.
+  const walletOrigins = ['https://pay.google.com', 'https://applepay.cdn-apple.com'];
   const paymentEmbedOrigins = [
-    'https://js.whop.com',
     'https://whop.com',
     'https://*.whop.com',
     'https://whop.io',
     'https://*.whop.io',
     'https://app.fawaterk.com',
     'https://*.fawaterk.com',
+    ...walletOrigins,
   ];
   const scriptSrc = [
     "'self'",
@@ -82,7 +85,8 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     ...zoomHttpOrigins,
     ...paypalHttpOrigins,
     ...recaptchaOrigins,
-    'https://js.whop.com',
+    'https://cdn.whop.com',
+    ...walletOrigins,
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
 
@@ -116,7 +120,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
+    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')} https://*.whop.com ${walletOrigins.join(' ')}`,
     `connect-src ${connectSrc}`,
     `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
     `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
@@ -214,6 +218,8 @@ const PUBLIC_PATHS = new Set([
   '/speaking/intro-questions',
   '/.well-known/apple-app-site-association',
   '/.well-known/assetlinks.json',
+  // Whop Apple Pay / Google Pay payment-domain verification (extensionless, so the matcher doesn't skip it).
+  '/.well-known/apple-developer-merchantid-domain-association',
 ]);
 
 function isPublicPath(pathname: string): boolean {
