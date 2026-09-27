@@ -1,0 +1,33 @@
+#!/bin/sh
+# oet-console-erase — GDPR erasure of one console session (docs/ops/OWNER-AGENT-CONSOLE.md §11.2).
+#
+# Run on the VPS as root, inside the sidecar:
+#   docker exec oet-agent-console oet-console-erase <sessionId>
+#
+# Calls the control server's POST /v1/admin/sessions/<id>/erase, which deletes the session's
+# JSONL + index rows, its worktree (when unshared) and the engine-native transcripts. The
+# internal token is read from the root-only secret file and handed to curl on stdin
+# (`-H @-`), so it never appears in any process argument list. The agent uid cannot run this
+# (it cannot read the token file).
+set -eu
+
+TOKEN_FILE="${OWNER_AGENT_INTERNAL_TOKEN_FILE:-/run/secrets/owner_agent_internal_token}"
+PORT="${AGENT_CONSOLE_PORT:-8410}"
+
+if [ "$#" -ne 1 ]; then
+  echo "usage: oet-console-erase <sessionId>" >&2
+  exit 64
+fi
+SESSION_ID="$1"
+printf '%s' "$SESSION_ID" | grep -Eq '^[0-9A-HJKMNP-TV-Z]{26}$' || { echo "oet-console-erase: not a session id (ULID)" >&2; exit 64; }
+[ -r "$TOKEN_FILE" ] || { echo "oet-console-erase: cannot read $TOKEN_FILE (run as root)" >&2; exit 77; }
+
+# First id of the env allow-list (the header must name an owner account).
+OWNER="$(printf '%s' "${OWNER_AGENT_OWNER_ACCOUNT_IDS:-}" | tr ',; ' '\n\n\n' | sed -n '/./{p;q;}')"
+[ -n "$OWNER" ] || { echo "oet-console-erase: OWNER_AGENT_OWNER_ACCOUNT_IDS is empty" >&2; exit 78; }
+
+TOKEN="$(cat "$TOKEN_FILE")"
+printf 'X-Oet-Internal-Token: %s\nX-Oet-Owner-Account: %s\n' "$TOKEN" "$OWNER" |
+  curl -fsS -m 300 -X POST -H @- -H 'Content-Type: application/json' --data '{}' \
+    "http://127.0.0.1:${PORT}/v1/admin/sessions/${SESSION_ID}/erase"
+echo

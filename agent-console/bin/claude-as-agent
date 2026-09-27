@@ -1,0 +1,7 @@
+#!/bin/sh
+# claude-as-agent — `pathToClaudeCodeExecutable` for the Claude Agent SDK (src/engines/claude.ts).
+#
+# Runs the SDK-bundled, unmodified Claude Code binary (symlinked to
+# /usr/local/lib/oet-agent/claude at image build) as uid agent. The SDK passes its own
+# arguments and the allow-listed environment; nothing is added or rewritten here.
+exec /usr/local/bin/as-agent /usr/local/lib/oet-agent/claude "$@"

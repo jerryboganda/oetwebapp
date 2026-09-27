@@ -330,6 +330,17 @@ export function createDockerProxyServer(deps: DockerProxyDeps): http.Server {
     const method = req.method ?? 'POST';
     const upstreamReq = http.request({ socketPath: config.socketPath, method, path, headers, agent: false });
     let settled = false;
+    // Held explicitly: once a non-upgraded response has ended, node detaches
+    // the socket from upstreamReq, so upstreamReq.destroy() alone would leave
+    // the (keep-alive) daemon connection open.
+    let upstreamSocket: net.Socket | undefined;
+    upstreamReq.on('socket', (s: net.Socket) => {
+      upstreamSocket = s;
+    });
+    const closeUpstream = (): void => {
+      upstreamReq.destroy();
+      upstreamSocket?.destroy();
+    };
 
     upstreamReq.on('upgrade', (res: http.IncomingMessage, daemon: net.Socket, daemonHead: Buffer) => {
       settled = true;
@@ -373,7 +384,7 @@ export function createDockerProxyServer(deps: DockerProxyDeps): http.Server {
       }
       lines.push('Connection: close');
       if (!client.writable) {
-        upstreamReq.destroy();
+        closeUpstream();
         client.destroy();
         return;
       }
@@ -385,11 +396,11 @@ export function createDockerProxyServer(deps: DockerProxyDeps): http.Server {
       res.on('end', () => {
         // Nothing more is ever read from this client connection.
         client.end(() => client.destroy());
-        upstreamReq.destroy();
+        closeUpstream();
       });
       res.on('error', () => {
         client.destroy();
-        upstreamReq.destroy();
+        closeUpstream();
       });
     });
 
@@ -398,7 +409,7 @@ export function createDockerProxyServer(deps: DockerProxyDeps): http.Server {
       if (!settled) rawResponse(client, 502, `oet-agent-dockerproxy: Docker daemon unreachable (${err.message})`);
       else client.destroy();
     });
-    client.on('error', () => upstreamReq.destroy());
+    client.on('error', closeUpstream);
     upstreamReq.end(body);
   }
 

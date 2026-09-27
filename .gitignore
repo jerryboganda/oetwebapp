@@ -35,6 +35,8 @@ backend/src/OetLearner.Api/oet_learner_dev.db-shm
 backend/src/OetLearner.Api/oet_learner_dev.db-wal
 backend/src/OetLearner.Api/Data/Migrations/__PendingProbe/
 **/bin/
+# Owner Agent Console container scripts (copied into the image by agent-console/Dockerfile).
+!agent-console/bin/
 **/obj/
 build-*.txt
 server*.log

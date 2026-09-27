@@ -1,0 +1,35 @@
+#!/bin/sh
+# as-agent — run a command as the unprivileged agent identity (uid/gid 10002).
+#
+# The control plane (uid 0 with capabilities dropped to SETUID/SETGID/KILL/CHOWN/FOWNER/
+# DAC_OVERRIDE and no-new-privileges; CONTRACT.md §2) starts every engine, sign-in and tool
+# process through this wrapper. The caller supplies the allow-listed environment built by
+# src/env.ts; this wrapper only pins the identity variables so nothing inherits root's HOME,
+# clears supplementary groups and inheritable capabilities, and sets no_new_privs.
+#
+# Usage: as-agent <command> [args...]
+set -eu
+
+AGENT_UID=10002
+AGENT_GID=10002
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: as-agent <command> [args...]" >&2
+  exit 64
+fi
+
+case "$(id -u)" in
+  0) ;;
+  "$AGENT_UID")
+    # Already the agent (e.g. `docker exec -u agent` break-glass sign-in): nothing to drop.
+    exec "$@"
+    ;;
+  *)
+    echo "as-agent: refusing to run as uid $(id -u); expected 0 or $AGENT_UID" >&2
+    exit 126
+    ;;
+esac
+
+export HOME=/home/agent USER=agent LOGNAME=agent
+umask 027
+exec setpriv --reuid="$AGENT_UID" --regid="$AGENT_GID" --clear-groups --inh-caps=-all --no-new-privs -- "$@"

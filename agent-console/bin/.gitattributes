@@ -1,0 +1,2 @@
+# Container scripts run under /bin/sh inside a Linux image: always LF.
+* text eol=lf
