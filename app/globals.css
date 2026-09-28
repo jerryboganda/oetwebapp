@@ -468,7 +468,7 @@
   }
 
   .page-enter {
-    animation: page-enter var(--page-enter-duration, 320ms) var(--ease-standard) both;
+    animation: page-enter var(--page-enter-duration, 320ms) var(--ease-standard);
   }
 }
 
@@ -695,16 +695,10 @@
     background: rgba(29, 78, 216, 0.22);
   }
 
+  /* Opacity only, no fill-mode: a transform would make #main-content the
+     containing block for its position:fixed children while it runs. */
   @keyframes page-enter {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; }
   }
 
   @media (prefers-reduced-motion: reduce) {
