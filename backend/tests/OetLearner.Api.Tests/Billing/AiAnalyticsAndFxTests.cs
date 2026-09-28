@@ -243,6 +243,24 @@ public class AiAnalyticsAndFxTests
     }
 
     [Fact]
+    public async Task FxRateService_DerivesCrossRateThroughBaseCurrency()
+    {
+        // Refresh stores only USD<->X pairs; AUD->GBP (Whop checkout conversion) must
+        // be derived as AUD->USD * USD->GBP instead of throwing.
+        await using var db = NewContext(nameof(FxRateService_DerivesCrossRateThroughBaseCurrency));
+        var opts = Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.FxOptions { BaseCurrency = "USD", ApiKey = null });
+        using var http = new HttpClient();
+        var svc = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
+        await svc.RefreshRatesAsync(CancellationToken.None);
+
+        var cross = await svc.GetRateAsync("AUD", "GBP", CancellationToken.None);
+        var expected = await svc.GetRateAsync("AUD", "USD", CancellationToken.None) * await svc.GetRateAsync("USD", "GBP", CancellationToken.None);
+
+        Assert.Equal(decimal.Round(expected, 6), cross);
+        Assert.InRange(cross, 0.4m, 0.7m);
+    }
+
+    [Fact]
     public async Task FxRateService_SameCurrencyReturnsOne()
     {
         await using var db = NewContext(nameof(FxRateService_SameCurrencyReturnsOne));
