@@ -12,8 +12,8 @@ interface PriceProps extends FormatMoneyOptions {
  * formatMoney so locale + currency fraction-digit rules stay consistent
  * (e.g. KWD/BHD/OMR render with 3 decimals; JPY renders with 0).
  *
- * Use with region pricing overrides: pass the resolved (amount, currency)
- * from PriceResolver rather than a raw plan.price/plan.currency.
+ * Pass the amount and currency exactly as the billing API returns them for
+ * this learner (never a hardcoded or locally derived price).
  */
 export function Price({ amount, currency, locale, minimumFractionDigits, maximumFractionDigits, className, regionLabel }: PriceProps) {
   const text = formatMoney(amount, { currency, locale, minimumFractionDigits, maximumFractionDigits });
