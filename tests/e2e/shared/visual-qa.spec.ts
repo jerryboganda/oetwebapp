@@ -66,6 +66,10 @@ test.describe('Visual QA sweep @visual', () => {
         if (authRole) await expect(page.getByRole('main').first()).toBeVisible({ timeout: 30_000 });
         await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
 
+        // First-run onboarding tours (driver.js) overlay the page; close so the
+        // screenshot shows the real layout. Only affects the seeded CI user.
+        await page.locator('.driver-popover-close-btn').click({ timeout: 2_000 }).catch(() => undefined);
+
         const overflow = await horizontalOverflow(page);
         // 1px tolerance for sub-pixel rounding.
         if (overflow > 1) failures.push(`${route} overflows by ${overflow}px at ${width}px`);
