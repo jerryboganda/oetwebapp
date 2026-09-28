@@ -1,4 +1,5 @@
 import {
+  isExamOrLiveRoute,
   isImmersiveLearnerRoute,
   isLearnerWorkspaceRoute,
   shouldShowLearnerBreadcrumbs,
@@ -23,5 +24,21 @@ describe('learner dashboard route policy', () => {
     expect(shouldShowLearnerBreadcrumbs('/mocks/report/mock-1')).toBe(true);
     expect(shouldShowLearnerBreadcrumbs('/speaking/results/attempt-1')).toBe(true);
     expect(shouldShowLearnerBreadcrumbs('/settings/profile')).toBe(true);
+  });
+
+  it('classifies exam and live routes segment-exactly', () => {
+    expect(isExamOrLiveRoute('/reading/paper/p1')).toBe(true);
+    expect(isExamOrLiveRoute('/listening/paper/p1/')).toBe(true);
+    expect(isExamOrLiveRoute('/mocks/player/m1')).toBe(true);
+    expect(isExamOrLiveRoute('/mocks/speaking-room/b1')).toBe(true);
+    expect(isExamOrLiveRoute('/listening/player/attempt-1')).toBe(true);
+    expect(isExamOrLiveRoute('/expert/speaking-room/b1')).toBe(true);
+    expect(isExamOrLiveRoute('/expert/speaking/live-room/s1')).toBe(true);
+    expect(isExamOrLiveRoute('/expert/speaking/exam/e1?tab=notes')).toBe(true);
+    expect(isExamOrLiveRoute('/reading/paper/p1/results')).toBe(false);
+    expect(isExamOrLiveRoute('/reading/exam')).toBe(false);
+    expect(isExamOrLiveRoute('/reading')).toBe(false);
+    expect(isExamOrLiveRoute('/expert/speaking')).toBe(false);
+    expect(isExamOrLiveRoute('/admin/users')).toBe(false);
   });
 });

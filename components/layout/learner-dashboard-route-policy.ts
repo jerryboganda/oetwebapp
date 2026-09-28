@@ -168,6 +168,28 @@ export function isImmersiveLearnerRoute(pathname: string | null | undefined) {
   );
 }
 
+/**
+ * Timed or live attempt routes that render inside a normal shell, as URL
+ * patterns. Together with the immersive routes above they are the one list of
+ * exam/live routes: nothing on them animates (DESIGN.md §5). Kept honest by
+ * `__tests__/learner-breadcrumb-routability.test.ts`, which walks `app/`.
+ */
+export const EXAM_LIVE_ROUTE_PATTERNS = [
+  '/reading/paper/[paperId]',
+  '/listening/paper/[paperId]',
+  '/mocks/speaking-room/[bookingId]',
+  '/expert/speaking-room/[bookingId]',
+  '/expert/speaking/live-room/[id]',
+  '/expert/speaking/exam/[examId]',
+] as const;
+
+export function isExamOrLiveRoute(pathname: string | null | undefined) {
+  const normalized = normalizeLearnerPathname(pathname);
+
+  return isImmersiveLearnerRoute(normalized)
+    || EXAM_LIVE_ROUTE_PATTERNS.some((pattern) => matchesRoutePattern(pattern, normalized));
+}
+
 export function isLearnerWorkspaceRoute(pathname: string | null | undefined) {
   const normalized = normalizeLearnerPathname(pathname);
 

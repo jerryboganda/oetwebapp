@@ -96,6 +96,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.
   - Under reduced motion, keep every **state** visible (active fills, selected rings). Drop only the movement.
 - **Never animate** exam timers, audio/recording controls or anything on the critical path of a live attempt.
+- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content`. It is skipped on first paint, in the learner shell (learner pages animate themselves), with `distractionFree`, and on exam/live routes (`isExamOrLiveRoute`). Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
 
 ## 6. Components
 | Component | Styling | Behaviour |
