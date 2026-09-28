@@ -68,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         # 6 disjoint shards (PlacementEndpointsTests + AuthFlowsTests alone are ~45 min of registrations). There is a single test project
-        # (OetLearner.Api.Tests) with a mostly-flat namespace, so we shard by
+        # (OetLearner.Api.Tests, one namespace per domain folder), so we shard by
         # round-robining distinct test CLASSES (not methods — keeps the
         # --filter compact) into N buckets via a stable, deterministic
         # partition computed at runtime from `dotnet test --list-tests`.

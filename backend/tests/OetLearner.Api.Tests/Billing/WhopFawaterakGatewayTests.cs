@@ -1,0 +1,702 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
+using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Billing.Gateways;
+using OetLearner.Api.Services.Settings;
+
+namespace OetLearner.Api.Tests.Billing;
+
+public class WhopFawaterakGatewayTests
+{
+    [Fact]
+    public async Task FawaterakWebhook_RejectsBadHash()
+    {
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = "1",
+            invoice_key = "k",
+            payment_method = "Card",
+            hashKey = "nope",
+            invoice_status = "paid",
+            payLoad = "quote-1",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("signature_invalid", result.EventType);
+    }
+
+    [Fact]
+    public async Task FawaterakWebhook_VerifiedPaidCallback_Completes()
+    {
+        // Official Fawaterak paid-webhook shape: hashKey = HMAC-SHA256 over
+        // "InvoiceId={id}&InvoiceKey={key}&PaymentMethod={method}" using the vendor key.
+        const string hashKey = "hash-secret";
+        const string invoiceId = "88";
+        const string invoiceKey = "inv-key";
+        const string paymentMethod = "Card";
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = invoiceId,
+            invoice_key = invoiceKey,
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
+            invoice_status = "paid",
+            payLoad = "quote-1",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal(invoiceId, result.GatewayTransactionId);
+    }
+
+    [Fact]
+    public async Task FawaterakWebhook_UnpaidStatus_NeverCompletes()
+    {
+        // Regression: "UNPAID" contains "paid" — the old Contains() check marked it succeeded.
+        const string hashKey = "hash-secret";
+        const string invoiceId = "89";
+        const string invoiceKey = "inv-key-2";
+        const string paymentMethod = "Fawry";
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = invoiceId,
+            invoice_key = invoiceKey,
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
+            invoice_status = "UNPAID",
+            payLoad = "quote-2",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.NotEqual("completed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task FawaterakWebhook_ExpiredStatus_MapsFailed()
+    {
+        const string hashKey = "hash-secret";
+        const string invoiceId = "90";
+        const string invoiceKey = "inv-key-3";
+        const string paymentMethod = "Fawry";
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = invoiceId,
+            invoice_key = invoiceKey,
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
+            invoice_status = "expired",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("failed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task FawaterakGetInvoiceStatus_ParsesPaidFlag()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":1001267,"invoice_key":"l1aQQG0AzvtnDZH","paid":1,"paid_at":"2021-11-10T12:33:44.000000Z","payment_method":"Credit-Debit Card"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var status = await gateway.GetInvoiceStatusAsync("1001267", default);
+
+        Assert.NotNull(status);
+        Assert.True(status!.Paid);
+        Assert.Equal("1001267", status.InvoiceId);
+        Assert.Equal("https://app.fawaterk.com/api/v2/getInvoiceData/1001267", handler.LastUri?.ToString());
+    }
+
+    [Fact]
+    public async Task FawaterakGetInvoiceStatus_UnpaidInvoice_IsNotPaid()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":1001268,"invoice_key":"k2","paid":0,"paid_at":"-","payment_method":"Fawry"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var status = await gateway.GetInvoiceStatusAsync("1001268", default);
+
+        Assert.NotNull(status);
+        Assert.False(status!.Paid);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_RejectsBadSignatureWhenSecretConfigured()
+    {
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "api-key", "biz_1", "whop-secret", null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"type":"payment.succeeded","data":{"id":"pay_1"}}""",
+            new Dictionary<string, string> { ["webhook-signature"] = "v1,badSignatureBase64=" },
+            default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("signature_invalid", result.EventType);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_AcceptsStandardWebhookSignature_CompletesPayment()
+    {
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_01HZY987654";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"action":"payment.succeeded","data":{"id":"pay_valid123","status":"paid","metadata":{"quote_id":"quote-whop-success"}}}""";
+
+        var signedData = $"{msgId}.{timestamp}.{payload}";
+        var validBase64Sig = PaymentCallbackHmac.HmacSha256Base64(secret, signedData);
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var headers = new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{validBase64Sig}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        };
+
+        var result = await gateway.HandleWebhookAsync(payload, headers, default);
+
+        Assert.True(result.Processed, $"Failed with: EventId={result.EventId}, EventType={result.EventType}, Error={result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("quote-whop-success", result.GatewayTransactionId);
+        Assert.Equal("pay_valid123", result.GatewayObjectId);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_MembershipWentValid_ExtractsNestedQuoteId()
+    {
+        const string payload = """
+        {
+            "event": "membership.went_valid",
+            "data": {
+                "id": "mem_998877",
+                "status": "valid",
+                "checkout_configuration": {
+                    "metadata": {
+                        "quote_id": "quote-membership-123"
+                    }
+                }
+            }
+        }
+        """;
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("quote-membership-123", result.GatewayTransactionId);
+        Assert.Equal("mem_998877", result.GatewayObjectId);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_MissingMetadata_MatchesByCheckoutConfigurationId()
+    {
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_1","status":"paid","checkout_configuration_id":"ch_live1"}}""";
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("ch_live1", result.GatewayTransactionId);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_WentInvalidEvent_IsNotTreatedAsSucceeded()
+    {
+        const string payload = """{"event":"membership.went_invalid","data":{"id":"mem_1","status":"invalid","checkout_configuration":{"metadata":{"quote_id":"quote-1"}}}}""";
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("pending", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_SignedEventWithUnknownPayment_IsAccepted()
+    {
+        // Whop dashboard test deliveries reference placeholder payments that do
+        // not exist in the API; a verified signature proves Whop sent them.
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_test_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_testdummy","status":"paid","metadata":{"quote_id":"quote-no-match"}}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.NotFound };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.True(result.Processed, $"Rejected with: {result.EventType} {result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_UnsignedEventWithUnknownPayment_IsStillRejected()
+    {
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_testdummy","status":"paid","metadata":{"quote_id":"quote-no-match"}}}""";
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.NotFound };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.False(result.Processed);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_SignedEventIsAcceptedWhenTheWhopApiCannotBeReached()
+    {
+        // 15 Sep 2026 P0: ProbePaymentAsync collapsed every failure — including a
+        // rejected API key, a 5xx and a timeout — into "not confirmed", and the
+        // webhook was then rejected AND persisted nowhere. A real GBP 100 payment
+        // could therefore vanish because of an outage on OUR side. Whop signed this
+        // delivery, so it must be accepted; server-side re-verification happens in
+        // reconciliation before anything is granted.
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_probe_down_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_realbutunreachable","status":"paid","metadata":{"quote_id":"quote-1"}}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.ServiceUnavailable };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.True(result.Processed, $"Rejected with: {result.EventType} {result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+        // The unverified probe is recorded so reconciliation knows to re-check it.
+        Assert.Contains("probe_unavailable", result.SafePayloadJson);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_UnsignedEventIsStillRejectedWhenTheWhopApiCannotBeReached()
+    {
+        // Without a signature the API probe is the ONLY evidence, so "we could not
+        // ask" must never be treated as proof of payment.
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_unsigned_unreachable","status":"paid"}}""";
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.ServiceUnavailable };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.False(result.Processed);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_SignedEventWithUnpaidRealPayment_IsRejected()
+    {
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_unpaid_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_unpaid123","status":"paid"}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { Response = """{"id":"pay_unpaid123","status":"pending"}""" };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("Whop API did not confirm this payment", result.Error);
+    }
+
+    [Fact]
+    public async Task WhopSandboxCheckout_ReturnsEmbeddedIntent()
+    {
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base());
+        var gateway = new WhopGateway(
+            new HttpClient(),
+            Options.Create(new BillingOptions { AllowSandboxFallbacks = true, CheckoutBaseUrl = "https://app.example/checkout" }),
+            runtime);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "GBP", "plan_purchase", "quote-1", "OET", null), default);
+
+        Assert.StartsWith("whop_sandbox_", result.GatewayTransactionId);
+        Assert.Contains("/sandbox/whop", result.CheckoutUrl);
+    }
+
+    [Fact]
+    public async Task WhopSandboxWebhook_WithoutKeys_CompletesPayment()
+    {
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base());
+        var gateway = new WhopGateway(
+            new HttpClient(),
+            Options.Create(new BillingOptions { AllowSandboxFallbacks = true }),
+            runtime);
+
+        var result = await gateway.HandleWebhookAsync(
+            """{"type":"payment.succeeded","data":{"id":"whop_sandbox_abc","status":"paid","metadata":{"quote_id":"quote-1"}}}""",
+            new Dictionary<string, string>(),
+            default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("quote-1", result.GatewayTransactionId);
+    }
+
+    [Fact]
+    public async Task WhopCreateIntent_ParsesRootCheckoutConfiguration()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"id":"ch_live1","purchase_url":"/checkout/ch_live1/","plan":{"id":"plan_live1"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "GBP", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("ch_live1", result.GatewayTransactionId);
+        Assert.Equal("plan_live1", result.ClientSecret);
+        Assert.Equal("https://whop.com/checkout/ch_live1/", result.CheckoutUrl);
+        Assert.Equal("https://api.whop.com/api/v1/checkout_configurations", handler.LastUri?.ToString());
+        Assert.StartsWith("Bearer apik_test", handler.LastAuthorization);
+        Assert.Contains("\"plan_type\":\"one_time\"", handler.LastBody);
+        Assert.Contains("\"quote_id\":\"quote-1\"", handler.LastBody);
+        Assert.DoesNotContain("visibility", handler.LastBody);
+        Assert.DoesNotContain("card_payments", handler.LastBody);
+        Assert.DoesNotContain("company_id", handler.LastBody);
+        Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
+        // No Whop local-currency re-pricing (buyers in e.g. the UAE were shown AED).
+        Assert.Contains("\"adaptive_pricing_enabled\":false", handler.LastBody);
+    }
+
+    [Theory]
+    [InlineData("""{"id":"ch_x","purchase_url":"https://whop.com/checkout/ch_x/","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    [InlineData("""{"id":"ch_x","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    [InlineData("""{"id":"ch_x","purchase_url":"https://whop.com/embedded/checkout/ch_x/","plan":{"id":"plan_x"}}""", "https://whop.com/checkout/ch_x/")]
+    public async Task WhopCreateIntent_HostedFallbackNeverUsesLegacyEmbeddedCheckout(string response, string expectedUrl)
+    {
+        // Whop retires the legacy /embedded/checkout/ surface on 21 Oct 2026.
+        var handler = new StubHandler { Response = response };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "GBP", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal(expectedUrl, result.CheckoutUrl);
+    }
+
+    [Fact]
+    public async Task WhopCreateIntent_ConvertsUnsupportedCurrencyToGbp()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"id":"ch_fx","purchase_url":"https://whop.com/checkout/ch_fx/","plan":{"id":"plan_fx"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var fx = new StubFx { Rate = 0.65m };
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime, fx);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "AUD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("ch_fx", result.GatewayTransactionId);
+        Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
+        Assert.Contains("\"initial_price\":6.5", handler.LastBody);
+        Assert.Contains("\"adaptive_pricing_enabled\":false", handler.LastBody);
+        Assert.Equal(("AUD", "GBP"), (fx.LastFrom, fx.LastTo));
+    }
+
+    [Fact]
+    public async Task FawaterakCreateIntent_ParsesNumericInvoiceId()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":2726912869,"invoice_key":"272691286929958","payment_data":{"redirectTo":"https://app.fawaterk.com/ts/demo"}}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "USD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("2726912869", result.GatewayTransactionId);
+        Assert.Equal("272691286929958", result.ClientSecret);
+        Assert.Equal("https://app.fawaterk.com/ts/demo", result.CheckoutUrl);
+        Assert.Equal("https://app.fawaterk.com/api/v2/invoiceInitPay", handler.LastUri?.ToString());
+    }
+
+    [Fact]
+    public async Task FawaterakCreateIntent_SendsQuoteAndSessionOnRedirectionUrls()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":2726912869,"invoice_key":"272691286929958","payment_data":{"redirectTo":"https://app.fawaterk.com/ts/demo"}}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings(
+                "https://app.fawaterk.com",
+                "hash-secret",
+                "FAWATERAK.1",
+                "https://dashboard.example/billing/payment-return",
+                "https://dashboard.example/fail",
+                "https://dashboard.example/pending"),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1",
+            10m,
+            "USD",
+            "plan_purchase",
+            "quote-1",
+            "OET",
+            null,
+            SuccessUrl: "https://app.example/billing/payment-return?status=success&gateway=fawaterak&quote=quote-1&session={CHECKOUT_SESSION_ID}",
+            CancelUrl: "https://app.example/billing/payment-return?status=cancelled&gateway=fawaterak&quote=quote-1"), default);
+
+        Assert.Contains("\"payLoad\":\"quote-1\"", handler.LastBody);
+        Assert.DoesNotContain("{CHECKOUT_SESSION_ID}", handler.LastBody);
+
+        using var doc = JsonDocument.Parse(handler.LastBody ?? "{}");
+        var urls = doc.RootElement.GetProperty("redirectionUrls");
+        AssertRedirectionKeepsQuote(urls.GetProperty("successUrl").GetString(), "success");
+        AssertRedirectionKeepsQuote(urls.GetProperty("failUrl").GetString(), "cancelled");
+        AssertRedirectionKeepsQuote(urls.GetProperty("pendingUrl").GetString(), "pending");
+    }
+
+    private static void AssertRedirectionKeepsQuote(string? url, string status)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(url));
+        var parsed = new Uri(url!);
+        var query = QueryHelpers.ParseQuery(parsed.Query);
+        Assert.Equal(status, query["status"].ToString());
+        Assert.Equal("fawaterak", query["gateway"].ToString());
+        Assert.Equal("quote-1", query["quote"].ToString());
+        Assert.Equal("quote-1", query["session"].ToString());
+        Assert.False(string.IsNullOrWhiteSpace(query["session"].ToString()));
+        Assert.DoesNotContain("{CHECKOUT_SESSION_ID}", url);
+        Assert.DoesNotContain("session=&", url);
+        Assert.DoesNotContain("session=?", url);
+    }
+
+    [Fact]
+    public async Task FawaterakCreateIntent_ConvertsUnsupportedCurrencyToUsd()
+    {
+        var handler = new StubHandler
+        {
+           Response = """{"status":"success","data":{"invoice_id":99,"invoice_key":"k99","payment_data":{"iframeURL":"https://app.fawaterk.com/pay/99"}}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+           Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var fx = new StubFx { Rate = 0.65m };
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime, fx);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+           "user-1", 10m, "AUD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("99", result.GatewayTransactionId);
+        Assert.Contains("\"currency\":\"USD\"", handler.LastBody);
+        Assert.Contains("\"cartTotal\":\"6.50\"", handler.LastBody);
+    }
+
+    private sealed class StubFx : IFxRateService
+    {
+        public decimal Rate { get; set; } = 1m;
+        public string? LastFrom { get; private set; }
+        public string? LastTo { get; private set; }
+
+        public Task<decimal> GetRateAsync(string fromCurrency, string toCurrency, CancellationToken ct)
+           => Task.FromResult(Rate);
+
+        public Task<decimal> ConvertAsync(decimal amount, string fromCurrency, string toCurrency, CancellationToken ct)
+        {
+            (LastFrom, LastTo) = (fromCurrency, toCurrency);
+            return Task.FromResult(decimal.Round(amount * Rate, 4));
+        }
+
+        public Task<int> RefreshRatesAsync(CancellationToken ct) => Task.FromResult(0);
+    }
+
+    [Fact]
+    public async Task WhopAdaptivePricing_PatchesOnlyGbpPlansAndOnlyTheFlag()
+    {
+        var patched = new List<(string Path, string Body)>();
+        var gbpAdaptive = true;
+        var handler = new RouteHandler(async request =>
+        {
+            var path = request.RequestUri!.PathAndQuery;
+            if (request.Method == HttpMethod.Patch)
+            {
+                var body = await request.Content!.ReadAsStringAsync();
+                patched.Add((path, body));
+                gbpAdaptive = false;
+                return "{}";
+            }
+
+            // Two pages: follow page_info.end_cursor.
+            return path.Contains("after=c1")
+                ? """{"data":[{"id":"plan_usd","currency":"usd","initial_price":10,"adaptive_pricing_enabled":true}],"page_info":{"has_next_page":false}}"""
+                : """{"data":[{"id":"plan_gbp","currency":"gbp","initial_price":100,"adaptive_pricing_enabled":ADAPTIVE,"product":{"id":"prod_1"}},{"id":"plan_off","currency":"gbp","initial_price":50,"adaptive_pricing_enabled":false}],"page_info":{"has_next_page":true,"end_cursor":"c1"}}"""
+                    .Replace("ADAPTIVE", gbpAdaptive ? "true" : "false");
+        });
+
+        var result = await WhopPlanAdaptivePricing.RunAsync(
+            new HttpClient(handler), "https://api.whop.com/api/v1", "apik_test", "biz_1",
+            new HashSet<string> { "plan_gbp" }, apply: true, default);
+
+        Assert.Equal(3, result.TotalPlans);
+        var patch = Assert.Single(patched);
+        Assert.Equal("/api/v1/plans/plan_gbp", patch.Path);
+        Assert.Equal("""{"adaptive_pricing_enabled":false}""", patch.Body);
+        Assert.Equal("plan_usd", Assert.Single(result.SkippedNonGbp).Id);
+        var after = Assert.Single(result.AffectedAfter);
+        Assert.Equal((false, 100m, "gbp", true), (after.AdaptivePricingEnabled, after.InitialPrice, after.Currency, after.UsedByWebsiteCheckout));
+        Assert.Empty(result.Failures);
+    }
+
+    private sealed class RouteHandler(Func<HttpRequestMessage, Task<string>> respond) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(await respond(request), System.Text.Encoding.UTF8, "application/json"),
+            };
+    }
+
+    private sealed class StubHandler : HttpMessageHandler
+    {
+        public string Response { get; set; } = "{}";
+        public System.Net.HttpStatusCode StatusCode { get; set; } = System.Net.HttpStatusCode.OK;
+        public Uri? LastUri { get; private set; }
+        public string? LastAuthorization { get; private set; }
+        public string? LastBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+           LastUri = request.RequestUri;
+           LastAuthorization = request.Headers.Authorization?.ToString()
+               ?? (request.Headers.TryGetValues("Authorization", out var values) ? values.FirstOrDefault() : null);
+           LastBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+           return new HttpResponseMessage(StatusCode)
+           {
+               Content = new StringContent(Response, System.Text.Encoding.UTF8, "application/json"),
+           };
+        }
+    }
+}

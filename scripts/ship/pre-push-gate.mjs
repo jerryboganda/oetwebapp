@@ -474,7 +474,7 @@ export function selfTest() {
     },
     {
       name: 'extra class brace',
-      path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
+      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n    }\n}\n',
       wantFail: true,
     },
@@ -496,7 +496,7 @@ export function selfTest() {
     },
     {
       name: 'normal xUnit method boundary is legal',
-      path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
+      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n\n    [Fact]\n    public async Task B() {\n        Assert.True(true);\n    }\n}\n',
       wantFail: false,
     },
@@ -522,7 +522,7 @@ export function selfTest() {
     },
     {
       name: 'column-0 orphan brace before Fact fails',
-      path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
+      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n}\n\n[Fact]\npublic async Task B() {\n    Assert.True(true);\n}\n',
       wantFail: true,
     },

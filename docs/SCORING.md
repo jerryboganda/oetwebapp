@@ -126,7 +126,7 @@ OetScoring.FormatListeningReadingDisplay(30);           // "30/42 â€¢ 350/500 â€
 
 Both implementations are **behaviourally identical**. The TypeScript module is
 tested by `lib/scoring.test.ts` (72 assertions). The .NET module is tested by
-`backend/tests/OetLearner.Api.Tests/OetScoringTests.cs` (98 assertions).
+`backend/tests/OetLearner.Api.Tests/Assessment/OetScoringTests.cs` (98 assertions).
 
 ---
 
