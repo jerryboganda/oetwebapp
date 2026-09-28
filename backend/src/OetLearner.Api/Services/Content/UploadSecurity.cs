@@ -222,21 +222,6 @@ public sealed class MagicByteValidator : IUploadContentValidator
 public interface IUploadScanner
 {
     /// <summary>Scan a file. Return (clean, reason). Implementations can
-    /// stream through antivirus engines; default no-op passes everything.</summary>
+    /// stream through antivirus engines; the default <c>noop</c> provider passes everything.</summary>
     Task<(bool clean, string? reason)> ScanAsync(Stream stream, string filename, CancellationToken ct);
-}
-
-public sealed class NoOpUploadScanner(ILogger<NoOpUploadScanner> logger) : IUploadScanner
-{
-    private bool _warnedOnce;
-    public Task<(bool clean, string? reason)> ScanAsync(Stream stream, string filename, CancellationToken ct)
-    {
-        if (!_warnedOnce)
-        {
-            _warnedOnce = true;
-            logger.LogWarning(
-                "NoOpUploadScanner is active — production deployments should wire a real IUploadScanner (ClamAV, etc.).");
-        }
-        return Task.FromResult((clean: true, reason: (string?)null));
-    }
 }

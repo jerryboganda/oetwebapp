@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Grammar;
@@ -80,7 +81,7 @@ public sealed class GrammarDraftService(
         if (string.IsNullOrWhiteSpace(request.Prompt))
             throw new ArgumentException("Prompt is required.", nameof(request));
 
-        var profession = ParseProfession(request.Profession);
+        var profession = AiReplyParsing.ParseProfessionOrMedicine(request.Profession);
         var rulebook = rulebookLoader.Load(RuleKind.Grammar, profession);
         var ruleIds = rulebook.Rules.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -224,9 +225,9 @@ public sealed class GrammarDraftService(
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
 
-            var title = SafeString(root, "title")?.Trim();
-            var topicSlug = Slugify(SafeString(root, "topicSlug") ?? "grammar_topic");
-            var level = NormaliseLevel(SafeString(root, "level"));
+            var title = AiReplyParsing.SafeString(root, "title")?.Trim();
+            var topicSlug = Slugify(AiReplyParsing.SafeString(root, "topicSlug") ?? "grammar_topic");
+            var level = NormaliseLevel(AiReplyParsing.SafeString(root, "level"));
             var estimated = root.TryGetProperty("estimatedMinutes", out var em) && em.TryGetInt32(out var emv) ? emv : 12;
 
             var contentBlocks = new List<LessonContentBlock>();
@@ -235,9 +236,9 @@ public sealed class GrammarDraftService(
                 var i = 0;
                 foreach (var cb in cbEl.EnumerateArray())
                 {
-                    var md = SafeString(cb, "contentMarkdown")?.Trim();
+                    var md = AiReplyParsing.SafeString(cb, "contentMarkdown")?.Trim();
                     if (string.IsNullOrWhiteSpace(md)) continue;
-                    var type = SafeString(cb, "type") ?? "prose";
+                    var type = AiReplyParsing.SafeString(cb, "type") ?? "prose";
                     contentBlocks.Add(new LessonContentBlock(
                         Id: $"cb-{++i}",
                         SortOrder: i,
@@ -297,13 +298,13 @@ public sealed class GrammarDraftService(
 
     private static LessonExercise? ParseExercise(JsonElement ex, HashSet<string> validRuleIds, int sortOrder)
     {
-        var type = SafeString(ex, "type") ?? "mcq";
-        var prompt = SafeString(ex, "promptMarkdown")?.Trim();
-        var explanation = SafeString(ex, "explanationMarkdown")?.Trim() ?? string.Empty;
+        var type = AiReplyParsing.SafeString(ex, "type") ?? "mcq";
+        var prompt = AiReplyParsing.SafeString(ex, "promptMarkdown")?.Trim();
+        var explanation = AiReplyParsing.SafeString(ex, "explanationMarkdown")?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(prompt)) return null;
         if (string.IsNullOrWhiteSpace(explanation)) return null;
 
-        var difficulty = NormaliseLevel(SafeString(ex, "difficulty"));
+        var difficulty = NormaliseLevel(AiReplyParsing.SafeString(ex, "difficulty"));
         var points = ex.TryGetProperty("points", out var pts) && pts.TryGetInt32(out var pv) ? pv : 1;
 
         object options = ex.TryGetProperty("options", out var opts) && opts.ValueKind == JsonValueKind.Array
@@ -364,17 +365,6 @@ public sealed class GrammarDraftService(
         return inner.StartsWith("{") && inner.EndsWith("}") ? inner : null;
     }
 
-    private static string? SafeString(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var v)) return null;
-        return v.ValueKind switch
-        {
-            JsonValueKind.String => v.GetString(),
-            JsonValueKind.Number => v.ToString(),
-            _ => null,
-        };
-    }
-
     private static string NormaliseLevel(string? raw)
     {
         var v = (raw ?? "intermediate").Trim().ToLowerInvariant();
@@ -398,14 +388,6 @@ public sealed class GrammarDraftService(
         }
         var slug = sb.ToString().Trim('_');
         return string.IsNullOrEmpty(slug) ? "grammar_topic" : slug;
-    }
-
-    private static ExamProfession ParseProfession(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
-        return Enum.TryParse<ExamProfession>(raw.Replace("-", ""), ignoreCase: true, out var p)
-            ? p
-            : ExamProfession.Medicine;
     }
 
     // ---------------------------------------------------------------------

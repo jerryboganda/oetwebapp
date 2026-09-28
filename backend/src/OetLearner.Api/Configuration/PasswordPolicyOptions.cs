@@ -8,8 +8,6 @@ namespace OetLearner.Api.Configuration;
 /// </summary>
 public sealed class PasswordPolicyOptions
 {
-    public const string SectionName = "PasswordPolicy";
-
     /// <summary>Minimum allowed password length. NIST 800-63B recommends 8+; we default to 10.</summary>
     public int MinimumLength { get; set; } = 10;
 

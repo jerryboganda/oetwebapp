@@ -2,8 +2,6 @@ namespace OetLearner.Api.Configuration;
 
 public sealed class BootstrapOptions
 {
-    public const string SectionName = "Bootstrap";
-
     public bool? AutoMigrate { get; set; }
     public bool? SeedDemoData { get; set; }
 

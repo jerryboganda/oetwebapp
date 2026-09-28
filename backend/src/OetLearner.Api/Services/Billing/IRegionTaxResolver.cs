@@ -1,9 +1,8 @@
 namespace OetLearner.Api.Services.Billing;
 
 /// <summary>
-/// Resolves tax (VAT/GST/withholding) for a checkout context. Phase 1 ships a
-/// no-op implementation; Phase 3 swaps in a real <c>TaxResolver</c> backed by
-/// the <c>TaxRule</c> table and optional Stripe Tax acceleration.
+/// Resolves tax (VAT/GST/withholding) for a checkout context. Implemented by
+/// <c>TaxResolver</c>, backed by the <c>TaxRule</c> table.
 /// </summary>
 public interface IRegionTaxResolver
 {
@@ -25,10 +24,3 @@ public sealed record TaxBreakdown(IReadOnlyList<TaxLine> Lines, decimal TotalTax
 }
 
 public sealed record TaxLine(string TaxType, string Description, decimal RatePercent, decimal Amount);
-
-/// <summary>Phase 1 placeholder. Returns zero tax until Phase 3 ships.</summary>
-public sealed class NoTaxResolver : IRegionTaxResolver
-{
-    public Task<TaxBreakdown> ResolveAsync(TaxResolutionRequest request, CancellationToken ct)
-        => Task.FromResult(TaxBreakdown.Empty);
-}

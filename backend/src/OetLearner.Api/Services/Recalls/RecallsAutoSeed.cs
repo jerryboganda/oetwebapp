@@ -104,10 +104,3 @@ public sealed class RecallsAutoSeed(LearnerDbContext db) : IRecallsAutoSeed
         if (added > 0) await db.SaveChangesAsync(ct);
     }
 }
-
-public sealed class NoopRecallsAutoSeed : IRecallsAutoSeed
-{
-    public Task SeedFromListeningAsync(
-        string userId, string attemptId,
-        IEnumerable<RecallsListeningSeedItem> wrongItems, CancellationToken ct) => Task.CompletedTask;
-}

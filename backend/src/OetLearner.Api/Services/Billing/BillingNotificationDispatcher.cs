@@ -159,27 +159,3 @@ public sealed class EmailBillingChannel : IBillingNotificationChannel
             EventKey: eventCode), ct);
     }
 }
-
-public sealed class StubSmsBillingChannel : IBillingNotificationChannel
-{
-    public string Channel => "sms";
-    private readonly ILogger<StubSmsBillingChannel> _logger;
-    public StubSmsBillingChannel(ILogger<StubSmsBillingChannel> logger) => _logger = logger;
-    public Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
-    {
-        _logger.LogInformation("[stub sms] user={UserId}", userId);
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class StubWhatsAppBillingChannel : IBillingNotificationChannel
-{
-    public string Channel => "whatsapp";
-    private readonly ILogger<StubWhatsAppBillingChannel> _logger;
-    public StubWhatsAppBillingChannel(ILogger<StubWhatsAppBillingChannel> logger) => _logger = logger;
-    public Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
-    {
-        _logger.LogInformation("[stub whatsapp] user={UserId}", userId);
-        return Task.CompletedTask;
-    }
-}

@@ -8,5 +8,5 @@
 > desktop shell is Tauri 2: [`docs/tauri-desktop-shell.md`](../tauri-desktop-shell.md)).
 
 The files stay because code comments cite them by path (`03`, `06` and `07`,
-e.g. `TierEntitlementEnforcer.cs`, `lib/entitlement-categories.ts`). Do not
+e.g. `lib/entitlement-categories.ts`). Do not
 rename them.

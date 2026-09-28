@@ -5,7 +5,7 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services;
 
 /// <summary>
-/// Background job that computes content staleness assessments for all published content.
+/// Computes content staleness assessments for all published content, on demand via the admin staleness endpoints.
 /// Per docs/product-strategy/06_feature_strategy_and_blueprint.md:
 /// "Content provenance/QA analytics" requires periodic staleness computation.
 /// </summary>
@@ -203,44 +203,5 @@ public sealed class ContentStalenessService(LearnerDbContext db, ILogger<Content
     {
         var all = await ComputeAllAsync(ct);
         return all.Where(a => a.DaysSinceLastEdit > thresholdDays).ToList();
-    }
-}
-
-/// <summary>
-/// Hosted service that runs content staleness computation periodically.
-/// </summary>
-public sealed class ContentStalenessWorker(IServiceScopeFactory scopeFactory, ILogger<ContentStalenessWorker> logger) : BackgroundService
-{
-    // Run daily at 3 AM UTC
-    private static readonly TimeSpan RunTime = new(3, 0, 0);
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            var now = DateTimeOffset.UtcNow;
-            var nextRun = now.Date.Add(RunTime);
-            if (nextRun <= now) nextRun = nextRun.AddDays(1);
-            var delay = nextRun - now;
-
-            logger.LogInformation("ContentStalenessWorker next run at {NextRun} (in {Delay:hh\\:mm\\:ss})", nextRun, delay);
-            await Task.Delay(delay, stoppingToken);
-
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var service = scope.ServiceProvider.GetRequiredService<IContentStalenessService>();
-                var assessments = await service.ComputeAllAsync(stoppingToken);
-                var staleCount = assessments.Count(a => a.IsStale);
-                logger.LogInformation("Content staleness scan complete. Total={Total}, Stale={Stale}", assessments.Count, staleCount);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Content staleness scan failed");
-            }
-
-            await Task.Delay(Interval, stoppingToken);
-        }
     }
 }

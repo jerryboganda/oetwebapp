@@ -1398,7 +1398,6 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Companion.CompanionCor
 builder.Services.AddScoped<OetLearner.Api.Services.Admin.UserHardDeleteService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<INotificationCampaignService, NotificationCampaignService>();
-builder.Services.AddScoped<NotificationRuleEngine>();
 builder.Services.AddScoped<PeerReviewService>();
 builder.Services.Configure<OetLearner.Api.Configuration.SoketiOptions>(builder.Configuration.GetSection("Soketi"));
 builder.Services.AddHttpClient("Soketi");
@@ -1433,7 +1432,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPaymentGatewayCatalo
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IGatewayRegistry, OetLearner.Api.Services.Billing.GatewayRegistry>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionTaxResolver, OetLearner.Api.Services.Billing.TaxResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionDetector, OetLearner.Api.Services.Billing.RegionDetector>();
-builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPriceResolver, OetLearner.Api.Services.Billing.PriceResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IManualPaymentService, OetLearner.Api.Services.Billing.ManualPaymentService>();
 // Scoped, not Singleton: captures LearnerDbContext. Its cache lives in the singleton IMemoryCache, so it survives the scope.
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPlanContentAvailabilityService, OetLearner.Api.Services.Billing.PlanContentAvailabilityService>();
@@ -1969,7 +1967,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPracticeS
 builder.Services.AddSingleton<OetLearner.Api.Services.Listening.IListeningPathwayGenerator, OetLearner.Api.Services.Listening.ListeningPathwayGenerator>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IDailyPlanService, OetLearner.Api.Services.Reading.DailyPlanService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IPracticeSelectionService, OetLearner.Api.Services.Reading.PracticeSelectionService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReviewQueueService, OetLearner.Api.Services.Reading.ReviewQueueService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingVocabularyService, OetLearner.Api.Services.Reading.ReadingVocabularyService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExplanationService, OetLearner.Api.Services.Reading.ReadingExplanationService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPassageQnaService, OetLearner.Api.Services.Reading.ReadingPassageQnaService>();
@@ -2220,8 +2217,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingScenarioServi
     OetLearner.Api.Services.Writing.WritingScenarioService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonService,
     OetLearner.Api.Services.Writing.WritingCanonService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDrillServiceV2,
-    OetLearner.Api.Services.Writing.WritingDrillServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingLessonServiceV2,
     OetLearner.Api.Services.Writing.WritingLessonServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingMockService,
@@ -2399,8 +2394,8 @@ await using (var migrationScope = app.Services.CreateAsyncScope())
     }
 }
 
-// ── Production safety gate: forbid NoOpUploadScanner when running in production. ──
-// Rationale: the NoOp scanner accepts every byte; if production accidentally
+// ── Production safety gate: forbid UploadScanner:Provider=noop in production. ──
+// Rationale: a no-op scanner accepts every byte; if production accidentally
 // boots with it (misconfiguration, missing env var, container swap), learner
 // content uploads can carry malware into storage. Better to refuse to start
 // and make the operator look at the config than to silently become a vector.

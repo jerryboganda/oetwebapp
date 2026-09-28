@@ -109,7 +109,7 @@ public sealed class WritingPathwayServiceV2(
             Now: now,
             DaysPerWeek: profile.DaysPerWeek,
             MinutesPerDay: profile.MinutesPerDay,
-            LetterTypeFocus: DeserializeStringList(profile.LetterTypeFocusJson),
+            LetterTypeFocus: WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson),
             DiagnosticScores: scores,
             SubSkillBaseline: subSkillBaseline);
 
@@ -308,12 +308,6 @@ public sealed class WritingPathwayServiceV2(
 
     private static string BuildDescription(WritingPathwayItem item)
         => $"Stage {item.Stage} · Week {item.WeekNumber}";
-
-    private static List<string> DeserializeStringList(string json)
-    {
-        try { return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? []; }
-        catch (JsonException) { return []; }
-    }
 
     private static IReadOnlyDictionary<string, double> DeserializeDoubleMap(string? json)
     {

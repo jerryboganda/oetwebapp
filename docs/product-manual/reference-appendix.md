@@ -139,7 +139,6 @@ These hosted services run inside the API process. Each worker has a defined swee
 | `AuthDataRetentionWorker` | Daily | Expired refresh tokens, expired auth challenges, dormant sessions. | Auth |
 | `AdminUploadCleanupWorker` | Hourly | Incomplete chunked uploads older than `Storage.ContentUpload.StagingTtlHours`. | Content |
 | `ContentTextExtractionWorker` | On enqueue | PDF/text extraction for newly published assets. | Content |
-| `ContentStalenessWorker` | Daily | Marks long-unrevised papers as stale for admin review. | Content |
 | `WritingSampleSeeder` | Startup/scheduled | Seeds canonical Writing prompts per `WritingSeedOptions`. | Writing |
 | `ListeningV2BackfillService` | One-shot/triggered | Backfills Listening v2 schema for legacy papers. | Listening |
 | `ListeningAttemptExpireWorker` | Periodic | Expires abandoned Listening attempts past timeout. | Listening |

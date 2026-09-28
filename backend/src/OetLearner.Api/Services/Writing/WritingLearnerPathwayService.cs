@@ -96,7 +96,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         var weeks = DeserializeWeeks(pathway.WeeksJson);
         if (weeks.Count == 0)
         {
-            weeks = BuildDefaultWeeks(profile.Profession, DeserializeStringList(profile.LetterTypeFocusJson), pathway.TotalWeeks);
+            weeks = BuildDefaultWeeks(profile.Profession, WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson), pathway.TotalWeeks);
         }
         var currentWeek = CalculateCurrentWeek(pathway.GeneratedAt, pathway.TotalWeeks, clock.GetUtcNow());
         return new WritingPathwayResponse(
@@ -314,7 +314,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
     {
         var now = clock.GetUtcNow();
         var pathway = await db.LearnerWritingPathways.FirstOrDefaultAsync(p => p.UserId == profile.UserId, ct);
-        var focus = DeserializeStringList(profile.LetterTypeFocusJson);
+        var focus = WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson);
         if (focus.Count == 0) focus = DefaultLetterTypes(profile.Profession);
         var totalWeeks = CalculateTotalWeeks(profile.ExamDate, now);
 
@@ -385,7 +385,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
 
     private async Task<ContentItem?> PickPracticeTaskAsync(LearnerWritingProfile profile, CancellationToken ct)
     {
-        var focus = DeserializeStringList(profile.LetterTypeFocusJson).Select(ToLegacyLetterType).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var focus = WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson).Select(ToLegacyLetterType).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var profession = NormalizeProfession(profile.Profession);
         var query = db.ContentItems.AsNoTracking()
             .Where(c => c.SubtestCode == "writing" && c.Status == ContentStatus.Published);
@@ -440,7 +440,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             profile.DaysPerWeek,
             profile.MinutesPerDay,
             profile.TargetCountry,
-            DeserializeStringList(profile.LetterTypeFocusJson),
+            WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson),
             state.ReadinessScore,
             state.PredictedScore,
             state.LastDiagnosticEvaluationId,
@@ -606,12 +606,6 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
                string.IsNullOrWhiteSpace(value) ? "country_required" : "country_unsupported",
                string.IsNullOrWhiteSpace(value) ? "Target country is required for Writing scoring." : "Target country is not supported for Writing scoring.",
                [new ApiFieldError("targetCountry", string.IsNullOrWhiteSpace(value) ? "required" : "unsupported", "Choose a supported Writing target country.")]);
-
-    private static List<string> DeserializeStringList(string json)
-    {
-        try { return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? []; }
-        catch (JsonException) { return []; }
-    }
 
     private static string DrillHrefFor(string? skillCode)
         => string.IsNullOrWhiteSpace(skillCode) ? "/writing/drills" : $"/writing/drills?skill={Uri.EscapeDataString(skillCode)}";

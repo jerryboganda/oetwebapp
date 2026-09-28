@@ -942,7 +942,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         await db.Database.EnsureCreatedAsync();
 
         // GetDiagnosticTaskAsync only surfaces Reading papers carrying the
-        // "diagnostic" tag (HasDiagnosticPaperTag), so the regression papers
+        // "diagnostic" tag, so the regression papers
         // must include it alongside their access tag.
         await SeedDiagnosticReadingPaperAsync(
             db,
