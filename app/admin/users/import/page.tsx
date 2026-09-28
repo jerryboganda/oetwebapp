@@ -141,9 +141,9 @@ export default function BulkImportUsersPage() {
           <div
             className={`flex cursor-pointer flex-col items-center justify-center rounded-admin-lg border-2 border-dashed px-6 py-12 text-center transition-colors ${
               isDragging
-                ? 'border-[var(--admin-primary)] bg-admin-primary-tint'
+                ? 'border-[var(--admin-primary)] bg-admin-primary/10'
                 : selectedFile
-                  ? 'border-admin-success bg-admin-success-tint'
+                  ? 'border-admin-success bg-admin-success/10'
                   : 'border-admin-border hover:border-admin-border-strong hover:bg-admin-bg-subtle'
             }`}
             onDrop={handleDrop}
@@ -230,7 +230,7 @@ export default function BulkImportUsersPage() {
                 <AlertCircle size={16} />
                 {result.errors.length} row(s) had errors
               </div>
-              <div className="overflow-hidden rounded-admin-lg border border-admin-border">
+              <div className="overflow-x-auto rounded-admin-lg border border-admin-border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-admin-border bg-admin-bg-subtle">

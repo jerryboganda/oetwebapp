@@ -1106,22 +1106,22 @@ export default function UserDetailPage() {
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-lavender text-primary">
                     <UserIcon className="h-8 w-8" />
                   </div>
-                  <div className="w-full space-y-3 text-left text-sm text-admin-text-muted">
+                  <div className="w-full space-y-3 text-left text-sm text-admin-fg-muted">
                     <div className="flex items-start gap-3">
-                      <Mail className="mt-0.5 h-4 w-4 text-admin-text-muted" />
+                      <Mail className="mt-0.5 h-4 w-4 text-admin-fg-muted" />
                       <span className="break-all">{user.email}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <UserLock className="mt-0.5 h-4 w-4 text-admin-text-muted" />
+                      <UserLock className="mt-0.5 h-4 w-4 text-admin-fg-muted" />
                       <span className="break-all">{user.authAccountId ?? 'No linked auth account'}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Shield className="mt-0.5 h-4 w-4 text-admin-text-muted" />
+                      <Shield className="mt-0.5 h-4 w-4 text-admin-fg-muted" />
                       <span>Created {formatDate(user.createdAt, 'unknown')}</span>
                     </div>
                     {user.profession ? (
                       <div className="flex items-start gap-3">
-                        <ShieldCheck className="mt-0.5 h-4 w-4 text-admin-text-muted" />
+                        <ShieldCheck className="mt-0.5 h-4 w-4 text-admin-fg-muted" />
                         <span>Profession: {user.profession}</span>
                       </div>
                     ) : null}
@@ -1206,10 +1206,10 @@ export default function UserDetailPage() {
                     description="Granular admin permissions for this account. Edit in the Admins & Permissions tab."
                   >
                     {adminPermissions === null ? (
-                      <p className="text-sm text-admin-text-muted">Loading permissions…</p>
+                      <p className="text-sm text-admin-fg-muted">Loading permissions…</p>
                     ) : adminPermissions.length === 0 ? (
                       <div className="flex flex-wrap items-center gap-3">
-                        <p className="text-sm text-admin-text-muted">No granular permissions granted yet.</p>
+                        <p className="text-sm text-admin-fg-muted">No granular permissions granted yet.</p>
                         <Link
                           href="/admin/users?tab=admins"
                           className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
@@ -1315,9 +1315,9 @@ export default function UserDetailPage() {
                           </Button>
                         </div>
                         {isLoadingSecurityDetail ? (
-                          <p className="text-sm text-admin-text-muted">Loading sessions…</p>
+                          <p className="text-sm text-admin-fg-muted">Loading sessions…</p>
                         ) : securitySessions.length === 0 ? (
-                          <p className="text-sm text-admin-text-muted">No active sessions.</p>
+                          <p className="text-sm text-admin-fg-muted">No active sessions.</p>
                         ) : (
                           <div className="space-y-2">
                             {securitySessions.map((session) => (
@@ -1387,9 +1387,9 @@ export default function UserDetailPage() {
                           ) : null}
                         </div>
                         {isLoadingSecurityDetail ? (
-                          <p className="text-sm text-admin-text-muted">Loading devices…</p>
+                          <p className="text-sm text-admin-fg-muted">Loading devices…</p>
                         ) : securityDevices.length === 0 ? (
-                          <p className="text-sm text-admin-text-muted">No trusted devices recorded yet.</p>
+                          <p className="text-sm text-admin-fg-muted">No trusted devices recorded yet.</p>
                         ) : (
                           <div className="space-y-2">
                             {securityDevices.map((device) => (
@@ -1517,7 +1517,7 @@ export default function UserDetailPage() {
                   </SettingsSection>
                 ) : user.role === 'learner' ? (
                   <SettingsSection title="Subscription" description="No active subscription found for this learner.">
-                    <p className="text-sm text-admin-text-muted">This learner has not subscribed to a paid plan yet.</p>
+                    <p className="text-sm text-admin-fg-muted">This learner has not subscribed to a paid plan yet.</p>
                   </SettingsSection>
                 ) : null}
 

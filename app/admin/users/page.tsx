@@ -613,7 +613,7 @@ export default function UsersPage() {
                       className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-sm transition ${
                         checked
                           ? 'border-primary/50 bg-primary/10 font-medium text-admin-fg-strong'
-                          : 'border-border/60 hover:bg-muted/30 text-admin-fg-muted'
+                          : 'border-border/60 hover:bg-admin-bg-subtle text-admin-fg-muted'
                       }`}
                     >
                       <input
@@ -647,7 +647,7 @@ export default function UsersPage() {
                     ))}
                 </div>
               ) : (
-                <p className="text-xs font-medium text-amber-500">Tick at least one specialty above</p>
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Tick at least one specialty above</p>
               )}
             </div>
           ) : inviteForm.role === 'learner' ? (
@@ -884,7 +884,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                 <Link href={`/admin/users/${admin.id}`} className="text-sm font-medium text-primary hover:underline">
                   {admin.name}
                 </Link>
-                <p className="text-xs text-admin-text-muted">{admin.email}</p>
+                <p className="text-xs text-admin-fg-muted">{admin.email}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => openPermissions(admin)} className="gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" />
@@ -992,7 +992,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                       ))}
                     </div>
                   </div>
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteTemplate(tpl.id, tpl.name)}>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteTemplate(tpl.id, tpl.name)} aria-label={`Delete template ${tpl.name}`}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>

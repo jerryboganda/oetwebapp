@@ -404,8 +404,8 @@ export default function AdminPrivateSpeakingPage() {
           icon={<Calendar className="h-5 w-5" aria-hidden="true" />}
         />
 
-      {error && <InlineAlert variant="warning">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
-      {success && <InlineAlert variant="success">{success}<button onClick={() => setSuccess(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}<button type="button" onClick={() => setError(null)} className="ml-2" aria-label="Dismiss error"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {success && <InlineAlert variant="success">{success}<button type="button" onClick={() => setSuccess(null)} className="ml-2" aria-label="Dismiss message"><X className="w-4 h-4 inline" /></button></InlineAlert>}
 
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-admin-border">
@@ -453,75 +453,75 @@ export default function AdminPrivateSpeakingPage() {
                 <span className="text-sm text-admin-fg-strong">Learner Reschedule Enabled</span>
               </label>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Default Price (minor units)</label>
-                <input type="number" value={config.defaultPriceMinorUnits}
+                <label htmlFor="ps-field-1" className="text-xs text-admin-fg-muted mb-1 block">Default Price (minor units)</label>
+                <input id="ps-field-1" type="number" value={config.defaultPriceMinorUnits}
                   onChange={e => setConfig(c => c ? { ...c, defaultPriceMinorUnits: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Currency</label>
-                <input type="text" value={config.currency}
+                <label htmlFor="ps-field-2" className="text-xs text-admin-fg-muted mb-1 block">Currency</label>
+                <input id="ps-field-2" type="text" value={config.currency}
                   onChange={e => setConfig(c => c ? { ...c, currency: e.target.value } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Slot Duration (minutes)</label>
-                <input type="number" value={config.defaultSlotDurationMinutes}
+                <label htmlFor="ps-field-3" className="text-xs text-admin-fg-muted mb-1 block">Slot Duration (minutes)</label>
+                <input id="ps-field-3" type="number" value={config.defaultSlotDurationMinutes}
                   onChange={e => setConfig(c => c ? { ...c, defaultSlotDurationMinutes: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Buffer Between Slots (minutes)</label>
-                <input type="number" value={config.bufferMinutesBetweenSlots}
+                <label htmlFor="ps-field-4" className="text-xs text-admin-fg-muted mb-1 block">Buffer Between Slots (minutes)</label>
+                <input id="ps-field-4" type="number" value={config.bufferMinutesBetweenSlots}
                   onChange={e => setConfig(c => c ? { ...c, bufferMinutesBetweenSlots: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Min Lead Time (hours)</label>
-                <input type="number" value={config.minBookingLeadTimeHours}
+                <label htmlFor="ps-field-5" className="text-xs text-admin-fg-muted mb-1 block">Min Lead Time (hours)</label>
+                <input id="ps-field-5" type="number" value={config.minBookingLeadTimeHours}
                   onChange={e => setConfig(c => c ? { ...c, minBookingLeadTimeHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Max Advance Days</label>
-                <input type="number" value={config.maxBookingAdvanceDays}
+                <label htmlFor="ps-field-6" className="text-xs text-admin-fg-muted mb-1 block">Max Advance Days</label>
+                <input id="ps-field-6" type="number" value={config.maxBookingAdvanceDays}
                   onChange={e => setConfig(c => c ? { ...c, maxBookingAdvanceDays: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Cancellation Window (hours)</label>
-                <input type="number" value={config.cancellationWindowHours}
+                <label htmlFor="ps-field-7" className="text-xs text-admin-fg-muted mb-1 block">Cancellation Window (hours)</label>
+                <input id="ps-field-7" type="number" value={config.cancellationWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Window (hours)</label>
-                <input type="number" value={config.rescheduleWindowHours}
+                <label htmlFor="ps-field-8" className="text-xs text-admin-fg-muted mb-1 block">Reschedule Window (hours)</label>
+                <input id="ps-field-8" type="number" value={config.rescheduleWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, rescheduleWindowHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Reservation Timeout (minutes)</label>
-                <input type="number" value={config.reservationTimeoutMinutes}
+                <label htmlFor="ps-field-9" className="text-xs text-admin-fg-muted mb-1 block">Reservation Timeout (minutes)</label>
+                <input id="ps-field-9" type="number" value={config.reservationTimeoutMinutes}
                   onChange={e => setConfig(c => c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Reminder Offsets (minutes JSON)</label>
-                <input type="text" value={config.reminderOffsetsMinutesJson}
+                <label htmlFor="ps-field-10" className="text-xs text-admin-fg-muted mb-1 block">Reminder Offsets (minutes JSON)</label>
+                <input id="ps-field-10" type="text" value={config.reminderOffsetsMinutesJson}
                   placeholder="[1440, 60, 15]"
                   onChange={e => setConfig(c => c ? { ...c, reminderOffsetsMinutesJson: e.target.value } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Free Window (hours)</label>
-                <input type="number" value={config.rescheduleFreeWindowHours}
+                <label htmlFor="ps-field-11" className="text-xs text-admin-fg-muted mb-1 block">Reschedule Free Window (hours)</label>
+                <input id="ps-field-11" type="number" value={config.rescheduleFreeWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, rescheduleFreeWindowHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
-                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Same-Day Penalty (%)</label>
-                <input type="number" value={config.rescheduleSameDayPenaltyPercent}
+                <label htmlFor="ps-field-12" className="text-xs text-admin-fg-muted mb-1 block">Reschedule Same-Day Penalty (%)</label>
+                <input id="ps-field-12" type="number" value={config.rescheduleSameDayPenaltyPercent}
                   onChange={e => setConfig(c => c ? { ...c, rescheduleSameDayPenaltyPercent: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
@@ -860,14 +860,14 @@ export default function AdminPrivateSpeakingPage() {
             {bookingModal === 'refund' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Amount (minor units, optional)</label>
-                  <input type="number" value={refundForm.amount} placeholder="Leave blank for full refund"
+                  <label htmlFor="ps-field-13" className="text-xs text-admin-fg-muted mb-1 block">Amount (minor units, optional)</label>
+                  <input id="ps-field-13" type="number" value={refundForm.amount} placeholder="Leave blank for full refund"
                     onChange={e => setRefundForm(f => ({ ...f, amount: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
-                  <textarea value={refundForm.reason} rows={3}
+                  <label htmlFor="ps-field-14" className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
+                  <textarea id="ps-field-14" value={refundForm.reason} rows={3}
                     onChange={e => setRefundForm(f => ({ ...f, reason: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
@@ -881,14 +881,14 @@ export default function AdminPrivateSpeakingPage() {
             {bookingModal === 'reschedule' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">New session start</label>
-                  <input type="datetime-local" value={rescheduleForm.newStart}
+                  <label htmlFor="ps-field-15" className="text-xs text-admin-fg-muted mb-1 block">New session start</label>
+                  <input id="ps-field-15" type="datetime-local" value={rescheduleForm.newStart}
                     onChange={e => setRescheduleForm(f => ({ ...f, newStart: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
-                  <textarea value={rescheduleForm.reason} rows={3}
+                  <label htmlFor="ps-field-16" className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
+                  <textarea id="ps-field-16" value={rescheduleForm.reason} rows={3}
                     onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
@@ -902,26 +902,26 @@ export default function AdminPrivateSpeakingPage() {
             {bookingModal === 'edit' && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Session start</label>
-                  <input type="datetime-local" value={editForm.sessionStart}
+                  <label htmlFor="ps-field-17" className="text-xs text-admin-fg-muted mb-1 block">Session start</label>
+                  <input id="ps-field-17" type="datetime-local" value={editForm.sessionStart}
                     onChange={e => setEditForm(f => ({ ...f, sessionStart: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Duration (minutes)</label>
-                  <input type="number" value={editForm.durationMinutes}
+                  <label htmlFor="ps-field-18" className="text-xs text-admin-fg-muted mb-1 block">Duration (minutes)</label>
+                  <input id="ps-field-18" type="number" value={editForm.durationMinutes}
                     onChange={e => setEditForm(f => ({ ...f, durationMinutes: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Profession track</label>
-                  <input type="text" value={editForm.professionTrack}
+                  <label htmlFor="ps-field-19" className="text-xs text-admin-fg-muted mb-1 block">Profession track</label>
+                  <input id="ps-field-19" type="text" value={editForm.professionTrack}
                     onChange={e => setEditForm(f => ({ ...f, professionTrack: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>
                 <div>
-                  <label className="text-xs text-admin-fg-muted mb-1 block">Tutor notes</label>
-                  <textarea value={editForm.tutorNotes} rows={3}
+                  <label htmlFor="ps-field-20" className="text-xs text-admin-fg-muted mb-1 block">Tutor notes</label>
+                  <textarea id="ps-field-20" value={editForm.tutorNotes} rows={3}
                     onChange={e => setEditForm(f => ({ ...f, tutorNotes: e.target.value }))}
                     className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
                 </div>

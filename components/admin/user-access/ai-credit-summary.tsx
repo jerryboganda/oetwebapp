@@ -60,10 +60,10 @@ export function AiCreditSummary({
   loading?: boolean;
 }) {
   if (loading) {
-    return <p className="text-sm text-gray-400">Loading credit ledger…</p>;
+    return <p className="text-sm text-admin-fg-muted">Loading credit ledger…</p>;
   }
   if (!snapshot) {
-    return <p className="text-sm text-gray-500">No credit data available.</p>;
+    return <p className="text-sm text-admin-fg-muted">No credit data available.</p>;
   }
 
   const credits = snapshot;
@@ -75,11 +75,11 @@ export function AiCreditSummary({
   return (
     <div className="space-y-3">
       {buckets.length === 0 ? (
-        <p className="text-sm text-gray-500">No active credit buckets.</p>
+        <p className="text-sm text-admin-fg-muted">No active credit buckets.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200">
+        <div className="overflow-hidden rounded-lg border border-admin-border">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 text-2xs uppercase tracking-wide text-gray-500">
+            <thead className="bg-admin-bg-subtle text-2xs uppercase tracking-wide text-admin-fg-muted">
               <tr>
                 <th className="px-3 py-2 font-medium">Balance</th>
                 <th className="px-3 py-2 font-medium">Total</th>
@@ -89,16 +89,16 @@ export function AiCreditSummary({
                 <th className="px-3 py-2 font-medium">Validity</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-admin-border">
               {buckets.map((bucket) => (
                 <Fragment key={bucket.key}>
                   <tr data-testid={`admin-bucket-${bucket.key}`}>
-                    <td className="px-3 py-2 font-medium text-gray-800">{bucket.label}</td>
+                    <td className="px-3 py-2 font-medium text-admin-fg-strong">{bucket.label}</td>
                     {bucket.unlimited ? (
                       <>
-                        <td className="px-3 py-2 text-gray-400">—</td>
-                        <td className="px-3 py-2 text-gray-400">—</td>
-                        <td className="px-3 py-2 font-semibold text-emerald-700">Unlimited</td>
+                        <td className="px-3 py-2 text-admin-fg-muted">—</td>
+                        <td className="px-3 py-2 text-admin-fg-muted">—</td>
+                        <td className="px-3 py-2 font-semibold text-emerald-700 dark:text-emerald-300">Unlimited</td>
                       </>
                     ) : (
                       <>
@@ -107,16 +107,16 @@ export function AiCreditSummary({
                         <td className="px-3 py-2 font-semibold tabular-nums">{bucket.remaining}</td>
                       </>
                     )}
-                    <td className="max-w-[16rem] truncate px-3 py-2 text-gray-500" title={bucket.sourcePackages ?? undefined}>
+                    <td className="max-w-[16rem] truncate px-3 py-2 text-admin-fg-muted" title={bucket.sourcePackages ?? undefined}>
                       {bucket.sourcePackages ?? '—'}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-gray-500">{validityLabel(bucket) ?? '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-admin-fg-muted">{validityLabel(bucket) ?? '—'}</td>
                   </tr>
                   {bucket.grants.length > 0 ? (
                     <tr key={`${bucket.key}-grants`} data-testid={`admin-bucket-${bucket.key}-grants`}>
-                      <td colSpan={6} className="bg-gray-50/60 px-3 py-2">
+                      <td colSpan={6} className="bg-admin-bg-subtle/60 px-3 py-2">
                         <div className="space-y-1">
-                          <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">
+                          <p className="text-2xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Grants · {bucket.grants.length}
                           </p>
                           <ul className="space-y-1">
@@ -124,21 +124,21 @@ export function AiCreditSummary({
                               <li
                                 key={`${grant.sourceReferenceId ?? grant.packageId ?? grant.description}-${index}`}
                                 data-testid={`admin-bucket-${bucket.key}-grant-${index}`}
-                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs leading-4 text-gray-600"
+                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs leading-4 text-admin-fg-muted"
                               >
-                                <span className="font-medium text-gray-700">
+                                <span className="font-medium text-admin-fg-default">
                                   {grant.description || grant.packageId || 'grant'} · {grant.totalGranted}
                                 </span>
                                 {grant.sourceReferenceId ? (
                                   <span
-                                    className="max-w-[14rem] truncate font-mono text-3xs text-gray-500"
+                                    className="max-w-[14rem] truncate font-mono text-3xs text-admin-fg-muted"
                                     title={grant.sourceReferenceId}
                                   >
                                     {shortSource(grant.sourceReferenceId)}
                                   </span>
                                 ) : null}
-                                <span className="text-gray-500">{grantValidityLabel(grant) ?? '—'}</span>
-                                <span className="text-gray-400">
+                                <span className="text-admin-fg-muted">{grantValidityLabel(grant) ?? '—'}</span>
+                                <span className="text-admin-fg-muted">
                                   {new Date(grant.grantedAt).toLocaleDateString()}
                                 </span>
                               </li>
@@ -155,7 +155,7 @@ export function AiCreditSummary({
         </div>
       )}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-admin-fg-muted">
         Wallet expiry:{' '}
         {credits.expiresAt ? new Date(credits.expiresAt).toLocaleString() : 'no expiry'}
         {credits.expiredBecausePassed ? ' · expired because candidate passed OET' : ''}
