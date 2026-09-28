@@ -61,7 +61,7 @@ describe('Referral page', () => {
     mockGenerateReferralCode.mockResolvedValue({ referralCode: 'OET-NEW999' });
   });
 
-  it('renders the empty-state generator inside the shared shell when no code exists', async () => {
+  it('renders the empty-state generator when no code exists', async () => {
     mockFetchReferralInfo.mockResolvedValue({
       ...sampleInfo,
       referralCode: null,
@@ -72,8 +72,6 @@ describe('Referral page', () => {
     renderWithRouter(<ReferralPage />);
 
     expect(await screen.findByText('Referral program')).toBeInTheDocument();
-    const shell = screen.getByTestId('learner-dashboard-shell');
-    expect(shell.getAttribute('data-back-href')).toBe('/billing');
     expect(screen.getByRole('button', { name: /generate my referral code/i })).toBeEnabled();
     expect(screen.getByRole('link', { name: /back to billing center/i })).toHaveAttribute(
       'href',

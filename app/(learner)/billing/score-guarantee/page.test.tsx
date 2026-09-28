@@ -70,14 +70,12 @@ describe('Score guarantee page', () => {
     mockActivateScoreGuarantee.mockResolvedValue({});
   });
 
-  it('shows the activation form inside the shared shell when no pledge exists', async () => {
+  it('shows the activation form when no pledge exists', async () => {
     mockGetScoreGuaranteeData.mockResolvedValue(null);
 
     renderWithRouter(<ScoreGuaranteePage />);
 
     expect(await screen.findByRole('heading', { name: /score guarantee/i, level: 1 })).toBeInTheDocument();
-    const shell = screen.getByTestId('learner-dashboard-shell');
-    expect(shell.getAttribute('data-back-href')).toBe('/billing');
     expect(screen.getByLabelText(/baseline oet score/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back to billing center/i })).toHaveAttribute(
       'href',

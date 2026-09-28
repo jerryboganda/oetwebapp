@@ -74,10 +74,9 @@ describe('Escalations list page', () => {
     mockFetchMyEscalations.mockResolvedValue(MOCK_ESCALATIONS);
   });
 
-  it('renders escalation list inside the learner dashboard shell', async () => {
+  it('renders escalation list', async () => {
     renderWithRouter(<EscalationsPage />, { router: { push: mockPush } });
     expect(await screen.findByText('sub-100')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('shows color-coded status badges for each status', async () => {

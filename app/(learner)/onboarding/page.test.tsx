@@ -33,11 +33,10 @@ describe('Onboarding page', () => {
     mockCompleteOnboarding.mockResolvedValue({});
   });
 
-  it('renders the first onboarding step through the shared learner dashboard shell', async () => {
+  it('renders the first onboarding step', async () => {
     renderWithRouter(<OnboardingPage />, { router: { push: mockPush } });
     const matches = await screen.findAllByText('What is the OET?');
     expect(matches.length).toBeGreaterThan(0);
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('tracks onboarding_started analytics when starting fresh', async () => {

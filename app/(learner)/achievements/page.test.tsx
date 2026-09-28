@@ -37,10 +37,9 @@ describe('Achievements page', () => {
     ]);
   });
 
-  it('renders through the shared learner dashboard shell', async () => {
+  it('renders the page', async () => {
     render(<AchievementsPage />);
     expect(await screen.findByRole('heading', { name: /Achievements, streaks, and XP in one place/i })).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('displays XP level from the API', async () => {

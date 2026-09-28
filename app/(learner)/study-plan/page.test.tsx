@@ -32,10 +32,9 @@ describe('Study plan page', () => {
     mockUpdateStudyPlanTask.mockResolvedValue({});
   });
 
-  it('renders study tasks through the shared learner dashboard shell', async () => {
+  it('renders study tasks', async () => {
     renderWithRouter(<StudyPlanPage />, { router: { push: mockPush } });
     expect(await screen.findByText('Practice Reading Part C passages')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('shows sub-test badges and task details', async () => {

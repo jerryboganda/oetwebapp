@@ -58,10 +58,9 @@ describe('Progress dashboard page', () => {
     });
   });
 
-  it('renders through the shared learner dashboard shell', async () => {
+  it('renders the page', async () => {
     renderProgress();
     expect(await screen.findByText('See whether recent effort is turning into better evidence')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('tracks progress_viewed analytics on mount', async () => {

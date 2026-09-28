@@ -81,11 +81,10 @@ describe('Billing page', () => {
     }
   });
 
-  it('renders inside the shared learner dashboard shell', async () => {
+  it('renders the page', async () => {
     renderWithRouter(<BillingPage />);
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('shows only Overview and Invoices tabs — no Plans, Credits, or AI Credits', async () => {

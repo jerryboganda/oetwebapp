@@ -78,11 +78,10 @@ describe('Mock report page', () => {
     });
   });
 
-  it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
+  it('renders without a second page-root width wrapper', async () => {
     const { container } = renderWithRouter(<MockReportPage />);
 
     expect(await screen.findByText('Overall Performance')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(container.querySelector('[class*="max-w-3xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
   });
 

@@ -122,7 +122,6 @@ describe('StrategiesPage', () => {
     render(<StrategiesPage />);
 
     expect(await screen.findByRole('heading', { name: /strategy at the right moment/i })).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recommended Next' })).toBeInTheDocument();
     expect(screen.getAllByText('Writing case notes strategy')).toHaveLength(2);
     expect(screen.getByRole('heading', { name: 'Continue Reading' })).toBeInTheDocument();

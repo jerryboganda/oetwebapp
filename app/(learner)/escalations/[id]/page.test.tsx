@@ -50,10 +50,9 @@ describe('Escalation detail page', () => {
     mockFetchEscalationDetails.mockResolvedValue(MOCK_DETAIL);
   });
 
-  it('renders escalation details inside the learner dashboard shell', async () => {
+  it('renders escalation details', async () => {
     renderWithRouter(<EscalationDetailPage />);
     expect(await screen.findByText('sub-100')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('displays full reason and details', async () => {

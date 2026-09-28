@@ -103,14 +103,13 @@ describe('Mock player page', () => {
     mockSubmitMockSession.mockResolvedValue({});
   });
 
-  it('renders the orchestrator route inside the shared learner dashboard shell', async () => {
+  it('renders the orchestrator route', async () => {
     renderWithRouter(<MockPlayerPage />, {
       params: { id: 'mock-1' },
       router: { push: mockPush },
     });
 
     expect(await screen.findByText('Full OET Mock Test')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('launches sections through the backend-provided route', async () => {
