@@ -94,7 +94,7 @@ export default function SpeakingModerationQueuePage() {
         header: 'Session',
         render: (row) => (
           <div className="flex flex-col">
-            <span className="font-mono text-xs text-muted-foreground">{row.sessionId}</span>
+            <span className="font-mono text-xs text-muted">{row.sessionId}</span>
             <span className="text-sm">{row.professionId || '—'}</span>
           </div>
         ),
@@ -118,9 +118,10 @@ export default function SpeakingModerationQueuePage() {
       {
         key: 'variance',
         header: 'Variance',
+        className: 'text-right tabular-nums',
         render: (row) =>
           row.variancePoints == null ? (
-            <span className="text-muted-foreground">—</span>
+            <span className="text-muted">—</span>
           ) : (
             <span className="font-medium">{row.variancePoints} pts</span>
           ),
@@ -133,11 +134,12 @@ export default function SpeakingModerationQueuePage() {
       {
         key: 'created',
         header: 'Opened',
-        render: (row) => <span className="text-muted-foreground">{formatRelative(row.createdAt)}</span>,
+        render: (row) => <span className="text-muted">{formatRelative(row.createdAt)}</span>,
       },
       {
         key: 'actions',
-        header: '',
+        header: 'Action',
+        className: 'text-right',
         render: (row) => (
           <Button
             variant="primary"
@@ -157,9 +159,9 @@ export default function SpeakingModerationQueuePage() {
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" aria-hidden />
-            <h1 className="text-2xl font-semibold tracking-tight">Speaking moderation</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-navy">Speaking moderation</h1>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             Double-marking and senior moderation for speaking sessions. A second independent marker is
             required for flagged sessions; when two marks diverge beyond the agreement threshold, a
             senior moderator reconciles the final score.
@@ -177,14 +179,21 @@ export default function SpeakingModerationQueuePage() {
               }}
               onClear={() => setProfession('')}
             />
-            <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
+            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />
               Refresh
             </Button>
           </div>
         </Card>
 
-        {errorMsg && <InlineAlert variant="error">{errorMsg}</InlineAlert>}
+        {errorMsg && (
+          <InlineAlert
+            variant="error"
+            action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Retry</Button>}
+          >
+            {errorMsg}
+          </InlineAlert>
+        )}
 
         {loading ? (
           <div className="flex flex-col gap-2">

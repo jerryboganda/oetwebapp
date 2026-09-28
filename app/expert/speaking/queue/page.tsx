@@ -225,6 +225,7 @@ export default function SpeakingQueuePage() {
         key: 'duration',
         header: 'Duration',
         hideOnMobile: true,
+        className: 'text-right',
         render: (item) => <span className="tabular-nums text-sm">{formatDuration(item.durationSeconds)}</span>,
       },
       {
@@ -254,7 +255,7 @@ export default function SpeakingQueuePage() {
       },
       {
         key: 'actions',
-        header: '',
+        header: 'Action',
         render: (item) => {
           const isPending = pendingId === item.sessionId;
           if (item.claimedByMe) {
@@ -320,7 +321,11 @@ export default function SpeakingQueuePage() {
         />
 
         {errorMsg && (
-          <InlineAlert variant="error" title="Failed to load queue">
+          <InlineAlert
+            variant="error"
+            title="Failed to load queue"
+            action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Retry</Button>}
+          >
             {errorMsg}
           </InlineAlert>
         )}

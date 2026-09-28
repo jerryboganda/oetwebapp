@@ -38,7 +38,7 @@ export default function CompensationPage() {
     <ExpertRouteWorkspace>
       <ExpertRouteHero title="Compensation" description="Track your earnings and payouts." />
 
-      <section className="rounded-2xl border bg-surface p-4 text-sm text-muted">
+      <section className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
         <ExpertRouteSectionHeader title="Launch payout model" />
         <p className="mt-2">
           Public launch uses fixed, tiered payouts by review type and promised turnaround SLA.

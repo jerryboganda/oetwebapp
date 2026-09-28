@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Clock3, Inbox, RefreshCw, Search, Sparkles, Unlock, Users, ClipboardList } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -303,14 +304,14 @@ export default function ReviewQueuePage() {
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession.replace('_', ' ')}</span> },
     { key: 'type', header: 'Sub-test', render: (row) => <span className="capitalize">{row.type}</span> },
     { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">Unknown</span> : <span className="capitalize">{row.aiConfidence}</span> },
-    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'font-semibold capitalize text-error' : 'capitalize'}>{row.priority}</span> },
+    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'font-semibold capitalize text-danger' : 'capitalize'}>{row.priority}</span> },
     {
       key: 'slaDue',
       header: 'SLA Due',
       render: (row) => {
         const date = new Date(row.slaDue);
         const formatted = `${date.toISOString().split('T')[0]} ${date.toISOString().split('T')[1].slice(0, 5)}`;
-        return <span className={row.isOverdue ? 'font-bold text-error' : row.slaState === 'at_risk' ? 'font-semibold text-amber-600' : ''}>{formatted} UTC</span>;
+        return <span className={row.isOverdue ? 'font-bold text-danger' : row.slaState === 'at_risk' ? 'font-semibold text-warning' : ''}>{formatted} UTC</span>;
       },
     },
     { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => <span className={row.assignedReviewerName ? 'text-navy' : 'italic text-muted'}>{row.assignedReviewerName ?? 'Unassigned'}</span> },
@@ -318,8 +319,8 @@ export default function ReviewQueuePage() {
       key: 'status',
       header: 'Status',
       render: (row) => {
-        const variant = row.status === 'overdue' ? 'bg-red-50 text-red-700' : row.status === 'assigned' ? 'bg-blue-50 text-blue-700' : row.status === 'in_progress' ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-foreground';
-        return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variant}`}>{row.status.replace('_', ' ')}</span>;
+        const variant = row.status === 'overdue' ? 'danger' : row.status === 'assigned' ? 'info' : row.status === 'in_progress' ? 'success' : 'muted';
+        return <Badge variant={variant} className="capitalize">{row.status.replace('_', ' ')}</Badge>;
       },
     },
     {

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
@@ -59,17 +60,17 @@ function ExpertReviewRow({
   review: ReviewRequest;
   onOpen: () => void;
 }) {
-  const statusTone = review.isOverdue
-    ? 'border-rose-200 bg-rose-50 text-rose-700'
+  const statusVariant = review.isOverdue
+    ? 'danger'
     : review.status === 'in_progress'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      : 'border-border bg-background-light text-muted';
+      ? 'success'
+      : 'muted';
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="pressable flex w-full items-start justify-between gap-4 rounded-2xl border border-border bg-surface p-4 text-left hover:border-primary/40 hover:shadow-sm"
+      className="pressable flex w-full items-start justify-between gap-4 rounded-2xl border border-border bg-surface p-4 text-left hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div className="space-y-1">
         <p className="text-sm font-bold text-navy">{review.learnerName}</p>
@@ -80,9 +81,9 @@ function ExpertReviewRow({
           <span>AI {review.aiConfidence}</span>
         </div>
       </div>
-      <div className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusTone}`}>
+      <Badge variant={statusVariant} className="shrink-0 capitalize">
         {review.status.replace(/_/g, ' ')}
-      </div>
+      </Badge>
     </button>
   );
 }

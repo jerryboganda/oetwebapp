@@ -157,7 +157,7 @@ export default function ExpertSpeakingLiveRoomPage() {
   if (error || !room || (consentAccepted && !tokenInfo)) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
-        <h2 className="text-base font-semibold">Could not open this tutor room</h2>
+        <h2 className="text-base font-semibold text-navy">Could not open this tutor room</h2>
         <p className="mt-1">{error ?? 'Live room not available.'}</p>
         <Button
           type="button"

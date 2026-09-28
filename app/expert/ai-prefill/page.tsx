@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Bot, CheckCircle2, Edit3, XCircle } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
@@ -38,7 +39,9 @@ interface CriterionDecision {
 
 const apiRequest = apiClient.request;
 
-const CONFIDENCE_COLOR: Record<string, string> = { high: 'bg-emerald-100 text-emerald-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-red-100 text-red-700' };
+const CONFIDENCE_VARIANT: Record<string, BadgeProps['variant']> = { high: 'success', medium: 'warning', low: 'danger' };
+
+const DECISION_BUTTON_BASE = 'flex items-center gap-1 px-3 py-2 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1';
 
 // Mirrors backend ExpertService.MaxScoreForCriterion — writing: purpose=3,
 // others=7; speaking: clinical-communication cluster=3, linguistic=6.
@@ -161,10 +164,10 @@ export default function AiPreFillPage() {
   }, [data?.subtestCode, decidedCount, decidedScores, loadedReviewId]);
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div>
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">AI Pre-Fill Assistant</h1>
+          <h1 className="text-2xl font-bold text-navy">AI Pre-Fill Assistant</h1>
           <p className="text-muted mt-1">Use AI-suggested scores as a starting point for your tutor review.</p>
         </div>
 
@@ -172,9 +175,9 @@ export default function AiPreFillPage() {
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="text-sm font-medium text-muted mb-1 block" htmlFor="ai-prefill-review-id">Review Request ID</label>
-              <input id="ai-prefill-review-id" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter review request ID..." value={reviewId} onChange={e => setReviewId(e.target.value)} />
+              <input id="ai-prefill-review-id" className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/20" onKeyDown={e => { if (e.key === 'Enter' && !loading && reviewId.trim()) void load(reviewId); }} placeholder="Enter review request ID..." value={reviewId} onChange={e => setReviewId(e.target.value)} />
             </div>
-            <button onClick={() => void load(reviewId)} disabled={loading || !reviewId.trim()} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50">{loading ? 'Loading...' : 'Load AI Suggestions'}</button>
+            <Button type="button" onClick={() => void load(reviewId)} disabled={loading || !reviewId.trim()}>{loading ? 'Loading...' : 'Load AI Suggestions'}</Button>
           </div>
 
           {error && <InlineAlert variant="error">{error}</InlineAlert>}
@@ -182,20 +185,20 @@ export default function AiPreFillPage() {
           {loading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
 
           {data && !data.hasAiPreFill && (
-            <Card className="p-6 text-center text-muted"><Bot className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>{data.message}</p></Card>
+            <Card className="p-6 text-center text-muted"><Bot className="w-8 h-8 mx-auto mb-3 opacity-50" aria-hidden="true" /><p>{data.message}</p></Card>
           )}
 
           {data?.hasAiPreFill && (
             <>
               <MotionItem>
-                <Card className="p-5 bg-blue-50/50 dark:bg-blue-950/20">
+                <Card className="p-5 border-info/20 bg-info/5 dark:bg-info/10">
                   <div className="flex items-start gap-3">
-                    <Bot className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                    <Bot className="w-6 h-6 text-info flex-shrink-0" aria-hidden="true" />
                     <div>
                       <h3 className="font-semibold">AI Evaluation Available</h3>
                       <div className="flex gap-3 mt-1 text-sm text-muted flex-wrap">
                         <span>Score range: <strong>{data.aiScoreRange}</strong></span>
-                        <Badge className={CONFIDENCE_COLOR[data.aiConfidence ?? 'medium']}>{data.aiConfidence} confidence</Badge>
+                        <Badge variant={CONFIDENCE_VARIANT[data.aiConfidence ?? 'medium'] ?? 'default'}>{data.aiConfidence} confidence</Badge>
                         <span className="capitalize">{data.subtestCode}</span>
                       </div>
                       {data.instructions && <p className="text-sm mt-2 text-muted">{data.instructions.guidance}</p>}
@@ -216,33 +219,33 @@ export default function AiPreFillPage() {
                           <Card className="p-4">
                             <div className="flex items-center justify-between">
                               <h4 className="font-medium capitalize">{s.criterionCode.replace(/_/g, ' ')}</h4>
-                              <div className="text-2xl font-bold text-primary">{s.aiScore}<span className="text-sm font-normal text-muted">/{max}</span></div>
+                              <div className="text-2xl font-bold tabular-nums text-primary">{s.aiScore}<span className="text-sm font-normal text-muted">/{max}</span></div>
                             </div>
-                            <Badge className={`mt-1 ${CONFIDENCE_COLOR[s.aiConfidence] ?? ''}`}>{s.aiConfidence}</Badge>
+                            <Badge variant={CONFIDENCE_VARIANT[s.aiConfidence] ?? 'default'} className="mt-1">{s.aiConfidence}</Badge>
                             <div className="flex flex-wrap gap-2 mt-3">
                               <button
                                 type="button"
                                 onClick={() => setDecision(s.criterionCode, { mode: 'accepted', chosenScore: clampScore(s.aiScore, max) })}
                                 aria-pressed={decision.mode === 'accepted'}
-                                className={`flex items-center gap-1 px-3 py-2 rounded-md text-xs font-medium ${decision.mode === 'accepted' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                                className={`${DECISION_BUTTON_BASE} ${decision.mode === 'accepted' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900'}`}
                               >
-                                <CheckCircle2 className="w-3 h-3" /> Accept
+                                <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> Accept
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDecision(s.criterionCode, { mode: 'adjusted', chosenScore: clampScore(s.aiScore, max) })}
                                 aria-pressed={decision.mode === 'adjusted'}
-                                className={`flex items-center gap-1 px-3 py-2 rounded-md text-xs font-medium ${decision.mode === 'adjusted' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}
+                                className={`${DECISION_BUTTON_BASE} ${decision.mode === 'adjusted' ? 'bg-warning text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900'}`}
                               >
-                                <Edit3 className="w-3 h-3" /> Adjust
+                                <Edit3 className="w-3 h-3" aria-hidden="true" /> Adjust
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDecision(s.criterionCode, { mode: 'overridden', chosenScore: 0 })}
                                 aria-pressed={decision.mode === 'overridden'}
-                                className={`flex items-center gap-1 px-3 py-2 rounded-md text-xs font-medium ${decision.mode === 'overridden' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                className={`${DECISION_BUTTON_BASE} ${decision.mode === 'overridden' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900'}`}
                               >
-                                <XCircle className="w-3 h-3" /> Override
+                                <XCircle className="w-3 h-3" aria-hidden="true" /> Override
                               </button>
                             </div>
                             {(decision.mode === 'adjusted' || decision.mode === 'overridden') && (
@@ -256,7 +259,7 @@ export default function AiPreFillPage() {
                                   step={1}
                                   value={decision.chosenScore}
                                   onChange={(e) => setDecision(s.criterionCode, { mode: decision.mode, chosenScore: clampScore(Number(e.target.value), max) })}
-                                  className="w-20 border rounded-lg px-2 py-1 text-sm"
+                                  className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm tabular-nums text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
                                 />
                               </div>
                             )}
@@ -274,14 +277,13 @@ export default function AiPreFillPage() {
                       <p className="text-sm font-medium">{decidedCount} of {data.suggestedScores.length} criteria decided</p>
                       <p className="text-xs text-muted">Applying merges the chosen scores into your saved review draft — comments already in the draft are kept.</p>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => void applyToDraft()}
                       disabled={applying || decidedCount === 0}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50"
                     >
                       {applying ? 'Applying...' : 'Apply to review draft'}
-                    </button>
+                    </Button>
                   </Card>
 
                   {applyError && <InlineAlert variant="error">{applyError}</InlineAlert>}
@@ -290,7 +292,7 @@ export default function AiPreFillPage() {
                     <InlineAlert variant="success" title="Draft updated">
                       <span className="mr-2">The chosen scores were saved to your review draft.</span>
                       <Link href={`/expert/review/${encodeURIComponent(loadedReviewId)}`} className="inline-flex items-center gap-1 font-medium underline">
-                        Open review workspace <ArrowRight className="w-3.5 h-3.5" />
+                        Open review workspace <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
                       </Link>
                     </InlineAlert>
                   )}
@@ -314,7 +316,7 @@ export default function AiPreFillPage() {
               )}
 
               {data.instructions && (
-                <Card className="p-4 bg-muted/50">
+                <Card className="p-4 bg-background-light">
                   <p className="text-sm font-medium mb-1">{data.instructions.note}</p>
                   <div className="flex gap-2 mt-2">
                     {data.instructions.actions.map(a => <Badge key={a} variant="outline" className="text-xs">{a}</Badge>)}

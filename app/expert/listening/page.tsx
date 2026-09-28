@@ -83,13 +83,13 @@ export default function ExpertListeningAttemptsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Headphones className="h-5 w-5" />
+            <Headphones className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-navy">
               Listening Attempts
             </h1>
-            <p className="text-sm text-muted">
+            <p className="text-sm tabular-nums text-muted">
               {total} submitted {tab === 'attempts' ? 'attempt' : 'review'}{total !== 1 ? 's' : ''}
             </p>
           </div>
@@ -98,12 +98,13 @@ export default function ExpertListeningAttemptsPage() {
         {/* Search (attempts view only — my-reviews is unfiltered) */}
         {tab === 'attempts' && (
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by learner name..."
+              aria-label="Search by learner name"
               className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm text-navy placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
@@ -132,7 +133,14 @@ export default function ExpertListeningAttemptsPage() {
         </Button>
       </div>
 
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="error"
+          action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Retry</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
@@ -140,12 +148,12 @@ export default function ExpertListeningAttemptsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
-              <th className="px-4 py-3">Learner</th>
-              <th className="px-4 py-3">Paper</th>
-              <th className="px-4 py-3">Submitted</th>
-              <th className="px-4 py-3">Score</th>
-              <th className="px-4 py-3">Feedback</th>
-              <th className="px-4 py-3" />
+              <th scope="col" className="px-4 py-3">Learner</th>
+              <th scope="col" className="px-4 py-3">Paper</th>
+              <th scope="col" className="px-4 py-3">Submitted</th>
+              <th scope="col" className="px-4 py-3">Score</th>
+              <th scope="col" className="px-4 py-3">Feedback</th>
+              <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -181,7 +189,7 @@ export default function ExpertListeningAttemptsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-semibold text-navy">
+                      <span className="font-semibold tabular-nums text-navy">
                         {item.rawScore}/{item.maxRawScore}
                       </span>
                       <span className="ml-2 text-xs text-muted">
@@ -232,11 +240,11 @@ export default function ExpertListeningAttemptsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
-              <th className="px-4 py-3">Learner</th>
-              <th className="px-4 py-3">Paper</th>
-              <th className="px-4 py-3">Reviewed</th>
-              <th className="px-4 py-3">Score override</th>
-              <th className="px-4 py-3" />
+              <th scope="col" className="px-4 py-3">Learner</th>
+              <th scope="col" className="px-4 py-3">Paper</th>
+              <th scope="col" className="px-4 py-3">Reviewed</th>
+              <th scope="col" className="px-4 py-3">Score override</th>
+              <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -312,7 +320,7 @@ export default function ExpertListeningAttemptsPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted">
-          <span>
+          <span className="tabular-nums">
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-2">
