@@ -180,6 +180,27 @@
   --color-admin-text-muted:        var(--admin-fg-muted);
   --color-admin-warning-strong:    var(--admin-warning-strong);
 
+  /* Names used across admin/ui primitives and pages that were never defined
+     (the classes rendered no colour — e.g. data-table row hover/selection). */
+  --color-admin-fg:                var(--admin-fg-default);
+  --color-admin-text-secondary:    var(--admin-fg-default);
+  --color-admin-accent:            var(--admin-primary);
+  --color-admin-bg:                var(--admin-bg-page);
+  --color-admin-bg-muted:          var(--admin-bg-subtle);
+  --color-admin-bg-surface-raised: var(--admin-bg-subtle);
+  --color-admin-surface-muted:     var(--admin-bg-subtle);
+  --color-admin-border-default:    var(--admin-border-default);
+  --color-admin-border-subtle:     var(--admin-border-default);
+  --color-admin-hover:             var(--admin-state-hover);
+  --color-admin-state-hover:       var(--admin-state-hover);
+  --color-admin-state-active:      var(--admin-state-active);
+  --color-admin-state-selected:    var(--admin-state-selected);
+  --color-admin-primary-tint:      var(--admin-primary-tint);
+  --color-admin-success-tint:      var(--admin-success-tint);
+  --color-admin-warning-tint:      var(--admin-warning-tint);
+  --color-admin-danger-tint:       var(--admin-danger-tint);
+  --color-admin-info-tint:         var(--admin-info-tint);
+
   /* Surfaces */
   --color-admin-bg-page:           var(--admin-bg-page);
   --color-admin-bg-surface:        var(--admin-bg-surface);
