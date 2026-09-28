@@ -28,7 +28,7 @@ public static class ContentPapersAdminEndpoints
 
     /// <summary>RFC 4180 cell: quote always, doubling any embedded quotes.</summary>
     private static string CsvCell(string? value)
-        => $"\"{(value ?? string.Empty).Replace("\"", "\"\"")}\"";
+        => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
 
     public static IEndpointRouteBuilder MapContentPapersAdminEndpoints(this IEndpointRouteBuilder app)
     {
