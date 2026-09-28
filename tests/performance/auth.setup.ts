@@ -1,7 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test as setup } from '@playwright/test';
 import {
-  bootstrapBrowserSessionForRole,
   bootstrapSessionForRole,
   persistSessionToStorageState,
 } from '../e2e/fixtures/auth-bootstrap';
@@ -62,8 +61,15 @@ setup.describe.configure({ mode: 'serial' });
 
 for (const target of authTargets) {
   setup(`bootstrap ${target.projectName} auth state`, async ({ request }) => {
-    const { session, cookies } = await bootstrapBrowserSessionForRole(request, target.role);
-    await persistSessionToStorageState(session, target.path, cookies);
+    // Mint an isolated session, then let persistSessionToStorageState capture the
+    // live frontend-proxy cookies itself. It returns the live session, which is the
+    // one that owns the oet_rt cookie - the bootstrap session has just been revoked
+    // by the single-active-session sign-in.
+    const bootstrapSession = await bootstrapSessionForRole(request, target.role, undefined, {
+      useDiskCache: false,
+      isolateSession: true,
+    });
+    const session = await persistSessionToStorageState(bootstrapSession, target.path, request, target.role);
     await markPerformanceTourComplete(request, session, target.role);
 
     const rawState = JSON.parse(await readFile(target.path, 'utf8')) as {

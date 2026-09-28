@@ -44,9 +44,7 @@ test.describe('Speaking pre-warm-up timer @learner @speaking', () => {
     });
 
     try {
-      await recoverBrowserSession(page, request, 'learner', `/speaking/sessions/${sessionId}/warmup`, {
-        freshSession: true,
-      });
+      await recoverBrowserSession(page, request, 'learner', `/speaking/sessions/${sessionId}/warmup`);
 
       // Skip is always available
       const skip = page.getByRole('button', { name: /skip/i }).first();

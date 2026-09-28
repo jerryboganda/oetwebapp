@@ -20,7 +20,7 @@ test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
     }
 
     const diagnostics = observePage(page);
-    await recoverBrowserSession(page, request, 'learner', '/speaking/recordings', { freshSession: true });
+    await recoverBrowserSession(page, request, 'learner', '/speaking/recordings');
 
     // Intercept the DELETE so the spec stays deterministic without
     // needing a seeded recording row in CI. The mocked response mirrors
