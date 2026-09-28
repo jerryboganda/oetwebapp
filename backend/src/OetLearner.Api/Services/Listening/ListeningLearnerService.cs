@@ -2894,6 +2894,21 @@ public sealed class ListeningLearnerService(
             if (!string.IsNullOrWhiteSpace(url)) audioUrlBySection[section] = url;
         }
 
+        // A section's countdown must never be shorter than its own recording (+5 s): a timer under the audio length cuts the
+        // recording at 00:00 and, in the last section, submits the test early. Audio re-cuts left authored timers behind
+        // (Sep 2026) and the authoring API refuses timer edits once a paper has attempts, so guard it at read time.
+        var durationByUrl = assets
+            .Where(a => a.Role == PaperAssetRole.Audio && a.MediaAsset?.DurationSeconds is > 0)
+            .GroupBy(a => $"/v1/media/{a.MediaAsset!.Id}/content")
+            .ToDictionary(g => g.Key, g => g.First().MediaAsset!.DurationSeconds!.Value, StringComparer.Ordinal);
+        extracts = extracts
+            .Select(e => audioUrlBySection.GetValueOrDefault(SectionForPartCode(e.PartCode)) is { } url
+                && durationByUrl.TryGetValue(url, out var seconds)
+                && (e.TimeLimitSeconds ?? 0) < seconds + 5
+                    ? e with { TimeLimitSeconds = seconds + 5 }
+                    : e)
+            .ToList();
+
         return new ListeningSource(
             Id: paper.Id,
             SourceKind: "content_paper",

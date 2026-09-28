@@ -1,0 +1,114 @@
+name: Listening Audio Evidence
+
+# Fleet audit of Atlas/Nova Listening audio (owner-approved 2026-09-22). All compute (download, ffmpeg, Whisper,
+# analysis) runs here, never on the dev PC or the VPS. Transcripts of licensed audio are sealed (AES-256-GCM)
+# before upload because artifacts of a public repo are public. Trigger: bump scripts/listening/asr-run-trigger.txt
+# on this branch, or run manually.
+
+on:
+  push:
+    branches: [fix/listening-audio-integrity-2026-09-22]
+    paths:
+      - scripts/listening/asr-run-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listening-audio-evidence
+  cancel-in-progress: false
+
+env:
+  OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+  OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+  EVIDENCE_KEY: ${{ secrets.EVIDENCE_KEY }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/listening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # scripts/listening/asr-run-trigger.txt may carry:  "extra: <mediaAssetId>,<mediaAssetId>"  (candidate files
+      # uploaded but not yet attached to any paper) and a line "only-extra" to analyse only those.
+      - name: Plan
+        run: |
+          EXTRA=$(grep -E '^extra:' scripts/listening/asr-run-trigger.txt | head -1 | cut -d: -f2 | tr -d ' ' || true)
+          ONLY=""; grep -qE '^only-extra' scripts/listening/asr-run-trigger.txt && ONLY="--only-extra" || true
+          SHARDS=$(grep -E '^shards:' scripts/listening/asr-run-trigger.txt | head -1 | cut -d: -f2 | tr -d ' ' || true)
+          node scripts/listening/evidence.mjs plan --shards "${SHARDS:-12}" --out plan.json --token-out token.json --extra "$EXTRA" $ONLY
+          # One sign-in for the whole run (a new sign-in revokes every earlier token): share it, sealed, with the shards.
+          node scripts/listening/seal.mjs seal token.json token.sealed
+      - uses: actions/upload-artifact@v4
+        with:
+          name: token
+          path: token.sealed
+          retention-days: 1
+      - id: m
+        run: |
+          echo "matrix=$(node -e "const p=JSON.parse(require('fs').readFileSync('plan.json','utf8'));console.log(JSON.stringify({shard:[...new Set(p.assets.map(a=>a.shard))].sort((a,b)=>a-b)}))")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: plan.json
+          retention-days: 7
+
+  evidence:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/listening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Tools
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+          pip install --quiet faster-whisper==1.2.1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-faster-whisper-small-en-v1
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+      - uses: actions/download-artifact@v4
+        with:
+          name: token
+      - name: Collect evidence (download, silence map, speech-to-text)
+        run: |
+          node scripts/listening/seal.mjs open token.sealed token.json
+          node scripts/listening/evidence.mjs run --plan plan.json --shard ${{ matrix.shard }} --out evidence-out --model small.en --token-file token.json
+          rm -f token.json
+      - name: Seal
+        if: always()
+        run: |
+          if [ -f evidence-out/evidence-${{ matrix.shard }}.json ]; then
+            node scripts/listening/seal.mjs seal evidence-out/evidence-${{ matrix.shard }}.json evidence-${{ matrix.shard }}.sealed
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidence-${{ matrix.shard }}
+          path: evidence-${{ matrix.shard }}.sealed
+          if-no-files-found: warn
+          retention-days: 7

@@ -289,6 +289,60 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
+    public async Task SiblingSectionsSharingOneAudioFile_BlockPublish_ButOwnFilesPass()
+    {
+        var (db, svc) = Build();
+        var paper = await AddPaperAsync(db, BuildQuestionsJson(24, 6, 12));
+        void AddAudio(string part, string mediaId)
+        {
+            if (!db.Set<MediaAsset>().Any(m => m.Id == mediaId))
+            {
+                db.Set<MediaAsset>().Add(new MediaAsset
+                {
+                    Id = mediaId,
+                    OriginalFilename = $"{part}.mp3",
+                    MimeType = "audio/mpeg",
+                    Format = "mp3",
+                    SizeBytes = 1024,
+                    DurationSeconds = 60,
+                    StoragePath = $"test/{mediaId}.mp3",
+                    Status = MediaAssetStatus.Ready,
+                    MediaKind = "audio",
+                    UploadedAt = DateTimeOffset.UtcNow,
+                });
+            }
+            db.Set<ContentPaperAsset>().Add(new ContentPaperAsset
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = paper.Id,
+                Role = PaperAssetRole.Audio,
+                Part = part,
+                MediaAssetId = mediaId,
+                IsPrimary = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        // Atlas Sample Test 8 shape: one parent "A" file and one parent "C" file serve both siblings.
+        AddAudio("A", "media-parent-a");
+        AddAudio("C", "media-parent-c");
+        await db.SaveChangesAsync();
+        var shared = await svc.ValidatePaperAsync(paper.Id, default);
+        Assert.False(shared.IsPublishReady);
+        Assert.Contains(shared.Issues, i => i.Code == "listening_audio_shared_across_sections" && i.Severity == "error" && i.Message.StartsWith("A1 and A2"));
+        Assert.Contains(shared.Issues, i => i.Code == "listening_audio_shared_across_sections" && i.Severity == "error" && i.Message.StartsWith("C1 and C2"));
+
+        // Each section's own file (exact keys beat the parent rows) clears the rule.
+        AddAudio("A1", "media-a1");
+        AddAudio("A2", "media-a2");
+        AddAudio("C1", "media-c1");
+        AddAudio("C2", "media-c2");
+        await db.SaveChangesAsync();
+        var split = await svc.ValidatePaperAsync(paper.Id, default);
+        Assert.DoesNotContain(split.Issues, i => i.Code == "listening_audio_shared_across_sections");
+    }
+
+    [Fact]
     public async Task JsonSectionTimingShorterThanAudio_BlocksPublish()
     {
         var (db, svc) = Build();
