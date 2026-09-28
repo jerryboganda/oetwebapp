@@ -7,14 +7,16 @@ interface SkeletonProps {
   width?: string | number;
   height?: string | number;
   lines?: number;
+  /** Set when a parent already exposes the loading status, so it is announced once. */
+  'aria-hidden'?: boolean | 'true' | 'false';
 }
 
-export function Skeleton({ className, variant = 'rectangle', width, height, lines }: SkeletonProps) {
+export function Skeleton({ className, variant = 'rectangle', width, height, lines, 'aria-hidden': ariaHidden }: SkeletonProps) {
   const pulseClassName = 'motion-safe:animate-pulse motion-reduce:animate-none';
 
   if (lines && lines > 1) {
     return (
-      <div className={cn('flex flex-col gap-2', className)} role="status" aria-busy="true" aria-label="Loading">
+      <div className={cn('flex flex-col gap-2', className)} role="status" aria-busy="true" aria-label="Loading" aria-hidden={ariaHidden}>
         {Array.from({ length: lines }).map((_, i) => (
           <div
             key={i}
@@ -39,6 +41,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
       role="status"
       aria-busy="true"
       aria-label="Loading"
+      aria-hidden={ariaHidden}
     />
   );
 }
@@ -52,9 +55,9 @@ export function CardSkeleton({ className }: { className?: string }) {
       aria-busy="true"
       aria-label="Loading card"
     >
-      <Skeleton variant="text" className="mb-3 h-5 w-1/3" />
-      <Skeleton lines={3} className="mb-4" />
-      <div className="flex gap-2">
+      <Skeleton variant="text" className="mb-3 h-5 w-1/3" aria-hidden="true" />
+      <Skeleton lines={3} className="mb-4" aria-hidden="true" />
+      <div className="flex gap-2" aria-hidden="true">
         <Skeleton className="h-10 w-24 rounded-2xl" />
         <Skeleton className="h-10 w-24 rounded-2xl" />
       </div>
@@ -71,7 +74,7 @@ export function PageSkeleton({ className }: { className?: string }) {
       aria-busy="true"
       aria-label="Loading page"
     >
-      <div className="rounded-surface border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+      <div className="rounded-surface border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6" aria-hidden="true">
         <div className="space-y-4">
           <div className="flex items-start gap-4">
             <Skeleton variant="circle" className="h-12 w-12" />
@@ -88,7 +91,7 @@ export function PageSkeleton({ className }: { className?: string }) {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
         <CardSkeleton />
         <CardSkeleton />
         <CardSkeleton />
