@@ -36,7 +36,7 @@ export interface EnabledModulesGate {
  *  - the sidebar, bottom nav, skill switcher, and dashboard hero collapse
  *    into ONE /v1/me/entitlement-snapshot request instead of two
  *    independent caches that both hit the endpoint;
- *  - the purchase-success invalidation in app/page.tsx
+ *  - the purchase-success invalidation in app/(learner)/page.tsx
  *    (queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.entitlement(...) }))
  *    now also refreshes nav/module visibility, instead of only the hero;
  *  - the query key already includes the userId, so switching identity

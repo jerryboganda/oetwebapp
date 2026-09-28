@@ -3,7 +3,7 @@ import type { TourDefinition } from '../tour-types';
 /**
  * Action-first orientation of the learner dashboard. Copy is exam-aware and
  * concise (one concept per step). Anchors are `data-tour` attributes added to
- * app/page.tsx and the learner shell. Steps whose anchor is absent are skipped.
+ * app/(learner)/page.tsx and the learner shell. Steps whose anchor is absent are skipped.
  */
 export const learnerDashboardTour: TourDefinition = {
   id: 'learner-dashboard',

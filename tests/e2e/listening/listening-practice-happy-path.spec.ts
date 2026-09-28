@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
 // Light-weight smoke around the Listening practice-mode entry: prove the
-// `app/listening/player/[id]/page.tsx` route boots against the seeded
+// `app/(learner)/listening/player/[id]/page.tsx` route boots against the seeded
 // `lt-001` sample paper, the intro card renders, and clicking Start
 // progresses to Part A (the first question stem from lt-001 becomes
 // visible). The full end-to-end submit→results flow is exercised by

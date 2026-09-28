@@ -70,7 +70,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
       { kind: 'mode-policy-flag', flag: 'onePlayOnly', expected: true },
       { kind: 'mode-policy-flag', flag: 'canPause', expected: false },
       { kind: 'mode-policy-flag', flag: 'canScrub', expected: false },
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'Player blocks rewind via shouldResumeAfterBlockedPause + resolveBlockedSeekTarget when these flags are set.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'Player blocks rewind via shouldResumeAfterBlockedPause + resolveBlockedSeekTarget when these flags are set.' },
     ],
   },
   listening_pass_threshold: {
@@ -132,7 +132,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
     checkId: 'listening_part_b_one_per_screen_cbt',
     surfaces: [
       { kind: 'mode-policy-flag', flag: 'oneWayLocks', expected: true },
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'In exam/home mode the player renders one Part B question per screen and advances on Next.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'In exam/home mode the player renders one Part B question per screen and advances on Next.' },
     ],
   },
   listening_a_to_b_transition: {
@@ -145,7 +145,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
     checkId: 'listening_part_c_continuous_audio',
     surfaces: [
       { kind: 'mode-policy-flag', flag: 'canPause', expected: false },
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'Part C audio plays continuously; question navigation does not pause playback.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'Part C audio plays continuously; question navigation does not pause playback.' },
     ],
   },
   listening_b_to_c1_transition: {
@@ -170,7 +170,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
     checkId: 'listening_c2_final_review_scope',
     surfaces: [
       { kind: 'mode-policy-flag', flag: 'reviewWindowMsC2FinalCbt', expected: { type: 'number', min: 120000 } },
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'When state == c2_final_review, visible question set is filtered to partC2Range (Q37–42) only.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'When state == c2_final_review, visible question set is filtered to partC2Range (Q37–42) only.' },
       { kind: 'playwright-spec', spec: 'tests/e2e/listening/c2-only-final-review.spec.ts' },
     ],
   },
@@ -204,7 +204,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
   listening_part_c_split_layout: {
     checkId: 'listening_part_c_split_layout',
     surfaces: [
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'Part C view renders audio on the left panel and questions on the right.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'Part C view renders audio on the left panel and questions on the right.' },
     ],
   },
   listening_part_a_no_highlight: {
@@ -237,7 +237,7 @@ export const LISTENING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnfo
   listening_part_c_audio_panel_visible: {
     checkId: 'listening_part_c_audio_panel_visible',
     surfaces: [
-      { kind: 'ui-component', component: 'app/listening/player/[id]/page.tsx', description: 'Part C view keeps the audio panel docked to the left for the duration of the extract.' },
+      { kind: 'ui-component', component: 'app/(learner)/listening/player/[id]/page.tsx', description: 'Part C view keeps the audio panel docked to the left for the duration of the extract.' },
     ],
   },
   listening_tech_min_screen_resolution: {
@@ -324,7 +324,7 @@ export const READING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnforc
     checkId: 'reading_part_a_lock_at_15_min',
     surfaces: [
       { kind: 'session-service', service: 'ReadingSessionService', method: 'TickPartATimer + AdvanceStateAsync — Part A text panel becomes inaccessible after 15 minutes or part submission, mirroring the Listening Locks pattern.' },
-      { kind: 'ui-component', component: 'app/reading/player/[id]/page.tsx', description: 'When sessionState.partALocked is true the text panel is unmounted and answers become read-only.' },
+      { kind: 'ui-component', component: 'app/(learner)/reading/player/[id]/page.tsx', description: 'When sessionState.partALocked is true the text panel is unmounted and answers become read-only.' },
       { kind: 'playwright-spec', spec: 'tests/e2e/reading/part-a-15-min-lock.spec.ts' },
     ],
   },
@@ -361,7 +361,7 @@ export const READING_EXAM_MODE_ENFORCERS: Readonly<Record<string, ExamModeEnforc
   reading_part_a_copy_paste_warning: {
     checkId: 'reading_part_a_copy_paste_warning',
     surfaces: [
-      { kind: 'ui-component', component: 'app/reading/player/[id]/page.tsx', description: 'One-time banner in Part A warns the candidate that copy/paste is unreliable across exam centres.' },
+      { kind: 'ui-component', component: 'app/(learner)/reading/player/[id]/page.tsx', description: 'One-time banner in Part A warns the candidate that copy/paste is unreliable across exam centres.' },
     ],
   },
   reading_part_b_three_options: {

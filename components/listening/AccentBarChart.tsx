@@ -4,8 +4,8 @@
  * AccentBarChart — horizontal accent-accuracy chart (§6.4, §27).
  *
  * Consumed by:
- *   - app/listening/results — diagnostic results page accent breakdown.
- *   - app/listening/dashboard — accent progress block on the dashboard.
+ *   - app/(learner)/listening/results — diagnostic results page accent breakdown.
+ *   - app/(learner)/listening/dashboard — accent progress block on the dashboard.
  *
  * Pure-Tailwind implementation (no chart library). Each row is a label, a
  * solid progress bar, and a numeric percentage. Rows under 60% accuracy

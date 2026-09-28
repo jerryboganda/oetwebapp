@@ -1,7 +1,7 @@
 /**
  * Typed API client for the 16-stage Speaking course pathway (Phase 6).
  *
- * Backs `/app/speaking/course-pathway/page.tsx`.
+ * Backs `/app/(learner)/speaking/course-pathway/page.tsx`.
  */
 import { apiClient } from '@/lib/api';
 

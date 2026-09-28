@@ -461,7 +461,7 @@ export function selfTest() {
   const cases = [
     {
       name: 'payment-return leftover',
-      path: 'app/billing/payment-return/page.tsx',
+      path: 'app/(learner)/billing/payment-return/page.tsx',
       source: [
         'useEffect(() => {',
         '    void poll();',

@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      VITEST_PATHS: ${{ inputs.vitest_paths || 'lib/rulebook app/writing components/domain/writing components/domain/InsufficientCreditsModal' }}
+      VITEST_PATHS: ${{ inputs.vitest_paths || 'lib/rulebook app/(learner)/writing components/domain/writing components/domain/InsufficientCreditsModal' }}
     steps:
       # Full commit graph (blobless, so still cheap) for the merge-base diff
       # that scopes the lint step to files this branch changed.

@@ -7,7 +7,7 @@
  * Step's text body fields. The wizard never renders that HTML directly to the
  * learner — the manifest is POSTed to the backend, which stores the bytes as
  * `ReadingText.BodyHtml` and renders them later inside the learner Reading
- * player (`app/reading/paper/[paperId]/page.tsx`) inside a
+ * player (`app/(learner)/reading/paper/[paperId]/page.tsx`) inside a
  * `dangerouslySetInnerHTML` block scoped to a sandboxed reading-pane.
  *
  * This helper is a defense-in-depth wrapper: any future surface that wants to

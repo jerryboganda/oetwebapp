@@ -35,12 +35,15 @@ function listFiles(dir: string): string[] {
 
 function collectStaticWritingKeys() {
   const sourceRoots = [
-    path.join(repoRoot, 'app', 'writing'),
+    path.join(repoRoot, 'app', '(learner)', 'writing'),
     path.join(repoRoot, 'components', 'domain', 'writing'),
   ];
+  const files = sourceRoots.map(listFiles);
+  // listFiles returns [] for a missing dir, so a moved root would drop out silently.
+  files.forEach((rootFiles, i) => expect(rootFiles.length, sourceRoots[i]).toBeGreaterThan(0));
 
   const keys = new Set<string>();
-  for (const file of sourceRoots.flatMap(listFiles)) {
+  for (const file of files.flat()) {
     const source = fs.readFileSync(file, 'utf8');
     for (const match of source.matchAll(staticWritingKeyPattern)) {
       keys.add(match[1]);

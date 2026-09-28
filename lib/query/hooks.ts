@@ -108,7 +108,7 @@ export function useXp(userId: string, options: QueryOpts<Awaited<ReturnType<type
   });
 }
 
-// Shared with the Dashboard's own entitlement query (app/page.tsx) via the
+// Shared with the Dashboard's own entitlement query (app/(learner)/page.tsx) via the
 // same queryKeys.dashboard.entitlement(userId) key — React Query dedupes by
 // key regardless of which hook/component asks first, so the sidebar, bottom
 // nav, skill switcher (via useEnabledModules below) and the dashboard hero
@@ -122,7 +122,7 @@ export function useEntitlementSnapshot(
   return useQuery({
     queryKey: queryKeys.dashboard.entitlement(userId),
     queryFn: fetchMyEntitlementSnapshot,
-    // Kept in sync with app/page.tsx's own entitlementQuery, which shares
+    // Kept in sync with app/(learner)/page.tsx's own entitlementQuery, which shares
     // this exact key — every mutation that changes entitlement (purchase
     // completion) already invalidates this key explicitly, so a longer
     // staleTime only skips unnecessary background refetches, not real ones.

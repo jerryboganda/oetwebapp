@@ -3,7 +3,7 @@ name: Speaking Module CI
 on:
   pull_request:
     paths:
-      - 'app/speaking/**'
+      - 'app/(learner)/speaking/**'
       - 'app/expert/speaking/**'
       - 'app/expert/private-speaking/**'
       - 'app/expert/speaking-room/**'
@@ -11,12 +11,12 @@ on:
       - 'app/admin/private-speaking/**'
       - 'app/admin/analytics/speaking/**'
       - 'app/admin/analytics/mocks/**'
-      - 'app/mocks/bookings/**'
-      - 'app/mocks/speaking/**'
-      - 'app/mocks/speaking-room/**'
-      - 'app/private-speaking/**'
+      - 'app/(learner)/mocks/bookings/**'
+      - 'app/(learner)/mocks/speaking/**'
+      - 'app/(learner)/mocks/speaking-room/**'
+      - 'app/(learner)/private-speaking/**'
       - 'app/admin/free-tier/**'
-      - 'app/writing/practice/library/**'
+      - 'app/(learner)/writing/practice/library/**'
       - 'components/domain/speaking/**'
       - 'components/domain/speaking/LiveRoomRealtime.tsx'
       - 'hooks/useSpeakingRealtimeVoice.ts'
