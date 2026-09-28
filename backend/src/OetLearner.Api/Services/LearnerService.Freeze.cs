@@ -266,7 +266,7 @@ public partial class LearnerService
         {
             record.Status = FreezeStatus.Active;
             record.StartedAt ??= record.ScheduledStartAt;
-            await ConsumeSelfServiceFreezeEntitlementAsync(record, now, cancellationToken);
+            await AccountFreezeEntitlements.ConsumeSelfServiceAsync(db, record, now, cancellationToken);
         }
 
         record.UpdatedAt = now;
@@ -601,40 +601,7 @@ public partial class LearnerService
         policy.Version
     };
 
-    private static object MapFreezeRecord(AccountFreezeRecord record) => new
-    {
-        record.Id,
-        record.UserId,
-        record.RequestedByLearnerId,
-        record.RequestedByAdminId,
-        record.RequestedByAdminName,
-        record.ApprovedByAdminId,
-        record.ApprovedByAdminName,
-        record.RejectedByAdminId,
-        record.RejectedByAdminName,
-        record.EndedByAdminId,
-        record.EndedByAdminName,
-        status = record.Status.ToString(),
-        record.IsCurrent,
-        record.IsSelfService,
-        record.EntitlementConsumed,
-        record.EntitlementReset,
-        record.IsOverride,
-        record.RequestedAt,
-        record.ScheduledStartAt,
-        record.StartedAt,
-        record.EndedAt,
-        record.DurationDays,
-        record.Reason,
-        record.InternalNotes,
-        record.PolicySnapshotJson,
-        record.PolicyVersionSnapshot,
-        record.EligibilitySnapshotJson,
-        record.RejectionReason,
-        record.EndReason,
-        record.CancellationReason,
-        record.UpdatedAt
-    };
+    private static object MapFreezeRecord(AccountFreezeRecord record) => AccountFreezeEntitlements.MapRecord(record);
 
     private sealed record FreezeEligibilityResult(
         bool Eligible,
@@ -654,38 +621,6 @@ public partial class LearnerService
             || (record.Status == FreezeStatus.Scheduled
                 && record.ScheduledStartAt is not null
                 && record.ScheduledStartAt <= DateTimeOffset.UtcNow);
-
-    private async Task ConsumeSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, DateTimeOffset consumedAt, CancellationToken cancellationToken)
-    {
-        if (!record.IsSelfService || record.EntitlementConsumed)
-        {
-            return;
-        }
-
-        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, cancellationToken);
-        if (entitlement is null)
-        {
-            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
-            {
-                Id = $"FZE-{Guid.NewGuid():N}",
-                UserId = record.UserId,
-                FreezeRecordId = record.Id,
-                ConsumedAt = consumedAt,
-                ResetAt = null
-            });
-        }
-        else
-        {
-            entitlement.FreezeRecordId = record.Id;
-            entitlement.ConsumedAt = consumedAt;
-            entitlement.ResetAt = null;
-            entitlement.ResetByAdminId = null;
-            entitlement.ResetByAdminName = null;
-            entitlement.ResetReason = null;
-        }
-
-        record.EntitlementConsumed = true;
-    }
 
     private async Task ReleaseSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, string? adminId, string? adminName, string reason, CancellationToken cancellationToken)
     {

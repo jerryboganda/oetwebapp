@@ -455,7 +455,7 @@ public sealed class SpeakingDrillService(
         };
     }
 
-    private static string[] ParseTargetCriteria(string? json)
+    internal static string[] ParseTargetCriteria(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
         try
@@ -479,7 +479,7 @@ public sealed class SpeakingDrillService(
         }
     }
 
-    private static string ParseInstructionText(string? detailJson)
+    internal static string ParseInstructionText(string? detailJson)
     {
         if (string.IsNullOrWhiteSpace(detailJson)) return string.Empty;
         try

@@ -266,16 +266,6 @@ public record AdminMockBundleReorderRequest(IReadOnlyList<string> SectionIds);
 
 public record RevisionSubmitRequest(string Content, string? IdempotencyKey);
 
-/// <summary>
-/// Generates a payout batch for completed expert reviews in a pay window.
-/// All fields optional: defaults to last 30 days, $5/review when not set on
-/// the review row. Used by <c>AdminService.GenerateExpertPayoutsAsync</c>.
-/// </summary>
-public record GenerateExpertPayoutsRequest(
-    DateTimeOffset? PayPeriodStart = null,
-    DateTimeOffset? PayPeriodEnd = null,
-    decimal? DefaultCompensationPerReview = null);
-
 public record WalletTopUpRequest(
     int Amount,
     string Gateway,
