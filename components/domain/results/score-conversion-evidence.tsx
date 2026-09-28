@@ -78,7 +78,7 @@ export function ScoreConversionEvidence({
         </p>
       )}
       <div
-        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy p-4 text-white shadow-inner"
+        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy dark:bg-surface p-4 text-white shadow-inner"
         role="img"
         aria-label={graphAriaLabel}
       >

@@ -107,7 +107,7 @@ export function ProgressTimeline() {
                   </span>
 
                   {/* Tooltip on hover */}
-                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-navy px-2 py-1 text-3xs text-white opacity-0 transition-opacity group-hover:opacity-100 whitespace-nowrap">
+                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-navy dark:bg-surface px-2 py-1 text-3xs text-white opacity-0 transition-opacity group-hover:opacity-100 whitespace-nowrap">
                     {point.attemptCount} attempts
                   </div>
                 </motion.div>

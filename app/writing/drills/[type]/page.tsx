@@ -45,7 +45,7 @@ export default async function WritingDrillsTypeListPage({
 
   return (
     <LearnerDashboardShell pageTitle={`Writing: ${TYPE_TITLES[type]}`}>
-      <header className="bg-navy text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
+      <header className="bg-navy dark:bg-surface text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
         <Link
           href="/writing/drills"
           className="text-info text-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-info rounded"

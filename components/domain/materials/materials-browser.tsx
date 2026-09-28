@@ -301,7 +301,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
             className={cn(
               'rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize transition-all',
               subtest === null
-                ? 'bg-navy text-white shadow-sm'
+                ? 'bg-navy dark:bg-primary-700 text-white shadow-sm'
                 : 'bg-muted/10 text-muted hover:bg-muted/20 hover:text-navy',
             )}
           >
