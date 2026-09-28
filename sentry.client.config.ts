@@ -1,5 +1,5 @@
-// Browser-side Sentry init. Auto-loaded by @sentry/nextjs when present at the
-// repo root. Env-gated on NEXT_PUBLIC_SENTRY_DSN so local dev, tests, and
+// Browser-side Sentry init. Loaded by the root instrumentation-client.ts.
+// Env-gated on NEXT_PUBLIC_SENTRY_DSN so local dev, tests, and
 // preview envs without a DSN never ship events.
 
 import * as Sentry from '@sentry/nextjs';
