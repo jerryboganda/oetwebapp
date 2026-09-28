@@ -18,7 +18,8 @@ import { triggerImpactHaptic, type HapticImpactStyle } from '@/lib/mobile/haptic
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline';
-  size?: 'sm' | 'md' | 'lg';
+  /** `xs` is for dense desktop tables/queues; it keeps a 44px target below lg (touch). */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   loading?: boolean;
   fullWidth?: boolean;
   asChild?: boolean;
@@ -40,6 +41,7 @@ const variantStyles: Record<string, string> = {
 };
 
 const sizeStyles: Record<string, string> = {
+  xs: 'min-h-11 px-3 py-2 text-xs lg:min-h-8 lg:px-2.5 lg:py-1',
   sm: 'min-h-11 px-3 py-2 text-xs',
   md: 'min-h-11 px-5 py-2.5 text-sm',
   lg: 'min-h-12 px-6 py-3 text-base',
