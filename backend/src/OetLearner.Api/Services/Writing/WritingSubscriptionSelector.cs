@@ -48,7 +48,12 @@ public sealed record WritingSubscriptionDecision(
 
 public static class WritingSubscriptionProviders
 {
+    // Level 1 — dedicated Claude Max 5x subscription (sidecar over the claude CLI).
     public const string Claude = "writing-claude-sub";
+    // Level 2 — Claude API (pay-as-you-go Anthropic key on the `anthropic` row).
+    // Used when the subscription hits its weekly cap or errors, before Codex.
+    public const string ClaudeApi = "anthropic";
+    // Level 3 — Codex subscription (sidecar over the codex CLI).
     public const string Codex = "writing-codex-sub";
     public const string ClaudeModel = "claude-opus-5-5";
     public const string CodexModel = "gpt-6-sol";
@@ -84,14 +89,15 @@ public sealed class WritingSubscriptionSelector(
         var util = snapshot.UtilizationPct;
 
         // Sticky quota-override: a hard Claude refusal recorded earlier this
-        // window keeps us on Codex until the reset, independent of the estimate.
+        // window keeps the SUBSCRIPTION off until the reset. The chain still goes
+        // to the Claude API (level 2) first — Codex is the last resort.
         if (row.WritingAiClaudeQuotaExceededUntil is { } until && until > DateTimeOffset.UtcNow)
         {
-            return Codex("auto_quota_signal", util, isFallback: true);
+            return ClaudeApiRoute("auto_quota_signal", util);
         }
 
         if (util is double u && u >= failoverPct)
-            return Codex("auto_threshold_failover", util, isFallback: true);
+            return ClaudeApiRoute("auto_threshold_failover", util);
 
         return Claude("auto_primary", util);
     }
@@ -132,6 +138,9 @@ public sealed class WritingSubscriptionSelector(
 
     private static WritingSubscriptionDecision Claude(string reason, double? util)
         => new(WritingSubscriptionProviders.Claude, WritingSubscriptionProviders.ClaudeModel, reason, util, IsFallback: false);
+
+    private static WritingSubscriptionDecision ClaudeApiRoute(string reason, double? util)
+        => new(WritingSubscriptionProviders.ClaudeApi, WritingSubscriptionProviders.ClaudeModel, reason, util, IsFallback: true);
 
     private static WritingSubscriptionDecision Codex(string reason, double? util, bool isFallback)
         => new(WritingSubscriptionProviders.Codex, WritingSubscriptionProviders.CodexModel, reason, util, IsFallback: isFallback);

@@ -1352,51 +1352,28 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
 
         AiGatewayResult result;
-        try
+        // Owner directive 2026-09-29 (revised) — Writing grading failover chain:
+        //   L1 Claude subscription (dedicated Max 5x)
+        //     → retry the SAME provider once on any transient failure
+        //   L2 Claude API (pay-as-you-go Anthropic key)
+        //   L3 Codex subscription (gpt-6-sol)
+        // Every hop stays inside ONE coordinated AiOperation, so the learner's
+        // credit is debited exactly once and no duplicate grade is persisted.
+        if (subscriptionSelector is not null)
         {
-            // Owner directive 2026-09-29 — decide the subscription provider
-            // (Claude 5x primary / Codex fallback) BEFORE the call, then pin it so
-            // the feature route cannot silently re-route. Failover retries once on
-            // Codex inside this SAME operation, so the learner's credit is debited
-            // exactly once and no duplicate grade is persisted.
-            var decision = subscriptionSelector is not null
-                ? await subscriptionSelector.DecideAsync(ct)
-                // Tests construct the pipeline without the selector — keep the
-                // historical behaviour (feature-route default, no provider pin).
-                : new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
-            result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
+            result = await GradeWithFailoverAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, freeSampleGrant, ct);
         }
-        catch (Exception primaryEx) when (subscriptionSelector is not null && IsSubscriptionQuotaSignal(primaryEx))
+        else
         {
-            // Claude reported quota/rate exhaustion (or its sidecar is down): record
-            // the signal so auto mode fails over for the rest of the window, then
-            // retry once on Codex. Only quota/availability signals fail over — a
-            // genuine provider error surfaces to the learner as before. When no
-            // selector is wired (tests), there is no fallback provider to try, so
-            // the generic catch below handles it instead.
-            logger.LogWarning(primaryEx,
-                "Writing rubric primary provider reported quota/availability exhaustion for submission {SubmissionId}; failing over to Codex.",
-                submission.Id);
-            if (subscriptionSelector is not null)
-                await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
+            // Tests construct the pipeline without the selector — keep the
+            // historical single-call behaviour (feature-route default, no pin).
+            var decision = new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
             try
             {
-                var fallback = new WritingSubscriptionDecision(
-                    WritingSubscriptionProviders.Codex,
-                    WritingSubscriptionProviders.CodexModel,
-                    "auto_quota_failover",
-                    null,
-                    IsFallback: true);
-                result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, fallback, ct, freeSampleGrant);
+                result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
             }
-            catch (Exception fallbackEx)
+            catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
             {
-                logger.LogWarning(fallbackEx, "Writing rubric fallback provider also failed for submission {SubmissionId}", submission.Id);
-                throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
-            }
-        }
-        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
-        {
             // No-charge-on-failure: the gateway throws before debiting, so no
             // credit was consumed. Surface a clean, modal-ready signal instead
             // of masking it as a generic service error (spec §9 — balance = 0).
@@ -1456,6 +1433,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
             logger.LogWarning(ex, "Writing rubric AI call failed for submission {SubmissionId}", submission.Id);
             throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
         }
+        }
+        }
 
         var rubric = ParseRubric(result);
         if (rubric is null)
@@ -1477,6 +1456,106 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         return rubric;
     }
+
+    /// <summary>
+    /// Owner directive 2026-09-29 (revised) — the Writing grading failover chain.
+    /// Walks the levels in order, retrying the primary subscription once before
+    /// escalating. Every attempt runs inside the SAME coordinated AiOperation, so
+    /// the learner is debited exactly once and only one grade row is persisted.
+    ///
+    ///   L1 Claude subscription (decision from the selector — auto/claude/codex)
+    ///     → on transient failure, retry the SAME provider once
+    ///   L2 Claude API (only when L1 was the Claude subscription; skipped when the
+    ///     subscription key isn't configured, and skipped for forced-codex)
+    ///   L3 Codex subscription (last resort)
+    ///
+    /// A genuine policy/quota/budget refusal (AiQuotaDenied, AiBudgetExhausted,
+    /// duplicate-in-flight) is NEVER treated as a failover trigger — those bubble
+    /// up unchanged so the caller's existing catch blocks keep their semantics.
+    /// </summary>
+    private async Task<AiGatewayResult> GradeWithFailoverAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot,
+        string? creditReservationId,
+        int? resourceVersion,
+        AiGroundedPrompt prompt,
+        bool freeSampleGrant,
+        CancellationToken ct)
+    {
+        var decision = await subscriptionSelector!.DecideAsync(ct);
+        var startedOnSubscription = decision.ProviderCode == WritingSubscriptionProviders.Claude;
+        Exception? lastError = null;
+
+        // ── Level 1: chosen provider (subscription in auto), with one retry ──
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
+            }
+            catch (Exception ex) when (IsFailoverable(ex))
+            {
+                lastError = ex;
+                logger.LogWarning(ex,
+                    "Writing rubric primary attempt {Attempt} failed for submission {SubmissionId} via {Provider}.",
+                    attempt + 1, submission.Id, decision.ProviderCode);
+            }
+        }
+        // L1 exhausted (both attempts failed). If it was the Claude subscription,
+        // record the quota signal so auto mode holds the subscription off for the
+        // rest of the weekly window.
+        if (startedOnSubscription)
+            await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
+
+        // ── Level 2: Claude API (pay-as-you-go) — only relevant when we started on the subscription ──
+        if (startedOnSubscription && decision.ProviderCode != WritingSubscriptionProviders.ClaudeApi)
+        {
+            try
+            {
+                var apiDecision = new WritingSubscriptionDecision(
+                    WritingSubscriptionProviders.ClaudeApi,
+                    WritingSubscriptionProviders.ClaudeModel,
+                    "failover_claude_api",
+                    decision.UtilizationPct,
+                    IsFallback: true);
+                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, apiDecision, ct, freeSampleGrant);
+            }
+            catch (Exception ex) when (IsFailoverable(ex))
+            {
+                lastError = ex;
+                logger.LogWarning(ex,
+                    "Writing rubric Claude API fallback failed for submission {SubmissionId}; escalating to Codex.",
+                    submission.Id);
+            }
+        }
+
+        // ── Level 3: Codex subscription (last resort) ──
+        if (decision.ProviderCode != WritingSubscriptionProviders.Codex)
+        {
+            var codexDecision = new WritingSubscriptionDecision(
+                WritingSubscriptionProviders.Codex,
+                WritingSubscriptionProviders.CodexModel,
+                startedOnSubscription ? "failover_codex_after_api" : "failover_codex",
+                decision.UtilizationPct,
+                IsFallback: true);
+            return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, codexDecision, ct, freeSampleGrant);
+        }
+
+        // We started on Codex (forced) and it already failed twice.
+        throw lastError ?? new InvalidOperationException("Writing grading failed on all providers.");
+    }
+
+    /// <summary>True when a provider failure justifies moving to the next failover
+    /// level — transient/network/rate-limit/5xx/timeout. Policy, quota, budget and
+    /// duplicate-in-flight refusals are NOT failoverable: they bubble up so the
+    /// existing catch blocks preserve their distinct, honest error codes.</summary>
+    private static bool IsFailoverable(Exception ex)
+        => ex is not (
+            OetLearner.Api.Services.AiManagement.AiQuotaDeniedException
+            or OetLearner.Api.Services.Ai.AiBudgetExhaustedException
+            or OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException
+            or OetLearner.Api.Services.Ai.AiOperationConflictException);
 
     /// <summary>Executes one rubric call against the chosen subscription provider,
     /// pinning Provider+Model so the feature route cannot re-route mid-failover.
