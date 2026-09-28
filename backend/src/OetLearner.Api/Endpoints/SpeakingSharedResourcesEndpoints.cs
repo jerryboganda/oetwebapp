@@ -54,17 +54,17 @@ public static class SpeakingSharedResourcesEndpoints
             CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "file required" });
-            if (file.Length > MaxPdfBytes) return Results.BadRequest(new { error = $"file too large (max {MaxPdfBytes} bytes)" });
+            if (file is null || file.Length == 0) return new ApiErrorResult(400, "speaking_resource_file_required", "file required");
+            if (file.Length > MaxPdfBytes) return new ApiErrorResult(400, "speaking_resource_file_too_large", $"file too large (max {MaxPdfBytes} bytes)");
             if (string.IsNullOrWhiteSpace(kind) || !AllowedKinds.Contains(kind))
-                return Results.BadRequest(new { error = "kind must be WarmUpQuestions or AssessmentCriteria" });
+                return new ApiErrorResult(400, "speaking_resource_kind_invalid", "kind must be WarmUpQuestions or AssessmentCriteria");
             if (string.IsNullOrWhiteSpace(title) || title.Length > 200)
-                return Results.BadRequest(new { error = "title required (max 200 chars)" });
+                return new ApiErrorResult(400, "speaking_resource_title_invalid", "title required (max 200 chars)");
 
             var originalFileName = Path.GetFileName(file.FileName ?? "speaking-shared-resource.pdf");
             if (string.IsNullOrWhiteSpace(originalFileName)) originalFileName = "speaking-shared-resource.pdf";
             var ext = (Path.GetExtension(originalFileName)?.TrimStart('.') ?? "pdf").ToLowerInvariant();
-            if (ext != "pdf") return Results.BadRequest(new { error = "only .pdf accepted" });
+            if (ext != "pdf") return new ApiErrorResult(400, "speaking_resource_file_type_invalid", "only .pdf accepted");
 
             await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxPdfBytes));
             await file.CopyToAsync(buffer, ct);

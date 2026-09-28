@@ -133,8 +133,8 @@ public static class VocabularyEndpoints
             {
                 return Results.Json(new
                 {
-                    errorCode = "VOCAB_PREMIUM_REQUIRED",
-                    error = "This quiz format is part of the premium plan.",
+                    code = "VOCAB_PREMIUM_REQUIRED",
+                    message = "This quiz format is part of the premium plan.",
                     freeFormat = "definition_match",
                 }, statusCode: 402);
             }

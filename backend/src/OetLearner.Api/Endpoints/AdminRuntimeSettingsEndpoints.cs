@@ -135,7 +135,7 @@ public static partial class AdminRuntimeSettingsEndpoints
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
-                    return Results.BadRequest(new { message = ex.Message });
+                    return new ApiErrorResult(400, "runtime_settings_invalid", ApiErrorResult.SafeMessage(ex, "The runtime settings update is invalid.")) { Exception = ex };
                 }
 
                 row.UpdatedAt = now;
@@ -178,7 +178,7 @@ public static partial class AdminRuntimeSettingsEndpoints
             {
                 var normalized = NormalizeSectionId(sectionId);
                 if (normalized is null)
-                    return Results.BadRequest(new { message = $"Unknown integration section '{sectionId}'." });
+                    return new ApiErrorResult(400, "runtime_settings_section_unknown", $"Unknown integration section '{sectionId}'.");
 
                 var testedAt = clock.GetUtcNow();
                 var result = await TestSectionAsync(normalized, provider, env, scannerOptions.Value, whisperRegistry, httpClientFactory, testedAt, ct);

@@ -40,7 +40,7 @@ public static class ScoringPolicyEndpoints
             var validationError = ScoringPolicyValidation.ValidateCanonicalPolicyJson(policyJson);
             if (validationError is not null)
             {
-                return Results.BadRequest(new { error = validationError });
+                return new ApiErrorResult(400, "scoring_policy_invalid", validationError);
             }
 
             var supportsTransactions = !string.Equals(
@@ -110,7 +110,7 @@ public static class ScoringPolicyEndpoints
             var validationError = ScoringPolicyValidation.ValidateCanonicalPolicyJson(policy.PolicyJson);
             if (validationError is not null)
             {
-                return Results.BadRequest(new { error = validationError });
+                return new ApiErrorResult(400, "scoring_policy_invalid", validationError);
             }
 
             var supportsTransactions = !string.Equals(

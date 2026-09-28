@@ -19,10 +19,10 @@ public static class PeerReviewEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.SubtestCode) || string.IsNullOrWhiteSpace(req.SubmissionText))
-                return Results.BadRequest(new { error = "INVALID_REQUEST" });
+                return new ApiErrorResult(400, "INVALID_REQUEST", "Subtest and submission text are required.");
 
             if (req.SubtestCode is not ("writing" or "speaking"))
-                return Results.BadRequest(new { error = "INVALID_SUBTEST" });
+                return new ApiErrorResult(400, "INVALID_SUBTEST", "Subtest must be writing or speaking.");
 
             var request = await service.SubmitForReviewAsync(
                 http.UserId(), req.SubtestCode, req.ContentId ?? "", req.SubmissionText, ct);
@@ -53,7 +53,7 @@ public static class PeerReviewEndpoints
         {
             var request = await service.ClaimReviewAsync(http.UserId(), requestId, ct);
             if (request == null)
-                return Results.BadRequest(new { error = "CANNOT_CLAIM" });
+                return new ApiErrorResult(400, "CANNOT_CLAIM", "This review request cannot be claimed.");
 
             return Results.Ok(new { id = request.Id, status = request.Status, claimedAt = request.ClaimedAt });
         });
@@ -66,13 +66,13 @@ public static class PeerReviewEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.FeedbackText) || req.Rating < 1 || req.Rating > 5)
-                return Results.BadRequest(new { error = "INVALID_FEEDBACK" });
+                return new ApiErrorResult(400, "INVALID_FEEDBACK", "Feedback text and a rating from 1 to 5 are required.");
 
             var feedback = await service.SubmitFeedbackAsync(
                 http.UserId(), requestId, req.FeedbackText, req.Rating, ct);
 
             if (feedback == null)
-                return Results.BadRequest(new { error = "CANNOT_SUBMIT_FEEDBACK" });
+                return new ApiErrorResult(400, "CANNOT_SUBMIT_FEEDBACK", "Feedback cannot be submitted for this review request.");
 
             return Results.Ok(new { id = feedback.Id, rating = feedback.OverallRating, createdAt = feedback.CreatedAt });
         });

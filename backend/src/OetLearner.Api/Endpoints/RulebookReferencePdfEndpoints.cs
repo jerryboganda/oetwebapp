@@ -45,8 +45,8 @@ public static class RulebookReferencePdfEndpoints
             {
                 return Results.Forbid();
             }
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "file required" });
-            if (file.Length > MaxPdfBytes) return Results.BadRequest(new { error = $"file too large (max {MaxPdfBytes} bytes)" });
+            if (file is null || file.Length == 0) return new ApiErrorResult(400, "upload_file_required", "file required");
+            if (file.Length > MaxPdfBytes) return new ApiErrorResult(400, "upload_file_too_large", $"file too large (max {MaxPdfBytes} bytes)");
 
             var originalFileName = Path.GetFileName(file.FileName ?? "rulebook-reference.pdf");
             if (string.IsNullOrWhiteSpace(originalFileName)) originalFileName = "rulebook-reference.pdf";
@@ -54,7 +54,7 @@ public static class RulebookReferencePdfEndpoints
             var ext = string.IsNullOrWhiteSpace(extValue)
                 ? "pdf"
                 : extValue.TrimStart('.').ToLowerInvariant();
-            if (ext != "pdf") return Results.BadRequest(new { error = "only .pdf accepted" });
+            if (ext != "pdf") return new ApiErrorResult(400, "upload_file_type_invalid", "only .pdf accepted");
 
             await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxPdfBytes));
             await file.CopyToAsync(buffer, ct);
@@ -65,22 +65,14 @@ public static class RulebookReferencePdfEndpoints
                 || !string.Equals(validation.DetectedMime, "application/pdf", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(validation.DetectedExtension, "pdf", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new
-                {
-                    code = "invalid_file_content",
-                    message = validation.Reason ?? "The uploaded file content does not match a PDF.",
-                });
+                return new ApiErrorResult(400, "invalid_file_content", validation.Reason ?? "The uploaded file content does not match a PDF.");
             }
 
             buffer.Position = 0;
             var scanResult = await scanner.ScanAsync(buffer, originalFileName, ct);
             if (!scanResult.clean)
             {
-                return Results.BadRequest(new
-                {
-                    code = "file_failed_security_scan",
-                    message = scanResult.reason ?? "The uploaded file failed security scanning.",
-                });
+                return new ApiErrorResult(400, "file_failed_security_scan", scanResult.reason ?? "The uploaded file failed security scanning.");
             }
 
             var stagingKey = $"staging/rulebook-pdf/{adminId}/{Guid.NewGuid():N}.pdf";

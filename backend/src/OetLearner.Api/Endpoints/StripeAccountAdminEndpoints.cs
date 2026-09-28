@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 using Stripe;
 using System.Security.Claims;
@@ -43,18 +44,18 @@ public static class StripeAccountAdminEndpoints
         return TypedResults.Ok(rows.Select(r => StripeAccountProfileDto.FromEntity(r, settings)).ToList());
     }
 
-    private static async Task<Results<Ok<StripeAccountProfileDto>, BadRequest<string>>> CreateAccount(
+    private static async Task<Results<Ok<StripeAccountProfileDto>, ApiErrorResult>> CreateAccount(
         HttpContext http, StripeAccountUpsertRequest request, LearnerDbContext db,
         IRuntimeSettingsProvider settings, CancellationToken ct)
     {
         var label = request.Label?.Trim();
         if (string.IsNullOrWhiteSpace(label))
-            return TypedResults.BadRequest("Label is required.");
+            return new ApiErrorResult(400, "stripe_account_label_required", "Label is required.");
         if (string.IsNullOrWhiteSpace(request.SecretKey))
-            return TypedResults.BadRequest("Secret key is required.");
+            return new ApiErrorResult(400, "stripe_account_secret_required", "Secret key is required.");
         if (!request.SecretKey.Trim().StartsWith("sk_", StringComparison.Ordinal)
             && !request.SecretKey.Trim().StartsWith("rk_", StringComparison.Ordinal))
-            return TypedResults.BadRequest("Secret key must start with sk_ (or rk_ for a restricted key).");
+            return new ApiErrorResult(400, "stripe_account_secret_invalid", "Secret key must start with sk_ (or rk_ for a restricted key).");
 
         var now = DateTimeOffset.UtcNow;
         var makeDefault = request.IsDefault
@@ -88,7 +89,7 @@ public static class StripeAccountAdminEndpoints
         return TypedResults.Ok(StripeAccountProfileDto.FromEntity(row, settings));
     }
 
-    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, BadRequest<string>>> UpdateAccount(
+    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, ApiErrorResult>> UpdateAccount(
         HttpContext http, string id, StripeAccountUpsertRequest request, LearnerDbContext db,
         IRuntimeSettingsProvider settings, CancellationToken ct)
     {
@@ -106,7 +107,7 @@ public static class StripeAccountAdminEndpoints
         {
             var secret = request.SecretKey.Trim();
             if (!secret.StartsWith("sk_", StringComparison.Ordinal) && !secret.StartsWith("rk_", StringComparison.Ordinal))
-                return TypedResults.BadRequest("Secret key must start with sk_ (or rk_ for a restricted key).");
+                return new ApiErrorResult(400, "stripe_account_secret_invalid", "Secret key must start with sk_ (or rk_ for a restricted key).");
             row.SecretKeyEncrypted = settings.Protect(secret);
             row.Mode = NormalizeMode(request.Mode, secret);
             row.StripeAccountId = null; // stale until re-tested
@@ -124,13 +125,13 @@ public static class StripeAccountAdminEndpoints
         if (request.IsActive is not null)
         {
             if (request.IsActive == false && row.IsDefault)
-                return TypedResults.BadRequest("Deactivate is blocked for the default account — set another account as default first.");
+                return new ApiErrorResult(400, "stripe_account_default_deactivate_blocked", "Deactivate is blocked for the default account — set another account as default first.");
             row.IsActive = request.IsActive.Value;
         }
 
         if (request.IsDefault == true && !row.IsDefault)
         {
-            if (!row.IsActive) return TypedResults.BadRequest("Only an active account can be the default.");
+            if (!row.IsActive) return new ApiErrorResult(400, "stripe_account_default_inactive", "Only an active account can be the default.");
             await ClearDefaultsAsync(db, ct);
             row.IsDefault = true;
         }
@@ -143,12 +144,12 @@ public static class StripeAccountAdminEndpoints
         return TypedResults.Ok(StripeAccountProfileDto.FromEntity(row, settings));
     }
 
-    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, BadRequest<string>>> SetDefault(
+    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, ApiErrorResult>> SetDefault(
         HttpContext http, string id, LearnerDbContext db, IRuntimeSettingsProvider settings, CancellationToken ct)
     {
         var row = await db.StripeAccountProfiles.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (row is null) return TypedResults.NotFound();
-        if (!row.IsActive) return TypedResults.BadRequest("Only an active account can be the default.");
+        if (!row.IsActive) return new ApiErrorResult(400, "stripe_account_default_inactive", "Only an active account can be the default.");
 
         await ClearDefaultsAsync(db, ct);
         row.IsDefault = true;
@@ -162,7 +163,7 @@ public static class StripeAccountAdminEndpoints
 
     /// <summary>Save &amp; Test Connection — calls Stripe <c>GET /v1/account</c> with the
     /// stored key (per-request ApiKey, never the global) and records the acct_… id.</summary>
-    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, BadRequest<string>>> TestConnection(
+    private static async Task<Results<Ok<StripeAccountProfileDto>, NotFound, ApiErrorResult>> TestConnection(
         HttpContext http, string id, LearnerDbContext db, IRuntimeSettingsProvider settings, CancellationToken ct)
     {
         var row = await db.StripeAccountProfiles.FirstOrDefaultAsync(p => p.Id == id, ct);
@@ -170,7 +171,7 @@ public static class StripeAccountAdminEndpoints
 
         var secret = settings.Unprotect(row.SecretKeyEncrypted);
         if (string.IsNullOrWhiteSpace(secret))
-            return TypedResults.BadRequest("Stored secret key could not be decrypted — rotate the key and try again.");
+            return new ApiErrorResult(400, "stripe_account_secret_undecryptable", "Stored secret key could not be decrypted — rotate the key and try again.");
 
         row.LastTestedAt = DateTimeOffset.UtcNow;
         try
@@ -185,22 +186,22 @@ public static class StripeAccountAdminEndpoints
         }
         catch (StripeException ex)
         {
-            row.LastTestResult = Truncate($"failed: {ex.StripeError?.Message ?? ex.Message}", 512);
+            row.LastTestResult = Truncate($"failed: {AiProviderConnectionTester.RedactSecrets(ex.StripeError?.Message ?? ex.Message, secret)}", 512);
             AddAudit(db, http, "stripe_account.test_connection", row.Id,
-                $"Stripe connection test for \"{row.Label}\" failed: {ex.StripeError?.Code ?? ex.Message}");
+                $"Stripe connection test for \"{row.Label}\" failed: {ex.StripeError?.Code ?? AiProviderConnectionTester.RedactSecrets(ex.Message, secret)}");
         }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return TypedResults.Ok(StripeAccountProfileDto.FromEntity(row, settings));
     }
 
-    private static async Task<Results<NoContent, NotFound, BadRequest<string>>> DeleteAccount(
+    private static async Task<Results<NoContent, NotFound, ApiErrorResult>> DeleteAccount(
         HttpContext http, string id, LearnerDbContext db, IRuntimeSettingsProvider settings, CancellationToken ct)
     {
         var row = await db.StripeAccountProfiles.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (row is null) return TypedResults.NotFound();
         if (row.IsDefault)
-            return TypedResults.BadRequest("The default account cannot be deleted — set another account as default first.");
+            return new ApiErrorResult(400, "stripe_account_default_delete_blocked", "The default account cannot be deleted — set another account as default first.");
 
         db.StripeAccountProfiles.Remove(row);
         AddAudit(db, http, "stripe_account.delete", row.Id,

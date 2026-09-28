@@ -264,7 +264,7 @@ public static class PlacementEndpoints
                 .AsNoTracking()
                 .SingleOrDefaultAsync(r => r.Id == resultId && r.LearnerUserId == learnerId, ct);
             return row is null
-                ? Results.NotFound(new { error = "placement_result_not_found" })
+                ? new ApiErrorResult(404, "placement_result_not_found", "Placement result not found.")
                 : Results.Content(row.ResultJson, "application/json");
         });
 
@@ -729,8 +729,7 @@ public sealed class PlacementEnabledFilter : IEndpointFilter
         var snapshot = await _settings.GetAsync();
         if (!snapshot.Placement.PlacementEnabled)
         {
-            return Results.Json(new { error = "placement_disabled", message = "The placement test is not available yet." },
-                statusCode: StatusCodes.Status404NotFound);
+            return new ApiErrorResult(404, "placement_disabled", "The placement test is not available yet.");
         }
 
         // Controlled beta: enabled, but narrowed to the allowlist. Everyone
@@ -742,8 +741,7 @@ public sealed class PlacementEnabledFilter : IEndpointFilter
                 ?? context.HttpContext.User.FindFirst("email")?.Value;
             if (!snapshot.Placement.IsBetaEmail(email))
             {
-                return Results.Json(new { error = "placement_disabled", message = "The placement test is not available yet." },
-                    statusCode: StatusCodes.Status404NotFound);
+                return new ApiErrorResult(404, "placement_disabled", "The placement test is not available yet.");
             }
         }
 

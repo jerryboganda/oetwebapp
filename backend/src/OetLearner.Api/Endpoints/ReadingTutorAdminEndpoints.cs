@@ -55,9 +55,9 @@ public static class ReadingTutorAdminEndpoints
             CancellationToken ct) =>
         {
             if (body is null || string.IsNullOrWhiteSpace(body.Reason))
-                return Results.BadRequest(new { error = "reason is required." });
+                return new ApiErrorResult(400, "reading_override_reason_required", "reason is required.");
             if (!body.RawScore.HasValue && !body.ScaledScore.HasValue)
-                return Results.BadRequest(new { error = "rawScore or scaledScore is required." });
+                return new ApiErrorResult(400, "reading_override_score_required", "rawScore or scaledScore is required.");
 
             if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
                 return Results.NotFound();
@@ -91,7 +91,7 @@ public static class ReadingTutorAdminEndpoints
                     if (!string.Equals(body.Scope, "thisAttempt", StringComparison.OrdinalIgnoreCase)
                         || string.IsNullOrWhiteSpace(body.AttemptId))
                     {
-                        return Results.BadRequest(new { error = "Expert recalculation requires scope 'thisAttempt' and attemptId." });
+                        return new ApiErrorResult(400, "reading_recalc_scope_invalid", "Expert recalculation requires scope 'thisAttempt' and attemptId.");
                     }
 
                     if (!await svc.CanExpertAccessAttemptAsync(body.AttemptId, CurrentUserId(http), ct))
@@ -103,7 +103,7 @@ public static class ReadingTutorAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_recalc_rejected", ApiErrorResult.SafeMessage(ex, "The recalculation request was rejected.")) { Exception = ex };
             }
         }), isAdmin);
 
@@ -136,9 +136,9 @@ public static class ReadingTutorAdminEndpoints
             CancellationToken ct) =>
         {
             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
-                return Results.BadRequest(new { error = "feedbackText is required." });
+                return new ApiErrorResult(400, "reading_feedback_text_required", "feedbackText is required.");
             if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
-                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
+                return new ApiErrorResult(400, "reading_feedback_scope_invalid", "scope must be one of: test, section, question, skill.");
 
             if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
                 return Results.NotFound();
@@ -156,9 +156,9 @@ public static class ReadingTutorAdminEndpoints
             CancellationToken ct) =>
         {
             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
-                return Results.BadRequest(new { error = "feedbackText is required." });
+                return new ApiErrorResult(400, "reading_feedback_text_required", "feedbackText is required.");
             if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
-                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
+                return new ApiErrorResult(400, "reading_feedback_scope_invalid", "scope must be one of: test, section, question, skill.");
 
             if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
                 return Results.NotFound();
@@ -190,7 +190,7 @@ public static class ReadingTutorAdminEndpoints
                     || string.IsNullOrWhiteSpace(body.AssignedToUserId)
                     || string.IsNullOrWhiteSpace(body.PaperId))
                 {
-                    return Results.BadRequest(new { error = "assignedToUserId and paperId are required." });
+                    return new ApiErrorResult(400, "reading_assignment_fields_required", "assignedToUserId and paperId are required.");
                 }
 
                 try
@@ -200,7 +200,7 @@ public static class ReadingTutorAdminEndpoints
                 }
                 catch (InvalidOperationException ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return new ApiErrorResult(400, "reading_assignment_rejected", ApiErrorResult.SafeMessage(ex, "The assignment could not be created.")) { Exception = ex };
                 }
             }), isAdmin);
 

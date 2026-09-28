@@ -47,12 +47,12 @@ public static class ConversationEndpoints
         conv.MapGet("/media/{fileName}", async (string fileName, HttpContext http, LearnerDbContext db, IConversationAudioService audio, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(fileName) || !fileName.Contains('.'))
-                return Results.BadRequest(new { error = "invalid_filename" });
+                return new ApiErrorResult(400, "invalid_filename", "Invalid audio file name.");
             var dot = fileName.LastIndexOf('.');
             var sha = fileName[..dot];
             var ext = fileName[(dot + 1)..];
             if (sha.Length < 4 || sha.Any(c => !Uri.IsHexDigit(c)))
-                return Results.BadRequest(new { error = "invalid_filename" });
+                return new ApiErrorResult(400, "invalid_filename", "Invalid audio file name.");
             // Authorisation is capability-based: this endpoint is LearnerOnly
             // (authenticated) and the file name is the SHA-256 content hash of the
             // audio — a 256-bit unguessable token that is only ever sent to the

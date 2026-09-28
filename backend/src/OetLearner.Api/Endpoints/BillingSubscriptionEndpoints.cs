@@ -63,7 +63,7 @@ public static class BillingSubscriptionEndpoints
         return TypedResults.Ok(invoices);
     }
 
-    private static async Task<Results<Ok<object>, BadRequest<string>>> CreatePortalSession(
+    private static async Task<Results<Ok<object>, ApiErrorResult>> CreatePortalSession(
         HttpContext http,
         PortalSessionRequest request,
         ISubscriptionService svc,
@@ -76,11 +76,11 @@ public static class BillingSubscriptionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "billing_portal_unavailable", ApiErrorResult.SafeMessage(ex, "The billing portal could not be opened.")) { Exception = ex };
         }
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> CancelLatestSubscription(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> CancelLatestSubscription(
         HttpContext http,
         CancelRequest request,
         LearnerDbContext db,
@@ -88,7 +88,7 @@ public static class BillingSubscriptionEndpoints
     {
         var userId = GetUserId(http);
         var sub = await GetCurrentSubscriptionAsync(db, userId, ct);
-        if (sub is null) return TypedResults.BadRequest("No subscription found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "No subscription found.");
 
         var now = DateTimeOffset.UtcNow;
         CloseOpenFreezeRows(db, sub, now, "cancelled");
@@ -99,49 +99,49 @@ public static class BillingSubscriptionEndpoints
         return TypedResults.Ok(await ProjectAsync(db, sub, ct));
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> RequestFreezeLatestSubscription(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> RequestFreezeLatestSubscription(
         HttpContext http,
         LearnerDbContext db,
         CancellationToken ct)
     {
         var sub = await GetCurrentSubscriptionAsync(db, GetUserId(http), ct);
-        if (sub is null) return TypedResults.BadRequest("No subscription found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "No subscription found.");
         return await RequestFreezeCore(db, sub, "candidate_requested_freeze", ct);
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> ResumeLatestSubscription(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> ResumeLatestSubscription(
         HttpContext http,
         LearnerDbContext db,
         CancellationToken ct)
     {
         var sub = await GetCurrentSubscriptionAsync(db, GetUserId(http), ct);
-        if (sub is null) return TypedResults.BadRequest("No subscription found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "No subscription found.");
         return await ResumeCore(db, sub, ct);
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> RequestFreeze(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> RequestFreeze(
         string subscriptionId,
         HttpContext http,
         LearnerDbContext db,
         CancellationToken ct)
     {
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId && s.UserId == GetUserId(http), ct);
-        if (sub is null) return TypedResults.BadRequest("Subscription not found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "Subscription not found.");
         return await RequestFreezeCore(db, sub, "candidate_requested_freeze", ct);
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> Resume(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> Resume(
         string subscriptionId,
         HttpContext http,
         LearnerDbContext db,
         CancellationToken ct)
     {
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId && s.UserId == GetUserId(http), ct);
-        if (sub is null) return TypedResults.BadRequest("Subscription not found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "Subscription not found.");
         return await ResumeCore(db, sub, ct);
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> RequestFreezeCore(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> RequestFreezeCore(
         LearnerDbContext db,
         Subscription sub,
         string reason,
@@ -150,13 +150,13 @@ public static class BillingSubscriptionEndpoints
         var now = DateTimeOffset.UtcNow;
         if (sub.Status != SubscriptionStatus.Active && sub.Status != SubscriptionStatus.Trial)
         {
-            return TypedResults.BadRequest("Only active subscriptions can request a freeze.");
+            return new ApiErrorResult(400, "subscription_freeze_not_active", "Only active subscriptions can request a freeze.");
         }
         var remaining = CalculateRemainingDays(sub, now);
-        if (remaining <= 0) return TypedResults.BadRequest("A subscription with no remaining days cannot be frozen.");
-        if (sub.TotalFreezeDaysUsed >= sub.MaxFreezeDaysAllowed) return TypedResults.BadRequest("Freeze allowance has already been used.");
+        if (remaining <= 0) return new ApiErrorResult(400, "subscription_freeze_no_remaining_days", "A subscription with no remaining days cannot be frozen.");
+        if (sub.TotalFreezeDaysUsed >= sub.MaxFreezeDaysAllowed) return new ApiErrorResult(400, "subscription_freeze_allowance_used", "Freeze allowance has already been used.");
         var hasPending = await db.SubscriptionFreezes.AnyAsync(f => f.SubscriptionId == sub.Id && f.RequestStatus == "pending", ct);
-        if (hasPending) return TypedResults.BadRequest("A freeze request is already pending.");
+        if (hasPending) return new ApiErrorResult(400, "subscription_freeze_already_pending", "A freeze request is already pending.");
 
         var freeze = new SubscriptionFreeze
         {
@@ -178,7 +178,7 @@ public static class BillingSubscriptionEndpoints
         return TypedResults.Ok(await ProjectAsync(db, sub, ct));
     }
 
-    private static async Task<Results<Ok<SubscriptionMeDto>, BadRequest<string>>> ResumeCore(
+    private static async Task<Results<Ok<SubscriptionMeDto>, ApiErrorResult>> ResumeCore(
         LearnerDbContext db,
         Subscription sub,
         CancellationToken ct)
@@ -186,7 +186,7 @@ public static class BillingSubscriptionEndpoints
         var now = DateTimeOffset.UtcNow;
         if (sub.Status != SubscriptionStatus.Frozen)
         {
-            return TypedResults.BadRequest("Only frozen subscriptions can be resumed.");
+            return new ApiErrorResult(400, "subscription_resume_not_frozen", "Only frozen subscriptions can be resumed.");
         }
 
         var open = await db.SubscriptionFreezes
@@ -195,7 +195,7 @@ public static class BillingSubscriptionEndpoints
             .FirstOrDefaultAsync(ct);
         if (open is null || open.FreezeStartDate is null)
         {
-            return TypedResults.BadRequest("Open freeze record was not found.");
+            return new ApiErrorResult(400, "subscription_freeze_record_missing", "Open freeze record was not found.");
         }
 
         var used = Math.Max(1, (int)Math.Ceiling((now - open.FreezeStartDate.Value).TotalDays));

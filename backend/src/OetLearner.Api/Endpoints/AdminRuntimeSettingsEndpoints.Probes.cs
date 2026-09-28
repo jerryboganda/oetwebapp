@@ -190,7 +190,8 @@ public static partial class AdminRuntimeSettingsEndpoints
             }
             catch (Exception ex)
             {
-                return Failed(sectionId, $"FCM service account did not authenticate: {ex.Message}", testedAt);
+                // Never echo ex.Message: credential/token errors can carry service-account JSON fragments.
+                return Failed(sectionId, $"FCM service account did not authenticate ({ex.GetType().Name}). Check the service account JSON and Firebase project.", testedAt);
             }
         }
 

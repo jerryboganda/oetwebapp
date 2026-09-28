@@ -39,7 +39,7 @@ public static class ListeningAudioEndpoints
                 CancellationToken ct) =>
             {
                 if (string.IsNullOrWhiteSpace(fileName))
-                    return Results.BadRequest(new { error = "invalid_filename" });
+                    return new ApiErrorResult(400, "invalid_filename", "Invalid audio file name.");
 
                 // Accept both "{sha}" and "{sha}.{ext}". The extension in the URL
                 // is advisory — the actual stored extension is discovered by
@@ -48,7 +48,7 @@ public static class ListeningAudioEndpoints
                 var sha = dot > 0 ? fileName[..dot] : fileName;
 
                 if (sha.Length != 64 || sha.Any(c => !Uri.IsHexDigit(c)))
-                    return Results.BadRequest(new { error = "invalid_filename" });
+                    return new ApiErrorResult(400, "invalid_filename", "Invalid audio file name.");
 
                 sha = sha.ToLowerInvariant();
 

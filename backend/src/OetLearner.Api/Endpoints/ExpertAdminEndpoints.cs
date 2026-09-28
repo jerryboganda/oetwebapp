@@ -56,7 +56,7 @@ public static class ExpertAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var expert = await db.ExpertUsers.FirstOrDefaultAsync(e => e.Id == id, ct);
-            if (expert is null) return Results.NotFound(new { error = "expert_not_found" });
+            if (expert is null) return new ApiErrorResult(404, "expert_not_found", "Expert not found.");
 
             var normalized = NormalizeSpecialties(dto.Specialties).ToList();
             var unknown = normalized.Where(s => !KnownProfessions.Contains(s)).ToList();
@@ -64,7 +64,8 @@ public static class ExpertAdminEndpoints
             {
                 return Results.BadRequest(new
                 {
-                    error = "unknown_profession",
+                    code = "unknown_profession",
+                    message = "One or more specialties are not known professions.",
                     unknown,
                     knownProfessions = KnownProfessions.OrderBy(p => p).ToArray(),
                 });

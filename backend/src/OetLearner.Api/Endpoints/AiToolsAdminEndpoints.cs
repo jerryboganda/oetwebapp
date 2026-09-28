@@ -84,10 +84,10 @@ public static class AiToolsAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.FeatureCode) || string.IsNullOrWhiteSpace(dto.ToolCode))
-                return Results.BadRequest(new { error = "featureCode and toolCode are required" });
+                return new ApiErrorResult(400, "ai_tool_grant_fields_required", "featureCode and toolCode are required");
 
             if (!registry.IsKnownToolCode(dto.ToolCode))
-                return Results.BadRequest(new { error = $"unknown tool code: {dto.ToolCode}" });
+                return new ApiErrorResult(400, "ai_tool_code_unknown", $"unknown tool code: {dto.ToolCode}");
 
             // Idempotent upsert on (featureCode, toolCode) — re-activate if soft-disabled.
             var existing = await db.AiFeatureToolGrants

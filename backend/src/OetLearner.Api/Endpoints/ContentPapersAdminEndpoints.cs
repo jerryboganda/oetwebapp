@@ -121,15 +121,11 @@ public static class ContentPapersAdminEndpoints
             }
             catch (ContentIntegrityAcknowledgementRequiredException ex)
             {
-                return Results.BadRequest(new
-                {
-                    error = ex.Message,
-                    code = "integrity_acknowledgement_required",
-                });
+                return new ApiErrorResult(400, "integrity_acknowledgement_required", ex.Message);
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "writing_task_invalid", ApiErrorResult.SafeMessage(ex, "The writing task is invalid.")) { Exception = ex };
             }
         })
         .RequireAuthorization("AdminContentWrite")
@@ -163,10 +159,9 @@ public static class ContentPapersAdminEndpoints
             try { await svc.PublishAsync(id, adminId, ct); }
             catch (InvalidOperationException ex)
             {
-                // Return `message` (in addition to `error`) so the client api
-                // helper surfaces the real reason (e.g. "SourceProvenance is
-                // required …") instead of a generic failure toast.
-                return Results.BadRequest(new { error = ex.Message, message = ex.Message });
+                // `message` carries the real reason (e.g. "SourceProvenance is
+                // required …") so the client shows it instead of a generic toast.
+                return new ApiErrorResult(400, "paper_publish_rejected", ApiErrorResult.SafeMessage(ex, "The paper could not be published.")) { Exception = ex };
             }
             return Results.NoContent();
         })
@@ -181,7 +176,7 @@ public static class ContentPapersAdminEndpoints
             try { await svc.UnpublishAsync(id, adminId, ct); }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "paper_unpublish_rejected", ApiErrorResult.SafeMessage(ex, "The paper could not be unpublished.")) { Exception = ex };
             }
             return Results.NoContent();
         })
@@ -202,7 +197,7 @@ public static class ContentPapersAdminEndpoints
             var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (paper is null)
             {
-                return Results.NotFound(new { error = "Paper not found." });
+                return new ApiErrorResult(404, "paper_not_found", "Paper not found.");
             }
 
             paper.CandidateVisible = visible;
@@ -232,7 +227,7 @@ public static class ContentPapersAdminEndpoints
             try { await svc.SubmitForReviewAsync(id, adminId, ct); }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "paper_submit_for_review_rejected", ApiErrorResult.SafeMessage(ex, "The paper could not be submitted for review.")) { Exception = ex };
             }
             return Results.NoContent();
         })
@@ -248,7 +243,7 @@ public static class ContentPapersAdminEndpoints
             try { await svc.ApproveAndPublishAsync(id, adminId, ct); }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "paper_approve_publish_rejected", ApiErrorResult.SafeMessage(ex, "The paper could not be approved and published.")) { Exception = ex };
             }
 
             // WS-B2 bridge: publishing a writing paper idempotently projects it into
@@ -280,12 +275,12 @@ public static class ContentPapersAdminEndpoints
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             if (string.IsNullOrWhiteSpace(dto.Reason))
             {
-                return Results.BadRequest(new { error = "Rejection reason is required.", code = "rejection_reason_required" });
+                return new ApiErrorResult(400, "rejection_reason_required", "Rejection reason is required.");
             }
             try { await svc.RejectAsync(id, adminId, dto.Reason, ct); }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "paper_reject_rejected", ApiErrorResult.SafeMessage(ex, "The paper could not be rejected.")) { Exception = ex };
             }
             return Results.NoContent();
         })
@@ -310,7 +305,7 @@ public static class ContentPapersAdminEndpoints
             var requiresWrite = action is "archive" or "submit-for-review";
             if (!requiresSystemAdmin && !requiresPublish && !requiresWrite)
             {
-                return Results.BadRequest(new { error = $"Unknown bulk action '{req.Action}'." });
+                return new ApiErrorResult(400, "paper_bulk_action_unknown", $"Unknown bulk action '{req.Action}'.");
             }
 
             var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
@@ -326,7 +321,7 @@ public static class ContentPapersAdminEndpoints
 
             if (action == "reject" && string.IsNullOrWhiteSpace(req.Reason))
             {
-                return Results.BadRequest(new { error = "Rejection reason is required.", code = "rejection_reason_required" });
+                return new ApiErrorResult(400, "rejection_reason_required", "Rejection reason is required.");
             }
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -337,7 +332,7 @@ public static class ContentPapersAdminEndpoints
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "paper_bulk_action_invalid", ApiErrorResult.SafeMessage(ex, "The bulk action request is invalid.")) { Exception = ex };
             }
         })
         .RequireRateLimiting("PerUserWrite");
@@ -354,7 +349,7 @@ public static class ContentPapersAdminEndpoints
             if (paper is null) return Results.NotFound();
             if (!string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new { error = "This paper is not a speaking paper." });
+                return new ApiErrorResult(400, "paper_not_speaking", "This paper is not a speaking paper.");
             }
 
             return Results.Ok(new
@@ -380,12 +375,12 @@ public static class ContentPapersAdminEndpoints
             if (paper is null) return Results.NotFound();
             if (!string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new { error = "This paper is not a speaking paper." });
+                return new ApiErrorResult(400, "paper_not_speaking", "This paper is not a speaking paper.");
             }
 
             if (dto.Structure.ValueKind != JsonValueKind.Object)
             {
-                return Results.BadRequest(new { error = "speaking structure object is required." });
+                return new ApiErrorResult(400, "speaking_structure_required", "speaking structure object is required.");
             }
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -427,7 +422,7 @@ public static class ContentPapersAdminEndpoints
             if (paper is null) return Results.NotFound();
             if (!string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new { error = "This paper is not a writing paper." });
+                return new ApiErrorResult(400, "paper_not_writing", "This paper is not a writing paper.");
             }
 
             return Results.Ok(new
@@ -453,12 +448,12 @@ public static class ContentPapersAdminEndpoints
             if (paper is null) return Results.NotFound();
             if (!string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new { error = "This paper is not a writing paper." });
+                return new ApiErrorResult(400, "paper_not_writing", "This paper is not a writing paper.");
             }
 
             if (dto.Structure.ValueKind != JsonValueKind.Object)
             {
-                return Results.BadRequest(new { error = "writing structure object is required." });
+                return new ApiErrorResult(400, "writing_structure_required", "writing structure object is required.");
             }
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -573,7 +568,7 @@ public static class ContentPapersAdminEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("admin id required");
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "file required" });
+            if (file is null || file.Length == 0) return new ApiErrorResult(400, "upload_file_required", "file required");
             await using var stream = file.OpenReadStream();
             var session = await svc.StagePayloadAsync(adminId, stream, file.FileName, ct);
             return Results.Ok(new

@@ -73,7 +73,7 @@ public static class LiveKitWebhookEndpoint
 
         if (string.IsNullOrWhiteSpace(payload))
         {
-            return Results.BadRequest(new { errorCode = "empty_payload", message = "Webhook payload is empty." });
+            return new ApiErrorResult(400, "empty_payload", "Webhook payload is empty.");
         }
 
         string eventType;
@@ -87,12 +87,12 @@ public static class LiveKitWebhookEndpoint
 
             if (string.IsNullOrWhiteSpace(eventType))
             {
-                return Results.BadRequest(new { errorCode = "event_required", message = "event field is required." });
+                return new ApiErrorResult(400, "event_required", "event field is required.");
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_json", message = "Webhook payload is not valid JSON." });
+            return new ApiErrorResult(400, "invalid_json", "Webhook payload is not valid JSON.") { Exception = ex };
         }
 
         // Keep the idempotency marker and provider side effects in one

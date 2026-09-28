@@ -68,12 +68,12 @@ public static class BillingExpansionV3Endpoints
         return TypedResults.Ok(rows.Select(PaymentMethodConfigDto.FromEntity).ToList());
     }
 
-    private static async Task<Results<Ok<PaymentMethodConfigDto>, BadRequest<string>>> UpsertPaymentMethod(
+    private static async Task<Results<Ok<PaymentMethodConfigDto>, ApiErrorResult>> UpsertPaymentMethod(
         PaymentMethodConfigUpsertRequest request, LearnerDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Key) || string.IsNullOrWhiteSpace(request.Label))
         {
-            return TypedResults.BadRequest("Key and label are required.");
+            return new ApiErrorResult(400, "payment_method_key_label_required", "Key and label are required.");
         }
 
         var key = request.Key.Trim();
@@ -82,7 +82,7 @@ public static class BillingExpansionV3Endpoints
         // layer; this rejects bad input early with a clear message.)
         if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[a-z0-9_-]{1,64}$"))
         {
-            return TypedResults.BadRequest("Key must be a lowercase slug (a-z, 0-9, '_' or '-'), max 64 chars.");
+            return new ApiErrorResult(400, "payment_method_key_invalid", "Key must be a lowercase slug (a-z, 0-9, '_' or '-'), max 64 chars.");
         }
         var category = NormalizeCategory(request.Category);
         var now = DateTimeOffset.UtcNow;
@@ -129,12 +129,12 @@ public static class BillingExpansionV3Endpoints
     /// manual-payment proof). The bytes are magic-byte validated and stored as an
     /// opaque blob; the key is saved on the config row.
     /// </summary>
-    private static async Task<Results<Ok<PaymentMethodConfigDto>, BadRequest<string>, NotFound>> UploadPaymentMethodQr(
+    private static async Task<Results<Ok<PaymentMethodConfigDto>, ApiErrorResult, NotFound>> UploadPaymentMethodQr(
         string key, PaymentMethodQrUploadRequest request, LearnerDbContext db, IFileStorage storage, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.ImageBase64))
         {
-            return TypedResults.BadRequest("imageBase64 is required.");
+            return new ApiErrorResult(400, "payment_method_qr_required", "imageBase64 is required.");
         }
 
         byte[] bytes;
@@ -144,16 +144,16 @@ public static class BillingExpansionV3Endpoints
         }
         catch (FormatException)
         {
-            return TypedResults.BadRequest("imageBase64 is not valid base64.");
+            return new ApiErrorResult(400, "payment_method_qr_invalid_base64", "imageBase64 is not valid base64.");
         }
 
         if (bytes.Length == 0 || bytes.Length > ManualPaymentProof.MaxProofBytes)
         {
-            return TypedResults.BadRequest("QR image must be between 1 byte and 10 MB.");
+            return new ApiErrorResult(400, "payment_method_qr_size_invalid", "QR image must be between 1 byte and 10 MB.");
         }
         if (!ManualPaymentProof.IsAllowedProof(bytes))
         {
-            return TypedResults.BadRequest("QR image must be an image (JPG, PNG, GIF, WEBP).");
+            return new ApiErrorResult(400, "payment_method_qr_type_invalid", "QR image must be an image (JPG, PNG, GIF, WEBP).");
         }
 
         var row = await db.PaymentMethodConfigs.FirstOrDefaultAsync(m => m.Key == key, ct);

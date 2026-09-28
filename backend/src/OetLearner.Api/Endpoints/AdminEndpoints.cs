@@ -489,11 +489,11 @@ public static class AdminEndpoints
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = "wallet_spend_invalid", message = ex.Message });
+                return new ApiErrorResult(400, "wallet_spend_invalid", ApiErrorResult.SafeMessage(ex, "The wallet spend request is invalid.")) { Exception = ex };
             }
             catch (InvalidOperationException ex)
             {
-                return Results.Conflict(new { error = "wallet_spend_not_allowed", message = ex.Message });
+                return new ApiErrorResult(409, "wallet_spend_not_allowed", ApiErrorResult.SafeMessage(ex, "The wallet spend is not allowed.")) { Exception = ex };
             }
         })
             .WithAdminWrite("AdminBillingSubscriptionWrite");
@@ -645,11 +645,15 @@ public static class AdminEndpoints
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = "refund_invalid", message = ex.Message });
+                return new ApiErrorResult(400, "refund_invalid", ApiErrorResult.SafeMessage(ex, "The refund request is invalid.")) { Exception = ex };
             }
             catch (InvalidOperationException ex)
             {
-                return Results.Conflict(new { error = "refund_not_allowed", message = ex.Message });
+                // PaymobGateway interpolates the provider response body into its IOE; never echo it.
+                var message = ex.Message.StartsWith("Paymob refund failed", StringComparison.Ordinal)
+                    ? "The payment gateway rejected the refund."
+                    : ApiErrorResult.SafeMessage(ex, "The refund is not allowed for this transaction.");
+                return new ApiErrorResult(409, "refund_not_allowed", message) { Exception = ex };
             }
         })
             .WithAdminWrite("AdminBillingRefundWrite");
@@ -1072,7 +1076,7 @@ public static class AdminEndpoints
                 var result = await gate.PublishAsync(lessonId, http.AdminId(), http.AdminName(), ct);
                 return result.CanPublish
                     ? Results.Ok(new { published = true, status = "active", errors = Array.Empty<string>() })
-                    : Results.Json(new { published = false, errors = result.Errors }, statusCode: 422);
+                    : Results.Json(new { code = "grammar_lesson_publish_blocked", message = "Grammar lesson is not ready to publish.", published = false, errors = result.Errors }, statusCode: 422);
             })
             .WithAdminWrite("AdminContentPublish");
 
@@ -1097,7 +1101,7 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
                 if (body is null || string.IsNullOrWhiteSpace(body.Prompt))
-                    return Results.BadRequest(new { error = "prompt is required" });
+                    return new ApiErrorResult(400, "ai_draft_prompt_required", "prompt is required");
 
                 try
                 {
@@ -1125,7 +1129,7 @@ public static class AdminEndpoints
                 }
                 catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
                 {
-                    return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+                    return new ApiErrorResult(429, qex.ErrorCode, qex.Message);
                 }
             })
             .WithAdminWrite("AdminContentWrite");
@@ -1137,7 +1141,7 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
                 if (body is null || string.IsNullOrWhiteSpace(body.Prompt))
-                    return Results.BadRequest(new { error = "prompt is required" });
+                    return new ApiErrorResult(400, "ai_draft_prompt_required", "prompt is required");
 
                 try
                 {
@@ -1165,7 +1169,7 @@ public static class AdminEndpoints
                 }
                 catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
                 {
-                    return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+                    return new ApiErrorResult(429, qex.ErrorCode, qex.Message);
                 }
             })
             .WithAdminWrite("AdminContentWrite");
@@ -1359,7 +1363,7 @@ public static class AdminEndpoints
             }
             catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
             {
-                return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+                return new ApiErrorResult(429, qex.ErrorCode, qex.Message);
             }
         })
             .WithAdminWrite("AdminContentWrite");
@@ -1757,7 +1761,7 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
                 var provider = await selector.TrySelectAsync(ct);
-                if (provider is null) return Results.BadRequest(new { error = "tts_disabled" });
+                if (provider is null) return new ApiErrorResult(400, "tts_disabled", "Text-to-speech is not configured.");
                 var text = string.IsNullOrWhiteSpace(request.Text)
                     ? "Good morning. Thank you for coming in today. How can I help you?"
                     : request.Text;
@@ -1919,7 +1923,7 @@ public static class AdminEndpoints
             AdminCommunityPinRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
-            if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
+            if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
             thread.IsPinned = request.IsPinned;
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = thread.Id, isPinned = thread.IsPinned });
@@ -1929,7 +1933,7 @@ public static class AdminEndpoints
             AdminCommunityLockRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
-            if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
+            if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
             thread.IsLocked = request.IsLocked;
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = thread.Id, isLocked = thread.IsLocked });
@@ -1939,7 +1943,7 @@ public static class AdminEndpoints
             LearnerDbContext db, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
-            if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
+            if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
             var replies = await db.ForumReplies.Where(r => r.ThreadId == threadId).ToListAsync(ct);
             db.ForumReplies.RemoveRange(replies);
             db.ForumThreads.Remove(thread);
@@ -1951,7 +1955,7 @@ public static class AdminEndpoints
             LearnerDbContext db, CancellationToken ct) =>
         {
             var reply = await db.ForumReplies.FirstOrDefaultAsync(r => r.Id == replyId && r.ThreadId == threadId, ct);
-            if (reply == null) return Results.NotFound(new { error = "REPLY_NOT_FOUND" });
+            if (reply == null) return new ApiErrorResult(404, "REPLY_NOT_FOUND", "Reply not found.");
             db.ForumReplies.Remove(reply);
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
             if (thread != null && thread.ReplyCount > 0) thread.ReplyCount--;
@@ -1977,10 +1981,10 @@ public static class AdminEndpoints
         admin.MapPost("/roles", async (AdminRoleCreateRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
-                return Results.BadRequest(new { error = "ROLE_NAME_REQUIRED" });
+                return new ApiErrorResult(400, "ROLE_NAME_REQUIRED", "Role name is required.");
             var invalidPerms = request.Permissions.Except(AdminPermissions.All).ToArray();
             if (invalidPerms.Length > 0)
-                return Results.BadRequest(new { error = "INVALID_PERMISSIONS", invalid = invalidPerms });
+                return InvalidPermissions(invalidPerms);
             var role = new
             {
                 id = Guid.NewGuid().ToString(),
@@ -1996,19 +2000,19 @@ public static class AdminEndpoints
         admin.MapPut("/roles/{roleId}", async (string roleId, AdminRoleUpdateRequest request, LearnerDbContext db, CancellationToken ct) =>
         {
             if (AdminRoleCatalog.BuiltInRoleIds.Contains(roleId))
-                return Results.BadRequest(new { error = "CANNOT_MODIFY_BUILTIN_ROLE" });
+                return new ApiErrorResult(400, "CANNOT_MODIFY_BUILTIN_ROLE", "Built-in roles cannot be modified.");
             if (string.IsNullOrWhiteSpace(request.Name))
-                return Results.BadRequest(new { error = "ROLE_NAME_REQUIRED" });
+                return new ApiErrorResult(400, "ROLE_NAME_REQUIRED", "Role name is required.");
             var invalidPerms = request.Permissions.Except(AdminPermissions.All).ToArray();
             if (invalidPerms.Length > 0)
-                return Results.BadRequest(new { error = "INVALID_PERMISSIONS", invalid = invalidPerms });
+                return InvalidPermissions(invalidPerms);
             return Results.Ok(new { id = roleId, name = request.Name, description = request.Description, permissions = request.Permissions, updatedAt = DateTime.UtcNow });
         }).WithAdminWrite("AdminSystemAdmin");
 
         admin.MapDelete("/roles/{roleId}", async (string roleId, LearnerDbContext db, CancellationToken ct) =>
         {
             if (AdminRoleCatalog.BuiltInRoleIds.Contains(roleId))
-                return Results.BadRequest(new { error = "CANNOT_DELETE_BUILTIN_ROLE" });
+                return new ApiErrorResult(400, "CANNOT_DELETE_BUILTIN_ROLE", "Built-in roles cannot be deleted.");
             return Results.Ok(new { deleted = true, roleId });
         }).WithAdminWrite("AdminSystemAdmin");
 
@@ -2029,16 +2033,16 @@ public static class AdminEndpoints
 
             var role = AdminRoleCatalog.Find(roleId);
             if (role is null)
-                return Results.BadRequest(new { error = "BUILTIN_ROLE_NOT_FOUND", roleId });
+                return Results.BadRequest(new { code = "BUILTIN_ROLE_NOT_FOUND", message = $"Role '{roleId}' is not a built-in role.", roleId });
 
             var user = await db.AdminUsers.FindAsync([userId], ct);
-            if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
+            if (user == null) return new ApiErrorResult(404, "USER_NOT_FOUND", "User not found.");
 
             var account = await db.ApplicationUserAccounts
                 .AsNoTracking()
                 .SingleOrDefaultAsync(account => account.Id == userId, ct);
             if (account is null || !string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "ROLE_TARGET_MUST_BE_ADMIN", userId });
+                return Results.BadRequest(new { code = "ROLE_TARGET_MUST_BE_ADMIN", message = $"User '{userId}' is not an admin account, so it cannot hold an admin role.", userId });
 
             user.Role = role.Id;
 
@@ -2092,9 +2096,9 @@ public static class AdminEndpoints
                 ownerAgentOptions.Value, http.User.FindFirstValue(ClaimTypes.NameIdentifier), userId, "change the admin role");
 
             var user = await db.AdminUsers.FindAsync([userId], ct);
-            if (user == null) return Results.NotFound(new { error = "USER_NOT_FOUND" });
+            if (user == null) return new ApiErrorResult(404, "USER_NOT_FOUND", "User not found.");
             if (!string.Equals(user.Role, roleId, StringComparison.OrdinalIgnoreCase))
-                return Results.BadRequest(new { error = "USER_NOT_IN_ROLE" });
+                return new ApiErrorResult(400, "USER_NOT_IN_ROLE", "The user is not in this role.");
             user.Role = "unassigned";
 
             // Admin policies consume AdminPermissionGrant rows, not the legacy
@@ -2166,7 +2170,7 @@ public static class AdminEndpoints
         admin.MapGet("/strategies/{guideId}", async (string guideId, StrategyGuideService service, CancellationToken ct) =>
         {
             var guide = await service.GetAdminGuideAsync(guideId, ct);
-            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+            return guide is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(guide);
         })
         .WithName("AdminGetStrategyGuide")
         .WithSummary("Gets a strategy guide draft or published record.")
@@ -2190,7 +2194,7 @@ public static class AdminEndpoints
             CancellationToken ct) =>
         {
             var guide = await service.UpdateGuideAsync(http.AdminId(), http.AdminName(), guideId, request, ct);
-            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+            return guide is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(guide);
         })
         .WithName("AdminUpdateStrategyGuide")
         .WithSummary("Updates strategy guide metadata and content.")
@@ -2199,7 +2203,7 @@ public static class AdminEndpoints
         admin.MapGet("/strategies/{guideId}/publish-gate", async (string guideId, StrategyGuideService service, CancellationToken ct) =>
         {
             var validation = await service.ValidateGuideForPublishAsync(guideId, ct);
-            return validation is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(validation);
+            return validation is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(validation);
         })
         .WithName("AdminValidateStrategyGuidePublish")
         .WithSummary("Validates required strategy guide fields before publish.")
@@ -2208,7 +2212,10 @@ public static class AdminEndpoints
         admin.MapPost("/strategies/{guideId}/publish", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
         {
             var result = await service.PublishGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
-            return result.Published ? Results.Ok(result) : Results.BadRequest(result);
+            return result.Published
+                ? Results.Ok(result)
+                : new ApiErrorResult(400, "strategy_guide_publish_blocked", "Strategy guide is not ready to publish.",
+                    FieldErrors: result.Validation.Errors.Select(e => new ApiFieldError(e.Field, "strategy_guide_field_invalid", e.Message)).ToArray());
         })
         .WithName("AdminPublishStrategyGuide")
         .WithSummary("Publishes a valid strategy guide and writes an audit event.")
@@ -2217,7 +2224,7 @@ public static class AdminEndpoints
         admin.MapPost("/strategies/{guideId}/archive", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
         {
             var guide = await service.ArchiveGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
-            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+            return guide is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(guide);
         })
         .WithName("AdminArchiveStrategyGuide")
         .WithSummary("Archives a strategy guide and writes an audit event.")
@@ -2226,7 +2233,7 @@ public static class AdminEndpoints
         admin.MapPost("/strategies/{guideId}/force-delete", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
         {
             var deleted = await service.ForceDeleteGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
-            return deleted is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(new { id = guideId, deleted = true });
+            return deleted is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(new { id = guideId, deleted = true });
         })
         .WithName("AdminForceDeleteStrategyGuide")
         .WithSummary("Permanently deletes an archived strategy guide and its learner progress.")
@@ -2312,11 +2319,10 @@ public static class AdminEndpoints
         => features.CurrentValue.SponsorPortalEnabled;
 
     private static IResult SponsorPortalDisabled()
-        => Results.NotFound(new
-        {
-            code = "SPONSOR_PORTAL_DISABLED",
-            message = "Sponsor and enterprise management are held for a later launch gate.",
-        });
+        => new ApiErrorResult(404, "SPONSOR_PORTAL_DISABLED", "Sponsor and enterprise management are held for a later launch gate.");
+
+    private static IResult InvalidPermissions(string[] invalid)
+        => Results.BadRequest(new { code = "INVALID_PERMISSIONS", message = "One or more permissions are not recognised.", invalid });
 
     private static string NormalizeRealtimeAsrProvider(string provider)
         => provider.Trim().ToLowerInvariant() switch

@@ -24,7 +24,7 @@ public static class SocialEndpoints
         certs.MapGet("/verify/{code}", async (string code, LearnerDbContext db, CancellationToken ct) =>
         {
             var cert = await db.Certificates.FirstOrDefaultAsync(c => c.VerificationCode == code, ct);
-            if (cert == null) return Results.NotFound(new { valid = false });
+            if (cert == null) return Results.NotFound(new { code = "certificate_not_found", message = "No certificate matches this verification code.", valid = false });
             return Results.Ok(new { valid = true, userDisplayName = cert.UserDisplayName, type = cert.Type, title = cert.Title, issuedAt = cert.IssuedAt });
         });
 
@@ -64,16 +64,16 @@ public static class SocialEndpoints
         referrals.MapPost("/apply", async (HttpContext http, ApplyReferralRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
             var code = await db.ReferralCodes.FirstOrDefaultAsync(rc => rc.Code == req.Code, ct);
-            if (code == null) return Results.BadRequest(new { error = "INVALID_CODE" });
-            if (code.UserId == http.UserId()) return Results.BadRequest(new { error = "OWN_CODE" });
+            if (code == null) return new ApiErrorResult(400, "INVALID_CODE", "This referral code is not valid.");
+            if (code.UserId == http.UserId()) return new ApiErrorResult(400, "OWN_CODE", "You cannot use your own referral code.");
 
             var existing = await db.Referrals.AnyAsync(r => r.ReferredUserId == http.UserId(), ct);
-            if (existing) return Results.BadRequest(new { error = "ALREADY_REFERRED" });
+            if (existing) return new ApiErrorResult(400, "ALREADY_REFERRED", "A referral code has already been applied to your account.");
 
             // Referral.ReferredEmail is NOT NULL — leaving it unset made every
             // call to this endpoint fail on SaveChanges with a 23502 violation.
             var referredUser = await db.Users.FindAsync([http.UserId()], ct);
-            if (referredUser == null) return Results.BadRequest(new { error = "INVALID_CODE" });
+            if (referredUser == null) return new ApiErrorResult(400, "INVALID_CODE", "This referral code is not valid.");
 
             db.Referrals.Add(new Referral
             {
@@ -122,7 +122,7 @@ public static class SocialEndpoints
         bookings.MapDelete("/{bookingId}", async (HttpContext http, string bookingId, LearnerDbContext db, CancellationToken ct) =>
         {
             var booking = await db.ExamBookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.UserId == http.UserId(), ct);
-            if (booking == null) return Results.NotFound(new { error = "NOT_FOUND" });
+            if (booking == null) return new ApiErrorResult(404, "NOT_FOUND", "Exam booking not found.");
             db.ExamBookings.Remove(booking);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { deleted = true });
@@ -162,7 +162,7 @@ public static class SocialEndpoints
         tutoring.MapPost("/sessions/{sessionId}/rate", async (HttpContext http, string sessionId, RateSessionRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
             var session = await db.TutoringSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.LearnerUserId == http.UserId(), ct);
-            if (session == null) return Results.NotFound(new { error = "NOT_FOUND" });
+            if (session == null) return new ApiErrorResult(404, "NOT_FOUND", "Tutoring session not found.");
             session.LearnerRating = req.Rating;
             session.LearnerFeedback = req.Feedback;
             await db.SaveChangesAsync(ct);

@@ -124,7 +124,7 @@ public static class DocumentationCenterAdminEndpoints
 
                 var version = await db.DocumentationVersions.AsNoTracking()
                     .FirstOrDefaultAsync(v => v.ModuleId == code && v.IsCurrent, ct);
-                if (version is null) return Results.NotFound("This module has no published version yet.");
+                if (version is null) return new ApiErrorResult(404, "documentation_version_not_found", "This module has no published version yet.");
 
                 var evidence = await LoadEvidence(db, exportMode, code, ct);
                 var pdfModel = BuildPdfModel(

@@ -48,6 +48,11 @@ public static class ListeningAuthoringAdminEndpoints
     public sealed record TranscriptSegmentDto(int StartMs, int EndMs, string SpeakerId, string Text);
     public sealed record ReplaceTranscriptBody(IReadOnlyList<TranscriptSegmentDto> Segments);
 
+    // OCR/AI provider failures can carry the upstream response body, so the real
+    // cause goes to the server log (ApiErrorResult.Exception), not the response.
+    private const string ExtractFailedHint =
+        "Check the OCR and AI provider rows in Admin > AI Providers; the server log has the provider error for this correlation id.";
+
     /// <summary>
     /// Validates the If-Match header against the paper's RowVersion.
     /// Returns a 412 Precondition Failed result if they don't match, or null to proceed.
@@ -448,13 +453,9 @@ public static class ListeningAuthoringAdminEndpoints
                 var result = await svc.ExtractAsync(paperId, adminId, ct);
                 return Results.Ok(result);
             }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
             catch (InvalidOperationException ex)
             {
-                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+                return new ApiErrorResult(502, "listening_extract_failed", "Listening AI extraction failed.", SupportHint: ExtractFailedHint) { Exception = ex };
             }
         });
 
@@ -471,17 +472,13 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
-                return Results.Json(
-                    new { error = "Expected multipart/form-data with a question-paper file.", errorCode = "listening_import_bad_content_type" },
-                    statusCode: 415);
+                return new ApiErrorResult(415, "listening_import_bad_content_type", "Expected multipart/form-data with a question-paper file.");
 
             var form = await request.ReadFormAsync(ct);
             var questionFile = form.Files.GetFile("questionPaper") ?? form.Files.GetFile("file");
             var answerFile = form.Files.GetFile("answerKey");
             if (questionFile is null || questionFile.Length == 0)
-                return Results.Json(
-                    new { error = "Upload a question-paper PDF or image (field 'questionPaper').", errorCode = "listening_import_missing_file" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_import_missing_file", "Upload a question-paper PDF or image (field 'questionPaper').");
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -509,13 +506,9 @@ public static class ListeningAuthoringAdminEndpoints
                     paperId, qBytes, questionFile.ContentType, aBytes, aMime, adminId, ct);
                 return Results.Ok(detail);
             }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
             catch (InvalidOperationException ex)
             {
-                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+                return new ApiErrorResult(502, "listening_extract_failed", "Listening AI extraction failed.", SupportHint: ExtractFailedHint) { Exception = ex };
             }
         });
 
@@ -533,28 +526,20 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
-                return Results.Json(
-                    new { error = "Expected multipart/form-data with question paper + answer-key files.", errorCode = "listening_partbc_bad_content_type" },
-                    statusCode: 415);
+                return new ApiErrorResult(415, "listening_partbc_bad_content_type", "Expected multipart/form-data with question paper + answer-key files.");
 
             var form = await request.ReadFormAsync(ct);
             var part = (form["part"].ToString() ?? string.Empty).Trim().ToUpperInvariant();
             if (part != "B" && part != "C")
-                return Results.Json(
-                    new { error = "Field 'part' must be 'B' or 'C'.", errorCode = "listening_partbc_invalid_part" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_partbc_invalid_part", "Field 'part' must be 'B' or 'C'.");
 
             var questionFile = form.Files.GetFile("questionPaper");
             var questionFile2 = form.Files.GetFile("questionPaper2"); // optional — Part C2
             var answerFile = form.Files.GetFile("answerKey");
             if (questionFile is null || questionFile.Length == 0)
-                return Results.Json(
-                    new { error = "Upload the question-paper PDF or image (field 'questionPaper').", errorCode = "listening_partbc_missing_file" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_partbc_missing_file", "Upload the question-paper PDF or image (field 'questionPaper').");
             if (answerFile is null || answerFile.Length == 0)
-                return Results.Json(
-                    new { error = "Upload the answer-key PDF (field 'answerKey').", errorCode = "listening_partbc_missing_answer_key" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_partbc_missing_answer_key", "Upload the answer-key PDF (field 'answerKey').");
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -574,13 +559,9 @@ public static class ListeningAuthoringAdminEndpoints
                 var result = await svc.ExtractFromUploadAsync(paperId, part, questionDocs, answerBytes, answerMime, adminId, ct);
                 return Results.Ok(result);
             }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
             catch (InvalidOperationException ex)
             {
-                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+                return new ApiErrorResult(502, "listening_extract_failed", "Listening AI extraction failed.", SupportHint: ExtractFailedHint) { Exception = ex };
             }
         });
 
@@ -601,17 +582,10 @@ public static class ListeningAuthoringAdminEndpoints
             if (forbidden is not null) return forbidden;
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try
-            {
-                var structure = await svc.EnsurePartASlotsAsync(paperId, body.Code, body.Count, adminId, ct);
-                await db.Entry(paper).ReloadAsync(ct);
-                SetETag(http, paper);
-                return Results.Ok(structure);
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
+            var structure = await svc.EnsurePartASlotsAsync(paperId, body.Code, body.Count, adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
+            return Results.Ok(structure);
         });
 
         group.MapGet("/extractions", async (
@@ -629,15 +603,8 @@ public static class ListeningAuthoringAdminEndpoints
             IListeningPartAExtractionService svc,
             CancellationToken ct) =>
         {
-            try
-            {
-                var detail = await svc.GetDraftAsync(paperId, draftId, ct);
-                return Results.Ok(detail);
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
+            var detail = await svc.GetDraftAsync(paperId, draftId, ct);
+            return Results.Ok(detail);
         });
 
         group.MapPost("/extractions/{draftId}/approve", async (
@@ -653,17 +620,10 @@ public static class ListeningAuthoringAdminEndpoints
             var forbidden = EnforcePublishGate(paper, http);
             if (forbidden is not null) return forbidden;
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try
-            {
-                var result = await svc.ApproveAsync(paperId, draftId, adminId, ct);
-                await db.Entry(paper).ReloadAsync(ct);
-                SetETag(http, paper);
-                return Results.Ok(new { draftId = result.DraftId, structure = result.Import.Structure, report = result.Import.Report });
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
+            var result = await svc.ApproveAsync(paperId, draftId, adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
+            return Results.Ok(new { draftId = result.DraftId, structure = result.Import.Structure, report = result.Import.Report });
         });
 
         group.MapPost("/extractions/{draftId}/reject", async (
@@ -675,15 +635,8 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            try
-            {
-                await svc.RejectAsync(paperId, draftId, adminId, body?.Reason, ct);
-                return Results.Ok(new { ok = true });
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
+            await svc.RejectAsync(paperId, draftId, adminId, body?.Reason, ct);
+            return Results.Ok(new { ok = true });
         });
 
         // ─── WS5: spec §19 manifest import / export ────────────────────────
@@ -701,15 +654,8 @@ public static class ListeningAuthoringAdminEndpoints
             IListeningAuthoringService svc,
             CancellationToken ct) =>
         {
-            try
-            {
-                var manifest = await svc.ExportManifestAsync(paperId, ct);
-                return Results.Ok(manifest);
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
+            var manifest = await svc.ExportManifestAsync(paperId, ct);
+            return Results.Ok(manifest);
         });
 
         group.MapPost("/manifest", async (
@@ -721,7 +667,7 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (body?.Manifest is null)
-                return Results.BadRequest(new { error = "Request body must contain a manifest.", errorCode = "listening_manifest_required" });
+                return new ApiErrorResult(400, "listening_manifest_required", "Request body must contain a manifest.");
 
             var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
             if (paper is null) return Results.NotFound();
@@ -738,13 +684,9 @@ public static class ListeningAuthoringAdminEndpoints
                 SetETag(http, paper);
                 return Results.Ok(new { structure = result.Structure, report = result.Report });
             }
-            catch (ApiException ex)
-            {
-                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
-            }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "listening_manifest_import_rejected", ApiErrorResult.SafeMessage(ex, "The manifest could not be imported.")) { Exception = ex };
             }
         });
 
@@ -760,14 +702,14 @@ public static class ListeningAuthoringAdminEndpoints
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.Id == extractId, ct);
             if (extract is null)
-                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." });
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} not found.");
 
             // Validate extract belongs to this paper via part → paper linkage.
             var part = await db.ListeningParts
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
             if (part is null || part.PaperId != paperId)
-                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} does not belong to paper {paperId}.");
 
             var segments = System.Text.Json.JsonSerializer
                 .Deserialize<List<TranscriptSegmentDto>>(
@@ -803,30 +745,30 @@ public static class ListeningAuthoringAdminEndpoints
             var extract = await db.ListeningExtracts
                 .FirstOrDefaultAsync(e => e.Id == extractId, ct);
             if (extract is null)
-                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." });
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} not found.");
 
             // Validate extract belongs to this paper via part → paper linkage.
             var part = await db.ListeningParts
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
             if (part is null || part.PaperId != paperId)
-                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} does not belong to paper {paperId}.");
 
             // Validate each segment.
             if (body.Segments is null || body.Segments.Count == 0)
-                return Results.BadRequest(new { errorCode = "invalid_segments", message = "Segments array must contain at least one entry." });
+                return new ApiErrorResult(400, "invalid_segments", "Segments array must contain at least one entry.");
 
             for (var i = 0; i < body.Segments.Count; i++)
             {
                 var seg = body.Segments[i];
                 if (seg.StartMs < 0)
-                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: startMs must be >= 0." });
+                    return new ApiErrorResult(400, "invalid_segment", $"Segment[{i}]: startMs must be >= 0.");
                 if (seg.StartMs >= seg.EndMs)
-                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: startMs must be less than endMs." });
+                    return new ApiErrorResult(400, "invalid_segment", $"Segment[{i}]: startMs must be less than endMs.");
                 if (string.IsNullOrWhiteSpace(seg.Text))
-                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: text must not be empty." });
+                    return new ApiErrorResult(400, "invalid_segment", $"Segment[{i}]: text must not be empty.");
                 if (string.IsNullOrWhiteSpace(seg.SpeakerId))
-                    return Results.BadRequest(new { errorCode = "invalid_segment", message = $"Segment[{i}]: speakerId must not be empty." });
+                    return new ApiErrorResult(400, "invalid_segment", $"Segment[{i}]: speakerId must not be empty.");
             }
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -856,9 +798,9 @@ public static class ListeningAuthoringAdminEndpoints
             {
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DbUpdateConcurrencyException ex)
             {
-                return Results.Conflict(new { errorCode = "listening_paper_concurrent_update", message = "Another user modified this paper. Reload and retry." });
+                return new ApiErrorResult(409, "listening_paper_concurrent_update", "Another user modified this paper. Reload and retry.") { Exception = ex };
             }
 
             await db.Entry(paper).ReloadAsync(ct);
@@ -902,14 +844,12 @@ public static class ListeningAuthoringAdminEndpoints
             var extract = await db.ListeningExtracts
                 .FirstOrDefaultAsync(e => e.Id == extractId, ct);
             if (extract is null)
-                return Results.Json(
-                    new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} not found." },
-                    statusCode: 404);
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} not found.");
 
             var ttsPart = await db.ListeningParts.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == extract.ListeningPartId, ct);
             if (ttsPart is null || ttsPart.PaperId != paperId)
-                return Results.NotFound(new { errorCode = "listening_extract_not_found", message = $"Extract {extractId} does not belong to paper {paperId}." });
+                return new ApiErrorResult(404, "listening_extract_not_found", $"Extract {extractId} does not belong to paper {paperId}.");
 
             var job = new ListeningTtsJob
             {
@@ -940,7 +880,7 @@ public static class ListeningAuthoringAdminEndpoints
             var job = await db.ListeningTtsJobs
                 .FirstOrDefaultAsync(j => j.Id == jobId && j.ExtractId == extractId, ct);
             if (job is null)
-                return Results.NotFound(new { errorCode = "tts_job_not_found" });
+                return new ApiErrorResult(404, "tts_job_not_found", "TTS job not found.");
 
             return Results.Ok(new
             {
@@ -962,9 +902,9 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (body.PaperIds is null || body.PaperIds.Count == 0)
-                return Results.BadRequest(new { errorCode = "empty_paper_ids", message = "At least one paperId is required." });
+                return new ApiErrorResult(400, "empty_paper_ids", "At least one paperId is required.");
             if (body.PaperIds.Count > 50)
-                return Results.BadRequest(new { errorCode = "too_many_paper_ids", message = "Maximum 50 paper IDs per request." });
+                return new ApiErrorResult(400, "too_many_paper_ids", "Maximum 50 paper IDs per request.");
 
             var papers = await db.ContentPapers.AsNoTracking()
                 .Where(p => body.PaperIds.Contains(p.Id))
@@ -1023,20 +963,14 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (!request.HasFormContentType)
-                return Results.Json(
-                    new { error = "Expected multipart/form-data with an 'audio' file.", errorCode = "listening_qa_bad_content_type" },
-                    statusCode: 415);
+                return new ApiErrorResult(415, "listening_qa_bad_content_type", "Expected multipart/form-data with an 'audio' file.");
 
             var form = await request.ReadFormAsync(ct);
             var audio = form.Files.GetFile("audio") ?? form.Files.GetFile("file");
             if (audio is null || audio.Length == 0)
-                return Results.Json(
-                    new { error = "Upload an audio window (field 'audio').", errorCode = "listening_qa_missing_file" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_qa_missing_file", "Upload an audio window (field 'audio').");
             if (audio.Length > 25 * 1024 * 1024)
-                return Results.Json(
-                    new { error = "Audio window exceeds the 25 MB STT limit.", errorCode = "listening_qa_too_large" },
-                    statusCode: 400);
+                return new ApiErrorResult(400, "listening_qa_too_large", "Audio window exceeds the 25 MB STT limit.");
 
             var key = $"qa/cuescan/{Guid.NewGuid():N}{Path.GetExtension(audio.FileName)}";
             await using (var source = audio.OpenReadStream())
@@ -1049,9 +983,7 @@ public static class ListeningAuthoringAdminEndpoints
                 var language = form["language"].ToString();
                 var result = await stt.TranscribeAsync(key, language.Length >= 2 ? language[..2] : "en", ct);
                 if (string.Equals(result.Provider, "mock", StringComparison.OrdinalIgnoreCase))
-                    return Results.Json(
-                        new { error = "Speech-to-text is not configured (mock provider active).", errorCode = "listening_qa_stt_unconfigured" },
-                        statusCode: 503);
+                    return new ApiErrorResult(503, "listening_qa_stt_unconfigured", "Speech-to-text is not configured (mock provider active).");
                 return Results.Ok(new
                 {
                     provider = result.Provider,
@@ -1064,7 +996,7 @@ public static class ListeningAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.Json(new { error = ex.Message, errorCode = "listening_qa_transcribe_failed" }, statusCode: 502);
+                return new ApiErrorResult(502, "listening_qa_transcribe_failed", ApiErrorResult.SafeMessage(ex, "Speech-to-text transcription failed.")) { Exception = ex };
             }
         })
         .RequireAuthorization("AdminContentWrite")
@@ -1107,7 +1039,7 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (body?.Items is null)
-                return Results.BadRequest(new { errorCode = "listening_sequence_missing_body", message = "Request body must contain an items array." });
+                return new ApiErrorResult(400, "listening_sequence_missing_body", "Request body must contain an items array.");
             var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
             if (paper is null) return Results.NotFound();
             var forbidden = EnforcePublishGate(paper, http);
@@ -1161,7 +1093,7 @@ public static class ListeningAuthoringAdminEndpoints
             CancellationToken ct) =>
         {
             if (body?.Items is null)
-                return Results.BadRequest(new { errorCode = "listening_sequence_missing_body", message = "Request body must contain an items array." });
+                return new ApiErrorResult(400, "listening_sequence_missing_body", "Request body must contain an items array.");
             var paper = await db.ContentPapers.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == paperId, ct);
             if (paper is null) return Results.NotFound();

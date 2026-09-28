@@ -64,7 +64,7 @@ public static class SpeakingAliasEndpoints
             CancellationToken ct) =>
         {
             var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
-            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+            if (profile is null) return new ApiErrorResult(404, "NO_PROFILE", "Tutor profile not found.");
 
             var rule = await svc.CreateAvailabilityRuleAsync(
                 profile.Id, req.DayOfWeek, req.StartTime, req.EndTime,
@@ -85,11 +85,11 @@ public static class SpeakingAliasEndpoints
             CancellationToken ct) =>
         {
             var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
-            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+            if (profile is null) return new ApiErrorResult(404, "NO_PROFILE", "Tutor profile not found.");
 
             var owned = await db.PrivateSpeakingAvailabilityRules
                 .AnyAsync(r => r.Id == ruleId && r.TutorProfileId == profile.Id, ct);
-            if (!owned) return Results.NotFound(new { error = "NOT_FOUND" });
+            if (!owned) return new ApiErrorResult(404, "NOT_FOUND", "Availability rule not found.");
 
             try
             {
@@ -104,7 +104,7 @@ public static class SpeakingAliasEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "private_speaking_availability_update_rejected", ApiErrorResult.SafeMessage(ex, "The availability rule could not be updated.")) { Exception = ex };
             }
         });
 
@@ -116,11 +116,11 @@ public static class SpeakingAliasEndpoints
             CancellationToken ct) =>
         {
             var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
-            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+            if (profile is null) return new ApiErrorResult(404, "NO_PROFILE", "Tutor profile not found.");
 
             var owned = await db.PrivateSpeakingAvailabilityRules
                 .AnyAsync(r => r.Id == ruleId && r.TutorProfileId == profile.Id, ct);
-            if (!owned) return Results.NotFound(new { error = "NOT_FOUND" });
+            if (!owned) return new ApiErrorResult(404, "NOT_FOUND", "Availability rule not found.");
 
             try
             {
@@ -129,7 +129,7 @@ public static class SpeakingAliasEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "private_speaking_availability_delete_rejected", ApiErrorResult.SafeMessage(ex, "The availability rule could not be deleted.")) { Exception = ex };
             }
         });
 
@@ -166,11 +166,11 @@ public static class SpeakingAliasEndpoints
             CancellationToken ct) =>
         {
             if (!DateOnly.TryParse(from, out var fromDate) || !DateOnly.TryParse(to, out var toDate))
-                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+                return new ApiErrorResult(400, "private_speaking_invalid_date", "Invalid date format. Use yyyy-MM-dd.");
             if (toDate < fromDate)
-                return Results.BadRequest(new { error = "'to' must be >= 'from'." });
+                return new ApiErrorResult(400, "private_speaking_invalid_date_range", "'to' must be >= 'from'.");
             if ((toDate.ToDateTime(default) - fromDate.ToDateTime(default)).TotalDays > 30)
-                return Results.BadRequest(new { error = "Date range must not exceed 30 days." });
+                return new ApiErrorResult(400, "private_speaking_date_range_too_long", "Date range must not exceed 30 days.");
 
             var slots = await svc.GetLearnerSlotsAsync(tutorId, fromDate, toDate, ct);
             return Results.Ok(slots);
@@ -189,7 +189,7 @@ public static class SpeakingAliasEndpoints
                 req.ProfessionTrack, req.IdempotencyKey, req.SessionFormat, ct);
 
             if (!result.Success)
-                return Results.BadRequest(new { error = result.Error });
+                return new ApiErrorResult(400, "private_speaking_booking_rejected", result.Error ?? "The booking could not be created.");
 
             return Results.Ok(new
             {
@@ -225,7 +225,7 @@ public static class SpeakingAliasEndpoints
                 bookingId, http.UserId(), "learner", req?.Reason, ct);
             return success
                 ? Results.Ok(new { cancelled = true })
-                : Results.BadRequest(new { error });
+                : new ApiErrorResult(400, "private_speaking_cancel_rejected", error ?? "The booking could not be cancelled.");
         });
 
         me.MapPost("/bookings/{bookingId}/reschedule", async (
@@ -249,7 +249,7 @@ public static class SpeakingAliasEndpoints
                     result.EntitlementUsed,
                     result.SpeakingSessionsRemaining
                 })
-                : Results.BadRequest(new { error = result.Error });
+                : new ApiErrorResult(400, "private_speaking_reschedule_rejected", result.Error ?? "The booking could not be rescheduled.");
         });
 
         me.MapPost("/bookings/{bookingId}/join-token", (
@@ -285,13 +285,13 @@ public static class SpeakingAliasEndpoints
             if (from is not null)
             {
                 if (!DateOnly.TryParse(from, out var parsedFrom))
-                    return Results.BadRequest(new { error = "Invalid 'from'/'to' date. Use yyyy-MM-dd." });
+                    return new ApiErrorResult(400, "private_speaking_invalid_date", "Invalid 'from'/'to' date. Use yyyy-MM-dd.");
                 fromDate = parsedFrom;
             }
             if (to is not null)
             {
                 if (!DateOnly.TryParse(to, out var parsedTo))
-                    return Results.BadRequest(new { error = "Invalid 'from'/'to' date. Use yyyy-MM-dd." });
+                    return new ApiErrorResult(400, "private_speaking_invalid_date", "Invalid 'from'/'to' date. Use yyyy-MM-dd.");
                 toDate = parsedTo;
             }
 
@@ -321,7 +321,7 @@ public static class SpeakingAliasEndpoints
                 req.SessionStartUtc, req.DurationMinutes,
                 req.ProfessionTrack, req.TutorNotes, ct);
             return booking is null
-                ? Results.NotFound(new { error = "NOT_FOUND" })
+                ? new ApiErrorResult(404, "NOT_FOUND", "Booking not found.")
                 : Results.Ok(ToPdfResponse(booking));
         }).WithAdminWrite("AdminReviewOps");
 
@@ -336,7 +336,7 @@ public static class SpeakingAliasEndpoints
                 bookingId, http.UserId(), req?.AmountMinorUnits, req?.Reason, ct);
             return success
                 ? Results.Ok(new { refunded = true })
-                : Results.BadRequest(new { error });
+                : new ApiErrorResult(400, "private_speaking_refund_rejected", error ?? "The refund could not be completed.");
         }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/manual-reschedule", async (
@@ -350,7 +350,7 @@ public static class SpeakingAliasEndpoints
                 bookingId, http.UserId(), req.NewSessionStartUtc, req.Reason, ct);
             return success
                 ? Results.Ok(new { rescheduled = true })
-                : Results.BadRequest(new { error });
+                : new ApiErrorResult(400, "private_speaking_reschedule_rejected", error ?? "The booking could not be rescheduled.");
         }).WithAdminWrite("AdminReviewOps");
 
         return app;

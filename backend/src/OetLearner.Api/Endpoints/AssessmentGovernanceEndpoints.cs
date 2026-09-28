@@ -51,7 +51,7 @@ public static class AssessmentGovernanceEndpoints
                 ? new[] { "listening", "reading" }
                 : new[] { AssessmentScoreTableValidator.NormalizeAssessment(assessment) };
             if (assessments.Any(item => !AssessmentScoreTableValidator.IsSupportedAssessment(item)))
-                return Results.BadRequest(new { error = "assessment_unsupported" });
+                return new ApiErrorResult(400, "assessment_unsupported", "Assessment must be listening or reading.");
 
             var now = DateTimeOffset.UtcNow;
             var status = new List<object>(assessments.Length);
@@ -108,7 +108,7 @@ public static class AssessmentGovernanceEndpoints
                 else
                 {
                     try { policyDocument = AssessmentMarkingPolicyDocument.Parse(policy.PolicyJson); }
-                    catch (InvalidOperationException ex) { policyError = ex.Message; }
+                    catch (InvalidOperationException ex) { policyError = ApiErrorResult.SafeMessage(ex, "assessment_marking_policy_invalid"); }
                 }
 
                 var rationaleCount = await db.AssessmentRationales
@@ -173,16 +173,16 @@ public static class AssessmentGovernanceEndpoints
                     row.Grade,
                     row.Passed)).ToArray());
             if (!validation.IsValid)
-                return Results.BadRequest(new { error = validation.ErrorCode });
+                return ScoreTableInvalid(validation.ErrorCode);
             if (string.IsNullOrWhiteSpace(request.VersionKey))
-                return Results.BadRequest(new { error = "score_table_version_required" });
+                return new ApiErrorResult(400, "score_table_version_required", "A score table version key is required.");
 
             var exists = await db.AssessmentScoreConversionTables.AnyAsync(x =>
                 x.Assessment == assessment
                 && x.ScopeKey == scopeKey
                 && x.VersionKey == request.VersionKey.Trim(), ct);
             if (exists)
-                return Results.Conflict(new { error = "score_table_version_exists" });
+                return new ApiErrorResult(409, "score_table_version_exists", "This score table version already exists.");
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -224,7 +224,7 @@ public static class AssessmentGovernanceEndpoints
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (table is null) return Results.NotFound();
             if (table.Status != AssessmentGovernanceStatus.Draft)
-                return Results.Conflict(new { error = "score_table_requires_draft_for_review" });
+                return new ApiErrorResult(409, "score_table_requires_draft_for_review", "Only a draft score table can be submitted for review.");
 
             table.Status = AssessmentGovernanceStatus.InReview;
             table.UpdatedAt = DateTimeOffset.UtcNow;
@@ -245,14 +245,14 @@ public static class AssessmentGovernanceEndpoints
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (table is null) return Results.NotFound();
             if (table.Status != AssessmentGovernanceStatus.InReview)
-                return Results.Conflict(new { error = "score_table_requires_review_before_approval" });
+                return new ApiErrorResult(409, "score_table_requires_review_before_approval", "The score table must be in review before it can be approved.");
 
             var validation = AssessmentScoreTableValidator.Validate(
                 table.Assessment,
                 table.Rows.Select(row => new AssessmentScoreTableRowInput(
                     row.RawScore, row.ConvertedScore, row.Grade, row.Passed)).ToArray());
             if (!validation.IsValid)
-                return Results.BadRequest(new { error = validation.ErrorCode });
+                return ScoreTableInvalid(validation.ErrorCode);
 
             var now = DateTimeOffset.UtcNow;
             table.Status = AssessmentGovernanceStatus.Approved;
@@ -276,18 +276,18 @@ public static class AssessmentGovernanceEndpoints
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (table is null) return Results.NotFound();
             if (table.HasBeenUsed)
-                return Results.Conflict(new { error = "score_table_used_version_is_immutable" });
+                return new ApiErrorResult(409, "score_table_used_version_is_immutable", "A score table version that has been used cannot be changed.");
             if (table.Status == AssessmentGovernanceStatus.Effective)
                 return Results.Ok(ProjectTable(table));
             if (table.Status != AssessmentGovernanceStatus.Approved)
-                return Results.Conflict(new { error = "score_table_requires_approval_before_effective" });
+                return new ApiErrorResult(409, "score_table_requires_approval_before_effective", "The score table must be approved before it can become effective.");
 
             var validation = AssessmentScoreTableValidator.Validate(
                 table.Assessment,
                 table.Rows.Select(row => new AssessmentScoreTableRowInput(
                     row.RawScore, row.ConvertedScore, row.Grade, row.Passed)).ToArray());
             if (!validation.IsValid)
-                return Results.BadRequest(new { error = validation.ErrorCode });
+                return ScoreTableInvalid(validation.ErrorCode);
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -340,19 +340,19 @@ public static class AssessmentGovernanceEndpoints
         {
             var assessment = AssessmentScoreTableValidator.NormalizeAssessment(request.Assessment);
             if (!AssessmentScoreTableValidator.IsSupportedAssessment(assessment))
-                return Results.BadRequest(new { error = "assessment_unsupported" });
+                return new ApiErrorResult(400, "assessment_unsupported", "Assessment must be listening or reading.");
             if (string.IsNullOrWhiteSpace(request.VersionKey))
-                return Results.BadRequest(new { error = "marking_policy_version_required" });
+                return new ApiErrorResult(400, "marking_policy_version_required", "A marking policy version key is required.");
 
             try { _ = AssessmentMarkingPolicyDocument.Parse(request.PolicyJson); }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+            catch (InvalidOperationException ex) { return MarkingPolicyInvalid(ex); }
 
             var scopeKey = AssessmentScoreTableValidator.NormalizeScope(request.ScopeKey);
             var exists = await db.AssessmentMarkingPolicyVersions.AnyAsync(x =>
                 x.Assessment == assessment
                 && x.ScopeKey == scopeKey
                 && x.VersionKey == request.VersionKey.Trim(), ct);
-            if (exists) return Results.Conflict(new { error = "marking_policy_version_exists" });
+            if (exists) return new ApiErrorResult(409, "marking_policy_version_exists", "This marking policy version already exists.");
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -386,7 +386,7 @@ public static class AssessmentGovernanceEndpoints
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (policy is null) return Results.NotFound();
             if (policy.Status != AssessmentGovernanceStatus.Draft)
-                return Results.Conflict(new { error = "marking_policy_requires_draft_for_review" });
+                return new ApiErrorResult(409, "marking_policy_requires_draft_for_review", "Only a draft marking policy can be submitted for review.");
 
             policy.Status = AssessmentGovernanceStatus.InReview;
             policy.UpdatedAt = DateTimeOffset.UtcNow;
@@ -406,13 +406,13 @@ public static class AssessmentGovernanceEndpoints
                 .SingleOrDefaultAsync(x => x.Id == id, ct);
             if (policy is null) return Results.NotFound();
             if (policy.Status != AssessmentGovernanceStatus.InReview)
-                return Results.Conflict(new { error = "marking_policy_requires_review_before_approval" });
+                return new ApiErrorResult(409, "marking_policy_requires_review_before_approval", "The marking policy must be in review before it can be approved.");
 
             AssessmentMarkingPolicyDocument parsedPolicy;
             try { parsedPolicy = AssessmentMarkingPolicyDocument.Parse(policy.PolicyJson); }
-            catch (InvalidOperationException ex) { return Results.BadRequest(new { error = ex.Message }); }
+            catch (InvalidOperationException ex) { return MarkingPolicyInvalid(ex); }
             if (parsedPolicy.ReleaseGate is not { IsApproved: true })
-                return Results.BadRequest(new { error = "assessment_release_gate_incomplete" });
+                return new ApiErrorResult(400, "assessment_release_gate_incomplete", "The marking policy release gate is not approved.");
 
             var now = DateTimeOffset.UtcNow;
             policy.Status = AssessmentGovernanceStatus.Approved;
@@ -434,11 +434,11 @@ public static class AssessmentGovernanceEndpoints
             var policy = await db.AssessmentMarkingPolicyVersions.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (policy is null) return Results.NotFound();
             if (policy.HasBeenUsed)
-                return Results.Conflict(new { error = "marking_policy_used_version_is_immutable" });
+                return new ApiErrorResult(409, "marking_policy_used_version_is_immutable", "A marking policy version that has been used cannot be changed.");
             if (policy.Status == AssessmentGovernanceStatus.Effective)
                 return Results.Ok(ProjectPolicy(policy));
             if (policy.Status != AssessmentGovernanceStatus.Approved)
-                return Results.Conflict(new { error = "marking_policy_requires_approval_before_effective" });
+                return new ApiErrorResult(409, "marking_policy_requires_approval_before_effective", "The marking policy must be approved before it can become effective.");
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -500,19 +500,19 @@ public static class AssessmentGovernanceEndpoints
         {
             var assessment = AssessmentScoreTableValidator.NormalizeAssessment(request.Assessment);
             if (!AssessmentScoreTableValidator.IsSupportedAssessment(assessment))
-                return Results.BadRequest(new { error = "assessment_unsupported" });
+                return new ApiErrorResult(400, "assessment_unsupported", "Assessment must be listening or reading.");
             if (string.IsNullOrWhiteSpace(request.QuestionRevisionId)
                 || string.IsNullOrWhiteSpace(request.SourceSentence)
                 || string.IsNullOrWhiteSpace(request.RationaleText)
                 || request.EvidenceCount <= 0)
-                return Results.BadRequest(new { error = "rationale_requires_source_text_and_evidence" });
+                return new ApiErrorResult(400, "rationale_requires_source_text_and_evidence", "Question revision, source sentence, rationale text and evidence count are required.");
             if (request.SourceSentence.Length > 4096 || request.RationaleText.Length > 4096)
-                return Results.BadRequest(new { error = "rationale_text_too_long" });
+                return new ApiErrorResult(400, "rationale_text_too_long", "Source sentence and rationale text must be 4096 characters or fewer.");
 
             var revisionId = request.QuestionRevisionId.Trim();
             if (await db.AssessmentRationales.AnyAsync(x =>
                 x.Assessment == assessment && x.QuestionRevisionId == revisionId, ct))
-                return Results.Conflict(new { error = "rationale_revision_exists" });
+                return new ApiErrorResult(409, "rationale_revision_exists", "A rationale already exists for this question revision.");
 
             var actorId = ActorId(http);
             var now = DateTimeOffset.UtcNow;
@@ -546,7 +546,7 @@ public static class AssessmentGovernanceEndpoints
             var rationale = await db.AssessmentRationales.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (rationale is null) return Results.NotFound();
             if (rationale.Status != AssessmentGovernanceStatus.Draft)
-                return Results.Conflict(new { error = "rationale_requires_draft_for_review" });
+                return new ApiErrorResult(409, "rationale_requires_draft_for_review", "Only a draft rationale can be submitted for review.");
 
             rationale.Status = AssessmentGovernanceStatus.InReview;
             rationale.UpdatedAt = DateTimeOffset.UtcNow;
@@ -565,11 +565,11 @@ public static class AssessmentGovernanceEndpoints
             var rationale = await db.AssessmentRationales.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (rationale is null) return Results.NotFound();
             if (rationale.Status != AssessmentGovernanceStatus.InReview)
-                return Results.Conflict(new { error = "rationale_requires_review_before_approval" });
+                return new ApiErrorResult(409, "rationale_requires_review_before_approval", "The rationale must be in review before it can be approved.");
             if (rationale.EvidenceCount <= 0
                 || string.IsNullOrWhiteSpace(rationale.SourceSentence)
                 || string.IsNullOrWhiteSpace(rationale.RationaleText))
-                return Results.BadRequest(new { error = "rationale_incomplete" });
+                return new ApiErrorResult(400, "rationale_incomplete", "The rationale needs a source sentence, rationale text and evidence.");
 
             rationale.Status = AssessmentGovernanceStatus.Approved;
             rationale.ApprovedByUserId = ActorId(http);
@@ -591,11 +591,11 @@ public static class AssessmentGovernanceEndpoints
             if (rationale.Status == AssessmentGovernanceStatus.Effective)
                 return Results.Ok(new { rationale.Id, status = rationale.Status.ToString(), rationale.ApprovedByUserId });
             if (rationale.Status != AssessmentGovernanceStatus.Approved)
-                return Results.Conflict(new { error = "rationale_requires_approval_before_effective" });
+                return new ApiErrorResult(409, "rationale_requires_approval_before_effective", "The rationale must be approved before it can become effective.");
             if (rationale.EvidenceCount <= 0
                 || string.IsNullOrWhiteSpace(rationale.SourceSentence)
                 || string.IsNullOrWhiteSpace(rationale.RationaleText))
-                return Results.BadRequest(new { error = "rationale_incomplete" });
+                return new ApiErrorResult(400, "rationale_incomplete", "The rationale needs a source sentence, rationale text and evidence.");
             rationale.Status = AssessmentGovernanceStatus.Effective;
             rationale.ApprovedByUserId = ActorId(http);
             rationale.UpdatedAt = DateTimeOffset.UtcNow;
@@ -642,14 +642,14 @@ public static class AssessmentGovernanceEndpoints
         {
             var assessment = AssessmentScoreTableValidator.NormalizeAssessment(request.Assessment);
             if (!AssessmentScoreTableValidator.IsSupportedAssessment(assessment))
-                return Results.BadRequest(new { error = "assessment_unsupported" });
+                return new ApiErrorResult(400, "assessment_unsupported", "Assessment must be listening or reading.");
             if (string.IsNullOrWhiteSpace(request.AttemptId)
                 || string.IsNullOrWhiteSpace(request.QuestionRevisionId)
                 || string.IsNullOrWhiteSpace(request.Reason))
-                return Results.BadRequest(new { error = "remark_job_fields_required" });
+                return new ApiErrorResult(400, "remark_job_fields_required", "Attempt, question revision and reason are required.");
             if (!IsValidKeySnapshot(request.OriginalKeySnapshotJson)
                 || !IsValidKeySnapshot(request.NewKeySnapshotJson))
-                return Results.BadRequest(new { error = "remark_key_snapshot_invalid_json" });
+                return new ApiErrorResult(400, "remark_key_snapshot_invalid_json", "Key snapshots must be valid JSON objects.");
 
             var attemptId = request.AttemptId.Trim();
             var paperId = assessment == "reading"
@@ -662,7 +662,7 @@ public static class AssessmentGovernanceEndpoints
                     .Select(x => x.PaperId)
                     .SingleOrDefaultAsync(ct);
             if (paperId is null)
-                return Results.NotFound(new { error = "submitted_attempt_not_found" });
+                return new ApiErrorResult(404, "submitted_attempt_not_found", "Submitted attempt not found.");
 
             var questionRevisionId = request.QuestionRevisionId.Trim();
             var currentKey = assessment == "reading"
@@ -677,7 +677,7 @@ public static class AssessmentGovernanceEndpoints
                     .Select(question => new CurrentKeySnapshot(question.CorrectAnswerJson, question.AcceptedSynonymsJson))
                     .SingleOrDefaultAsync(ct);
             if (currentKey is null)
-                return Results.NotFound(new { error = "remark_question_revision_not_found" });
+                return new ApiErrorResult(404, "remark_question_revision_not_found", "Question revision not found on this attempt's paper.");
 
             if (!TryCanonicalizeKeySnapshot(
                     request.OriginalKeySnapshotJson,
@@ -685,7 +685,7 @@ public static class AssessmentGovernanceEndpoints
                     requireMatch: true,
                     out var originalKeySnapshot))
             {
-                return Results.Conflict(new { error = "remark_original_key_snapshot_mismatch" });
+                return new ApiErrorResult(409, "remark_original_key_snapshot_mismatch", "The original key snapshot does not match the current answer key.");
             }
             if (!TryCanonicalizeKeySnapshot(
                     request.NewKeySnapshotJson,
@@ -693,7 +693,7 @@ public static class AssessmentGovernanceEndpoints
                     requireMatch: false,
                     out var newKeySnapshot))
             {
-                return Results.BadRequest(new { error = "remark_new_key_snapshot_invalid" });
+                return new ApiErrorResult(400, "remark_new_key_snapshot_invalid", "The new key snapshot is invalid.");
             }
 
             var active = await db.AssessmentReMarkJobs.AnyAsync(x =>
@@ -702,7 +702,7 @@ public static class AssessmentGovernanceEndpoints
                 && x.QuestionRevisionId == questionRevisionId
                 && x.Status != AssessmentGovernanceStatus.Completed
                 && x.Status != AssessmentGovernanceStatus.Retired, ct);
-            if (active) return Results.Conflict(new { error = "remark_job_already_open" });
+            if (active) return new ApiErrorResult(409, "remark_job_already_open", "A re-mark job is already open for this attempt and question.");
 
             var actorId = ActorId(http);
             var job = new AssessmentReMarkJob
@@ -737,7 +737,7 @@ public static class AssessmentGovernanceEndpoints
             if (job.Status == AssessmentGovernanceStatus.Completed)
                 return Results.Ok(new { job.Id, status = job.Status.ToString() });
             if (job.Status != AssessmentGovernanceStatus.InReview)
-                return Results.Conflict(new { error = "remark_job_not_in_review" });
+                return new ApiErrorResult(409, "remark_job_not_in_review", "The re-mark job is not in review.");
             job.Status = AssessmentGovernanceStatus.Approved;
             job.ApprovedByUserId = ActorId(http);
             job.ApprovedAt = DateTimeOffset.UtcNow;
@@ -760,7 +760,7 @@ public static class AssessmentGovernanceEndpoints
             if (job.Status == AssessmentGovernanceStatus.Completed)
                 return Results.Ok(new { job.Id, status = job.Status.ToString(), affectedAttemptIds = job.AffectedAttemptIdsJson });
             if (job.Status != AssessmentGovernanceStatus.Approved)
-                return Results.Conflict(new { error = "remark_job_not_approved" });
+                return new ApiErrorResult(409, "remark_job_not_approved", "The re-mark job must be approved before it can be executed.");
 
             object originalResult;
             object result;
@@ -992,6 +992,26 @@ public static class AssessmentGovernanceEndpoints
             return false;
         }
     }
+    private static ApiErrorResult ScoreTableInvalid(string? code) => new(400, code ?? "score_table_invalid", code switch
+    {
+        "assessment_unsupported" => "Assessment must be listening or reading.",
+        "score_table_requires_43_rows" => "The score table must have exactly 43 rows (raw scores 0 to 42).",
+        "score_table_duplicate_raw_score" => "The score table contains a duplicate raw score.",
+        "score_table_raw_scores_must_cover_0_to_42" => "The score table raw scores must cover 0 to 42.",
+        "score_table_converted_score_out_of_range" => "Converted scores must be between 0 and 500.",
+        "score_table_requires_grade_and_pass_decision" => "Every score table row needs a grade and a pass decision.",
+        _ => "The score table is invalid.",
+    });
+
+    // AssessmentMarkingPolicyDocument.Parse throws its error code as the message.
+    private static ApiErrorResult MarkingPolicyInvalid(InvalidOperationException ex)
+    {
+        var code = ApiErrorResult.SafeMessage(ex, "assessment_marking_policy_invalid");
+        return new(400, code, code == "assessment_marking_policy_invalid_json"
+            ? "The marking policy is not valid JSON."
+            : "The marking policy is incomplete or invalid.") { Exception = ex };
+    }
+
     private static string ActorId(HttpContext http) =>
         http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
 
