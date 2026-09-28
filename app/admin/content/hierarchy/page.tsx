@@ -733,13 +733,13 @@ export default function AdminContentHierarchyPage() {
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => { setTab('programs'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'programs' ? 'bg-primary text-primary-foreground' : 'bg-muted hover-primary'}`}
+          className={`px-4 py-2 text-sm rounded-md ${tab === 'programs' ? 'bg-admin-primary text-admin-primary-fg' : 'bg-admin-bg-subtle text-admin-fg-default hover-primary'}`}
         >
           <GitBranch className="w-4 h-4 inline mr-1" /> Programs ({programs.length})
         </button>
         <button
           onClick={() => { setTab('packages'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'packages' ? 'bg-primary text-primary-foreground' : 'bg-muted hover-primary'}`}
+          className={`px-4 py-2 text-sm rounded-md ${tab === 'packages' ? 'bg-admin-primary text-admin-primary-fg' : 'bg-admin-bg-subtle text-admin-fg-default hover-primary'}`}
         >
           <Package className="w-4 h-4 inline mr-1" /> Packages ({packages.length})
         </button>
@@ -812,7 +812,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openTrackEditor(undefined, selectedProgramId ?? undefined)}>Create Track</Button>}
               >
                 {tracks.length === 0 ? (
-                  <EmptyState title="No tracks" description="Create a track for this program." icon={<Layers className="w-8 h-8 text-admin-text-muted" />} />
+                  <EmptyState title="No tracks" description="Create a track for this program." icon={<Layers className="w-8 h-8 text-admin-fg-muted" />} />
                 ) : (
                   <DataTable columns={trackColumns} data={tracks} keyExtractor={(row) => row.id} />
                 )}
@@ -826,7 +826,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openModuleEditor(undefined, selectedTrackId ?? undefined)}>Create Module</Button>}
               >
                 {modules.length === 0 ? (
-                  <EmptyState title="No modules" description="Create a module for this track." icon={<Layers className="w-8 h-8 text-admin-text-muted" />} />
+                  <EmptyState title="No modules" description="Create a module for this track." icon={<Layers className="w-8 h-8 text-admin-fg-muted" />} />
                 ) : (
                   <DataTable columns={moduleColumns} data={modules} keyExtractor={(row) => row.id} />
                 )}
@@ -840,7 +840,7 @@ export default function AdminContentHierarchyPage() {
                 actions={<Button variant="outline" size="sm" onClick={() => openLessonEditor(undefined, selectedModuleId ?? undefined)}>Create Lesson</Button>}
               >
                 {lessons.length === 0 ? (
-                  <EmptyState title="No lessons" description="Create a lesson for this module." icon={<BookOpen className="w-8 h-8 text-admin-text-muted" />} />
+                  <EmptyState title="No lessons" description="Create a lesson for this module." icon={<BookOpen className="w-8 h-8 text-admin-fg-muted" />} />
                 ) : (
                   <DataTable columns={lessonColumns} data={lessons} keyExtractor={(row) => row.id} />
                 )}

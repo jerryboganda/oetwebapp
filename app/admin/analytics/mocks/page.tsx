@@ -71,7 +71,7 @@ function sumWorkload(rows: AdminMocksAnalyticsTutorWorkloadRow[]): { pending: nu
 function RevenuePanel({ rows }: { rows: AdminMocksAnalyticsRevenueRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No mock package revenue recorded yet. Once learners purchase mock bundles, totals will appear here.
       </p>
     );
@@ -81,7 +81,7 @@ function RevenuePanel({ rows }: { rows: AdminMocksAnalyticsRevenueRow[] }) {
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Package</th>
             <th scope="col" className="px-4 py-3">Code</th>
             <th scope="col" className="px-4 py-3 text-right">Total revenue</th>
@@ -91,14 +91,14 @@ function RevenuePanel({ rows }: { rows: AdminMocksAnalyticsRevenueRow[] }) {
           {rows.map((row) => (
             <tr key={row.packageCode}>
               <td className="py-3 pr-4">
-                <p className="font-semibold text-admin-text">{row.packageName}</p>
+                <p className="font-semibold text-admin-fg-strong">{row.packageName}</p>
               </td>
               <td className="px-4 py-3">
-                <code className="rounded bg-admin-surface-raised px-1.5 py-0.5 text-xs text-admin-text-muted">
+                <code className="rounded bg-admin-bg-subtle px-1.5 py-0.5 text-xs text-admin-fg-muted">
                   {row.packageCode}
                 </code>
               </td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-text">
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-fg-strong">
                 {formatRevenue(row.totalRevenue, row.currency)}
               </td>
             </tr>
@@ -112,7 +112,7 @@ function RevenuePanel({ rows }: { rows: AdminMocksAnalyticsRevenueRow[] }) {
 function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No tutor activity in the current window. Workload appears once mock bookings flow through.
       </p>
     );
@@ -122,7 +122,7 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Tutor</th>
             <th scope="col" className="px-4 py-3 text-right">Pending</th>
             <th scope="col" className="px-4 py-3 text-right">Completed (7d)</th>
@@ -132,8 +132,8 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
           {rows.map((row) => (
             <tr key={row.tutorId}>
               <td className="py-3 pr-4">
-                <p className="font-semibold text-admin-text">{row.tutorName}</p>
-                <p className="text-xs text-admin-text-muted">{row.tutorId}</p>
+                <p className="font-semibold text-admin-fg-strong">{row.tutorName}</p>
+                <p className="text-xs text-admin-fg-muted">{row.tutorId}</p>
               </td>
               <td className="px-4 py-3 text-right">
                 <Badge
@@ -143,7 +143,7 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
                   {row.pendingBookings}
                 </Badge>
               </td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-text">
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-fg-strong">
                 {row.completedThisWeek}
               </td>
             </tr>
@@ -157,7 +157,7 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
 function LowQualityPanel({ rows }: { rows: AdminMocksAnalyticsLowQualityRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No bundles have been flagged. Item analysis raises a flag when discrimination or distractor signals fall outside policy.
       </p>
     );
@@ -168,11 +168,11 @@ function LowQualityPanel({ rows }: { rows: AdminMocksAnalyticsLowQualityRow[] })
       {rows.map((row) => (
         <li
           key={row.bundleId}
-          className="flex flex-col gap-2 rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-2 rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="min-w-0">
-            <p className="truncate font-semibold text-admin-text">{row.bundleTitle}</p>
-            <p className="text-xs text-admin-text-muted">{row.itemCount} item{row.itemCount === 1 ? '' : 's'} flagged</p>
+            <p className="truncate font-semibold text-admin-fg-strong">{row.bundleTitle}</p>
+            <p className="text-xs text-admin-fg-muted">{row.itemCount} item{row.itemCount === 1 ? '' : 's'} flagged</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {row.flags.length === 0 ? (
@@ -205,7 +205,7 @@ function formatHours(value: number): string {
 function AttemptsCompletionPanel({ data }: { data: AdminMocksAnalyticsAttemptsCompletion }) {
   if (data.started === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No mock sub-test attempts in the current window. Once learners start sitting mocks the completion rate will populate.
       </p>
     );
@@ -213,17 +213,17 @@ function AttemptsCompletionPanel({ data }: { data: AdminMocksAnalyticsAttemptsCo
 
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Started</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">{data.started}</p>
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Started</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">{data.started}</p>
       </div>
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Completed</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">{data.completed}</p>
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Completed</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">{data.completed}</p>
       </div>
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Completion rate</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Completion rate</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">
           {formatPercent(data.completionRate)}
         </p>
       </div>
@@ -234,7 +234,7 @@ function AttemptsCompletionPanel({ data }: { data: AdminMocksAnalyticsAttemptsCo
 function AverageReadinessPanel({ data }: { data: AdminMocksAnalyticsAverageReadiness }) {
   if (data.sampleSize === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No mock reports were generated in the current window. Average readiness fills once reports are aggregated.
       </p>
     );
@@ -251,21 +251,21 @@ function AverageReadinessPanel({ data }: { data: AdminMocksAnalyticsAverageReadi
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums text-admin-text">
+        <span className="text-2xl font-semibold tabular-nums text-admin-fg-strong">
           {data.averageScore !== null ? data.averageScore.toFixed(1) : '-'}
         </span>
-        <span className="text-xs text-admin-text-muted">average overall ({data.sampleSize} report{data.sampleSize === 1 ? '' : 's'})</span>
+        <span className="text-xs text-admin-fg-muted">average overall ({data.sampleSize} report{data.sampleSize === 1 ? '' : 's'})</span>
       </div>
       <ul className="space-y-1.5">
         {bars.map((bar) => {
           const pct = total > 0 ? (bar.count / total) * 100 : 0;
           return (
             <li key={bar.key} className="space-y-1">
-              <div className="flex items-center justify-between text-xs text-admin-text-muted">
+              <div className="flex items-center justify-between text-xs text-admin-fg-muted">
                 <span>{bar.label}</span>
                 <span className="tabular-nums">{bar.count} · {pct.toFixed(0)}%</span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-admin-surface-raised">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-admin-bg-subtle">
                 <div
                   className={`h-full ${bar.barClass}`}
                   style={{ width: `${Math.max(2, pct)}%` }}
@@ -283,7 +283,7 @@ function AverageReadinessPanel({ data }: { data: AdminMocksAnalyticsAverageReadi
 function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction }) {
   if (data.sampleSize === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No mock reports with overall scores in the current window. Pass-rate trends populate once reports are generated.
       </p>
     );
@@ -291,7 +291,7 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
 
   if (data.byProfession.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         Profession breakdown unavailable. Global predicted pass rate: {formatPercent(data.predictedPassRate)}.
       </p>
     );
@@ -301,7 +301,7 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Profession</th>
             <th scope="col" className="px-4 py-3 text-right">Sample size</th>
             <th scope="col" className="px-4 py-3 text-right">Predicted pass rate</th>
@@ -311,9 +311,9 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
           {data.byProfession.map((row) => (
             <tr key={row.profession}>
               <td className="py-3 pr-4 capitalize">
-                <p className="font-semibold text-admin-text">{row.profession}</p>
+                <p className="font-semibold text-admin-fg-strong">{row.profession}</p>
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-admin-text">{row.sampleSize}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">{row.sampleSize}</td>
               <td className="px-4 py-3 text-right">
                 <Badge
                   variant={row.predictedPassRate < 0.5 ? 'warning' : 'outline'}
@@ -333,7 +333,7 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
 function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) {
   if (data.perSubtest.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No tutor-reviewed mocks closed inside the current window. Delay metrics appear once reviewers consume reservations.
       </p>
     );
@@ -343,7 +343,7 @@ function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) 
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Sub-test</th>
             <th scope="col" className="px-4 py-3 text-right">Sample size</th>
             <th scope="col" className="px-4 py-3 text-right">Avg delay</th>
@@ -354,10 +354,10 @@ function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) 
           {data.perSubtest.map((row) => (
             <tr key={row.subtest}>
               <td className="py-3 pr-4 capitalize">
-                <p className="font-semibold text-admin-text">{row.subtest}</p>
+                <p className="font-semibold text-admin-fg-strong">{row.subtest}</p>
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-admin-text">{row.sampleSize}</td>
-              <td className="px-4 py-3 text-right tabular-nums text-admin-text">{formatHours(row.avgDelayHours)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">{row.sampleSize}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">{formatHours(row.avgDelayHours)}</td>
               <td className="px-4 py-3 text-right">
                 <Badge
                   variant={row.p95DelayHours > 48 ? 'warning' : 'outline'}
@@ -383,7 +383,7 @@ function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) 
 function ReadingSectionPanel({ data }: { data: AdminMocksAnalyticsReadingSection }) {
   if (data.started === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No Reading sub-test attempts inside mocks yet. Once learners launch
         Reading from a mock booking, the cross-reference populates.
       </p>
@@ -392,33 +392,33 @@ function ReadingSectionPanel({ data }: { data: AdminMocksAnalyticsReadingSection
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Started</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">{data.started}</p>
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Started</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">{data.started}</p>
       </div>
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Submitted</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">{data.submitted}</p>
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Submitted</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">{data.submitted}</p>
         {data.completionRatePercent != null ? (
-          <p className="mt-1 text-xs text-admin-text-muted tabular-nums">
+          <p className="mt-1 text-xs text-admin-fg-muted tabular-nums">
             {data.completionRatePercent.toFixed(1)}% completion
           </p>
         ) : null}
       </div>
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Avg scaled</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Avg scaled</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">
           {data.averageScaledScore != null ? data.averageScaledScore.toFixed(0) : '-'}
         </p>
         {data.averageRawScore != null ? (
-          <p className="mt-1 text-xs text-admin-text-muted tabular-nums">
+          <p className="mt-1 text-xs text-admin-fg-muted tabular-nums">
             raw {data.averageRawScore.toFixed(1)} / 42
           </p>
         ) : null}
       </div>
-      <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Avg time</p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">
+      <div className="rounded-2xl border border-admin-border bg-admin-bg-subtle/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">Avg time</p>
+        <p className="mt-1 text-lg font-semibold tabular-nums text-admin-fg-strong">
           {data.averageCompletionSeconds != null
             ? `${Math.round(data.averageCompletionSeconds / 60)}m`
             : '-'}

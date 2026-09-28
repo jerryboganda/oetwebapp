@@ -64,19 +64,19 @@ interface AdminStudyPlan {
 const STATUS_BADGE: Record<string, string> = {
   Completed: 'bg-success/10 text-success',
   InProgress: 'bg-primary/10 text-primary',
-  NotStarted: 'bg-muted text-muted-foreground',
+  NotStarted: 'bg-admin-bg-subtle text-admin-fg-muted',
   Skipped: 'bg-warning/10 text-warning',
   Overdue: 'bg-danger/10 text-danger',
 };
 
 const SUBTEST_COLOR: Record<string, string> = {
-  reading: 'bg-blue-100 text-blue-800',
-  listening: 'bg-purple-100 text-purple-800',
-  writing: 'bg-green-100 text-green-800',
-  speaking: 'bg-orange-100 text-orange-800',
-  vocabulary: 'bg-yellow-100 text-yellow-800',
-  pronunciation: 'bg-pink-100 text-pink-800',
-  mock: 'bg-red-100 text-red-800',
+  reading: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+  listening: 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300',
+  writing: 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300',
+  speaking: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
+  vocabulary: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
+  pronunciation: 'bg-pink-100 text-pink-800 dark:bg-pink-500/15 dark:text-pink-300',
+  mock: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
 };
 
 export default function AdminLearnerStudyPlanPage() {
@@ -345,7 +345,7 @@ export default function AdminLearnerStudyPlanPage() {
           <div className="overflow-x-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-muted/50 text-left">
+                <tr className="bg-admin-bg-subtle text-left">
                   <th scope="col" className="px-4 py-3 font-medium">Task</th>
                   <th scope="col" className="px-4 py-3 font-medium">Subtest</th>
                   <th scope="col" className="px-4 py-3 font-medium">Section</th>
@@ -367,7 +367,7 @@ export default function AdminLearnerStudyPlanPage() {
                 ) : (
                   filteredItems.map((item) => (
                     <Fragment key={item.id}>
-                    <tr className="hover:bg-muted/30 transition-colors">
+                    <tr className="hover:bg-[var(--admin-state-hover)] transition-colors">
                       <td className="px-4 py-3 max-w-xs">
                         <p className="font-medium truncate">{item.title}</p>
                         {item.rationale && (
@@ -388,7 +388,7 @@ export default function AdminLearnerStudyPlanPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            SUBTEST_COLOR[item.subtestCode] ?? 'bg-muted text-muted-foreground'
+                            SUBTEST_COLOR[item.subtestCode] ?? 'bg-admin-bg-subtle text-admin-fg-muted'
                           }`}
                         >
                           {item.subtestCode}
@@ -400,7 +400,7 @@ export default function AdminLearnerStudyPlanPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            STATUS_BADGE[item.status] ?? 'bg-muted text-muted-foreground'
+                            STATUS_BADGE[item.status] ?? 'bg-admin-bg-subtle text-admin-fg-muted'
                           }`}
                         >
                           {item.status}

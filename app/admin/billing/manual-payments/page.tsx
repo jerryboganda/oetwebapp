@@ -685,7 +685,7 @@ export default function AdminPaymentProofsPage() {
       cell: ({ row }) => {
         const hl = highlightId && (row.original.subscriptionId === highlightId || row.original.userId === highlightId);
         return (
-          <div className={hl ? 'rounded bg-amber-50 px-2 py-1 ring-1 ring-amber-300' : undefined}>
+          <div className={hl ? 'rounded bg-[var(--admin-warning-tint)] px-2 py-1 ring-1 ring-[var(--admin-warning)]' : undefined}>
             <p className="font-medium text-admin-fg-strong">{row.original.displayName || '-'}</p>
             <p className="text-xs text-admin-fg-muted">{row.original.email || row.original.userId}</p>
           </div>
@@ -741,7 +741,7 @@ export default function AdminPaymentProofsPage() {
               href={row.original.telegramInviteUrl}
               target="_blank"
               rel="noreferrer"
-              className="block truncate text-sm font-medium text-admin-accent hover:underline"
+              className="block truncate text-sm font-medium text-admin-primary hover:underline"
             >
               {row.original.telegramInviteUrl}
             </a>
@@ -1075,7 +1075,7 @@ export default function AdminPaymentProofsPage() {
             proofView.type === 'application/pdf' ? (
               <div className="space-y-2">
                 <iframe title="Payment proof" src={proofView.url} className="h-[60vh] w-full rounded-md border border-admin-border" />
-                <a href={proofView.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-admin-accent hover:underline">
+                <a href={proofView.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-admin-primary hover:underline">
                   Open in new tab
                 </a>
               </div>
@@ -1083,7 +1083,7 @@ export default function AdminPaymentProofsPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={proofView.url} alt="Payment proof" className="max-h-[60vh] w-full rounded-md border border-admin-border object-contain" />
             ) : (
-              <a href={proofView.url} download className="text-sm font-medium text-admin-accent hover:underline">
+              <a href={proofView.url} download className="text-sm font-medium text-admin-primary hover:underline">
                 Download proof file
               </a>
             )

@@ -285,7 +285,7 @@ export default function AdminVideoLibraryPage() {
               variant="outline"
               onClick={() => setDeleteTarget(row)}
               aria-label={`Delete ${row.title}`}
-              className="border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+              className="border-[var(--admin-danger-tint-strong)] text-admin-danger hover:border-admin-danger hover:bg-[var(--admin-danger-tint)] hover:text-admin-danger"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -527,7 +527,7 @@ export default function AdminVideoLibraryPage() {
                 void handleDeleteConfirmed();
               }}
               disabled={deleting}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-admin-danger text-admin-danger-fg hover:bg-[var(--admin-danger-hover)]"
             >
               {deleting ? (
                 <>

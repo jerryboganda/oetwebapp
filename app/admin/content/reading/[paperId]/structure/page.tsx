@@ -50,9 +50,9 @@ function AssetPdfPreview({ mediaAssetId, label }: { mediaAssetId: string; label:
   return (
     <div className="rounded-lg border border-admin-border p-2">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-semibold text-admin-fg">{label}</span>
+        <span className="text-xs font-semibold text-admin-fg-default">{label}</span>
         {url ? (
-          <a className="text-xs font-medium text-admin-accent underline" href={url} target="_blank" rel="noreferrer">
+          <a className="text-xs font-medium text-admin-primary underline" href={url} target="_blank" rel="noreferrer">
             Open in new tab
           </a>
         ) : null}

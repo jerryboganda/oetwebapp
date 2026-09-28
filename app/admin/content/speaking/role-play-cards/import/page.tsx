@@ -77,8 +77,8 @@ function SourcePdfPreview({ mediaId }: { mediaId: string }) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-admin-fg">Source PDF (for manual entry)</h4>
-        <a className="text-sm font-medium text-admin-accent underline" href={url} target="_blank" rel="noreferrer">
+        <h4 className="text-sm font-semibold text-admin-fg-default">Source PDF (for manual entry)</h4>
+        <a className="text-sm font-medium text-admin-primary underline" href={url} target="_blank" rel="noreferrer">
           Open in new tab
         </a>
       </div>
@@ -133,14 +133,14 @@ function ImportResultCard({
             {entry.response.sourceMediaId ? <SourcePdfPreview mediaId={entry.response.sourceMediaId} /> : null}
 
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-admin-fg">Builder validation</h4>
+              <h4 className="mb-2 text-sm font-semibold text-admin-fg-default">Builder validation</h4>
               <ul className="space-y-1 text-sm">
                 {entry.response.validation.checks.map((check) => (
                   <li key={check.field} className="flex items-center gap-2">
                     <Badge variant={check.detected ? 'success' : check.required ? 'danger' : 'muted'}>
                       {check.detected ? 'detected' : check.required ? 'missing' : 'optional'}
                     </Badge>
-                    <span className="font-medium text-admin-fg">{check.field}</span>
+                    <span className="font-medium text-admin-fg-default">{check.field}</span>
                     {check.note ? <span className="text-admin-fg-muted">— {check.note}</span> : null}
                   </li>
                 ))}
@@ -249,7 +249,7 @@ export default function AdminSpeakingRolePlayCardImportPage() {
                 multiple
                 accept="application/pdf,.pdf"
                 onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                className="block w-full text-sm text-admin-fg-muted file:mr-3 file:rounded-md file:border-0 file:bg-admin-accent/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-admin-accent"
+                className="block w-full text-sm text-admin-fg-muted file:mr-3 file:rounded-md file:border-0 file:bg-[var(--admin-primary-tint)] file:px-3 file:py-2 file:text-sm file:font-medium file:text-admin-primary"
               />
               {files.length === 1 ? (
                 <p className="mt-1 text-xs text-admin-fg-muted">{files[0].name}</p>

@@ -609,15 +609,15 @@ export default function AdminVocabularyImportPage() {
                           <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Total</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-emerald-600">{audioReadyCount}</div>
+                          <div className="text-lg font-bold tabular-nums text-admin-success">{audioReadyCount}</div>
                           <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Done</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-amber-600">{remaining}</div>
+                          <div className="text-lg font-bold tabular-nums text-[var(--admin-warning-hover)]">{remaining}</div>
                           <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Remaining</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-blue-600">{queued}</div>
+                          <div className="text-lg font-bold tabular-nums text-admin-info">{queued}</div>
                           <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Queued</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
@@ -693,7 +693,7 @@ export default function AdminVocabularyImportPage() {
                   <AdminRouteSummaryCard label="Needs review" value={reconciliation.mismatchedRows + reconciliation.missingRows + reconciliation.extraRows + reconciliation.invalidManifestRows} icon={<AlertTriangle className="h-5 w-5" />} tone={reconciliation.clean ? 'default' : 'warning'} />
                 </div>
                 {reconciliationRowsToDisplay.length > 0 && (
-                  <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+                  <div className="overflow-x-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface">
                     <table className="w-full text-sm">
                       <thead className="bg-background-light text-left text-xs text-muted">
                         <tr>
@@ -764,7 +764,7 @@ export default function AdminVocabularyImportPage() {
                   </InlineAlert>
                 )}
 
-                <div className="overflow-hidden rounded-2xl border border-border">
+                <div className="overflow-x-auto rounded-admin-lg border border-admin-border">
                   <table className="w-full text-sm">
                     <thead className="bg-background-light text-left text-xs text-muted">
                       <tr>

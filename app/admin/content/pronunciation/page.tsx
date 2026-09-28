@@ -201,7 +201,7 @@ export default function AdminPronunciationDashboard() {
               primaryAction={{ label: 'New drill', href: '/admin/content/pronunciation/new' }}
             />
           ) : (
-            <Card className="overflow-hidden">
+            <Card className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
                   <tr>
@@ -265,7 +265,7 @@ export default function AdminPronunciationDashboard() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-red-600"
+                              className="text-admin-danger"
                               onClick={() => handleForceDelete(r.id)}
                               aria-label={`Force delete ${r.label}`}
                             >

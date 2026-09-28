@@ -287,7 +287,7 @@ export default function AdminGrammarDashboard() {
                                 )
                               ) : null}
                               {canWriteContent ? <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button> : null}
-                              {canWriteContent && l.publishState === 'archived' ? <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => forceDelete(l.id)}>Force delete</Button> : null}
+                              {canWriteContent && l.publishState === 'archived' ? <Button variant="outline" size="sm" className="text-admin-danger border-admin-danger hover:bg-[var(--admin-danger-tint)] hover:text-admin-danger" onClick={() => forceDelete(l.id)}>Force delete</Button> : null}
                             </div>
                           </td>
                         ) : null}

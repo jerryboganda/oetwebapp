@@ -247,7 +247,7 @@ export default function QualityAnalyticsPage() {
                     >
                       <ResponsiveContainer width="100%" height={320}>
                         <LineChart data={rateChartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border-default)" />
                           <XAxis dataKey="label" stroke="var(--admin-fg-muted)" fontSize={12} />
                           <YAxis stroke="var(--admin-fg-muted)" fontSize={12} />
                           <Tooltip />
@@ -267,7 +267,7 @@ export default function QualityAnalyticsPage() {
                     >
                       <ResponsiveContainer width="100%" height={320}>
                         <LineChart data={operationsChartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border-default)" />
                           <XAxis dataKey="label" stroke="var(--admin-fg-muted)" fontSize={12} />
                           <YAxis stroke="var(--admin-fg-muted)" fontSize={12} />
                           <Tooltip />

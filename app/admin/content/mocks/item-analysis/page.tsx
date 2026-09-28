@@ -108,7 +108,7 @@ export default function AdminMockItemAnalysisPage() {
           {loading ? (
             <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-admin" />)}</div>
           ) : (
-            <div className="overflow-hidden rounded-admin border border-admin-border bg-admin-bg-surface">
+            <div className="overflow-x-auto rounded-admin border border-admin-border bg-admin-bg-surface">
               <table className="w-full text-left text-sm">
                 <thead className="bg-admin-bg-subtle text-xs uppercase tracking-widest text-admin-fg-muted">
                   <tr>
