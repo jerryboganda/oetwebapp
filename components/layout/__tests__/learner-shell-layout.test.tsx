@@ -1,0 +1,132 @@
+import { screen, within } from '@testing-library/react';
+import { renderWithRouter } from '@/tests/test-utils';
+
+type ShellProps = Record<string, unknown> & { children: React.ReactNode; navActions?: React.ReactNode };
+
+// Stands in for TopNav's actions row and #main-content so the slot and the
+// shell count are observable without the real chrome's data hooks.
+const appShellSpy = vi.fn(({ children, navActions }: ShellProps) => (
+  <div data-testid="app-shell">
+    <header data-testid="top-nav-actions">{navActions}</header>
+    <main id="main-content">{children}</main>
+  </div>
+));
+
+vi.mock('@/components/layout/app-shell', () => ({
+  AppShell: (props: ShellProps) => appShellSpy(props),
+}));
+
+import { LearnerDashboardShell, LearnerNavActions, LearnerShellLayout } from '../learner-dashboard-shell';
+
+function lastShellProps() {
+  return appShellSpy.mock.calls.at(-1)?.[0] as ShellProps;
+}
+
+describe('LearnerShellLayout', () => {
+  beforeEach(() => {
+    appShellSpy.mockClear();
+  });
+
+  it('renders one shell when a page still wraps itself in LearnerDashboardShell', () => {
+    renderWithRouter(
+      <LearnerShellLayout>
+        <LearnerDashboardShell pageTitle="Progress">
+          <div>Progress page</div>
+        </LearnerDashboardShell>
+      </LearnerShellLayout>,
+      { pathname: '/progress' },
+    );
+
+    expect(screen.getByText('Progress page')).toBeInTheDocument();
+    expect(screen.getAllByTestId('app-shell')).toHaveLength(1);
+    expect(screen.getAllByTestId('learner-workspace-container')).toHaveLength(1);
+    expect(screen.getAllByRole('navigation', { name: /breadcrumb/i })).toHaveLength(1);
+    expect(lastShellProps()).toMatchObject({ requiredRole: 'learner', workspaceRole: 'learner', requireAuth: true });
+    expect(lastShellProps().distractionFree).toBe(false);
+  });
+
+  it('renders focus routes distraction-free, titled from the page copy or i18n key', () => {
+    const { unmount } = renderWithRouter(
+      <LearnerShellLayout>
+        <div>Onboarding</div>
+      </LearnerShellLayout>,
+      { pathname: '/onboarding' },
+    );
+    expect(lastShellProps()).toMatchObject({ distractionFree: true, requireAuth: true, pageTitle: 'Getting Started' });
+    expect(screen.queryByRole('navigation', { name: /breadcrumb/i })).not.toBeInTheDocument();
+    unmount();
+
+    // The global next-intl mock returns the key, as the production fallback does.
+    renderWithRouter(
+      <LearnerShellLayout>
+        <div>Paper</div>
+      </LearnerShellLayout>,
+      { pathname: '/writing/paper/session/s1' },
+    );
+    expect(lastShellProps()).toMatchObject({ distractionFree: true, pageTitle: 'writing.paper.pageTitle' });
+  });
+
+  it('keeps public learner routes outside the auth gate', () => {
+    renderWithRouter(
+      <LearnerShellLayout>
+        <div>Criteria</div>
+      </LearnerShellLayout>,
+      { pathname: '/speaking/assessment-criteria' },
+    );
+
+    expect(lastShellProps()).toMatchObject({ distractionFree: false, requireAuth: false });
+  });
+
+  it('renders self-chromed routes bare, leaving their own shell in charge', () => {
+    const { unmount } = renderWithRouter(
+      <LearnerShellLayout>
+        <div>Player</div>
+      </LearnerShellLayout>,
+      { pathname: '/listening/player/a1' },
+    );
+    expect(screen.getByText('Player')).toBeInTheDocument();
+    expect(appShellSpy).not.toHaveBeenCalled();
+    unmount();
+
+    // e.g. billing/loading.tsx under /billing/payment-return keeps its full shell.
+    renderWithRouter(
+      <LearnerShellLayout>
+        <LearnerDashboardShell>
+          <div>Payment return</div>
+        </LearnerDashboardShell>
+      </LearnerShellLayout>,
+      { pathname: '/billing/payment-return' },
+    );
+    expect(screen.getAllByTestId('app-shell')).toHaveLength(1);
+    expect(screen.getByText('Payment return')).toBeInTheDocument();
+  });
+
+  it('portals page nav actions into the layout TopNav actions slot', async () => {
+    renderWithRouter(
+      <LearnerShellLayout>
+        <LearnerDashboardShell navActions={<button type="button">Cart</button>}>
+          <div>Plans</div>
+        </LearnerDashboardShell>
+        <LearnerNavActions>
+          <span>Segment 1 of 3</span>
+        </LearnerNavActions>
+      </LearnerShellLayout>,
+      { pathname: '/subscriptions' },
+    );
+
+    const actions = screen.getByTestId('top-nav-actions');
+    expect(await within(actions).findByRole('button', { name: 'Cart' })).toBeInTheDocument();
+    expect(within(actions).getByText('Segment 1 of 3')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Cart' })).toHaveLength(1);
+  });
+
+  it('renders LearnerNavActions as nothing outside the learner layout', () => {
+    renderWithRouter(
+      <LearnerNavActions>
+        <span>Orphan action</span>
+      </LearnerNavActions>,
+    );
+
+    expect(screen.queryByText('Orphan action')).not.toBeInTheDocument();
+  });
+});

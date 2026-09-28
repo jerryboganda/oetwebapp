@@ -49,6 +49,14 @@ function learnerProjectSmokeRuns(project) {
         workers: 1,
       }),
     },
+    {
+      label: `learner: shell layout smoke on ${project}`,
+      args: playwrightArgs({
+        files: ['tests/e2e/learner/learner-shell-layout.spec.ts'],
+        projects: [project],
+        workers: 1,
+      }),
+    },
   ];
 }
 
@@ -110,6 +118,13 @@ const smokeRuns = [
     label: 'auth: unauthenticated redirects',
     args: playwrightArgs({
       files: ['tests/e2e/auth/auth.spec.ts'],
+      projects: ['chromium-unauth'],
+    }),
+  },
+  {
+    label: 'learner shell: public route signed out',
+    args: playwrightArgs({
+      files: ['tests/e2e/learner/learner-shell-layout.spec.ts'],
       projects: ['chromium-unauth'],
     }),
   },
