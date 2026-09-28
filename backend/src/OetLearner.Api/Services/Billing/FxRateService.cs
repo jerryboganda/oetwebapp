@@ -48,28 +48,53 @@ public sealed class FxRateService : IFxRateService
         var to = toCurrency.ToUpperInvariant();
         if (from == to) return 1m;
 
+        var row = await DirectRateAsync(from, to, ct);
+        if (row is not null && (DateTimeOffset.UtcNow - row.Value.EffectiveFrom).TotalHours <= 24)
+        {
+            return row.Value.Rate;
+        }
+
+        // Refresh only stores base<->currency pairs, so a cross pair (e.g. AUD->GBP with
+        // a USD base) never has a direct row. Derive it before falling back to a refresh,
+        // or every cross conversion would re-insert the whole rate table.
+        if (row is null && await CrossRateAsync(from, to, ct) is { } cross)
+        {
+            return cross;
+        }
+
+        // Stale or missing → refresh and re-read.
+        try { await RefreshRatesAsync(ct); } catch (Exception ex) { _logger.LogWarning(ex, "FX refresh failed"); }
+        return (await DirectRateAsync(from, to, ct))?.Rate
+            ?? await CrossRateAsync(from, to, ct)
+            ?? throw new InvalidOperationException($"No FX rate available for {from}->{to}.");
+    }
+
+    private async Task<(decimal Rate, DateTimeOffset EffectiveFrom)?> DirectRateAsync(string from, string to, CancellationToken ct)
+    {
         var row = await _db.ExchangeRates
             .Where(r => r.FromCurrency == from && r.ToCurrency == to)
             .OrderByDescending(r => r.EffectiveFrom)
             .Select(r => new { r.Rate, r.EffectiveFrom })
             .FirstOrDefaultAsync(ct);
+        return row is null ? null : (row.Rate, row.EffectiveFrom);
+    }
 
-        // Stale (>24h) or missing → trigger refresh and re-read.
-        if (row is null || (DateTimeOffset.UtcNow - row.EffectiveFrom).TotalHours > 24)
+    /// <summary>from->pivot * pivot->to, through whichever pivot (the FX base) `from` converts to.</summary>
+    private async Task<decimal?> CrossRateAsync(string from, string to, CancellationToken ct)
+    {
+        var pivots = await _db.ExchangeRates
+            .Where(r => r.FromCurrency == from)
+            .Select(r => r.ToCurrency)
+            .Distinct()
+            .ToListAsync(ct);
+        foreach (var pivot in pivots)
         {
-            try { await RefreshRatesAsync(ct); } catch (Exception ex) { _logger.LogWarning(ex, "FX refresh failed"); }
-            row = await _db.ExchangeRates
-                .Where(r => r.FromCurrency == from && r.ToCurrency == to)
-                .OrderByDescending(r => r.EffectiveFrom)
-                .Select(r => new { r.Rate, r.EffectiveFrom })
-                .FirstOrDefaultAsync(ct);
+            if (await DirectRateAsync(from, pivot, ct) is { } first && await DirectRateAsync(pivot, to, ct) is { } second)
+            {
+                return decimal.Round(first.Rate * second.Rate, 6);
+            }
         }
-
-        if (row is null)
-        {
-            throw new InvalidOperationException($"No FX rate available for {from}->{to}.");
-        }
-        return row.Rate;
+        return null;
     }
 
     public async Task<decimal> ConvertAsync(decimal amount, string fromCurrency, string toCurrency, CancellationToken ct)
