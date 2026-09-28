@@ -46,7 +46,7 @@ export function ScoreBandGraph({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-indigo-700 dark:text-indigo-300">Practice score band</p>
+          <p className="text-2xs font-black uppercase tracking-[0.16em] text-indigo-700 dark:text-indigo-300">Practice score band</p>
           <p className="mt-1 text-sm font-semibold text-navy dark:text-white">
             {hasConversion ? `${scaledScore}/500${grade ? ` · Grade ${grade}` : ''}` : `Scaled score unavailable · ${rawScore}/${maxRawScore} raw`}
           </p>
@@ -64,13 +64,13 @@ export function ScoreBandGraph({
             aria-hidden
           />
           <span
-            className="absolute -top-7 -translate-x-1/2 rounded-md bg-navy px-2 py-1 text-[10px] font-black text-white dark:bg-white dark:text-navy"
+            className="absolute -top-7 -translate-x-1/2 rounded-md bg-navy px-2 py-1 text-3xs font-black text-white dark:bg-white dark:text-navy"
             style={{ left: position }}
           >
             {hasConversion ? scaledScore : `${rawScore}/${maxRawScore}`}
           </span>
         </div>
-        <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-widest text-muted">
+        <div className="mt-2 flex justify-between text-3xs font-black uppercase tracking-widest text-muted">
           <span>0</span>
           <span>{hasConversion ? '350 reference' : `Raw scale · ${maxRawScore}`}</span>
           <span>{hasConversion ? '500' : maxRawScore}</span>

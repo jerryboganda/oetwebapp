@@ -158,13 +158,13 @@ export default function AdminSpeakingRecordingsAuditPage() {
                   <td className="p-3 text-xs font-mono">
                     {row.recordingId ?? '-'}
                     {row.sessionId && (
-                      <div className="text-[10px] text-admin-fg-muted">session {row.sessionId}</div>
+                      <div className="text-3xs text-admin-fg-muted">session {row.sessionId}</div>
                     )}
                   </td>
                   <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '-'}</td>
                   <td className="p-3">
                     <div className="text-sm text-admin-fg-strong">{row.actorName}</div>
-                    <div className="text-[10px] text-admin-fg-muted">
+                    <div className="text-3xs text-admin-fg-muted">
                       {row.actorRole ?? 'unknown role'}
                     </div>
                   </td>

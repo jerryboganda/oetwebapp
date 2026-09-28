@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { ArrowRight, Banknote, ExternalLink, Landmark, QrCode, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CopyField } from './copy-field';
@@ -96,7 +97,7 @@ export function EgyptPaymentMethods({ egyptHref, disabled }: { egyptHref: string
           </span>
           <p className="text-sm font-bold text-navy">{active.title}</p>
           {active.badge ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-semibold text-amber-700">
               {active.badge}
             </span>
           ) : null}
@@ -120,14 +121,11 @@ export function EgyptPaymentMethods({ egyptHref, disabled }: { egyptHref: string
         ) : null}
 
         {active.link ? (
-          <a
-            href={active.link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/10"
-          >
-            <ExternalLink className="h-4 w-4" /> {active.link.label}
-          </a>
+          <Button asChild variant="outline" fullWidth className="mt-3 border-primary/30 bg-primary/5 font-semibold text-primary hover:bg-primary/10">
+            <a href={active.link.href} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" /> {active.link.label}
+            </a>
+          </Button>
         ) : null}
 
         <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted">
@@ -136,20 +134,19 @@ export function EgyptPaymentMethods({ egyptHref, disabled }: { egyptHref: string
         </p>
       </div>
 
-      <Link
-        href={disabled ? '#' : egyptHref}
-        aria-disabled={disabled}
-        tabIndex={disabled ? -1 : undefined}
-        onClick={(e) => {
-          if (disabled) e.preventDefault();
-        }}
-        className={cn(
-          'mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary/90',
-          disabled && 'pointer-events-none opacity-50',
-        )}
-      >
-        I&apos;ve paid — upload proof &amp; activate <ArrowRight className="h-4 w-4" />
-      </Link>
+      <Button asChild fullWidth size="lg" className="mt-4 text-sm font-semibold">
+        <Link
+          href={disabled ? '#' : egyptHref}
+          aria-disabled={disabled}
+          tabIndex={disabled ? -1 : undefined}
+          onClick={(e) => {
+            if (disabled) e.preventDefault();
+          }}
+          className={cn(disabled && 'pointer-events-none opacity-50')}
+        >
+          I&apos;ve paid — upload proof &amp; activate <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </Button>
       <p className="mt-3 text-xs leading-5 text-muted">
         After paying with any method above, upload your receipt and we&apos;ll activate your access after a quick
         verification.

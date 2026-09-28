@@ -65,7 +65,7 @@ export function CriterionScoreRow({
           {exemplar}
         </div>
       ) : null}
-      {meta ? <div className="mt-2 text-[11px] text-muted">{meta}</div> : null}
+      {meta ? <div className="mt-2 text-2xs text-muted">{meta}</div> : null}
     </div>
   );
 }

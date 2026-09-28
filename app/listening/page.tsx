@@ -20,6 +20,8 @@ import { FreeSampleCard } from '@/components/domain/free-sample-card';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { findFreeSamplePaper } from '@/lib/free-sample';
@@ -94,27 +96,27 @@ const HUB_CARDS: HubCard[] = [
 
 const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
   partA: {
-    ring: 'border-violet-200 hover:border-violet-300',
-    badge: 'bg-violet-100 text-violet-800',
-    icon: 'bg-violet-100 text-violet-700',
+    ring: 'border-primary-200 hover:border-primary-300 dark:border-primary-900/60 dark:hover:border-primary-700',
+    badge: 'bg-primary-100 text-primary-800 dark:bg-primary-950/60 dark:text-primary-300',
+    icon: 'bg-primary-100 text-primary-700 dark:bg-primary-950/60 dark:text-primary-300',
     chip: 'Part A',
   },
   partB: {
-    ring: 'border-sky-200 hover:border-sky-300',
-    badge: 'bg-sky-100 text-sky-800',
-    icon: 'bg-sky-100 text-sky-700',
+    ring: 'border-sky-200 hover:border-sky-300 dark:border-sky-900/60 dark:hover:border-sky-700',
+    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
+    icon: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
     chip: 'Part B',
   },
   partC: {
-    ring: 'border-emerald-200 hover:border-emerald-300',
-    badge: 'bg-emerald-100 text-emerald-800',
-    icon: 'bg-emerald-100 text-emerald-700',
+    ring: 'border-emerald-200 hover:border-emerald-300 dark:border-emerald-900/60 dark:hover:border-emerald-700',
+    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+    icon: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
     chip: 'Part C',
   },
   exam: {
-    ring: 'border-amber-200 hover:border-amber-300',
-    badge: 'bg-amber-100 text-amber-900',
-    icon: 'bg-amber-100 text-amber-800',
+    ring: 'border-amber-200 hover:border-amber-300 dark:border-amber-900/60 dark:hover:border-amber-700',
+    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300',
+    icon: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
     chip: 'Full exam',
   },
 };
@@ -315,135 +317,142 @@ export default function ListeningHome() {
         {homeError ? (
           <div className="flex flex-wrap items-center gap-3">
             <InlineAlert variant="error">{homeError}</InlineAlert>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setRetryCount((count) => count + 1)}
-              className="rounded-full border border-danger/30 bg-surface px-3 py-1 text-xs font-medium text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
+              className="border-danger/30 bg-surface text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
             >
               Try again
-            </button>
+            </Button>
           </div>
         ) : null}
         {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
 
         {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
-          <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
-              Choose how to practice
-            </p>
-            <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
-              Practice by Part, or attempt the full exam
-            </h2>
-          </div>
-
-          <CreditUsageInfoCard module="listening" className="mb-4" />
-
-          {freeSampleHref ? (
-            <FreeSampleCard
-              testId="listening-free-mock-card"
-              icon={Headphones}
-              title="Free Listening Mock"
-              description="Try one complete OET Listening mock for free."
-              href={freeSampleHref}
-              onClick={() => analytics.track('free_sample_click', { module: 'listening' })}
-              className="mb-4"
-            />
-          ) : null}
-
-          <ul
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-            data-testid="listening-hub-cards"
-          >
-            {HUB_CARDS.map((card) => {
-              const accent = ACCENT_STYLES[card.accent];
-              return (
-                <li key={card.href}>
-                  <Link
-                    href={card.href}
-                    data-testid={`listening-hub-card-${card.accent}`}
-                    className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 transition-shadow hover:shadow-md ${accent.ring}`}
-                  >
-                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
-                      <Headphones className="h-5 w-5" aria-hidden />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-navy">
-                          {card.title}
-                        </h3>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
-                          {accent.chip}
-                        </span>
+        <MotionSection delayIndex={0}>
+          <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+                Choose how to practice
+              </p>
+              <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
+                Practice by Part, or attempt the full exam
+              </h2>
+            </div>
+  
+            <CreditUsageInfoCard module="listening" className="mb-4" />
+  
+            {freeSampleHref ? (
+              <FreeSampleCard
+                testId="listening-free-mock-card"
+                icon={Headphones}
+                title="Free Listening Mock"
+                description="Try one complete OET Listening mock for free."
+                href={freeSampleHref}
+                onClick={() => analytics.track('free_sample_click', { module: 'listening' })}
+                className="mb-4"
+              />
+            ) : null}
+  
+            <ul
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+              data-testid="listening-hub-cards"
+            >
+              {HUB_CARDS.map((card) => {
+                const accent = ACCENT_STYLES[card.accent];
+                return (
+                  <li key={card.href}>
+                    <Link
+                      href={card.href}
+                      data-testid={`listening-hub-card-${card.accent}`}
+                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
+                    >
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
+                        <Headphones className="h-5 w-5" aria-hidden />
                       </div>
-                      <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
-                    </div>
-                    <PlayCircle
-                      className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-hidden
-                    />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <h3 className="text-sm font-bold text-navy">
+                            {card.title}
+                          </h3>
+                          <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
+                            {accent.chip}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
+                      </div>
+                      <PlayCircle
+                        className="h-4 w-4 self-center text-primary-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                        aria-hidden
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </MotionSection>
 
         {/* Full listening exam library — every published listening paper the
             learner can attempt, surfaced in-module (Reading parity). */}
-        <section aria-labelledby="listening-papers-heading">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
-                <Target className="h-3.5 w-3.5" aria-hidden />
-                Paper library
-              </p>
-              <h2 id="listening-papers-heading" className="text-lg font-bold text-navy">
-                Available listening exams
-              </h2>
+        <MotionSection delayIndex={1}>
+          <section aria-labelledby="listening-papers-heading">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  <Target className="h-3.5 w-3.5" aria-hidden />
+                  Paper library
+                </p>
+                <h2 id="listening-papers-heading" className="text-lg font-bold text-navy">
+                  Available listening exams
+                </h2>
+              </div>
             </div>
-          </div>
-          {homeLoading ? (
-            <LearnerSkeleton variant="card-grid" />
-          ) : catalogPapers.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-6 text-sm text-muted">
-              no published Atlas/Nova Listening papers yet.
-            </div>
-          ) : (
-            <ListeningExamFolderBrowser
-              papers={papers}
-              emptyMessage="no published Atlas/Nova Listening papers yet."
-              renderPaper={(paper) => (
-                <PaperCard
-                  paper={paper}
-                  starting={startingPaperId === paper.id}
-                  onStart={() => void handleStartFullExam(paper)}
-                />
-              )}
-            />
-          )}
-        </section>
+            {homeLoading ? (
+              <LearnerSkeleton variant="card-grid" />
+            ) : catalogPapers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-background-light px-4 py-6 text-sm text-muted">
+                no published Atlas/Nova Listening papers yet.
+              </div>
+            ) : (
+              <ListeningExamFolderBrowser
+                papers={papers}
+                emptyMessage="no published Atlas/Nova Listening papers yet."
+                renderPaper={(paper) => (
+                  <PaperCard
+                    paper={paper}
+                    starting={startingPaperId === paper.id}
+                    onStart={() => void handleStartFullExam(paper)}
+                  />
+                )}
+              />
+            )}
+          </section>
+        </MotionSection>
 
         {recentResults.length > 0 ? (
-          <section aria-labelledby="listening-results-heading">
-            <div className="mb-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
-                <TrendingUp className="h-3.5 w-3.5" aria-hidden />
-                Review
-              </p>
-              <h2 id="listening-results-heading" className="text-lg font-bold text-navy">
-                Recent results
-              </h2>
-            </div>
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {recentResults.map((result) => (
-                <li key={result.attemptId}>
-                  <ResultCard result={result} />
-                </li>
-              ))}
-            </ul>
-          </section>
+          <MotionSection delayIndex={2}>
+            <section aria-labelledby="listening-results-heading">
+              <div className="mb-4">
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+                  <TrendingUp className="h-3.5 w-3.5" aria-hidden />
+                  Review
+                </p>
+                <h2 id="listening-results-heading" className="text-lg font-bold text-navy">
+                  Recent results
+                </h2>
+              </div>
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {recentResults.map((result) => (
+                  <li key={result.attemptId}>
+                    <ResultCard result={result} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </MotionSection>
         ) : null}
       </main>
     </LearnerDashboardShell>
@@ -482,23 +491,23 @@ function PaperCard({
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
           <Headphones className="h-5 w-5" aria-hidden />
         </div>
         <div className="flex-1">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                 <Lock className="h-3 w-3" aria-hidden />
                 Premium
               </span>
             ) : partial ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                 Partial · Q37–42 unavailable
               </span>
             ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                 Full exam
               </span>
             )}
@@ -519,14 +528,13 @@ function PaperCard({
         </div>
       </div>
       <div className="mt-auto pt-4">
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={onStart}
           disabled={starting}
-          className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
         >
           {starting ? 'Starting...' : resume ? 'Resume exam' : locked ? 'View access' : 'Start full exam'}
-        </button>
+        </Button>
       </div>
     </article>
   );
@@ -540,8 +548,8 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
       : 'Practice';
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-violet-300">
-      <span className="inline-flex w-fit rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-border-hover">
+      <span className="inline-flex w-fit rounded-full bg-primary-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
         {scopeLabel}
       </span>
       <span className="mt-2 font-semibold text-navy">{result.paperTitle}</span>
@@ -549,20 +557,18 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
         {result.requiresAdminReview ? 'Admin review pending' : result.scoreDisplay}
       </span>
       <div className="mt-auto flex items-center gap-2 pt-3">
-        <Link
-          href={result.route}
-          className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-violet-200 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
-        >
-          <Eye className="h-3.5 w-3.5" aria-hidden />
-          Review
-        </Link>
-        <Link
-          href={result.practiceRoute}
-          className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-info px-3 py-1.5 text-xs font-semibold text-white hover:bg-info/90"
-        >
-          <PlayCircle className="h-3.5 w-3.5" aria-hidden />
-          Practice
-        </Link>
+        <Button asChild size="sm" variant="outline" className="flex-1">
+          <Link href={result.route}>
+            <Eye className="h-3.5 w-3.5" aria-hidden />
+            Review
+          </Link>
+        </Button>
+        <Button asChild size="sm" className="flex-1">
+          <Link href={result.practiceRoute}>
+            <PlayCircle className="h-3.5 w-3.5" aria-hidden />
+            Practice
+          </Link>
+        </Button>
       </div>
     </article>
   );
@@ -581,13 +587,12 @@ function ResumeBanner({ attempts }: { attempts: ListeningHomeAttemptDto[] }) {
       <p className="mb-3 text-xs text-emerald-700/80 dark:text-emerald-300/70">
         {resumable.paperTitle}: {resumable.answeredCount} answered. Resume before the timer window closes.
       </p>
-      <Link
-        href={resumable.route}
-        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-      >
-        <ListChecks className="h-4 w-4" aria-hidden />
-        Resume attempt
-      </Link>
+      <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+        <Link href={resumable.route}>
+          <ListChecks className="h-4 w-4" aria-hidden />
+          Resume attempt
+        </Link>
+      </Button>
     </div>
   );
 }

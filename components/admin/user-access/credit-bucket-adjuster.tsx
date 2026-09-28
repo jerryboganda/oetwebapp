@@ -80,12 +80,12 @@ export function CreditBucketAdjuster({
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
+    <div className="rounded-lg border border-admin-border bg-admin-bg-surface p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <p className="text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
           Adjust credit buckets (ledgered)
         </p>
-        <div className="flex overflow-hidden rounded border border-gray-300 text-[11px] font-medium" role="group" aria-label="Adjustment mode">
+        <div className="flex overflow-hidden rounded border border-admin-border-strong text-2xs font-medium" role="group" aria-label="Adjustment mode">
           {(['add', 'set'] as const).map((option) => (
             <button
               key={option}
@@ -94,8 +94,8 @@ export function CreditBucketAdjuster({
               aria-pressed={mode === option}
               className={
                 mode === option
-                  ? 'bg-gray-900 px-2 py-1 text-white'
-                  : 'bg-white px-2 py-1 text-gray-600 hover:bg-gray-50'
+                  ? 'bg-admin-fg-strong px-2 py-1 text-admin-fg-inverse'
+                  : 'bg-admin-bg-surface px-2 py-1 text-admin-fg-muted hover:bg-admin-bg-subtle'
               }
             >
               {option === 'add' ? 'Add / remove (±)' : 'Set exact'}
@@ -105,7 +105,7 @@ export function CreditBucketAdjuster({
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {BUCKETS.map((bucket) => (
-          <label key={bucket.key} className="text-xs text-gray-600">
+          <label key={bucket.key} className="text-xs text-admin-fg-muted">
             {bucket.label}
             <Input
               type="number"
@@ -120,11 +120,11 @@ export function CreditBucketAdjuster({
         ))}
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-gray-600 sm:col-span-1">
+        <label className="text-xs text-admin-fg-muted sm:col-span-1">
           New expiry
           <Input type="datetime-local" className="mt-1" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
         </label>
-        <label className="text-xs text-gray-600 sm:col-span-2">
+        <label className="text-xs text-admin-fg-muted sm:col-span-2">
           Reason (audit)
           <Input className="mt-1" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this adjustment?" />
         </label>

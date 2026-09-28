@@ -147,7 +147,7 @@ function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
       <Card className="flex h-full flex-col gap-3 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+            <p className="text-2xs font-bold uppercase tracking-widest text-primary">
               {kindLabel(drill.kind)}
             </p>
             <h3 className="text-base font-black leading-tight text-navy">{drill.title}</h3>

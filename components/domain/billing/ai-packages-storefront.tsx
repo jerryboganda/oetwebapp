@@ -112,7 +112,7 @@ export function AiPackagesStorefront() {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
               Package {website.packageNo}
             </p>
             <h3 className="mt-1 text-xl font-semibold tracking-tight text-navy">{website.name}</h3>
@@ -121,7 +121,7 @@ export function AiPackagesStorefront() {
             {website.badges.map((badge) => (
               <span
                 key={badge}
-                className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-primary"
+                className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.08em] text-primary"
               >
                 {badge}
               </span>
@@ -132,7 +132,7 @@ export function AiPackagesStorefront() {
           {website.metaChips.map((chip) => (
             <span
               key={chip}
-              className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+              className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
             >
               {chip}
             </span>

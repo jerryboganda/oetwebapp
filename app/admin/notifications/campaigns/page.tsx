@@ -297,6 +297,7 @@ export default function AdminCampaignsPage() {
                   size="sm"
                   onClick={() => openEditForm(campaign)}
                   disabled={isLoading}
+                  aria-label={`Edit campaign ${campaign.name}`}
                 >
                   <Edit3 className="h-3.5 w-3.5" />
                 </Button>
@@ -305,6 +306,7 @@ export default function AdminCampaignsPage() {
                   size="sm"
                   onClick={() => handleAction(campaign.id, 'approve')}
                   disabled={isLoading}
+                  aria-label={`Approve campaign ${campaign.name}`}
                 >
                   {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 </Button>
@@ -316,6 +318,7 @@ export default function AdminCampaignsPage() {
                 size="sm"
                 onClick={() => handleAction(campaign.id, 'cancel')}
                 disabled={isLoading}
+                aria-label={`Cancel campaign ${campaign.name}`}
               >
                 <XCircle className="h-3.5 w-3.5" />
               </Button>
@@ -326,6 +329,7 @@ export default function AdminCampaignsPage() {
                 size="sm"
                 onClick={() => handleAction(campaign.id, 'cancel')}
                 disabled={isLoading}
+                aria-label={`Cancel campaign ${campaign.name}`}
               >
                 <XCircle className="h-3.5 w-3.5" />
               </Button>
@@ -428,8 +432,8 @@ export default function AdminCampaignsPage() {
         >
           <div className="space-y-4 p-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">Name</label>
-              <Input
+              <label htmlFor="campaign-field-1" className="text-sm font-medium text-admin-fg-strong">Name</label>
+              <Input id="campaign-field-1"
                 placeholder="Campaign name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -437,8 +441,8 @@ export default function AdminCampaignsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">Subject</label>
-              <Input
+              <label htmlFor="campaign-field-2" className="text-sm font-medium text-admin-fg-strong">Subject</label>
+              <Input id="campaign-field-2"
                 placeholder="Notification subject line"
                 value={form.subject}
                 onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
@@ -446,8 +450,8 @@ export default function AdminCampaignsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">Body</label>
-              <textarea
+              <label htmlFor="campaign-field-3" className="text-sm font-medium text-admin-fg-strong">Body</label>
+              <textarea id="campaign-field-3"
                 className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 rows={5}
                 placeholder="Notification body content…"
@@ -473,8 +477,8 @@ export default function AdminCampaignsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-admin-fg-strong">Schedule</label>
-                <Input
+                <label htmlFor="campaign-field-4" className="text-sm font-medium text-admin-fg-strong">Schedule</label>
+                <Input id="campaign-field-4"
                   type="datetime-local"
                   value={form.scheduledAt}
                   onChange={(e) => setForm((f) => ({ ...f, scheduledAt: e.target.value }))}
@@ -483,10 +487,10 @@ export default function AdminCampaignsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">
+              <label htmlFor="campaign-field-5" className="text-sm font-medium text-admin-fg-strong">
                 Segment (JSON)
               </label>
-              <textarea
+              <textarea id="campaign-field-5"
                 className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 font-mono text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 rows={3}
                 placeholder='{"role": "learner", "plan": "pro"}'
@@ -496,10 +500,10 @@ export default function AdminCampaignsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">
+              <label htmlFor="campaign-field-6" className="text-sm font-medium text-admin-fg-strong">
                 A/B Variant (optional)
               </label>
-              <Input
+              <Input id="campaign-field-6"
                 placeholder="e.g. variant-b-shorter-subject"
                 value={form.abVariant}
                 onChange={(e) => setForm((f) => ({ ...f, abVariant: e.target.value }))}

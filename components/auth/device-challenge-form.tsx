@@ -337,7 +337,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
                     <span className="min-w-0 flex-1">
                       <span className="font-mono text-xs font-medium">{device.maskedDeviceId}</span>
                       {device.deviceName ? <span className="ml-2 text-xs text-muted">{device.deviceName}</span> : null}
-                      {device.platform ? <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px]">{device.platform}</span> : null}
+                      {device.platform ? <span className="ml-2 rounded border border-border bg-background-light px-1.5 py-0.5 text-2xs">{device.platform}</span> : null}
                       <span className="block text-xs text-muted">Trusted: {formatTrustTime(device.trustedAt)}{device.lastSeenAt ? ` · Last seen: ${formatTrustTime(device.lastSeenAt)}` : ''}</span>
                     </span>
                   </label>

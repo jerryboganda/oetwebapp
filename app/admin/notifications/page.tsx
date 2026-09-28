@@ -283,7 +283,7 @@ export default function AdminNotificationsPage() {
       render: (row) => (
         <div className="space-y-1">
           <p className="font-medium text-navy">{row.label}</p>
-          <p className="font-mono text-[11px] text-muted">{row.eventKey}</p>
+          <p className="font-mono text-2xs text-muted">{row.eventKey}</p>
           {row.isPolicyProtected ? <Badge variant="warning">Protected</Badge> : null}
         </div>
       ),
@@ -392,7 +392,7 @@ export default function AdminNotificationsPage() {
         return (
           <div className="grid min-w-48 grid-cols-2 gap-2">
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-muted">Hour</span>
+              <span className="text-2xs font-semibold uppercase text-muted">Hour</span>
               <input
                 aria-label={`Hourly cap for ${row.audienceRole} ${row.eventKey}`}
                 type="number"
@@ -409,7 +409,7 @@ export default function AdminNotificationsPage() {
               />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold uppercase text-muted">Day</span>
+              <span className="text-2xs font-semibold uppercase text-muted">Day</span>
               <input
                 aria-label={`Daily cap for ${row.audienceRole} ${row.eventKey}`}
                 type="number"

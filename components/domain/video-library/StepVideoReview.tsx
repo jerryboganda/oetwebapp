@@ -145,7 +145,7 @@ export function StepVideoReview() {
       <div className="grid gap-2 rounded-2xl border border-border bg-background-light p-4 sm:grid-cols-2 lg:grid-cols-3">
         {summary.map((s) => (
           <div key={s.label}>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{s.label}</p>
+            <p className="text-3xs font-bold uppercase tracking-widest text-muted">{s.label}</p>
             <p className="truncate text-sm text-navy">{s.value}</p>
           </div>
         ))}

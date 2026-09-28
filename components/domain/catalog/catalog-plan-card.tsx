@@ -73,7 +73,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         </div>
         <div>
           <h3 className="text-lg font-bold leading-snug text-navy">{websitePackage?.name ?? plan.name}</h3>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wide text-muted">
             {websitePackage ? (
               websitePackage.metaChips.map((chip) => <span key={chip}>{chip}</span>)
             ) : (
@@ -104,7 +104,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         {flags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {flags.map((flag) => (
-              <span key={flag.key} className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              <span key={flag.key} className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary">
                 {flag.label}
               </span>
             ))}

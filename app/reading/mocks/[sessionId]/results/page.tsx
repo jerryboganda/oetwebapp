@@ -10,6 +10,9 @@ import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getMockResults, type MockResultDto } from '@/lib/reading-pathway-api';
 
 type Tab = 'score' | 'sections' | 'skills' | 'time' | 'next';
@@ -76,13 +79,11 @@ export default function MockResultsPage() {
         {loading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl bg-border/80 dark:bg-border/50" />
+              <Skeleton key={i} className="h-16 rounded-xl" />
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {error}
-          </div>
+          <InlineAlert variant="error">{error}</InlineAlert>
         ) : result ? (
           <>
             <p
@@ -114,7 +115,7 @@ export default function MockResultsPage() {
               title="Mock result"
               subtitle={`Session ${sessionId}`}
               gaugeValue={hasConversion ? (scaledScore / 500) * 100 : 0}
-              gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{hasConversion ? grade : '—'}</span>}
+              gaugeCenter={<span className="text-2xl font-black text-navy">{hasConversion ? grade : '—'}</span>}
               gaugeLabel={hasConversion ? `${scaledScore}/500` : 'Owner table unavailable'}
               gaugeColor={
                 !hasConversion ? 'var(--color-info)' : grade === 'A' || grade === 'B'
@@ -174,11 +175,12 @@ export default function MockResultsPage() {
                 <button
                   key={tab.id}
                   type="button"
+                  aria-pressed={activeTab === tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={[
-                    'flex-shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-colors',
+                    'min-h-10 flex-shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
                     activeTab === tab.id
-                      ? 'bg-primary text-white dark:bg-violet-700'
+                      ? 'bg-primary text-white dark:bg-primary-700'
                       : 'text-muted hover:text-navy hover:bg-background-light dark:hover:bg-background-dark',
                   ].join(' ')}
                 >
@@ -278,22 +280,22 @@ export default function MockResultsPage() {
                   {result.nextStep ? (
                     <>
                       <p className="text-sm text-muted">{result.nextStep.description}</p>
-                      <Link
-                        href={result.nextStep.route}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
-                      >
-                        {result.nextStep.title}
-                        <ArrowRight className="h-4 w-4" aria-hidden />
-                      </Link>
-                      {result.studyPlanRoute ? (
-                        <Link
-                          href={result.studyPlanRoute}
-                          className="ml-3 inline-flex items-center gap-2 rounded-lg border border-primary px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
-                        >
-                          Edit this plan
-                          <ArrowRight className="h-4 w-4" aria-hidden />
-                        </Link>
-                      ) : null}
+                      <div className="flex flex-wrap gap-3">
+                        <Button asChild>
+                          <Link href={result.nextStep.route}>
+                            {result.nextStep.title}
+                            <ArrowRight className="h-4 w-4" aria-hidden />
+                          </Link>
+                        </Button>
+                        {result.studyPlanRoute ? (
+                          <Button asChild variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                            <Link href={result.studyPlanRoute}>
+                              Edit this plan
+                              <ArrowRight className="h-4 w-4" aria-hidden />
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
                     </>
                   ) : (
                     <p className="text-sm text-muted">No missed items were recorded. Continue with your personalised study plan.</p>

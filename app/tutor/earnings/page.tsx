@@ -136,18 +136,18 @@ export default function TutorEarningsPage() {
                   <thead className="bg-background-light text-left">
                     <tr>
                       <th scope="col" className="px-4 py-3 font-semibold text-navy">Class</th>
-                      <th scope="col" className="px-4 py-3 font-semibold text-navy">Sessions</th>
-                      <th scope="col" className="px-4 py-3 font-semibold text-navy">Gross</th>
-                      <th scope="col" className="px-4 py-3 font-semibold text-navy">Net</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Sessions</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Gross</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Net</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {perClass.map((row) => (
                       <tr key={row.id} className="hover:bg-background-light">
                         <td className="px-4 py-3 font-medium text-navy">{row.title}</td>
-                        <td className="px-4 py-3 text-muted">{row.sessions}</td>
-                        <td className="px-4 py-3 text-muted">{formatUsd(row.gross)}</td>
-                        <td className="px-4 py-3 text-navy">{formatUsd(row.net)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted">{row.sessions}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted">{formatUsd(row.gross)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-navy">{formatUsd(row.net)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -173,8 +173,8 @@ export default function TutorEarningsPage() {
                     <tr>
                       <th scope="col" className="px-4 py-3 font-semibold text-navy">Date</th>
                       <th scope="col" className="px-4 py-3 font-semibold text-navy">Class</th>
-                      <th scope="col" className="px-4 py-3 font-semibold text-navy">Attendees</th>
-                      <th scope="col" className="px-4 py-3 font-semibold text-navy">Net</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Attendees</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Net</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -182,8 +182,8 @@ export default function TutorEarningsPage() {
                       <tr key={line.classSessionId} className="hover:bg-background-light">
                         <td className="px-4 py-3 text-muted">{formatDate(line.scheduledStartAt)}</td>
                         <td className="px-4 py-3 font-medium text-navy">{line.classTitle}</td>
-                        <td className="px-4 py-3 text-muted">{line.attendedCount}</td>
-                        <td className="px-4 py-3 text-navy">{formatUsd(line.netUsd)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted">{line.attendedCount}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-navy">{formatUsd(line.netUsd)}</td>
                       </tr>
                     ))}
                   </tbody>

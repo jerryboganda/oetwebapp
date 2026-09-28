@@ -78,11 +78,11 @@ export function ReadinessForecastSimulator({ open, onClose, initialForecast }: R
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-background-light p-4 flex items-center justify-between">
               <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Projected probability</p>
+                <p className="text-3xs uppercase tracking-widest font-bold text-muted">Projected probability</p>
                 <p className="text-3xl font-bold text-navy">{Math.round(forecast.probability)}%</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Projected readiness</p>
+                <p className="text-3xs uppercase tracking-widest font-bold text-muted">Projected readiness</p>
                 <p className="text-xl font-bold text-navy">
                   {forecast.scenarios[0]?.projectedReadinessAtTarget != null
                     ? Math.round(forecast.scenarios[0].projectedReadinessAtTarget)

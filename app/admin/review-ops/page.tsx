@@ -307,11 +307,11 @@ export default function ReviewOpsPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Subtest</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Subtest</p>
           <p className="mt-1 font-medium capitalize text-admin-fg-strong">{item.subtestCode}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Tutor</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Tutor</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{item.assignedExpertId ?? 'Unassigned'}</p>
         </div>
       </div>
@@ -343,11 +343,11 @@ export default function ReviewOpsPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Subtest</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Subtest</p>
           <p className="mt-1 font-medium capitalize text-admin-fg-strong">{review.subtestCode}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Created</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Created</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{new Date(review.createdAt).toLocaleString()}</p>
         </div>
       </div>
@@ -371,7 +371,7 @@ export default function ReviewOpsPage() {
       </div>
 
       <div className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-sm">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Queued since</p>
+        <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Queued since</p>
         <p className="mt-1 font-medium text-admin-fg-strong">{new Date(review.createdAt).toLocaleString()}</p>
       </div>
 
@@ -395,15 +395,15 @@ export default function ReviewOpsPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Reason</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Reason</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{job.reason || 'No reason code'}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Retries</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Retries</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{job.retryCount}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Created</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Created</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{new Date(job.createdAt).toLocaleString()}</p>
         </div>
       </div>

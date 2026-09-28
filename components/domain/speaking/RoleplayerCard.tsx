@@ -93,7 +93,7 @@ export function RoleplayerCard({ card, cardNumber, className }: RoleplayerCardPr
         )}
       </div>
 
-      <footer className="border-t border-amber-200 bg-amber-100/60 px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-amber-800">
+      <footer className="border-t border-amber-200 bg-amber-100/60 px-4 py-1.5 text-2xs font-medium uppercase tracking-wide text-amber-800">
         Tutor / examiner only — not shown to the candidate
       </footer>
     </article>

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, Clock, ListChecks, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
 import {
@@ -158,7 +159,7 @@ export default function ReadingFullExamPage() {
                       min
                     </span>
                     {!allowed ? (
-                      <span className="inline-flex items-center gap-1 text-amber-800">
+                      <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300">
                         <Lock className="h-3 w-3" aria-hidden />
                         Subscription required
                       </span>
@@ -170,11 +171,10 @@ export default function ReadingFullExamPage() {
                     </p>
                   ) : null}
                   <div className="mt-auto pt-4">
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
                       onClick={() => handleStart(paper)}
                       disabled={starting}
-                      className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
                     >
                       {starting
                         ? 'Starting...'
@@ -183,7 +183,7 @@ export default function ReadingFullExamPage() {
                           : allowed
                             ? 'Start full exam'
                             : 'View access'}
-                    </button>
+                    </Button>
                   </div>
                 </article>
               );

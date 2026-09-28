@@ -62,10 +62,17 @@ export default function LearnerAiUsagePage() {
         description="How much AI you're using, what it's costing in credits, and what's coming up."
       />
 
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="error"
+          action={<Button size="sm" variant="outline" onClick={() => { setError(null); void load(); }}>Retry</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       {summary === null ? (
-        <Skeleton className="h-48 w-full" />
+        error ? null : <Skeleton className="h-48 w-full" />
       ) : (
         <div className="space-y-6">
           {/* Headline cards — Credits / Attempts only. Raw provider token
@@ -89,10 +96,13 @@ export default function LearnerAiUsagePage() {
                 <Mini label="Predicted credits" value={forecast.forecastCredits.toLocaleString()} />
               </div>
               {forecast.suggestedTopUpCredits > 0 && (
-                <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                <InlineAlert
+                  variant="warning"
+                  className="mt-4"
+                  action={<Button variant="primary" size="sm" onClick={() => location.href = '/ai-packages'}>Top up</Button>}
+                >
                   <strong>Suggested top-up:</strong> {forecast.suggestedTopUpCredits} credits to cover predicted usage.
-                  <Button variant="primary" size="sm" className="ml-3" onClick={() => location.href = '/ai-packages'}>Top up</Button>
-                </div>
+                </InlineAlert>
               )}
             </section>
           )}
@@ -142,7 +152,11 @@ export default function LearnerAiUsagePage() {
           <section className="space-y-2">
             <h2 className="text-lg font-semibold">Daily activity</h2>
             <div className="overflow-x-auto rounded-2xl border border-border bg-surface p-4 shadow-sm">
-              <div className="flex h-32 items-end gap-1">
+              <div
+                className="flex h-32 items-end gap-1"
+                role="img"
+                aria-label={`Daily AI calls over ${summary.daily.length} days, peaking at ${Math.max(0, ...summary.daily.map((b) => b.calls))} calls`}
+              >
                 {summary.daily.map((d) => {
                   const max = Math.max(1, ...summary.daily.map((b) => b.calls));
                   const heightPct = Math.max(4, (d.calls / max) * 100);

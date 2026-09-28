@@ -1609,7 +1609,7 @@ function ReadingA11ySettings({
                   className={
                     'flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold transition-colors ' +
                     (fontScale === value
-                      ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                      ? 'border-primary bg-primary text-white dark:bg-primary-700'
                       : 'border-border bg-background-light text-navy hover:bg-surface')
                   }
                 >
@@ -1641,7 +1641,7 @@ function ReadingA11ySettings({
             <span className="font-semibold text-navy">Extra screen-reader hints</span>
           </label>
         ) : null}
-        <p className="text-[10px] text-muted">
+        <p className="text-3xs text-muted">
           <Eye className="mr-1 inline h-3 w-3" aria-hidden />
           Settings are saved per paper. Changes here only affect this paper.
         </p>
@@ -1997,7 +1997,7 @@ function QuestionNavigator({
             aria-label={`Question ${publicNumber}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-              isActive ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background-light text-navy hover:border-primary/40',
+              isActive ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background-light text-navy hover:border-primary/40',
               answered && !isActive && 'border-success/30 bg-success/10 text-success',
               isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}

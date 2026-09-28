@@ -6,6 +6,10 @@ import { getSkillScores, getAccentProgress, getListeningPathway } from '@/lib/li
 import type { SkillScore, AccentProgress, Pathway } from '@/lib/listening-pathway-api';
 import { SkillRadarChart } from '@/components/listening/SkillRadarChart';
 import { AccentBarChart } from '@/components/listening/AccentBarChart';
+import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 
 export default function ListeningStatsPage() {
   const [skills, setSkills] = useState<SkillScore[]>([]);
@@ -35,8 +39,14 @@ export default function ListeningStatsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-6xl px-4 py-12">
-        <div className="text-muted">Loading your Listening stats…</div>
+      <main className="mx-auto max-w-6xl px-4 py-12 space-y-6" aria-busy="true">
+        <p className="sr-only">Loading your Listening stats…</p>
+        <Skeleton className="h-10 w-72 max-w-full rounded-lg" />
+        <div className="grid gap-8 md:grid-cols-2">
+          <CardSkeleton className="h-80" />
+          <CardSkeleton className="h-80" />
+        </div>
+        <CardSkeleton />
       </main>
     );
   }
@@ -49,15 +59,15 @@ export default function ListeningStatsPage() {
           Track your sub-skill mastery (L1–L8) and accent confidence over time.
         </p>
         {error && (
-          <p className="text-sm text-amber-600">
+          <InlineAlert variant="warning">
             Some metrics could not be loaded: {error}. Take the diagnostic if you haven&apos;t already.
-          </p>
+          </InlineAlert>
         )}
       </header>
 
       <section className="grid gap-8 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">Sub-skill mastery (L1–L8)</h2>
+        <Card padding="lg">
+          <h2 className="mb-4 text-lg font-semibold text-navy">Sub-skill mastery (L1–L8)</h2>
           {skills.length > 0 ? (
             <>
               <SkillRadarChart scores={skills} />
@@ -75,10 +85,10 @@ export default function ListeningStatsPage() {
               Skill scores will appear after your first diagnostic.
             </p>
           )}
-        </div>
+        </Card>
 
-        <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">Accent confidence</h2>
+        <Card padding="lg">
+          <h2 className="mb-4 text-lg font-semibold text-navy">Accent confidence</h2>
           {accents.length > 0 ? (
             <AccentBarChart accents={accents} />
           ) : (
@@ -86,11 +96,11 @@ export default function ListeningStatsPage() {
               Accent breakdown will appear after your first diagnostic.
             </p>
           )}
-        </div>
+        </Card>
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">Your 12-week roadmap</h2>
+      <section className="rounded-2xl border border-border bg-surface p-3.5 shadow-sm sm:p-6">
+        <h2 className="mb-4 text-lg font-semibold text-navy">Your 12-week roadmap</h2>
         {pathway && pathway.weeks.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             {pathway.weeks.map((w) => (
@@ -119,15 +129,12 @@ export default function ListeningStatsPage() {
       </section>
 
       <nav className="flex flex-wrap gap-3 text-sm">
-        <Link href="/listening" className="rounded-md bg-primary px-4 py-2 text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-          Back to dashboard
-        </Link>
-        <Link
-          href="/listening/pathway"
-          className="rounded-md border border-border px-4 py-2 text-navy transition-colors hover:bg-background-light"
-        >
-          View full pathway
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/listening">Back to dashboard</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/listening/pathway">View full pathway</Link>
+        </Button>
       </nav>
     </main>
   );

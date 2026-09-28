@@ -30,21 +30,21 @@ import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { queryKeys } from '@/lib/query/hooks';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { seriesColor } from '@/lib/domain/chart-palette';
 
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
 
+// Non-series colours mirror globals.css tokens (SVG attributes can't read CSS vars);
+// sub-test series use the shared chart palette so every chart agrees.
 const CHART_COLORS = {
-  primary: '#7c3aed',
-  info: '#2563eb',
   success: '#10b981',
   warning: '#d97706',
-  danger: '#ef4444',
-  navy: '#0f172a',
   muted: '#526072',
   border: '#d8e0e8',
 } as const;
@@ -155,7 +155,12 @@ export default function ProgressDashboard() {
         )}
 
         {!loading && error && (
-          <InlineAlert variant={hasAnyProgressData ? 'warning' : 'error'}>{error}</InlineAlert>
+          <InlineAlert
+            variant={hasAnyProgressData ? 'warning' : 'error'}
+            action={<Button size="sm" variant="outline" onClick={() => failedQueries.forEach((query) => void query.refetch())}>Retry</Button>}
+          >
+            {error}
+          </InlineAlert>
         )}
 
         {!loading && (
@@ -195,10 +200,10 @@ export default function ProgressDashboard() {
                       <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      <Line type="monotone" dataKey="reading" name="Reading" stroke={CHART_COLORS.info} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="listening" name="Listening" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="writing" name="Writing" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke={CHART_COLORS.navy} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="reading" name="Reading" stroke={seriesColor('reading')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="listening" name="Listening" stroke={seriesColor('listening')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="writing" name="Writing" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -252,9 +257,9 @@ export default function ProgressDashboard() {
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
                       {criterionFilter === 'Writing' ? (
-                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                       ) : (
-                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                       )}
                     </LineChart>
                   </ResponsiveContainer>

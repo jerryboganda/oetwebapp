@@ -67,7 +67,7 @@ export function CardTitle({ className, children, ...props }: HTMLAttributes<HTML
 
 export function CardDescription({ className, children, ...props }: HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={cn('mt-1 text-sm text-muted-foreground', className)} {...props}>
+    <p className={cn('mt-1 text-sm text-muted', className)} {...props}>
       {children}
     </p>
   );

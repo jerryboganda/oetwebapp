@@ -287,7 +287,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
                     className="absolute flex items-center justify-center rounded border-2 border-primary bg-primary/15"
                     style={{ left: `${b.xPct * 100}%`, top: `${b.yPct * 100}%`, width: `${b.wPct * 100}%`, height: `${b.hPct * 100}%` }}
                   >
-                    <span className="rounded bg-primary px-1 text-[10px] font-bold leading-tight text-white">{b.gapOrdinal}</span>
+                    <span className="rounded bg-primary px-1 text-3xs font-bold leading-tight text-white">{b.gapOrdinal}</span>
                     {!disabled ? (
                       <button
                         type="button"
@@ -310,7 +310,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
                   />
                 ) : null}
               </div>
-              <span className="absolute bottom-1 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">{page.pageNumber}</span>
+              <span className="absolute bottom-1 right-2 rounded bg-black/60 px-1.5 py-0.5 text-3xs font-bold text-white">{page.pageNumber}</span>
             </div>
           );
         })}

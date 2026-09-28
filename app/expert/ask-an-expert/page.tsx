@@ -79,8 +79,8 @@ export default function AskAnExpertPage() {
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <MessageSquareText className="w-8 h-8" /> Ask a Tutor
+            <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
+              <MessageSquareText className="w-7 h-7 text-primary" aria-hidden="true" /> Ask a Tutor
             </h1>
             <p className="text-muted mt-1">
               Answer learner questions with verified expert responses.
@@ -91,7 +91,14 @@ export default function AskAnExpertPage() {
           </Button>
         </div>
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+        {error && (
+          <InlineAlert
+            variant="error"
+            action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Retry</Button>}
+          >
+            {error}
+          </InlineAlert>
+        )}
 
         {loading && !data && (
           <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
@@ -140,9 +147,10 @@ export default function AskAnExpertPage() {
                   </div>
 
                   {replyingTo === thread.id && (
-                    <div className="mt-4 space-y-3 border-t pt-3">
+                    <div className="mt-4 space-y-3 border-t border-border pt-3">
                       <textarea
-                        className="w-full rounded-md border bg-background p-3 text-sm resize-none focus:ring-2 focus:ring-primary focus:outline-none"
+                        aria-label="Expert answer"
+                        className="w-full rounded-md border border-border bg-surface p-3 text-sm text-navy resize-none focus:ring-2 focus:ring-primary focus:outline-none"
                         rows={4}
                         placeholder="Write your expert-verified answer..."
                         value={replyBody}

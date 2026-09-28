@@ -320,7 +320,7 @@ export function AnnotationLayer({
                   isActive && 'ring-2 ring-primary/50',
                 )}
               >
-                <span aria-hidden="true" className="mr-0.5 select-none text-[10px] opacity-70">
+                <span aria-hidden="true" className="mr-0.5 select-none text-3xs opacity-70">
                   {style.glyph}
                 </span>
                 {seg.text}
@@ -355,7 +355,7 @@ export function AnnotationLayer({
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+              <label className="flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
                 Criterion
                 <select
                   ref={firstFieldRef}
@@ -368,7 +368,7 @@ export function AnnotationLayer({
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+              <label className="flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
                 Severity
                 <select
                   value={draft.severity}
@@ -382,7 +382,7 @@ export function AnnotationLayer({
               </label>
             </div>
 
-            <label className="mt-2 flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+            <label className="mt-2 flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
               Feedback
               <textarea
                 rows={2}
@@ -392,7 +392,7 @@ export function AnnotationLayer({
                 className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm font-normal normal-case text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             </label>
-            <label className="mt-2 flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+            <label className="mt-2 flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
               Suggestion <span className="font-normal normal-case text-muted">(optional)</span>
               <input
                 type="text"
@@ -456,10 +456,10 @@ export function AnnotationLayer({
                     )}
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', style.badgeClass)}>
+                      <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide', style.badgeClass)}>
                         <span aria-hidden="true">{style.glyph}</span> {style.tag}
                       </span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      <span className="text-3xs font-semibold uppercase tracking-wide text-muted">
                         {a.criterion ? CRITERION_LABEL[a.criterion] : 'General'}
                       </span>
                     </div>

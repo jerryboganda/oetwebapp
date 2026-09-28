@@ -395,7 +395,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                           className="block w-full text-sm"
                         />
                         {uploadProgress !== null && (
-                          <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
+                          <div className="mt-2 flex items-center gap-2 text-sm text-admin-fg-muted">
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Uploading… {Math.round(uploadProgress * 100)}%
                           </div>
@@ -430,7 +430,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                         <Link href={`/admin/content/listening/${paper.id}/extractions`}>AI extraction</Link>
                       </Button>
                     </div>
-                    <p className="mt-2 text-xs text-admin-text-muted">
+                    <p className="mt-2 text-xs text-admin-fg-muted">
                       Things the Assets tabs above can&rsquo;t do: author the Part A note-completion in the exact exam format, set per-section audio &amp; timers, or auto-fill the Part A notes from the question-paper + answer-key PDFs with AI. (Per-part question-paper PDFs live in the Assets tabs above.)
                     </p>
                   </CardContent>
@@ -559,7 +559,7 @@ function ListeningAssetTabs({
           {isAudio ? (
             <div className="md:col-span-3">
               <label className="block text-sm font-medium mb-1">Part</label>
-              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-admin-text-muted">
+              <div className="rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-admin-fg-muted">
                 Part A (single audio). Split per section on the{' '}
                 <Link href={`/admin/content/listening/${paperId}/audio`} className="underline">Audio page</Link>.
               </div>
@@ -587,7 +587,7 @@ function ListeningAssetTabs({
               className="block w-full text-sm"
             />
             {uploadProgress !== null && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
+              <div className="mt-2 flex items-center gap-2 text-sm text-admin-fg-muted">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Uploading… {Math.round(uploadProgress * 100)}%
               </div>

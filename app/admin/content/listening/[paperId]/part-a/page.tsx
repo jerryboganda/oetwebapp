@@ -493,14 +493,14 @@ function SubPartSection({
               <button
                 type="button"
                 onClick={() => { markDirty(); setMethod('wysiwyg'); }}
-                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'wysiwyg' ? 'bg-[var(--color-primary)] text-white' : 'text-admin-fg-muted'}`}
+                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'wysiwyg' ? 'bg-admin-primary text-admin-primary-fg' : 'text-admin-fg-muted'}`}
               >
                 WYSIWYG note
               </button>
               <button
                 type="button"
                 onClick={() => { markDirty(); setMethod('pdf_overlay'); }}
-                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'pdf_overlay' ? 'bg-[var(--color-primary)] text-white' : 'text-admin-fg-muted'}`}
+                className={`rounded-md px-3 py-1 text-xs font-semibold ${method === 'pdf_overlay' ? 'bg-admin-primary text-admin-primary-fg' : 'text-admin-fg-muted'}`}
               >
                 PDF overlay
               </button>

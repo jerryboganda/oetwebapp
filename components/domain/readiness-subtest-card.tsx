@@ -35,7 +35,7 @@ export function ReadinessSubtestCard({ test, href }: ReadinessSubtestCardProps) 
               <h3 className="text-base font-bold text-navy flex items-center gap-2">
                 {test.name}
                 {test.isWeakest && (
-                  <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                  <span className="bg-danger/10 text-danger text-3xs uppercase tracking-widest px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> Weakest
                   </span>
                 )}
@@ -52,7 +52,7 @@ export function ReadinessSubtestCard({ test, href }: ReadinessSubtestCardProps) 
           <div className="absolute top-0 bottom-0 w-0.5 bg-border z-10" style={{ left: `${target}%` }} />
           <div className={`h-full rounded-full ${test.barColor}`} style={{ width: `${value}%` }} />
         </div>
-        <div className="mt-3 flex items-center justify-between text-[11px] text-muted">
+        <div className="mt-3 flex items-center justify-between text-2xs text-muted">
           <span>
             {test.confidenceBand ? `Confidence ${test.confidenceBand}` : ''}
             {test.dataPoints != null ? ` · ${test.dataPoints} data points` : ''}

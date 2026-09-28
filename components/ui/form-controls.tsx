@@ -42,7 +42,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           className={cn(
             'rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
+            error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -51,7 +51,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         />
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -83,7 +83,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           className={cn(
             'min-h-[80px] resize-y rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
+            error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -92,7 +92,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         />
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -126,7 +126,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           className={cn(
             'appearance-none rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-red-400 focus:ring-red-400/20' : 'hover:border-border-hover',
+            error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
             className,
           )}
           aria-invalid={!!error}
@@ -139,7 +139,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         </select>
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -167,7 +167,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
         {...props}
       />
       <span className="flex-1 text-sm text-navy">{label}</span>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
     </label>
   ),
 );
@@ -212,7 +212,7 @@ export function CheckboxGroup({ label, options, values, onChange, error, classNa
           </label>
         ))}
       </div>
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{error}</p>}
     </fieldset>
   );
 }
@@ -256,7 +256,7 @@ export function RadioGroup({ name, label, options, value, onChange, error, class
           </label>
         ))}
       </div>
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{error}</p>}
     </fieldset>
   );
 }

@@ -231,7 +231,7 @@ export function TimeAnalyticsBreakdown({
                     ) : null}
                   </div>
                   {row.overran ? (
-                    <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-danger">
+                    <p className="mt-1 flex items-center gap-1 text-2xs font-bold text-danger">
                       <AlertCircle className="h-3 w-3" />
                       Ran past the deadline by{' '}
                       {formatDuration(
@@ -269,7 +269,7 @@ export function TimeAnalyticsBreakdown({
                   key={`${q.sectionId || 'section'}-${q.itemId || idx}`}
                   className={`rounded-xl border p-3 ${toneClasses}`}
                 >
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted">
+                  <p className="text-3xs font-black uppercase tracking-widest text-muted">
                     {q.subtest || 'Question'}
                   </p>
                   <p className="mt-1 text-sm font-black text-navy truncate">
@@ -280,11 +280,11 @@ export function TimeAnalyticsBreakdown({
                       {formatDuration(q.secondsSpent)}
                     </span>
                     {correct ? (
-                      <span className="text-[10px] font-black uppercase tracking-widest text-success">
+                      <span className="text-3xs font-black uppercase tracking-widest text-success">
                         Correct
                       </span>
                     ) : wrong ? (
-                      <span className="text-[10px] font-black uppercase tracking-widest text-danger">
+                      <span className="text-3xs font-black uppercase tracking-widest text-danger">
                         Incorrect
                       </span>
                     ) : null}

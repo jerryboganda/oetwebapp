@@ -9,6 +9,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
 import {
   fetchVocabularyTerm,
@@ -126,7 +127,7 @@ export default function VocabularyTermDetailPage() {
     return (
       <LearnerDashboardShell>
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="text-muted hover:text-navy">
+          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </Link>
           <Skeleton className="h-8 w-48 rounded" />
@@ -140,7 +141,7 @@ export default function VocabularyTermDetailPage() {
     return (
       <LearnerDashboardShell>
         <InlineAlert variant="warning" className="mb-4">Term not found.</InlineAlert>
-        <button onClick={() => router.back()} className="rounded-xl bg-primary px-4 py-2 text-sm text-white dark:bg-violet-700">Go back</button>
+        <Button onClick={() => router.back()}>Go back</Button>
       </LearnerDashboardShell>
     );
   }
@@ -152,7 +153,7 @@ export default function VocabularyTermDetailPage() {
     return (
       <LearnerDashboardShell>
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="text-muted transition-colors hover:text-navy">
+          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </Link>
           <LearnerPageHero
@@ -174,18 +175,12 @@ export default function VocabularyTermDetailPage() {
             definition, examples, British clinical pronunciation, and the full Recalls drill set.
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
-            <Link
-              href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              View upgrade options
-            </Link>
-            <Link
-              href="/vocabulary/browse"
-              className="inline-flex items-center justify-center rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-muted hover:text-navy"
-            >
-              Back to browse
-            </Link>
+            <Button asChild>
+              <Link href="/catalog">View upgrade options</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/vocabulary/browse">Back to browse</Link>
+            </Button>
           </div>
         </Card>
       </LearnerDashboardShell>
@@ -195,7 +190,7 @@ export default function VocabularyTermDetailPage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" aria-label="Back to vocabulary" className="text-muted transition-colors hover:text-navy">
+        <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero
@@ -229,7 +224,7 @@ export default function VocabularyTermDetailPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={() => void playAudio()}
-                className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label={`Play pronunciation of ${term.term}`}
               >
                 <Volume2 className="h-4 w-4" /> Play audio
@@ -331,7 +326,7 @@ export default function VocabularyTermDetailPage() {
                 <button
                   onClick={handleRemove}
                   disabled={saving}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 disabled:opacity-50"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" /> Remove from my list
                 </button>
@@ -339,13 +334,9 @@ export default function VocabularyTermDetailPage() {
             ) : (
               <>
                 <p className="mb-4 text-sm text-muted">Save this term to track your progress with spaced repetition.</p>
-                <button
-                  onClick={handleAdd}
-                  disabled={saving}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
-                >
-                  {saving ? 'Adding…' : (<><Plus className="h-4 w-4" /> Add to my list</>)}
-                </button>
+                <Button onClick={handleAdd} disabled={saving} fullWidth>
+                  {saving ? 'Adding…' : (<><Plus className="h-4 w-4" aria-hidden="true" /> Add to my list</>)}
+                </Button>
               </>
             )}
           </Card>
@@ -365,9 +356,11 @@ export default function VocabularyTermDetailPage() {
       {/* Added confirmation */}
       {myEntry && (
         <div className="mt-6 flex justify-center">
-          <Link href="/vocabulary/flashcards" className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-            <CheckCircle2 className="h-4 w-4" /> Practice with flashcards
-          </Link>
+          <Button asChild>
+            <Link href="/vocabulary/flashcards">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Practice with flashcards
+            </Link>
+          </Button>
         </div>
       )}
     </LearnerDashboardShell>

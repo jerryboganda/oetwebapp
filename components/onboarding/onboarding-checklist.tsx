@@ -120,7 +120,7 @@ export function OnboardingChecklist() {
                 type="button"
                 onClick={item.onClick}
                 disabled={item.done}
-                className="group flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left transition-colors enabled:hover:bg-primary/5 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="group flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left transition-colors enabled:hover:bg-primary/5 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="flex items-center gap-2.5">
                   {item.done ? (
@@ -133,7 +133,7 @@ export function OnboardingChecklist() {
                   </span>
                 </span>
                 {!item.done ? (
-                  <span className="flex items-center gap-1 text-xs font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="flex items-center gap-1 text-xs font-bold text-primary opacity-100 transition-opacity hoverable:opacity-0 hoverable:group-hover:opacity-100 group-focus-visible:opacity-100">
                     {item.cta}
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </span>

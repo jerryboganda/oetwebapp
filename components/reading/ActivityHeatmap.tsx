@@ -11,9 +11,9 @@ interface ActivityHeatmapProps {
 
 function getColor(minutes: number): string {
   if (minutes === 0) return 'bg-border';
-  if (minutes < 15) return 'bg-violet-200 dark:bg-violet-800';
-  if (minutes < 30) return 'bg-violet-400 dark:bg-violet-600';
-  return 'bg-violet-600 dark:bg-violet-400';
+  if (minutes < 15) return 'bg-primary-200 dark:bg-primary-800';
+  if (minutes < 30) return 'bg-primary-400 dark:bg-primary-600';
+  return 'bg-primary-600 dark:bg-primary-400';
 }
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -82,9 +82,9 @@ export function ActivityHeatmap({ days }: ActivityHeatmapProps) {
       <div className="flex items-center gap-2 mt-3 text-xs text-muted">
         <span>Less</span>
         <div className="w-3 h-3 rounded-sm bg-border" />
-        <div className="w-3 h-3 rounded-sm bg-violet-200 dark:bg-violet-800" />
-        <div className="w-3 h-3 rounded-sm bg-violet-400 dark:bg-violet-600" />
-        <div className="w-3 h-3 rounded-sm bg-violet-600 dark:bg-violet-400" />
+        <div className="w-3 h-3 rounded-sm bg-primary-200 dark:bg-primary-800" />
+        <div className="w-3 h-3 rounded-sm bg-primary-400 dark:bg-primary-600" />
+        <div className="w-3 h-3 rounded-sm bg-primary-600 dark:bg-primary-400" />
         <span>More</span>
       </div>
     </div>

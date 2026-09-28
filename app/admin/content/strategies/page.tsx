@@ -152,7 +152,7 @@ export default function AdminStrategiesPage() {
             <Button variant="outline" size="sm" onClick={() => void archiveGuide(guide.id)}>Archive</Button>
           ) : null}
           {guide.status === 'archived' ? (
-            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteGuide(guide.id)}>Force delete</Button>
+            <Button variant="outline" size="sm" className="text-admin-danger border-admin-danger hover:bg-[var(--admin-danger-tint)] hover:text-admin-danger" onClick={() => void forceDeleteGuide(guide.id)}>Force delete</Button>
           ) : null}
         </div>
       ),

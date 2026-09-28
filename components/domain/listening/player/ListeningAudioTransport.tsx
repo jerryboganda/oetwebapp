@@ -83,7 +83,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   return (
     <div
       data-testid="listening-audio-transport"
-      className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-2xl bg-navy p-3.5 sm:p-5 text-white shadow-xl shadow-navy/10 sm:flex-nowrap"
+      className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-2xl bg-navy dark:bg-surface p-3.5 sm:p-5 text-white shadow-xl shadow-navy/10 sm:flex-nowrap"
     >
       <button
         type="button"

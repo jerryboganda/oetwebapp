@@ -210,14 +210,14 @@ function ScoreTile({
         highlight ? 'border-primary/50 bg-primary/5' : 'border-border bg-surface'
       }`}
     >
-      <div className="text-[11px] uppercase tracking-[0.15em] text-muted">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
       <div className={`mt-1 font-mono text-2xl font-semibold ${tintForScore(value)}`}>
         {Math.round(value)}
       </div>
       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-background-light">
         <div className={`h-full ${barClass(value)}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
       </div>
-      <div className="mt-1 text-[11px] text-muted">{hint}</div>
+      <div className="mt-1 text-2xs text-muted">{hint}</div>
     </div>
   );
 }
@@ -225,9 +225,9 @@ function ScoreTile({
 function StatTile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-      <div className="text-[11px] uppercase tracking-[0.15em] text-muted">{label}</div>
+      <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
       <div className="mt-1 font-mono text-lg font-semibold text-navy">{value}</div>
-      <div className="text-[11px] text-muted">{hint}</div>
+      <div className="text-2xs text-muted">{hint}</div>
     </div>
   );
 }

@@ -845,7 +845,7 @@ export default function AdminMaterialsPage() {
             />
           ) : (
             <p className="text-xs text-admin-fg-muted">
-              Adding <span className="font-medium text-admin-fg">{uploadFiles.length} files</span> — each will be
+              Adding <span className="font-medium text-admin-fg-default">{uploadFiles.length} files</span> — each will be
               added as its own entry, titled from its filename.
             </p>
           )}
@@ -863,7 +863,7 @@ export default function AdminMaterialsPage() {
               options={folderOptions}
             />
             <p className="mt-1 text-xs text-admin-fg-muted">
-              Saving to: <span className="font-medium text-admin-fg">{buildFolderPath(flatFolders, fileForm.folderId || null)}</span>
+              Saving to: <span className="font-medium text-admin-fg-default">{buildFolderPath(flatFolders, fileForm.folderId || null)}</span>
             </p>
           </div>
           <Select
@@ -882,7 +882,7 @@ export default function AdminMaterialsPage() {
               multiple={!editingFile}
               accept=".pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov"
               onChange={(e) => setUploadFiles(Array.from(e.target.files ?? []))}
-              className="block w-full text-sm text-admin-fg file:mr-3 file:rounded-md file:border-0 file:bg-admin-hover file:px-3 file:py-1.5 file:text-xs file:font-semibold"
+              className="block w-full text-sm text-admin-fg-default file:mr-3 file:rounded-md file:border-0 file:bg-admin-bg-subtle file:px-3 file:py-1.5 file:text-xs file:font-semibold"
             />
             {uploadFiles.length === 1 && (
               <p className="mt-1 text-xs text-admin-fg-muted">{uploadFiles[0].name} ({formatBytes(uploadFiles[0].size)})</p>
@@ -966,7 +966,7 @@ export default function AdminMaterialsPage() {
           </div>
 
           {/* Publish requirements hint */}
-          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 mb-2 space-y-0.5">
+          <div className="rounded-admin-md bg-[var(--admin-warning-tint)] border border-[var(--admin-warning-tint-strong)] px-3 py-2 text-xs text-admin-fg-strong mb-2 space-y-0.5">
             <p className="font-semibold">For a folder to show to candidates:</p>
             <p>🟢 Status = <strong>Published</strong> &nbsp;·&nbsp; 🔒 Audience assigned &nbsp;·&nbsp; 📄 ≥1 published file inside</p>
           </div>
@@ -989,7 +989,7 @@ export default function AdminMaterialsPage() {
                   'w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left transition-colors',
                   selectedFolder === null
                     ? 'bg-primary/10 text-primary-dark font-semibold'
-                    : 'text-admin-fg hover:bg-admin-hover',
+                    : 'text-admin-fg-default hover:bg-[var(--admin-state-hover)]',
                 ].join(' ')}
               >
                 <FolderOpen className="w-4 h-4 shrink-0" /> All files
@@ -1137,7 +1137,7 @@ function FolderTreeNode({
       <div
         className={[
           'group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition-colors',
-          selected ? 'bg-primary/10 text-primary-dark font-semibold' : 'hover:bg-admin-hover text-admin-fg',
+          selected ? 'bg-primary/10 text-primary-dark font-semibold' : 'hover:bg-[var(--admin-state-hover)] text-admin-fg-default',
         ].join(' ')}
       >
         <button
@@ -1157,7 +1157,7 @@ function FolderTreeNode({
           title={visibility.ok ? 'Live — visible to matching candidates' : `Hidden: ${visibility.reason}`}
           className={[
             'shrink-0 w-2 h-2 rounded-full',
-            visibility.ok ? 'bg-green-500' : 'bg-amber-400',
+            visibility.ok ? 'bg-admin-success' : 'bg-admin-warning',
           ].join(' ')}
         />
 
@@ -1170,27 +1170,28 @@ function FolderTreeNode({
         {!visibility.ok && (
           <span
             title={visibility.reason}
-            className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-medium"
+            className="shrink-0 rounded-full bg-[var(--admin-warning-tint)] text-admin-fg-strong px-1.5 py-0.5 text-3xs font-medium"
           >
             {visibility.label}
           </span>
         )}
 
         {/* Audience badge — shown when hovering */}
-        <span className="shrink-0 text-[10px] text-admin-fg-muted hidden group-hover:inline">
+        <span className="shrink-0 text-3xs text-admin-fg-muted hidden group-hover:inline group-focus-within:inline">
           {folder.audienceMode === 'Everyone' ? '🌐' : folder.audienceMode === 'Restricted' ? '🔒' : '↑'}
         </span>
 
         {/* Actions (shown on hover) */}
-        <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+        <div className="hidden group-hover:flex group-focus-within:flex items-center gap-0.5 shrink-0">
           {/* Publish / Unpublish toggle — most important action */}
           {isPublished ? (
             <button
               type="button"
               title="Unpublish (hide from candidates)"
+              aria-label="Unpublish (hide from candidates)"
               onClick={onUnpublish}
               disabled={isBusy}
-              className="rounded p-0.5 hover:bg-amber-50 text-green-600 hover:text-amber-600 disabled:opacity-50"
+              className="rounded p-0.5 hover:bg-[var(--admin-warning-tint)] text-admin-success hover:text-admin-warning disabled:opacity-50"
             >
               <EyeOff className="w-3 h-3" />
             </button>
@@ -1198,28 +1199,30 @@ function FolderTreeNode({
             <button
               type="button"
               title="Publish (make visible to candidates)"
+              aria-label="Publish (make visible to candidates)"
               onClick={onPublish}
               disabled={isBusy}
-              className="rounded p-0.5 hover:bg-green-50 text-admin-fg-muted hover:text-green-600 disabled:opacity-50"
+              className="rounded p-0.5 hover:bg-[var(--admin-success-tint)] text-admin-fg-muted hover:text-admin-success disabled:opacity-50"
             >
               <Eye className="w-3 h-3" />
             </button>
           )}
-          <button type="button" title="Set audience" onClick={onAudience} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
+          <button type="button" title="Set audience" aria-label="Set audience" onClick={onAudience} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
             <Users className="w-3 h-3" />
           </button>
-          <button type="button" title="Add subfolder" onClick={onCreateChild} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
+          <button type="button" title="Add subfolder" aria-label="Add subfolder" onClick={onCreateChild} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
             <FolderPlus className="w-3 h-3" />
           </button>
-          <button type="button" title="Edit" onClick={onEdit} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
+          <button type="button" title="Edit" aria-label="Edit" onClick={onEdit} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
             <Pencil className="w-3 h-3" />
           </button>
           <button
             type="button"
             title="Delete"
+            aria-label="Delete"
             onClick={onDelete}
             disabled={isBusy}
-            className="rounded p-0.5 hover:bg-red-50 text-admin-fg-muted hover:text-red-500 disabled:opacity-50"
+            className="rounded p-0.5 hover:bg-[var(--admin-danger-tint)] text-admin-fg-muted hover:text-admin-danger disabled:opacity-50"
           >
             <Trash2 className="w-3 h-3" />
           </button>

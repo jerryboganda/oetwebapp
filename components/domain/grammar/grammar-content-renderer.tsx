@@ -36,16 +36,16 @@ function GrammarContentBlockView({ block }: { block: GrammarContentBlockLearner 
       );
     case 'example':
       return (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm leading-6 text-emerald-900">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-600">Example</p>
-          <SafeRichText markdown={block.contentMarkdown} className="text-emerald-900" />
+        <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm leading-6 text-navy">
+          <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.15em] text-success">Example</p>
+          <SafeRichText markdown={block.contentMarkdown} className="text-navy" />
         </div>
       );
     case 'note':
       return (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-amber-900">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-amber-600">Note</p>
-          <SafeRichText markdown={block.contentMarkdown} className="text-amber-900" />
+        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-navy">
+          <p className="mb-1 text-2xs font-semibold uppercase tracking-[0.15em] text-warning">Note</p>
+          <SafeRichText markdown={block.contentMarkdown} className="text-navy" />
         </div>
       );
     default:

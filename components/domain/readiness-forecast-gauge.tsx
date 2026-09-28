@@ -41,7 +41,7 @@ export function ReadinessForecastGauge({ probability, confidenceBand, targetDate
         <p className="text-xs text-muted mt-2">Chance of hitting target by <span className="font-bold text-navy">{targetDate}</span></p>
       )}
       {confidenceBand && (
-        <p className="text-[11px] uppercase tracking-widest font-bold text-muted mt-2">Confidence: {confidenceBand}</p>
+        <p className="text-2xs uppercase tracking-widest font-bold text-muted mt-2">Confidence: {confidenceBand}</p>
       )}
     </div>
   );

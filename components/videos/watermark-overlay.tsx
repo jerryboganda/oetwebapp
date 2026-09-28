@@ -114,7 +114,7 @@ export function WatermarkOverlay({ watermark, fallbackText, onTamper }: Watermar
         {Array.from({ length: TILE_COUNT }, (_, index) => (
           <span
             key={index}
-            className="flex -rotate-[18deg] items-center justify-center overflow-visible whitespace-nowrap font-mono text-[10px] text-white"
+            className="flex -rotate-[18deg] items-center justify-center overflow-visible whitespace-nowrap font-mono text-3xs text-white"
           >
             {tileText}
           </span>

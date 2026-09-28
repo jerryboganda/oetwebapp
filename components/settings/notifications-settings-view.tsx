@@ -453,8 +453,8 @@ export function NotificationsSettingsView() {
                       <RowIcon className="h-[18px] w-[18px]" aria-hidden="true" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-semibold leading-tight text-navy">{row.label}</p>
-                      <p className="mt-0.5 text-[12px] leading-snug text-muted">{row.hint}</p>
+                      <p className="text-sm font-semibold leading-tight text-navy">{row.label}</p>
+                      <p className="mt-0.5 text-xs leading-snug text-muted">{row.hint}</p>
                     </div>
                     <NotificationSwitch checked={row.checked} onChange={row.onChange} label={row.label} />
                   </div>
@@ -533,7 +533,7 @@ export function NotificationsSettingsView() {
               </div>
             </div>
             {!draft.quietHoursEnabled ? (
-              <p className="mt-2.5 text-[12px] text-muted">Turn on “Quiet hours” to set a window.</p>
+              <p className="mt-2.5 text-xs text-muted">Turn on “Quiet hours” to set a window.</p>
             ) : null}
           </section>
 
@@ -596,7 +596,7 @@ export function NotificationsSettingsView() {
             <div className="mt-4 overflow-x-auto">
               <div className="min-w-[36rem]">
                 <div className="grid grid-cols-[minmax(0,1fr)_3rem_3rem_3rem_8.5rem] items-center gap-2 border-b border-border pb-2.5">
-                  <span className="text-[12px] font-semibold text-muted">Event</span>
+                  <span className="text-xs font-semibold text-muted">Event</span>
                   <span className="flex items-center justify-center" title="In-app">
                     <Monitor className={cn('h-4 w-4', showInApp ? 'text-muted' : 'text-muted/30')} aria-label="In-app" />
                   </span>
@@ -606,7 +606,7 @@ export function NotificationsSettingsView() {
                   <span className="flex items-center justify-center" title="Push">
                     <Volume2 className={cn('h-4 w-4', showPush ? 'text-muted' : 'text-muted/30')} aria-label="Push" />
                   </span>
-                  <span className="text-[12px] font-semibold text-muted">Email mode</span>
+                  <span className="text-xs font-semibold text-muted">Email mode</span>
                 </div>
 
                 <div className="divide-y divide-border">
@@ -689,7 +689,7 @@ export function NotificationsSettingsView() {
         </section>
       </div>
 
-      <p className="flex items-center justify-center gap-1.5 pt-1 text-[12px] text-muted">
+      <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-muted">
         <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
         Changes save automatically.
       </p>

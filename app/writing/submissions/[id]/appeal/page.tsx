@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   getWritingSubmissionGrade,
   getWritingAppealResult,
@@ -155,7 +156,9 @@ export default function WritingAppealPage() {
           <CardContent className="p-6">
             <h2 className="mb-2 text-lg font-bold text-navy">Original AI grade</h2>
             {!grade ? (
-              <p className="text-sm text-muted">{busy === 'load' ? 'Loading…' : 'No grade available yet.'}</p>
+              busy === 'load'
+                ? <Skeleton lines={2} className="max-w-md" />
+                : <p className="text-sm text-muted">No grade available yet.</p>
             ) : (
               <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
                 <div>
@@ -203,7 +206,7 @@ export default function WritingAppealPage() {
                   <span className="block text-right text-xs text-muted">{500 - reason.length} characters remaining</span>
                 </label>
 
-                <label className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <label className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -242,7 +245,7 @@ export default function WritingAppealPage() {
               </p>
 
               {ACTIVE_STATUSES.has(appeal.status) ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200">
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
                   <span>The second examiner is regrading your letter. This usually takes 30–60 seconds.</span>
                 </div>
@@ -263,7 +266,7 @@ export default function WritingAppealPage() {
                       {deltaRaw == null ? 'raw / 38' : `${deltaRaw >= 0 ? '+' : ''}${deltaRaw} vs original`}
                     </p>
                   </div>
-                  <div className={`rounded-2xl border p-4 ${wasAdjusted ? 'border-emerald-300 bg-emerald-50' : 'border-border bg-background'}`}>
+                  <div className={`rounded-2xl border p-4 ${wasAdjusted ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/20' : 'border-border bg-background'}`}>
                     <p className="text-xs uppercase tracking-wider text-muted">Final on record</p>
                     <p className="text-3xl font-bold">{finalRaw ?? appeal.originalRawTotal}</p>
                     <p className="text-xs text-muted">

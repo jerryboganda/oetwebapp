@@ -165,19 +165,19 @@ export default function AdminContentLibraryPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Type</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Type</p>
           <p className="mt-1 font-medium capitalize text-admin-fg-strong">{row.type.replace('_', ' ')}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Profession</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Profession</p>
           <p className="mt-1 font-medium capitalize text-admin-fg-strong">{row.profession || 'All'}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Author</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Author</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{row.author}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Updated</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Updated</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{new Date(row.updatedAt).toLocaleString()}</p>
         </div>
       </div>

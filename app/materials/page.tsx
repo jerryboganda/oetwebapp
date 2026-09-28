@@ -6,6 +6,8 @@ import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-she
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { MaterialsBrowser } from '@/components/domain/materials/materials-browser';
 import { fetchMaterialsTree, type LearnerMaterialFolderDto } from '@/lib/materials-api';
 import { folderStats, formatBytes } from '@/lib/materials-tree';
@@ -48,7 +50,7 @@ export default function MaterialsPage() {
         highlights={loading ? [] : highlights}
       />
 
-      <div className="mx-auto mt-6 max-w-4xl space-y-5 px-4 pb-24 sm:px-6 lg:px-8">
+      <MotionSection className="mx-auto mt-6 max-w-4xl space-y-5 pb-24">
         <LearnerSurfaceSectionHeader
           title="Your Course Materials"
           description="Listening and Reading are shared across professions. Writing and Speaking are specific to yours."
@@ -66,17 +68,16 @@ export default function MaterialsPage() {
         {!loading && error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {!loading && !error && folders.length === 0 && (
-          <div className="rounded-2xl border border-border/60 bg-surface/70 p-8 text-center">
-            <FolderOpen className="mx-auto mb-3 h-10 w-10 text-muted/50" />
-            <p className="text-sm font-semibold text-navy">No materials yet</p>
-            <p className="mt-1 text-xs text-muted">
-              Your tutor will share study files here when they&apos;re available.
-            </p>
-          </div>
+          <LearnerEmptyState
+            icon={FolderOpen}
+            title="No materials yet"
+            description="Your tutor will share study files here when they're available."
+            primaryAction={{ label: 'Browse Video Library', href: '/videos' }}
+          />
         )}
 
         {!loading && !error && folders.length > 0 && <MaterialsBrowser folders={folders} />}
-      </div>
+      </MotionSection>
     </LearnerDashboardShell>
   );
 }

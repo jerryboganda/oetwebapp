@@ -160,11 +160,11 @@ export function ShipPanel({ ship, log, branch, onShip, onRefresh, disabled = fal
       ) : null}
 
       <div>
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-admin-fg-muted">Ship log</p>
+        <p className="mb-1 text-3xs font-semibold uppercase tracking-wide text-admin-fg-muted">Ship log</p>
         {log.length === 0 ? (
           <p className="text-xs text-admin-fg-muted">No ship activity in this session yet.</p>
         ) : (
-          <pre className="max-h-72 overflow-auto rounded-lg bg-admin-bg-subtle p-2 font-mono text-[11px] leading-5" data-testid="ship-log">
+          <pre className="max-h-72 overflow-auto rounded-lg bg-admin-bg-subtle p-2 font-mono text-2xs leading-5" data-testid="ship-log">
             {log.map((entry) => (
               <span
                 key={entry.seq}

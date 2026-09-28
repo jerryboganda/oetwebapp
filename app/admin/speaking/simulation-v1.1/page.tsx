@@ -122,9 +122,9 @@ export default function SpeakingSimulationV11GovernancePage() {
     >
       {error ? <InlineAlert variant="error" title="Governance action failed">{error}</InlineAlert> : null}
 
-      <Card className={status?.gate.isReleased ? 'border-emerald-300' : 'border-amber-300'}>
+      <Card className={status?.gate.isReleased ? 'border-emerald-300 dark:border-emerald-500/40' : 'border-amber-300 dark:border-amber-500/40'}>
         <CardHeader><CardTitle className="flex items-center gap-2 text-base">
-          {status?.gate.isReleased ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <ShieldAlert className="h-5 w-5 text-amber-600" />}
+          {status?.gate.isReleased ? <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
           {status?.gate.isReleased ? 'Released for this profession' : 'Release blocked by explicit owner gates'}
         </CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -137,7 +137,7 @@ export default function SpeakingSimulationV11GovernancePage() {
             <div className="flex flex-wrap gap-2">
               {status.gate.blockingReasons.map((reason) => <Badge key={reason} variant="warning">{reason}</Badge>)}
             </div>
-          ) : <p className="text-sm text-emerald-700">Every configured gate is approved for this profession.</p>}
+          ) : <p className="text-sm text-emerald-700 dark:text-emerald-300">Every configured gate is approved for this profession.</p>}
         </CardContent>
       </Card>
 
@@ -155,7 +155,7 @@ export default function SpeakingSimulationV11GovernancePage() {
           <CardContent className="space-y-3">
             <Input label="Rubric version" value={rubricVersion} onChange={(event) => setRubricVersion(event.target.value)} />
             <Input label="Calibration version" value={calibrationVersion} onChange={(event) => setCalibrationVersion(event.target.value)} />
-            <p className="text-xs text-muted">The ten released criteria total <span className={weightTotal === 100 ? 'font-semibold text-emerald-700' : 'font-semibold text-rose-700'}>{weightTotal}%</span>. Rule 55 is excluded.</p>
+            <p className="text-xs text-muted">The ten released criteria total <span className={weightTotal === 100 ? 'font-semibold text-emerald-700 dark:text-emerald-300' : 'font-semibold text-rose-700 dark:text-rose-300'}>{weightTotal}%</span>. Rule 55 is excluded.</p>
             <Button disabled={busy || weightTotal !== 100} onClick={() => void run(() => createSpeakingSimulationV11RubricRelease({ rubricVersion, calibrationVersion, criteria }))}>Create draft</Button>
           </CardContent>
         </Card>

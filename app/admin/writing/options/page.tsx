@@ -300,7 +300,7 @@ export default function WritingOptionsPage() {
               className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
               aria-label="Free tier limit"
             />
-            <span className="mt-1 block text-[11px] text-admin-fg-muted">
+            <span className="mt-1 block text-2xs text-admin-fg-muted">
               0 = premium-only access.
             </span>
           </label>
@@ -323,14 +323,14 @@ export default function WritingOptionsPage() {
               className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
               aria-label="Free tier window days"
             />
-            <span className="mt-1 block text-[11px] text-admin-fg-muted">
+            <span className="mt-1 block text-2xs text-admin-fg-muted">
               Default 7 days (rolling).
             </span>
           </label>
         </div>
       </SettingsSection>
 
-      <p className="text-[11px] text-admin-fg-muted">
+      <p className="text-2xs text-admin-fg-muted">
         {server?.updatedAt
           ? `Last saved ${new Date(server.updatedAt).toLocaleString()}`
           : 'Not yet saved'}

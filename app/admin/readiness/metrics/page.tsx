@@ -106,7 +106,7 @@ export default function AdminReadinessMetricsPage() {
 function SubAvg({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-admin border border-admin-border p-3">
-      <p className="text-[10px] uppercase tracking-widest font-bold text-admin-fg-muted">{label}</p>
+      <p className="text-3xs uppercase tracking-widest font-bold text-admin-fg-muted">{label}</p>
       <p className="text-xl font-bold text-admin-fg-strong">{value.toFixed(1)}</p>
       <div className="h-1.5 w-full bg-admin-bg-subtle rounded-full overflow-hidden mt-1">
         <div className="h-full bg-[var(--admin-primary)]" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />

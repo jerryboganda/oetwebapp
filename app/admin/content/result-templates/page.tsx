@@ -315,7 +315,7 @@ export default function AdminResultTemplatesPage() {
               </>
             ) : (
               <p className="text-xs text-muted">
-                Uploading <span className="font-medium text-admin-fg">{uploadFiles.length} templates</span> — each will get
+                Uploading <span className="font-medium text-admin-fg-default">{uploadFiles.length} templates</span> — each will get
                 its own key/title derived from its filename.
               </p>
             )}

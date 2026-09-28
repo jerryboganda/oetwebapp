@@ -8,6 +8,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -20,11 +21,12 @@ const apiRequest = apiClient.request;
 export default function CohortAnalysisPage() {
   const [data, setData] = useState<CohortData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [groupBy, setGroupBy] = useState('profession');
 
   const load = (g: string) => {
-    setLoading(true); setGroupBy(g);
-    apiRequest<CohortData>(`/v1/admin/analytics/cohort?groupBy=${g}`).then(setData).catch(() => {}).finally(() => setLoading(false));
+    setLoading(true); setLoadFailed(false); setGroupBy(g);
+    apiRequest<CohortData>(`/v1/admin/analytics/cohort?groupBy=${g}`).then(setData).catch(() => setLoadFailed(true)).finally(() => setLoading(false));
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
@@ -113,11 +115,7 @@ export default function CohortAnalysisPage() {
               ))}
             </BentoGrid>
           ) : (
-            <Card>
-              <CardContent>
-                <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>
-              </CardContent>
-            </Card>
+            <Card><CardContent>{loadFailed ? <EmptyState variant="error" size="sm" title="Could not load cohort analysis" description="The analytics request failed. Try again." primaryAction={{ label: 'Retry', onClick: () => load(groupBy) }} /> : <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>}</CardContent></Card>
           )}
         </div>
       }

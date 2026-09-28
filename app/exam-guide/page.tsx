@@ -42,9 +42,9 @@ export default function ExamGuidePage() {
             <MotionItem key={section.title}>
               <Card className="p-5">
                 <div className="flex items-start gap-4">
-                  <section.icon className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{section.title}</h3><Badge variant="outline"><Clock className="w-3 h-3 inline mr-1" />{section.duration}</Badge></div>
+                  <section.icon className="w-6 h-6 text-primary flex-shrink-0 mt-1" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-lg font-semibold text-navy">{section.title}</h3><Badge variant="outline"><Clock className="w-3 h-3 inline mr-1" aria-hidden="true" />{section.duration}</Badge></div>
                     <p className="text-sm text-muted mt-1">{section.parts}</p>
                     <p className="text-sm text-muted">Scoring: {section.scoring}</p>
                     <div className="mt-3 space-y-1">{section.tips.map((tip, i) => <p key={i} className="text-sm">• {tip}</p>)}</div>
@@ -52,7 +52,7 @@ export default function ExamGuidePage() {
                       href={section.href}
                       className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
                     >
-                      Practice {section.title} <ArrowRight className="w-3.5 h-3.5" />
+                      Practice {section.title} <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
                     </Link>
                   </div>
                 </div>

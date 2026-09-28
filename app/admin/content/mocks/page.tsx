@@ -779,7 +779,7 @@ function LeakReportsLink() {
     >
       <ShieldAlert className="mr-2 h-4 w-4" /> Leak reports
       {openCount !== null && openCount > 0 ? (
-        <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+        <span className="ml-2 rounded-full bg-[var(--admin-danger-tint)] px-2 py-0.5 text-xs font-bold tabular-nums text-admin-danger">
           {openCount}
         </span>
       ) : null}

@@ -138,12 +138,12 @@ export function AnswerComparisonCard({
       <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className={cn('rounded-xl border p-3', yourCellTint[state])}>
-            <p className={cn('text-[11px] font-black uppercase tracking-[0.14em]', yourLabelColor[state])}>Your answer</p>
+            <p className={cn('text-2xs font-black uppercase tracking-[0.14em]', yourLabelColor[state])}>Your answer</p>
             <p className="mt-1 break-words text-sm font-semibold text-navy dark:text-white">{yourAnswer}</p>
           </div>
           {correctAnswer ? (
             <div className="rounded-xl border border-success/30 bg-success/10 p-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-success">Correct answer</p>
+              <p className="text-2xs font-black uppercase tracking-[0.14em] text-success">Correct answer</p>
               <p className="mt-1 break-words text-sm font-semibold text-navy dark:text-white">{correctAnswer}</p>
             </div>
           ) : null}
@@ -161,14 +161,14 @@ export function AnswerComparisonCard({
 
         {distractor ? (
           <div className="rounded-xl border border-border bg-background-light p-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted">Distractor type you chose</p>
+            <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Distractor type you chose</p>
             <p className="mt-1 text-sm font-semibold text-navy dark:text-white">{distractor}</p>
           </div>
         ) : null}
 
         {explanation ? (
           <div className="rounded-xl border border-border bg-background-light p-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted">Explanation</p>
+            <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Explanation</p>
             <div className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{explanation}</div>
           </div>
         ) : null}

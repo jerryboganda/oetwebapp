@@ -141,7 +141,7 @@ export function StatCard({
     >
       {/* Top Header: Label & Icon */}
       <div className="flex items-start justify-between gap-2">
-        <h3 className={cn('text-[11px] font-bold uppercase tracking-[0.10em] line-clamp-1', activeTone.label)}>
+        <h3 className={cn('text-2xs font-bold uppercase tracking-[0.10em] line-clamp-1', activeTone.label)}>
           {label}
         </h3>
         {icon && (
@@ -177,7 +177,7 @@ export function StatCard({
                 {trend.value}
               </span>
               {trend.label && (
-                <span className={cn('ml-0.5 text-[11px] uppercase truncate', activeTone.label)}>
+                <span className={cn('ml-0.5 text-2xs uppercase truncate', activeTone.label)}>
                   {trend.label}
                 </span>
               )}
@@ -195,7 +195,7 @@ export function StatCard({
 
       {/* Hint Text */}
       {hint && (
-        <div className={cn('mt-1.5 text-[11px] font-medium leading-tight line-clamp-2', activeTone.label)}>
+        <div className={cn('mt-1.5 text-2xs font-medium leading-tight line-clamp-2', activeTone.label)}>
           {hint}
         </div>
       )}

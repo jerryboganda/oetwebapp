@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, Download, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/form-controls';
@@ -329,15 +330,17 @@ export default function AdminPlacementReviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted">
-          <Activity className="h-4 w-4" aria-hidden />
-          Engine: {health ? (health.ready ? 'ready' : 'not ready') : 'unknown'}
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={busy}>
-          <RefreshCw className="mr-2 h-4 w-4" aria-hidden /> Refresh
-        </Button>
-      </div>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Placement review"
+        description={`Engine: ${health ? (health.ready ? 'ready' : 'not ready') : 'unknown'}`}
+        icon={<Activity className="h-5 w-5" />}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={busy}>
+            <RefreshCw className="mr-2 h-4 w-4" aria-hidden /> Refresh
+          </Button>
+        }
+      />
 
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
       {notice ? <InlineAlert variant="success">{notice}</InlineAlert> : null}

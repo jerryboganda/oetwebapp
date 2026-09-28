@@ -53,7 +53,7 @@ export default function VideoWizardLayout({ children }: { children: ReactNode })
     return (
       <AdminRouteWorkspace>
         <AdminRoutePanel>
-          <p className="inline-flex items-center gap-2 text-sm text-admin-text-muted">
+          <p className="inline-flex items-center gap-2 text-sm text-admin-fg-muted">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading video…
           </p>
         </AdminRoutePanel>
@@ -65,7 +65,7 @@ export default function VideoWizardLayout({ children }: { children: ReactNode })
     return (
       <AdminRouteWorkspace>
         <AdminRoutePanel>
-          <p className="text-sm text-admin-text">{error ?? 'Video not found.'}</p>
+          <p className="text-sm text-admin-fg-strong">{error ?? 'Video not found.'}</p>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
     );

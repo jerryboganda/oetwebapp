@@ -136,7 +136,7 @@ export function DistractorHeatmap({ rows, emptyLabel, className }: DistractorHea
                         title={title}
                         aria-label={title}
                         className={cn(
-                          'flex h-8 min-w-[2.25rem] items-center justify-center rounded-admin px-1 font-mono text-[11px] font-semibold motion-safe:transition-colors',
+                          'flex h-8 min-w-[2.25rem] items-center justify-center rounded-admin px-1 font-mono text-2xs font-semibold motion-safe:transition-colors',
                           heatClass(intensity, isCorrect),
                         )}
                       >
@@ -152,7 +152,7 @@ export function DistractorHeatmap({ rows, emptyLabel, className }: DistractorHea
       </table>
 
       {/* Legend */}
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-admin-fg-muted">
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-2xs text-admin-fg-muted">
         <span className="inline-flex items-center gap-1.5">
           <span
             aria-hidden="true"

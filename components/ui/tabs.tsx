@@ -3,7 +3,7 @@
 import { getSharedLayoutId, motionTokens } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion/react';
-import { type KeyboardEvent, type ReactNode, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useId, useRef } from 'react';
 
 export interface Tab {
   id: string;
@@ -23,6 +23,9 @@ interface TabsProps {
 export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }: TabsProps) {
   const reducedMotion = useReducedMotion() ?? false;
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Per-instance id: a shared layoutId made the active pill fly between
+  // unrelated tab bars when two were mounted on the same page.
+  const pillScope = useId();
 
   const selectTab = (index: number) => {
     onChange(tabs[index].id);
@@ -80,7 +83,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
         >
           {activeTab === tab.id && (
             <motion.span
-              layoutId={getSharedLayoutId('tabs-active-pill', 'default')}
+              layoutId={getSharedLayoutId('tabs-active-pill', pillScope)}
               className="absolute inset-0 rounded-2xl bg-surface shadow-sm"
               transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.item}
             />

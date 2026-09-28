@@ -286,7 +286,7 @@ export function StepReading() {
             <p className="text-xs text-muted">
               Items: A {counts.A}/20 · B {counts.B}/6 · C {counts.C}/16
             </p>
-            <p className="mt-1 text-[11px] font-semibold text-muted">
+            <p className="mt-1 text-2xs font-semibold text-muted">
               Time: Part A is a standalone 15-minute window; Parts B and C share a single 45-minute window per OET specification.
             </p>
           </div>

@@ -92,7 +92,7 @@ export default function AdminConversationSessionsPage() {
         <select
           value={state}
           onChange={(e) => { setState(e.target.value); setPage(1); }}
-          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
         >
           <option value="">All</option>
           <option value="preparing">preparing</option>
@@ -108,7 +108,7 @@ export default function AdminConversationSessionsPage() {
         <select
           value={taskTypeCode}
           onChange={(e) => { setTaskTypeCode(e.target.value); setPage(1); }}
-          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
         >
           <option value="">All</option>
           <option value="oet-roleplay">oet-roleplay</option>
@@ -116,7 +116,7 @@ export default function AdminConversationSessionsPage() {
         </select>
       </div>
       <a
-        className="h-10 inline-flex items-center rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-xs font-medium text-[var(--admin-fg-strong)] hover:border-[var(--admin-border-strong)]"
+        className="h-10 inline-flex items-center rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-xs font-medium text-[var(--admin-fg-strong)] hover:border-[var(--admin-border-strong)]"
         href={`${process.env.NEXT_PUBLIC_API_BASE_URL ?? ''}/v1/admin/conversation/evaluations.csv`}
         target="_blank"
         rel="noreferrer"

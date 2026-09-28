@@ -336,7 +336,7 @@ export default function FreeTierStrategyPage() {
                 <div key={profession.professionId} className="grid gap-3 rounded-admin-sm border border-admin-border p-3 lg:grid-cols-2">
                   <div className="lg:col-span-2">
                     <p className="text-sm font-medium text-admin-fg-strong">{profession.professionLabel}</p>
-                    <p className="text-[11px] uppercase tracking-wider text-admin-fg-muted">{profession.professionId}</p>
+                    <p className="text-2xs uppercase tracking-wider text-admin-fg-muted">{profession.professionId}</p>
                   </div>
                   <label className="text-xs text-admin-fg-muted">
                     Free Writing case note
@@ -350,7 +350,7 @@ export default function FreeTierStrategyPage() {
                         <option key={item.id} value={item.id}>{item.title}</option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-[11px] text-admin-fg-muted">
+                    <span className="mt-1 block text-2xs text-admin-fg-muted">
                       Resolved: {profession.writingItems.find(item => item.id === profession.resolvedWritingScenarioId)?.title ?? 'None'}
                     </span>
                   </label>
@@ -366,7 +366,7 @@ export default function FreeTierStrategyPage() {
                         <option key={item.id} value={item.id}>{item.title}</option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-[11px] text-admin-fg-muted">
+                    <span className="mt-1 block text-2xs text-admin-fg-muted">
                       Resolved: {profession.speakingItems.find(item => item.id === profession.resolvedSpeakingCardId)?.title ?? 'None'}
                     </span>
                   </label>
@@ -451,7 +451,7 @@ export default function FreeTierStrategyPage() {
                         aria-hidden="true"
                       />
                       <div className="flex-1">
-                        <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                        <p className="mb-1 text-3xs uppercase tracking-wider text-admin-fg-muted">
                           Rollout %
                         </p>
                         <input
@@ -472,7 +472,7 @@ export default function FreeTierStrategyPage() {
                           className="h-1.5 w-full accent-[var(--admin-primary)]"
                           aria-label={`Rollout percentage for ${flag.name}`}
                         />
-                        <span className="text-[10px] text-admin-fg-muted">
+                        <span className="text-3xs text-admin-fg-muted">
                           {flag.rolloutPercentage}%
                         </span>
                       </div>
@@ -480,7 +480,7 @@ export default function FreeTierStrategyPage() {
 
                     {/* free tier limit */}
                     <div>
-                      <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                      <p className="mb-1 text-3xs uppercase tracking-wider text-admin-fg-muted">
                         Free Tier Limit
                       </p>
                       <select
@@ -507,7 +507,7 @@ export default function FreeTierStrategyPage() {
 
                     {/* premium tier limit */}
                     <div>
-                      <p className="mb-1 text-[10px] uppercase tracking-wider text-admin-fg-muted">
+                      <p className="mb-1 text-3xs uppercase tracking-wider text-admin-fg-muted">
                         Premium Limit
                       </p>
                       <select

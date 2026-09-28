@@ -430,7 +430,7 @@ function MockReportContent() {
                 <div className="rounded-xl border border-border bg-background-light p-4">
                   <p className="text-sm font-bold text-navy">Proctoring summary</p>
                   <p className="mt-2 text-xs leading-5 text-muted">{report.proctoringSummary.message}</p>
-                  <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-muted">
+                  <p className="mt-2 text-2xs font-black uppercase tracking-widest text-muted">
                     {report.proctoringSummary.totalEvents} events / {report.proctoringSummary.warningEvents} warnings
                   </p>
                 </div>
@@ -501,7 +501,7 @@ function MockReportContent() {
                         <h3 className="text-base font-bold text-navy">{test.name}</h3>
                         <p className="text-xs text-muted">Raw: {test.rawScore}</p>
                         {test.reviewState ? (
-                          <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-warning">
+                          <p className="mt-1 text-3xs font-black uppercase tracking-widest text-warning">
                             Review {test.reviewState.replace(/_/g, ' ')}
                           </p>
                         ) : null}
@@ -529,11 +529,11 @@ function MockReportContent() {
                         <Download className="mr-2 h-4 w-4" />
                         Download practice PDF
                       </Button>
-                      <p className="mt-2 text-[11px] leading-4 text-muted">
+                      <p className="mt-2 text-2xs leading-4 text-muted">
                         Watermarked “Practice Copy”. For your own study only, not for resale or redistribution.
                       </p>
                       {pdfState === 'error' && pdfError ? (
-                        <p className="mt-2 text-[11px] text-danger" role="alert">
+                        <p className="mt-2 text-2xs text-danger" role="alert">
                           {pdfError}
                         </p>
                       ) : null}
@@ -600,12 +600,12 @@ function MockReportContent() {
                       key={task.id}
                       className={`group flex flex-col rounded-2xl border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${completed ? 'border-success/40 opacity-80' : 'border-border hover:border-primary/30 hover:shadow-md'}`}
                     >
-                      <span className="text-[10px] font-black uppercase tracking-widest text-primary">Day {task.dayIndex}</span>
+                      <span className="text-3xs font-black uppercase tracking-widest text-primary">Day {task.dayIndex}</span>
                       <h3 className="mt-2 text-sm font-black text-navy">{task.title}</h3>
                       <p className="mt-2 text-xs leading-5 text-muted">{task.description}</p>
                       <div className="mt-auto flex items-center justify-between gap-2 pt-3">
                         {task.routeHref ? (
-                          <Link href={task.routeHref} className="text-[11px] font-black uppercase tracking-widest text-primary hover:underline">
+                          <Link href={task.routeHref} className="text-2xs font-black uppercase tracking-widest text-primary hover:underline">
                             Start
                           </Link>
                         ) : <span />}
@@ -635,7 +635,7 @@ function MockReportContent() {
                   href={item.route}
                   className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md"
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">{item.day}</span>
+                  <span className="text-3xs font-black uppercase tracking-widest text-primary">{item.day}</span>
                   <h3 className="mt-2 text-sm font-black text-navy transition-colors group-hover:text-primary">{item.title}</h3>
                   <p className="mt-2 text-xs leading-5 text-muted">{item.description}</p>
                 </Link>
@@ -649,11 +649,11 @@ function MockReportContent() {
           delayIndex={6}
           className="pt-4"
         >
-          <div className="bg-navy rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
+          <div className="bg-navy dark:bg-surface dark:border dark:border-border rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.1),_transparent)]" />
             <div className="relative z-10">
               <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
-                <RefreshCw className="w-8 h-8 text-white" />
+                <RefreshCw className="w-8 h-8 text-white" aria-hidden="true" />
               </div>
               <h2 className="text-xl font-black mb-2">Update Your Study Plan</h2>
               {report.weakestCriterion ? (
@@ -665,12 +665,9 @@ function MockReportContent() {
                   Based on this report, review your detailed sub-test breakdown to update your focus areas.
                 </p>
               )}
-              <Link
-                href="/study-plan"
-                className="bg-white text-navy px-8 py-4 rounded-xl font-black hover:bg-background-light transition-colors inline-flex items-center justify-center gap-2"
-              >
-                Update Study Plan
-              </Link>
+              <Button size="lg" asChild>
+                <Link href="/study-plan">Update Study Plan</Link>
+              </Button>
             </div>
           </div>
         </MotionSection>

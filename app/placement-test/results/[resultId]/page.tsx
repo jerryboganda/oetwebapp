@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import { LearnerDashboardShell } from '@/components/layout';
+import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/empty-error';
 import { ResultReportCard } from '@/components/placement/result-report-card';
 import { fetchPlacementStoredResult, type PlacementResultReport } from '@/lib/api/placement';
 import { readErrorMessage } from '@/lib/read-error-message';
@@ -43,33 +46,38 @@ export default function PlacementResultPage() {
 
   if (!report) {
     return (
+      <LearnerDashboardShell pageTitle="Placement Result">
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted">
         {notFound ? (
           <>
             <AlertTriangle className="h-6 w-6 text-warning" aria-hidden />
             <p>That result does not exist or belongs to another account.</p>
-            <Link href="/placement-test/history" className="text-primary underline">
-              Back to your placement history
-            </Link>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/placement-test/history">Back to your placement history</Link>
+            </Button>
           </>
+        ) : error ? (
+          <ErrorState className="w-full" title="Result unavailable" message={error} />
         ) : (
-          <>
-            {error ? <p role="alert" className="text-danger">{error}</p> : null}
+          <p role="status" className="flex items-center gap-2">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> Loading result…
-          </>
+          </p>
         )}
       </div>
+      </LearnerDashboardShell>
     );
   }
 
   return (
+    <LearnerDashboardShell pageTitle="Placement Result">
     <div className="space-y-4">
       <ResultReportCard title="Your placement result" report={report} />
       <div className="text-center">
-        <Link href="/placement-test/history" className="text-sm text-primary underline">
-          Back to your placement history
-        </Link>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/placement-test/history">Back to your placement history</Link>
+        </Button>
       </div>
     </div>
+    </LearnerDashboardShell>
   );
 }

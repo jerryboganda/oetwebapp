@@ -47,7 +47,7 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
 export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn('rounded-[24px] border border-border bg-surface p-5 shadow-sm', className)}
+      className={cn('rounded-surface border border-border bg-surface p-5 shadow-sm', className)}
       role="status"
       aria-busy="true"
       aria-label="Loading card"
@@ -71,7 +71,7 @@ export function PageSkeleton({ className }: { className?: string }) {
       aria-busy="true"
       aria-label="Loading page"
     >
-      <div className="rounded-[24px] border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+      <div className="rounded-surface border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
         <div className="space-y-4">
           <div className="flex items-start gap-4">
             <Skeleton variant="circle" className="h-12 w-12" />

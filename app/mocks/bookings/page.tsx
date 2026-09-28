@@ -151,16 +151,15 @@ export default function MockBookingsPage() {
         icon={CalendarClock}
       />
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 mt-6 flex flex-wrap items-center gap-2">
         <Button variant="ghost" onClick={() => void reload()} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+          <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
         </Button>
-        <Link
-          href="/mocks/setup"
-          className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-        >
-          <Plus className="h-4 w-4 mr-1" /> Book a mock
-        </Link>
+        <Button asChild>
+          <Link href="/mocks/setup">
+            <Plus className="h-4 w-4" aria-hidden="true" /> Book a mock
+          </Link>
+        </Button>
       </div>
 
       {error ? <InlineAlert variant="error" className="mb-4">{error}</InlineAlert> : null}
@@ -171,7 +170,7 @@ export default function MockBookingsPage() {
           <Skeleton className="h-32 w-full" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted">
+        <div className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-12 text-center text-sm text-muted">
           You have no upcoming bookings. Use the &quot;Book a mock&quot; button to schedule a Speaking or final-readiness mock.
         </div>
       ) : (
@@ -183,14 +182,14 @@ export default function MockBookingsPage() {
             const slots = availableSlots[b.id] ?? [];
             const isTerminal = b.status === 'completed' || b.status === 'cancelled' || b.status === 'tutor_no_show' || b.status === 'learner_no_show';
             return (
-              <li key={b.id} className="rounded-2xl border border-border bg-surface p-5">
+              <li key={b.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-foreground">
+                    <div className="text-sm font-semibold text-navy">
                       {formatScheduled(b.scheduledStartAt, b.timezoneIana)}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                      <MapPin className="h-3 w-3" /> {b.timezoneIana}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <MapPin className="h-3 w-3" aria-hidden="true" /> {b.timezoneIana}
                       <span>·</span>
                       <span>{b.deliveryMode}</span>
                       <span>·</span>
@@ -203,12 +202,13 @@ export default function MockBookingsPage() {
                 {!isTerminal ? (
                   <div className="mt-4 flex flex-wrap items-end gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-muted mb-1">
+                      <label htmlFor={`reschedule-date-${b.id}`} className="block text-xs font-medium text-muted mb-1">
                         Find another tutor slot
                       </label>
                       <input
+                        id={`reschedule-date-${b.id}`}
                         type="date"
-                        className="rounded-md border border-border px-3 py-2 text-sm"
+                        className="min-h-11 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
                         value={rescheduleDate}
                         min={defaultRescheduleDate()}
                         onChange={(e) => {
@@ -232,10 +232,10 @@ export default function MockBookingsPage() {
                             key={slot.startAt}
                             type="button"
                             onClick={() => setRescheduleDraft((prev) => ({ ...prev, [b.id]: slot.startAt }))}
-                            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                               draft === slot.startAt
                                 ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border bg-surface text-foreground hover:border-border-hover'
+                                : 'border-border bg-surface text-navy hover:border-border-hover'
                             }`}
                             aria-pressed={draft === slot.startAt}
                           >
@@ -260,15 +260,14 @@ export default function MockBookingsPage() {
                       onClick={() => void handleCancel(b.id)}
                       disabled={busyId === b.id}
                     >
-                      <X className="h-4 w-4 mr-1" /> Cancel
+                      <X className="h-4 w-4" aria-hidden="true" /> Cancel
                     </Button>
                     {b.tutorProfileId ? (
-                      <Link
-                        href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}
-                        className="inline-flex items-center rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
-                      >
-                        Open LiveKit tutor room
-                      </Link>
+                      <Button variant="outline" asChild>
+                        <Link href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}>
+                          Open LiveKit tutor room
+                        </Link>
+                      </Button>
                     ) : null}
                   </div>
                 ) : null}

@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -187,6 +188,7 @@ function RecommendedAreasInput({
             }
           }}
           placeholder="Add area, press Enter..."
+          aria-label="Add recommended practice area"
           className="min-w-[140px] flex-1 bg-transparent text-sm text-navy placeholder:text-muted focus:outline-none"
         />
       </div>
@@ -196,7 +198,7 @@ function RecommendedAreasInput({
             key={a}
             type="button"
             onClick={() => add(a)}
-            className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+            className="rounded-full border border-border bg-background-light px-2 py-0.5 text-xs text-muted hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
           >
             + {a.replace(/_/g, ' ')}
           </button>
@@ -222,7 +224,7 @@ function MetadataCard({
   onReasonChange: (v: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <Card padding="none" className="p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         Attempt
       </h2>
@@ -255,7 +257,7 @@ function MetadataCard({
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted p-3 text-center text-sm">
+      <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl border border-border bg-background-light p-3 text-center text-sm">
         <div>
           <p className="text-xs text-muted">Raw</p>
           <p className="font-bold text-navy">
@@ -289,7 +291,7 @@ function MetadataCard({
         onOverrideChange={onOverrideChange}
         onReasonChange={onReasonChange}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -376,7 +378,7 @@ function QuestionCard({
             </span>
             <Badge
               variant={item.isInvalid ? 'warning' : item.isCorrect ? 'success' : 'danger'}
-              className="text-[10px]"
+              className="text-3xs"
             >
               {item.isInvalid ? 'Invalid — review' : item.isCorrect ? 'Correct' : 'Incorrect'}
             </Badge>
@@ -409,12 +411,12 @@ function QuestionCard({
           {(item.selectedDistractorCategory || item.speakerAttitude) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {item.selectedDistractorCategory && (
-                <Badge variant="warning" className="text-[10px] capitalize">
+                <Badge variant="warning" className="text-3xs capitalize">
                   Trap: {humaniseTag(item.selectedDistractorCategory)}
                 </Badge>
               )}
               {item.speakerAttitude && (
-                <Badge variant="violet" className="text-[10px] capitalize">
+                <Badge variant="violet" className="text-3xs capitalize">
                   Attitude: {humaniseTag(item.speakerAttitude)}
                 </Badge>
               )}
@@ -432,12 +434,12 @@ function QuestionCard({
                       ? 'warning'
                       : 'danger'
                 }
-                className="text-[10px] capitalize"
+                className="text-3xs capitalize"
               >
                 AI: {item.aiVerdict}
               </Badge>
               {item.aiRationale && (
-                <span className="text-[11px] text-muted line-clamp-1" title={item.aiRationale}>
+                <span className="text-2xs text-muted line-clamp-1" title={item.aiRationale}>
                   {item.aiRationale}
                 </span>
               )}
@@ -453,7 +455,7 @@ function QuestionCard({
                   className={`rounded-lg border px-2 py-1.5 text-xs ${
                     opt.isCorrect
                       ? 'border-success/30 bg-success/5'
-                      : 'border-border bg-muted'
+                      : 'border-border bg-background-light'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -461,13 +463,13 @@ function QuestionCard({
                       {opt.key}. {opt.text}
                     </span>
                     {opt.isCorrect ? (
-                      <Badge variant="success" className="shrink-0 text-[10px]">
+                      <Badge variant="success" className="shrink-0 text-3xs">
                         Correct
                       </Badge>
                     ) : opt.distractorCategory ? (
                       <Badge
                         variant="muted"
-                        className="shrink-0 text-[10px] capitalize"
+                        className="shrink-0 text-3xs capitalize"
                       >
                         {humaniseTag(opt.distractorCategory)}
                       </Badge>
@@ -788,7 +790,7 @@ export default function ListeningReviewWorkspacePage() {
 
         {/* Right — feedback panel */}
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <Card padding="none" className="p-5">
             <h2 className="mb-4 text-sm font-semibold text-navy">
               Feedback Panel
             </h2>
@@ -863,7 +865,7 @@ export default function ListeningReviewWorkspacePage() {
             >
               {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
             </Button>
-          </div>
+          </Card>
         </aside>
       </div>
     </div>

@@ -31,7 +31,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                     isCurrent
                       ? 'border-primary bg-primary/10 text-primary'
                       : isComplete
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                         : 'border-border bg-background text-navy hover:border-primary/40',
                   )}
                   aria-current={isCurrent ? 'step' : undefined}
@@ -39,9 +39,9 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                 >
                   <span
                     className={cn(
-                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold',
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-3xs font-bold',
                       isCurrent
-                        ? 'bg-primary text-white dark:bg-violet-700'
+                        ? 'bg-primary text-white dark:bg-primary-700'
                         : isComplete
                           ? 'bg-emerald-500 text-white'
                           : 'bg-background-light text-muted',
@@ -56,7 +56,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                   className="flex items-center gap-2 rounded-full border border-dashed border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted"
                   aria-label={`Step ${step.index} of ${WIZARD_STEPS.length}: ${step.label}, locked`}
                 >
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background-light text-[10px] font-bold text-muted">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background-light text-3xs font-bold text-muted">
                     {step.index}
                   </span>
                   {step.label}

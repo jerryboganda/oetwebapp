@@ -115,9 +115,9 @@ export default function MockReadinessPage() {
 
         {status === 'loading' ? (
           <div className="space-y-4">
-            <Skeleton className="h-32 rounded-[24px]" />
-            <Skeleton className="h-48 rounded-[24px]" />
-            <Skeleton className="h-64 rounded-[24px]" />
+            <Skeleton className="h-32 rounded-surface" />
+            <Skeleton className="h-48 rounded-surface" />
+            <Skeleton className="h-64 rounded-surface" />
           </div>
         ) : null}
 

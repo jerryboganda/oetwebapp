@@ -179,7 +179,7 @@ export default function ExpertSpeakingExamPage() {
         {secondsLeft != null ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-2 text-center">
             <div className="text-2xl font-bold tabular-nums text-foreground">{formatMmSs(secondsLeft)}</div>
-            <div className="text-[11px] uppercase tracking-wide text-muted">remaining</div>
+            <div className="text-2xs uppercase tracking-wide text-muted">remaining</div>
           </div>
         ) : null}
       </header>
@@ -242,7 +242,7 @@ export default function ExpertSpeakingExamPage() {
             <div className="mb-1 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted">
               Card {c.cardNumber === 1 ? 'A' : 'B'}
               {c.cardNumber === activeCard ? (
-                <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] text-white">Current</span>
+                <span className="rounded-full bg-warning px-2 py-0.5 text-3xs text-white">Current</span>
               ) : null}
               {c.cardTypeName ? <span className="text-muted">· {c.cardTypeName}</span> : null}
             </div>

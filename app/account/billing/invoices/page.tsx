@@ -53,7 +53,7 @@ export default function AccountInvoicesPage() {
             href="/account/billing"
             className="inline-flex items-center gap-1 text-xs text-muted hover:text-navy"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Billing overview
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Billing overview
           </Link>
           <h1 className="mt-2 text-3xl font-bold text-navy">Invoices</h1>
           <p className="mt-1 text-sm text-muted">
@@ -66,7 +66,15 @@ export default function AccountInvoicesPage() {
       </header>
 
       {error ? (
-        <InlineAlert variant="error" title="Could not load invoices">
+        <InlineAlert
+          variant="error"
+          title="Could not load invoices"
+          action={(
+            <Button type="button" variant="outline" size="sm" onClick={() => void load(page)}>
+              Retry
+            </Button>
+          )}
+        >
           {error}
         </InlineAlert>
       ) : null}
@@ -74,7 +82,7 @@ export default function AccountInvoicesPage() {
       <InvoiceTable invoices={invoices} loading={loading} />
 
       {total > PAGE_SIZE ? (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted">
             Page {page} of {lastPage} - {total} invoice{total === 1 ? '' : 's'}
           </p>

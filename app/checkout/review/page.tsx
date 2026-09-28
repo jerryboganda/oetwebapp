@@ -578,7 +578,7 @@ function CheckoutReviewContent() {
                                   <span className="flex items-center gap-2">
                                     <span className="block text-sm font-bold text-navy">{brand.title}</span>
                                     {method.badge ? (
-                                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-primary">
                                         {method.badge}
                                       </span>
                                     ) : null}
@@ -710,7 +710,7 @@ function CheckoutReviewContent() {
                       {item.description ? (
                         <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.description}</p>
                       ) : null}
-                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted">Qty {item.quantity}</p>
+                      <p className="mt-1 text-2xs font-medium uppercase tracking-wide text-muted">Qty {item.quantity}</p>
                     </div>
                     <p className="shrink-0 text-sm font-bold text-navy">
                       {formatMoney(item.amount, { currency: item.currency })}
@@ -737,11 +737,14 @@ function CheckoutReviewContent() {
             ) : null}
 
             <div className="mt-4 border-t border-border pt-4">
-              <label className="block text-sm font-medium">
+              <label className="block text-sm font-medium text-navy">
                 Coupon code
                 <div className="mt-2 flex gap-2">
                   <input
-                    className="w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm outline-none focus:border-primary"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                     value={couponCode}
                     onChange={(event) => setCouponCode(event.target.value)}
                     placeholder="Optional"

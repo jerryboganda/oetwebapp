@@ -69,8 +69,8 @@ export default function InterleavedPracticePage() {
             />
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-sm font-semibold text-navy">Duration (minutes)</label>
-                <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:max-w-xs">
+                <label htmlFor="interleaved-duration" className="mb-1 block text-sm font-semibold text-navy">Duration (minutes)</label>
+                <select id="interleaved-duration" value={duration} onChange={e => setDuration(Number(e.target.value))} className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:max-w-xs">
                   <option value={10}>10 min</option><option value={15}>15 min</option><option value={20}>20 min</option><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option>
                 </select>
               </div>
@@ -119,7 +119,7 @@ export default function InterleavedPracticePage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">#{task.order}</span>
                           <h4 className="truncate text-sm font-semibold text-navy">{task.title}</h4>
-                          {task.isWeakArea && <Badge variant="danger" className="text-[10px]">Weak area</Badge>}
+                          {task.isWeakArea && <Badge variant="danger" className="text-3xs">Weak area</Badge>}
                         </div>
                         <p className="text-xs capitalize text-muted">{task.subtestCode} • {task.taskType.replace(/-/g, ' ')} • {task.durationMinutes} min</p>
                       </div>

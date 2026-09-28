@@ -139,7 +139,7 @@ export default function ReadinessCenter() {
                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${riskAccent.tile}`}>
                   <RiskIconCmp className="w-4 h-4" />
                 </span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${riskAccent.chip}`}>
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold uppercase tracking-wider ${riskAccent.chip}`}>
                   Forecast
                 </span>
               </div>
@@ -147,7 +147,7 @@ export default function ReadinessCenter() {
                 onClick={() => setSimulatorOpen(true)}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
               >
-                <Sliders className="w-3.5 h-3.5" /> Run scenario
+                <Sliders className="w-3.5 h-3.5" aria-hidden="true" /> Run scenario
               </button>
             </div>
             <ReadinessForecastGauge
@@ -181,7 +181,7 @@ export default function ReadinessCenter() {
                 disabled={refreshing}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline disabled:opacity-50"
               >
-                <RefreshCcw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCcw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 {refreshing ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
@@ -206,12 +206,12 @@ export default function ReadinessCenter() {
                     <div key={f.label}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-navy">{f.label}</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${sev.chip}`}>{f.severity}</span>
+                        <span className={`text-3xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${sev.chip}`}>{f.severity}</span>
                       </div>
                       <div className="h-1.5 w-full bg-background-light rounded-full overflow-hidden">
                         <div className={`h-full ${sev.bar}`} style={{ width: `${Math.min(100, f.impact)}%` }} />
                       </div>
-                      <p className="text-[11px] text-muted mt-1">{f.description}</p>
+                      <p className="text-2xs text-muted mt-1">{f.description}</p>
                     </div>
                   );
                 })
@@ -265,9 +265,10 @@ export default function ReadinessCenter() {
                   key={opt.value}
                   type="button"
                   onClick={() => setTrendSeries(opt.value)}
+                  aria-pressed={trendSeries === opt.value}
                   className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
                     trendSeries === opt.value
-                      ? 'bg-primary text-primary-foreground border-primary'
+                      ? 'bg-primary text-primary-foreground border-primary dark:bg-violet-700'
                       : 'bg-surface text-navy border-border hover:bg-background-light'
                   }`}
                 >
@@ -321,15 +322,15 @@ export default function ReadinessCenter() {
                   </div>
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+              <div className="mt-4 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
                 <span className="inline-flex items-center gap-1"><Info className="w-3 h-3" /> Updated</span>
                 <span>{new Date(data.evidence.lastUpdated).toLocaleDateString()}</span>
               </div>
-              <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+              <div className="mt-3 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
                 <span>Confidence</span>
                 <span className="text-navy">{data.confidenceLevel ?? 'Low'}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
+              <div className="mt-1 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
                 <span>Data points</span>
                 <span className="text-navy">{data.dataPointCount ?? 0}</span>
               </div>

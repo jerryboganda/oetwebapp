@@ -621,7 +621,7 @@ export default function ReadingQuestionsEditorPage() {
                 <FormInput className="h-3.5 w-3.5" />
               </Button>
               <Button variant="ghost" size="sm" onClick={() => handleDelete(q.id)} aria-label="Delete question">
-                <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                <Trash2 className="h-3.5 w-3.5 text-admin-danger" />
               </Button>
             </div>
           </div>
@@ -728,7 +728,7 @@ export default function ReadingQuestionsEditorPage() {
                       <button
                         type="button"
                         onClick={() => removeOption(idx)}
-                        className="p-1 text-red-400 hover:text-red-600"
+                        className="p-1 text-admin-danger hover:text-[var(--admin-danger-hover)]"
                         aria-label={`Remove option ${key}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -825,7 +825,7 @@ export default function ReadingQuestionsEditorPage() {
             {variantAuditLoading ? (
               <p className="mt-2 text-xs text-admin-fg-muted">Loading audit history…</p>
             ) : variantAuditError ? (
-              <p className="mt-2 text-xs text-red-500">{variantAuditError}</p>
+              <p className="mt-2 text-xs text-admin-danger">{variantAuditError}</p>
             ) : variantAudit.length === 0 ? (
               <p className="mt-2 text-xs text-admin-fg-muted">No accepted-variant changes recorded.</p>
             ) : (
@@ -1001,7 +1001,7 @@ export default function ReadingQuestionsEditorPage() {
                         onClick={() => { setActiveSectionId(section.id); cancelEdit(); }}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
                           isCurrent
-                            ? 'border-primary bg-primary text-white'
+                            ? 'border-admin-primary bg-admin-primary text-admin-primary-fg'
                             : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:text-admin-fg-strong'
                         }`}
                       >

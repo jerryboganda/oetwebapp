@@ -310,7 +310,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
                         );
                       })}
                       {contentStatus === 'Rejected' ? (
-                        <span className="ml-1 px-2 py-0.5 rounded-full bg-[var(--color-error-bg)] text-[var(--color-error)] text-xs">Rejected</span>
+                        <span className="ml-1 px-2 py-0.5 rounded-full bg-danger/10 text-danger text-xs">Rejected</span>
                       ) : null}
                     </div>
                   ) : null}

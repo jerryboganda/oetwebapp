@@ -146,7 +146,7 @@ export default function AdminReadinessLearnerDetailPage() {
                       <span className="text-sm font-bold text-admin-fg-strong">{String(t.name ?? t.code)}</span>
                       <span className="text-sm font-bold text-admin-fg-strong">{Math.round(Number(t.readiness ?? 0))}</span>
                     </div>
-                    <p className="text-[11px] text-admin-fg-muted">{String(t.status ?? '')} · target {Number(t.target ?? 70)}</p>
+                    <p className="text-2xs text-admin-fg-muted">{String(t.status ?? '')} · target {Number(t.target ?? 70)}</p>
                   </div>
                 ))}
               </div>

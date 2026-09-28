@@ -570,6 +570,7 @@ function ScheduleStep({
                 {d.active && (
                   <div className="flex items-center gap-2 text-sm">
                     <select
+                      aria-label={`${day} start time`}
                       value={d.start}
                       onChange={(e) => onDayUpdate(day, { start: e.target.value })}
                       className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
@@ -580,6 +581,7 @@ function ScheduleStep({
                     </select>
                     <span className="text-muted">to</span>
                     <select
+                      aria-label={`${day} end time`}
                       value={d.end}
                       onChange={(e) => onDayUpdate(day, { end: e.target.value })}
                       className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"

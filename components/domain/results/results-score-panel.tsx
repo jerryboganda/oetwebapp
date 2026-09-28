@@ -73,12 +73,12 @@ export function ResultsScorePanel({
               </span>
             )}
             {gaugeLabel ? (
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted">{gaugeLabel}</span>
+              <span className="mt-1 text-3xs font-bold uppercase tracking-widest text-muted">{gaugeLabel}</span>
             ) : null}
           </ResultGauge>
           <div className="min-w-0">
             {eyebrow ? (
-              <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-muted">
+              <div className="flex items-center gap-1.5 text-2xs font-black uppercase tracking-[0.16em] text-muted">
                 {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
                 {eyebrow}
               </div>
@@ -97,7 +97,7 @@ export function ResultsScorePanel({
               <div key={index} className={cn('rounded-xl border p-3', statToneClass[stat.tone ?? 'default'])}>
                 <div className="flex items-center gap-1.5">
                   {stat.icon ? <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{stat.icon}</span> : null}
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{stat.label}</p>
+                  <p className="text-3xs font-black uppercase tracking-widest opacity-80">{stat.label}</p>
                 </div>
                 <p className="mt-1 text-lg font-black leading-tight">{stat.value}</p>
               </div>

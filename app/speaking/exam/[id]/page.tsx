@@ -359,7 +359,7 @@ export default function SpeakingExamPage() {
             >
               {formatMmSs(secondsLeft)}
             </div>
-            <div className="text-[11px] uppercase tracking-wide text-muted">
+            <div className="text-2xs uppercase tracking-wide text-muted">
               {isPrep ? 'Preparation' : 'Discussion'}
             </div>
           </div>
@@ -474,7 +474,7 @@ export default function SpeakingExamPage() {
                   }}
                 />
               ) : (
-                <div className="flex min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted text-sm text-muted">
+                <div className="flex min-h-[480px] items-center justify-center rounded-2xl border border-border bg-background-light text-sm text-muted">
                   {liveTutorConsentAccepted ? 'Preparing the LiveKit room...' : 'Waiting for live-room consent...'}
                 </div>
               )}

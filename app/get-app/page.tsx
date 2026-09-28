@@ -94,7 +94,7 @@ export default function GetAppPage() {
           Back to OET Prep
         </Link>
 
-        <section className="mt-8 rounded-3xl bg-navy px-8 py-12 text-center text-white shadow-clinical">
+        <section className="mt-8 rounded-3xl bg-oet-navy px-5 py-12 text-center text-white shadow-clinical sm:px-8">
           <h1 className="text-3xl font-bold">Get the Candidates App</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/75">
             The Video Library and the smoothest OET practice experience live in our desktop and

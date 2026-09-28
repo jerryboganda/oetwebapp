@@ -15,13 +15,13 @@ import {
 } from '@/lib/study-plan-admin-api';
 
 const SUBTEST_COLORS: Record<string, string> = {
-  reading: 'bg-blue-100 text-blue-800',
-  listening: 'bg-purple-100 text-purple-800',
-  writing: 'bg-green-100 text-green-800',
-  speaking: 'bg-orange-100 text-orange-800',
-  vocabulary: 'bg-yellow-100 text-yellow-800',
-  pronunciation: 'bg-pink-100 text-pink-800',
-  mock: 'bg-red-100 text-red-800',
+  reading: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+  listening: 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300',
+  writing: 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300',
+  speaking: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
+  vocabulary: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
+  pronunciation: 'bg-pink-100 text-pink-800 dark:bg-pink-500/15 dark:text-pink-300',
+  mock: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -125,8 +125,8 @@ export default function StudyPlanTemplatePreviewPage() {
       <SettingsSection title="Preview parameters">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-admin-fg-strong">Target OET Band</label>
-            <select
+            <label htmlFor="spt-preview-1" className="text-sm font-medium text-admin-fg-strong">Target OET Band</label>
+            <select id="spt-preview-1"
               value={targetBand}
               onChange={(e) => setTargetBand(e.target.value)}
               className={inputCls}
@@ -140,8 +140,8 @@ export default function StudyPlanTemplatePreviewPage() {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-admin-fg-strong">Profession ID</label>
-            <input
+            <label htmlFor="spt-preview-2" className="text-sm font-medium text-admin-fg-strong">Profession ID</label>
+            <input id="spt-preview-2"
               type="text"
               value={professionId}
               onChange={(e) => setProfessionId(e.target.value)}
@@ -150,10 +150,10 @@ export default function StudyPlanTemplatePreviewPage() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-admin-fg-strong">
+            <label htmlFor="spt-preview-3" className="text-sm font-medium text-admin-fg-strong">
               Weeks to Preview ({template.minWeeks}–{template.maxWeeks})
             </label>
-            <input
+            <input id="spt-preview-3"
               type="number"
               value={weeksToPreview}
               min={1}

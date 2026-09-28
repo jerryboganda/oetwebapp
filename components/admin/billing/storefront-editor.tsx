@@ -156,8 +156,8 @@ export function StorefrontEditor() {
                   <option value="">no icon</option>
                   {CATALOG_ICON_KEYS.map((k) => <option key={k} value={k}>{k}</option>)}
                 </select>
-                <Button variant="ghost" size="sm" onClick={() => updateHero({ highlights: config.hero.highlights.filter((_, idx) => idx !== i) })}>
-                  <Trash2 className="h-4 w-4" />
+                <Button variant="ghost" size="sm" aria-label="Remove highlight" onClick={() => updateHero({ highlights: config.hero.highlights.filter((_, idx) => idx !== i) })}>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             ))}
@@ -222,8 +222,8 @@ export function StorefrontEditor() {
               <Input label="Key" value={l.key} onChange={(e) => setConfig((c) => ({ ...c, legend: c.legend.map((x, idx) => (idx === i ? { ...x, key: e.target.value } : x)) }))} />
               <Input label="Label" value={l.label} onChange={(e) => setConfig((c) => ({ ...c, legend: c.legend.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)) }))} />
               <Input label="Description" value={l.description} onChange={(e) => setConfig((c) => ({ ...c, legend: c.legend.map((x, idx) => (idx === i ? { ...x, description: e.target.value } : x)) }))} />
-              <Button variant="ghost" size="sm" onClick={() => setConfig((c) => ({ ...c, legend: c.legend.filter((_, idx) => idx !== i) }))}>
-                <Trash2 className="h-4 w-4" />
+              <Button variant="ghost" size="sm" aria-label="Remove legend item" onClick={() => setConfig((c) => ({ ...c, legend: c.legend.filter((_, idx) => idx !== i) }))}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           ))}

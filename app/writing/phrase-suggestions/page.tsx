@@ -169,9 +169,11 @@ export default function PhraseSuggestionsPage() {
         {suggestions.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             <button
+              type="button"
+              aria-pressed={!filter}
               onClick={() => setFilter(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                ${!filter ? 'bg-primary text-white dark:bg-violet-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
+              className={`min-h-9 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+                ${!filter ? 'bg-primary text-white dark:bg-primary-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
             >
               All ({suggestions.length})
             </button>
@@ -181,8 +183,10 @@ export default function PhraseSuggestionsPage() {
               return (
                 <button
                   key={key}
+                  type="button"
+                  aria-pressed={filter === key}
                   onClick={() => setFilter(filter === key ? null : key)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+                  className={`min-h-9 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
                     ${filter === key ? `${cfg.bg} ${cfg.color} border-current` : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
                 >
                   {cfg.label} ({count})
@@ -203,13 +207,13 @@ export default function PhraseSuggestionsPage() {
                   <Card className={`overflow-hidden border ${expanded ? cfg.bg : ''}`}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2 mb-3">
-                        <Badge variant="outline" className={`${cfg.color} text-[10px] shrink-0`}>{cfg.label}</Badge>
+                        <Badge variant="outline" className={`${cfg.color} text-3xs shrink-0`}>{cfg.label}</Badge>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted">{Math.round(s.confidence * 100)}%</span>
+                          <span className="text-3xs text-muted">{Math.round(s.confidence * 100)}%</span>
                           <button
                             type="button"
                             onClick={() => setExpandedId(expanded ? null : s.id)}
-                            className="p-2.5 -m-1"
+                            className="p-2.5 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             aria-expanded={expanded}
                             aria-label={expanded ? `Hide explanation for ${cfg.label} suggestion` : `Show explanation for ${cfg.label} suggestion`}
                           >
@@ -221,11 +225,11 @@ export default function PhraseSuggestionsPage() {
                       {/* original → suggested */}
                       <div className="space-y-2 mb-3">
                         <div className="flex items-start gap-2">
-                          <span className="text-[10px] text-muted mt-1 shrink-0 w-12">Before</span>
+                          <span className="text-3xs text-muted mt-1 shrink-0 w-12">Before</span>
                           <p className="text-sm line-through text-muted">{s.originalText}</p>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className="text-[10px] text-primary mt-1 shrink-0 w-12">After</span>
+                          <span className="text-3xs text-primary mt-1 shrink-0 w-12">After</span>
                           <p className="text-sm font-medium text-navy">{s.suggestedText}</p>
                         </div>
                       </div>

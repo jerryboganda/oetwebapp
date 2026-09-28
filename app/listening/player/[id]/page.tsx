@@ -2328,7 +2328,7 @@ function PlayerContent() {
                       translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
-                      <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
+                      <span className="mr-1 text-3xs font-black uppercase tracking-widest text-muted">
                         Jump to
                       </span>
                       {navigationQuestions.map((question) => {

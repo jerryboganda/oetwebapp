@@ -103,7 +103,7 @@ describe('AddonPurchaseModal', () => {
     });
   });
 
-  it('sends an ineligible Tutor Book buyer straight to the £45 checkout, not a course upsell', async () => {
+  it('sends an ineligible Tutor Book buyer straight to the standard-price checkout, not a course upsell', async () => {
     const onClose = vi.fn();
     mockQuoteAddonEligibility.mockResolvedValue({
       eligible: false,
@@ -126,7 +126,7 @@ describe('AddonPurchaseModal', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Continue to checkout — £45/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Continue to checkout/ }));
 
     expect(push).toHaveBeenCalledWith('/checkout/review?productType=plan_purchase&priceId=tutor-book&quantity=1');
     expect(onClose).toHaveBeenCalledTimes(1);

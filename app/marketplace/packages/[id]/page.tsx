@@ -8,6 +8,7 @@ import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
 import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
+import { buttonClassName } from '@/components/ui/button';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
@@ -113,7 +114,7 @@ export default function PackageDetailPage() {
   return (
     <div className="min-h-screen bg-background-light text-navy">
       {/* Hero */}
-      <section className="bg-navy px-4 py-16 text-white">
+      <section className="bg-oet-navy px-4 py-16 text-white">
         <div className="mx-auto max-w-5xl">
           <Link href="/catalog" className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white">
             <ArrowLeft className="h-3 w-3" /> All packages
@@ -134,7 +135,7 @@ export default function PackageDetailPage() {
                 <HeroTag><Clock className="mr-1 h-3 w-3" /> {websitePackage?.access ?? `${formatAccess(plan.accessDurationDays)} access`}</HeroTag>
                 {plan.writingAddonsEnabled && <HeroTag gold>W add-ons</HeroTag>}
                 {plan.speakingAddonsEnabled && <HeroTag gold>S add-ons</HeroTag>}
-                {tutorBookAddon && <HeroTag gold>Tutor Book £32</HeroTag>}
+                {tutorBookAddon && <HeroTag gold>Tutor Book £{tutorBookAddon.price.toFixed(0)}</HeroTag>}
               </div>
             </div>
             <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-right">
@@ -161,9 +162,14 @@ export default function PackageDetailPage() {
                   Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
                 </button>
               )}
-              <p className="mt-2 text-[10px] text-white/60">
+              <p className="mt-2 text-3xs text-white/60">
                 {plan.code === 'tutor-book'
-                  ? 'We check your eligibility automatically — £32 if you have an eligible course, £45 otherwise.'
+                  ? (() => {
+                      const discounted = addOns.find((a) => a.eligibilityFlag === 'tutor_book_discount')?.price;
+                      return discounted != null
+                        ? `We check your eligibility automatically — £${discounted.toFixed(0)} if you have an eligible course, £${plan.price.toFixed(0)} otherwise.`
+                        : 'We check your eligibility automatically — a discounted price applies if you have an eligible course.';
+                    })()
                   : 'Charged in GBP. No auto-renewal.'}
               </p>
             </div>
@@ -248,7 +254,7 @@ export default function PackageDetailPage() {
             {tutorBookAddon && (
               <div className="mt-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-                  The Tutor Book (£32, discount for enrolled candidates)
+                  The Tutor Book (£{tutorBookAddon.price.toFixed(0)}, discount for enrolled candidates)
                 </h3>
                 <div className="mt-3 max-w-sm rounded-2xl border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">
@@ -270,11 +276,11 @@ export default function PackageDetailPage() {
                   <button
                     type="button"
                     onClick={() => setModalAddOn(tutorBookAddon)}
-                    className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background-light px-3 py-2 text-xs font-medium text-navy transition-colors hover:bg-surface"
+                    className={buttonClassName({ variant: 'outline', size: 'sm', fullWidth: true, className: 'mt-4 bg-background-light' })}
                   >
-                    <TagIcon className="h-3 w-3" /> Add to order
+                    <TagIcon className="h-3 w-3" aria-hidden="true" /> Add to order
                   </button>
-                  <p className="mt-2 text-[10px] text-muted">After payment, contact us on WhatsApp for manual delivery. No platform access is unlocked.</p>
+                  <p className="mt-2 text-3xs text-muted">After payment, contact us on WhatsApp for manual delivery. No platform access is unlocked.</p>
                 </div>
               </div>
             )}
@@ -334,10 +340,10 @@ function AddonGroup({
             <button
               type="button"
               onClick={() => onSelect(addon)}
-              className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background-light px-3 py-2 text-xs font-medium text-navy transition-colors hover:bg-surface"
+              className={buttonClassName({ variant: 'outline', size: 'sm', fullWidth: true, className: 'mt-4 bg-background-light' })}
               data-addon-code={addon.code}
             >
-              <TagIcon className="h-3 w-3" /> Add to order
+              <TagIcon className="h-3 w-3" aria-hidden="true" /> Add to order
             </button>
           </div>
           );

@@ -24,9 +24,11 @@ interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'o
   dismissible?: boolean;
   className?: string;
   action?: ReactNode;
+  /** `polite` announces as role="status" — use for non-urgent suggestions. Default `assertive` (role="alert"). */
+  live?: 'assertive' | 'polite';
 }
 
-export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, ...rest }: InlineAlertProps) {
+export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
   const [visible, setVisible] = useState(true);
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const motionProps = getSurfaceMotion('item', reducedMotion);
@@ -38,7 +40,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
     <AnimatePresence mode={getMotionPresenceMode(reducedMotion)}>
       {visible && (
         <motion.div
-          role="alert"
+          role={live === 'polite' ? 'status' : 'alert'}
           {...rest}
           {...motionProps}
           className={cn('flex items-start gap-3 rounded-2xl border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}

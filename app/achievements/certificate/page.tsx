@@ -113,10 +113,10 @@ export default function CertificatePage() {
                             <h3 className="font-semibold text-sm mb-1">{cert.title}</h3>
                             <p className="text-xs text-muted mb-2">{cert.description}</p>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px] capitalize">
+                              <Badge variant="outline" className="text-3xs capitalize">
                                 {cert.type.replace(/_/g, ' ')}
                               </Badge>
-                              <span className="text-[10px] text-muted">
+                              <span className="text-3xs text-muted">
                                 Issued {new Date(cert.issuedAt).toLocaleDateString()}
                               </span>
                             </div>

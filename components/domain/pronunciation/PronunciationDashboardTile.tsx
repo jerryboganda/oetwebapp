@@ -41,7 +41,7 @@ export function PronunciationDashboardTile() {
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-primary">
               <Volume2 className="h-3.5 w-3.5" /> Click-to-hear
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-800">
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-warning">
               <Lock className="h-3.5 w-3.5" /> Paid candidates
             </span>
           </div>

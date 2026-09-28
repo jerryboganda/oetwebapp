@@ -18,7 +18,8 @@ import { triggerImpactHaptic, type HapticImpactStyle } from '@/lib/mobile/haptic
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline';
-  size?: 'sm' | 'md' | 'lg';
+  /** `xs` is for dense desktop tables/queues; it keeps a 44px target below lg (touch). */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   loading?: boolean;
   fullWidth?: boolean;
   asChild?: boolean;
@@ -27,9 +28,9 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 const variantStyles: Record<string, string> = {
   // Dark-mode `--color-primary` is lightened (#a78bfa) for accent text/icons,
   // but `text-white` on top of that lighter fill only reaches ~2.88:1 (WCAG
-  // AA fail). Pin the dark-mode button background to violet-700 so contrast
+  // AA fail). Pin the dark-mode button background to primary-700 so contrast
   // with white stays at ~7.3:1.
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm dark:bg-violet-700 dark:hover:bg-violet-600',
+  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm dark:bg-primary-700 dark:hover:bg-primary-600',
   // Dark-mode `--color-navy` inverts to #e5eef9 (near-white). `text-white`
   // on top of that is ~1.06:1 — effectively invisible. Force a dark
   // foreground in dark mode so the button reaches ~13:1.
@@ -40,6 +41,7 @@ const variantStyles: Record<string, string> = {
 };
 
 const sizeStyles: Record<string, string> = {
+  xs: 'min-h-11 px-3 py-2 text-xs lg:min-h-8 lg:px-2.5 lg:py-1',
   sm: 'min-h-11 px-3 py-2 text-xs',
   md: 'min-h-11 px-5 py-2.5 text-sm',
   lg: 'min-h-12 px-6 py-3 text-base',

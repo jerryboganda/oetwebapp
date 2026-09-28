@@ -130,13 +130,13 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                   <div
                                     key={opt.key}
                                     className={`flex items-center gap-2 rounded-admin border px-3 py-2 text-sm ${
-                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong'
+                                      isCorrect ? 'border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] text-admin-fg-strong' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong'
                                     }`}
                                     aria-disabled="true"
                                   >
                                     <span className="font-bold">{opt.key}.</span>
                                     <span>{opt.label}</span>
-                                    {isCorrect && <span className="ml-auto text-xs font-bold text-emerald-700">&#x2713; Correct</span>}
+                                    {isCorrect && <span className="ml-auto text-xs font-bold text-admin-success">&#x2713; Correct</span>}
                                   </div>
                                 );
                               })}
@@ -153,7 +153,7 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                 className="w-full rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-muted cursor-not-allowed"
                               />
                               {correctKeys.length > 0 && (
-                                <p className="text-sm font-semibold text-emerald-700">&#x2713; Correct: {correctKeys.join(' / ')}</p>
+                                <p className="text-sm font-semibold text-admin-success">&#x2713; Correct: {correctKeys.join(' / ')}</p>
                               )}
                             </div>
                           )}
@@ -169,11 +169,11 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                     aria-disabled="true"
                                     type="button"
                                     className={`w-full rounded-admin border px-3 py-2 text-left text-sm cursor-not-allowed ${
-                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong opacity-70'
+                                      isCorrect ? 'border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] text-admin-fg-strong' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong opacity-70'
                                     }`}
                                   >
                                     <span className="font-bold">{opt.key}.</span> {opt.label}
-                                    {isCorrect && <span className="ml-2 text-xs font-bold text-emerald-700">&#x2713;</span>}
+                                    {isCorrect && <span className="ml-2 text-xs font-bold text-admin-success">&#x2713;</span>}
                                   </button>
                                 );
                               })}

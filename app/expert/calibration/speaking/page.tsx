@@ -107,7 +107,7 @@ export default function ExpertSpeakingCalibrationPage() {
           <span className="font-bold">{row.title}</span>
           <Link
             href={`/expert/queue?search=${encodeURIComponent(row.sourceAttemptId)}`}
-            className="text-[10px] uppercase tracking-widest text-primary hover:underline"
+            className="text-3xs uppercase tracking-widest text-primary hover:underline"
             aria-label={`Find attempt ${row.sourceAttemptId} in the review queue`}
           >
             attempt {row.sourceAttemptId}
@@ -161,7 +161,14 @@ export default function ExpertSpeakingCalibrationPage() {
         icon={Activity}
       />
 
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="error"
+          action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Retry</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       <ExpertRouteSectionHeader title="Available calibration samples" />
       {loading ? (
@@ -195,10 +202,10 @@ export default function ExpertSpeakingCalibrationPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             {CRITERIA.map((c) => (
-              <label key={c.key} className="flex items-center justify-between gap-2 rounded border border-border-subtle px-3 py-2">
+              <label key={c.key} className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2">
                 <span className="flex flex-col">
                   <span className="text-sm font-bold">{c.label}</span>
-                  <span className="text-[10px] uppercase tracking-widest text-muted">
+                  <span className="text-3xs uppercase tracking-widest text-muted">
                     {c.band} · 0–{c.max}
                   </span>
                 </span>
@@ -221,7 +228,7 @@ export default function ExpertSpeakingCalibrationPage() {
           <label className="mt-4 flex flex-col gap-1">
             <span className="text-xs uppercase tracking-widest text-muted">Notes (optional)</span>
             <textarea
-              className="min-h-[80px] rounded border border-border-subtle bg-surface p-2 text-sm"
+              className="min-h-[80px] rounded border border-border bg-surface p-2 text-sm"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={2000}
@@ -241,7 +248,7 @@ export default function ExpertSpeakingCalibrationPage() {
           </div>
 
           {lastResult && (
-            <div className="mt-3 rounded border border-border-subtle bg-surface p-3">
+            <div className="mt-3 rounded border border-border bg-surface p-3">
               <p className="mb-2 text-xs uppercase tracking-widest text-muted">Per-criterion delta vs gold</p>
               <div className="grid gap-1 text-xs sm:grid-cols-3">
                 {Object.entries(lastResult.perCriterionDelta).map(([k, v]) => (

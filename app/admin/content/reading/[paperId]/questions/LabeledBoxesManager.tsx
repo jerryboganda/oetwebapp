@@ -96,7 +96,7 @@ export function LabeledBoxesManager({ boxes, onChange }: LabeledBoxesManagerProp
               <button
                 type="button"
                 onClick={() => removeBox(idx)}
-                className="p-0.5 text-red-400 hover:text-red-600"
+                className="p-0.5 text-admin-danger hover:text-[var(--admin-danger-hover)]"
                 aria-label="Remove box"
               >
                 <Trash2 className="h-3 w-3" />

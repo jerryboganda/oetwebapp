@@ -419,7 +419,7 @@ export function ReadingPdfViewer({
                   <DraftOverlay kind={draft.kind} geometry={draft.geometry} />
                 ) : null}
               </div>
-              <span className="absolute bottom-1 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              <span className="absolute bottom-1 right-2 rounded bg-black/60 px-1.5 py-0.5 text-3xs font-bold text-white">
                 {page.pageNumber}
               </span>
             </div>

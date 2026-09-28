@@ -47,7 +47,7 @@ export default function SpeakingMockSetWizardLayout({ children }: { children: Re
     return (
       <AdminRouteWorkspace>
         <AdminRoutePanel>
-          <p className="inline-flex items-center gap-2 text-sm text-admin-text-muted">
+          <p className="inline-flex items-center gap-2 text-sm text-admin-fg-muted">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading mock set…
           </p>
         </AdminRoutePanel>
@@ -59,7 +59,7 @@ export default function SpeakingMockSetWizardLayout({ children }: { children: Re
     return (
       <AdminRouteWorkspace>
         <AdminRoutePanel>
-          <p className="text-sm text-admin-text">{error ?? 'Mock set not found.'}</p>
+          <p className="text-sm text-admin-fg-strong">{error ?? 'Mock set not found.'}</p>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
     );

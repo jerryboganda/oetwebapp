@@ -606,23 +606,23 @@ export default function AdminVocabularyImportPage() {
                       <div className="grid grid-cols-2 gap-3 text-center md:grid-cols-5">
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{knownRowCount}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Total</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Total</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-emerald-600">{audioReadyCount}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Done</div>
+                          <div className="text-lg font-bold tabular-nums text-admin-success">{audioReadyCount}</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Done</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-amber-600">{remaining}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Remaining</div>
+                          <div className="text-lg font-bold tabular-nums text-[var(--admin-warning-hover)]">{remaining}</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Remaining</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-blue-600">{queued}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Queued</div>
+                          <div className="text-lg font-bold tabular-nums text-admin-info">{queued}</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Queued</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '-'}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">ETA</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">ETA</div>
                         </div>
                       </div>
 
@@ -665,7 +665,7 @@ export default function AdminVocabularyImportPage() {
                     type="file"
                     accept=".csv,text/csv"
                     onChange={(e) => { setManifestFile(e.target.files?.[0] ?? null); setReconciliation(null); }}
-                    className="text-sm text-navy file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-2 file:text-xs file:font-semibold file:text-navy hover:file:bg-muted"
+                    className="text-sm text-navy file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-2 file:text-xs file:font-semibold file:text-navy hover:file:bg-background-light"
                   />
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
@@ -693,7 +693,7 @@ export default function AdminVocabularyImportPage() {
                   <AdminRouteSummaryCard label="Needs review" value={reconciliation.mismatchedRows + reconciliation.missingRows + reconciliation.extraRows + reconciliation.invalidManifestRows} icon={<AlertTriangle className="h-5 w-5" />} tone={reconciliation.clean ? 'default' : 'warning'} />
                 </div>
                 {reconciliationRowsToDisplay.length > 0 && (
-                  <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+                  <div className="overflow-x-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface">
                     <table className="w-full text-sm">
                       <thead className="bg-background-light text-left text-xs text-muted">
                         <tr>
@@ -764,7 +764,7 @@ export default function AdminVocabularyImportPage() {
                   </InlineAlert>
                 )}
 
-                <div className="overflow-hidden rounded-2xl border border-border">
+                <div className="overflow-x-auto rounded-admin-lg border border-admin-border">
                   <table className="w-full text-sm">
                     <thead className="bg-background-light text-left text-xs text-muted">
                       <tr>

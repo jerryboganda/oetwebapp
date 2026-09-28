@@ -41,7 +41,7 @@ export function CopyField({
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+        <p className="text-2xs font-semibold uppercase tracking-wide text-muted">{label}</p>
         <p
           className={cn('mt-0.5 truncate text-sm text-navy', mono ? 'font-mono tracking-tight' : 'font-medium')}
           title={value}

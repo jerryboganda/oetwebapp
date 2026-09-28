@@ -228,7 +228,7 @@ export default function AdminReadinessLearnersPage() {
               enablePagination={false}
             />
             {data.total > data.pageSize && (
-              <div className="flex items-center justify-between border-t border-admin-border-default px-4 py-3 text-xs text-admin-fg-muted">
+              <div className="flex items-center justify-between border-t border-admin-border px-4 py-3 text-xs text-admin-fg-muted">
                 <span>
                   Page {data.page} · {data.total} learners
                 </span>

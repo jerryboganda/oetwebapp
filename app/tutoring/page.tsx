@@ -7,6 +7,8 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { fetchTutoringSessions, rateTutoringSession } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -71,10 +73,12 @@ export default function TutoringPage() {
       {loading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-12 text-muted/60">
-          <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>No tutoring sessions yet.</p>
-        </div>
+        <LearnerEmptyState
+          icon={GraduationCap}
+          title="No tutoring sessions yet."
+          description="Booking is paused for now. Keep practising and your booked sessions will appear here."
+          primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+        />
       ) : (
         <div className="space-y-3">
           {sessions.map((session, i) => (
@@ -86,8 +90,8 @@ export default function TutoringPage() {
                   <span className="font-medium text-navy text-sm">{session.examTypeCode.toUpperCase()} {session.subtestFocus ? `· ${session.subtestFocus}` : ''}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATE_COLORS[session.state] ?? 'bg-background-light text-muted'}`}>{session.state}</span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted/60">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(session.scheduledAt)}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" aria-hidden="true" />{formatDate(session.scheduledAt)}</span>
                   <span>{session.durationMinutes} min</span>
                   <span>{session.price} credits</span>
                 </div>
@@ -96,18 +100,19 @@ export default function TutoringPage() {
                 ratingSession === session.id ? (
                   <div className="flex flex-wrap items-center gap-2">
                     {[1, 2, 3, 4, 5].map(v => (
-                      <button key={v} onClick={() => setRatingValue(v)}
-                        className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>
+                      <button key={v} type="button" onClick={() => setRatingValue(v)}
+                        aria-label={`${v} star${v === 1 ? '' : 's'}`} aria-pressed={ratingValue === v}
+                        className={`w-11 h-11 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>
                         ★
                       </button>
                     ))}
-                    <button onClick={() => handleRate(session.id)} className="text-xs px-3 py-2.5 bg-warning hover:bg-warning/90 text-white rounded-lg">Submit</button>
-                    <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
+                    <Button size="sm" onClick={() => handleRate(session.id)}>Submit</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRatingSession(null)}>Cancel</Button>
                   </div>
                 ) : (
-                  <button onClick={() => setRatingSession(session.id)} className="flex items-center gap-1.5 text-sm text-warning hover:text-warning font-medium py-2 px-1">
-                    <Star className="w-4 h-4" /> Rate
-                  </button>
+                  <Button size="sm" variant="ghost" onClick={() => setRatingSession(session.id)} className="text-warning">
+                    <Star className="w-4 h-4" aria-hidden="true" /> Rate
+                  </Button>
                 )
               )}
               {session.learnerRating !== null && (

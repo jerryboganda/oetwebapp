@@ -153,7 +153,7 @@ export function DataTable<T>({
               </div>
             ) : null}
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
+              <p className="text-2xs font-bold uppercase tracking-[0.16em] text-muted">
                 {primaryColumn?.header ?? 'Item'}
               </p>
               <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-bold text-navy dark:text-slate-100">
@@ -172,7 +172,7 @@ export function DataTable<T>({
                     column.className,
                   )}
                 >
-                  <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
+                  <span className="text-2xs font-bold uppercase tracking-[0.16em] text-muted">
                     {column.header}
                   </span>
                   <div className="text-right text-sm text-navy dark:text-slate-100">{column.render(row, index)}</div>
@@ -285,7 +285,7 @@ export function DataTable<T>({
                       key={column.key}
                       scope="col"
                       className={cn(
-                        'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
+                        'border-b border-border py-2 px-4 text-left text-2xs font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}
@@ -427,7 +427,7 @@ function VirtualizedDesktopView<T>({
               key={column.key}
               role="columnheader"
               className={cn(
-                'border-b border-border py-2 px-4 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
+                'border-b border-border py-2 px-4 text-left text-2xs font-bold uppercase tracking-[0.18em] text-muted whitespace-nowrap',
                 column.className,
               )}
             >

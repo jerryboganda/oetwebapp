@@ -201,7 +201,7 @@ function WritingDetailedFeedbackContent() {
                                      <Badge variant={severityVariant} size="sm">{comment.severity}</Badge>
                                    ) : null}
                                    {sourceLabel ? (
-                                     <span className="text-[11px] font-medium uppercase tracking-wider text-muted">{sourceLabel}</span>
+                                     <span className="text-2xs font-medium uppercase tracking-wider text-muted">{sourceLabel}</span>
                                    ) : null}
                                  </div>
                                )}
@@ -209,7 +209,7 @@ function WritingDetailedFeedbackContent() {
                                <div className="text-sm font-medium text-navy">{comment.comment}</div>
                                {comment.suggestedFix ? (
                                  <div className="mt-3 rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
-                                   <div className="text-[11px] font-bold uppercase tracking-wider text-success mb-1">Suggested fix</div>
+                                   <div className="text-2xs font-bold uppercase tracking-wider text-success mb-1">Suggested fix</div>
                                    <div className="text-navy/80">{comment.suggestedFix}</div>
                                  </div>
                                ) : null}

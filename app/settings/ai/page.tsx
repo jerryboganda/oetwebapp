@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Cpu, KeyRound, Loader2, Shield, Trash2 } from 'lucide-react';
+import { ArrowLeft, Cpu, KeyRound, Shield, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -109,7 +109,7 @@ export default function AiSettingsPage() {
             onClick={() => router.push('/settings')}
             className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Settings
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Settings
           </Button>
 
           <div className="bg-surface p-2 sm:p-2 border border-border shadow-sm overflow-hidden relative rounded-3xl">
@@ -128,7 +128,7 @@ export default function AiSettingsPage() {
           {/* AI credit balances — Credits / Attempts / Unlimited only. Raw
               provider token quotas are platform-level operational data and are
               never shown on candidate surfaces. */}
-          <section className="bg-surface rounded-[2.5rem] border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
+          <section className="bg-surface rounded-surface border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
             <div className="relative z-10 space-y-4">
               <div className="flex flex-wrap items-center gap-3 justify-between">
                 <div className="flex items-center gap-3">
@@ -137,13 +137,13 @@ export default function AiSettingsPage() {
                   </div>
                   <h2 className="text-xl font-black text-navy tracking-tight">AI credit balances</h2>
                 </div>
-                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Credits</Badge>
+                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-3xs uppercase tracking-widest shadow-sm">Credits</Badge>
               </div>
 
               {loading ? (
                 <Skeleton className="h-24 w-full rounded-2xl mt-4" />
               ) : aiCredits ? (
-                <div className="mt-4 bg-background-light p-6 rounded-[2rem] border border-border shadow-inner">
+                <div className="mt-4 bg-background-light p-6 rounded-surface border border-border shadow-inner">
                   <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {(
                       [
@@ -156,7 +156,7 @@ export default function AiSettingsPage() {
                     ).map((row) => (
                       <li key={row.label} className="flex items-baseline justify-between rounded-xl bg-surface px-4 py-3 border border-border">
                         <span className="text-sm font-bold text-muted">{row.label}</span>
-                        <span className={`text-sm font-black tabular-nums ${row.value === null ? 'text-emerald-700' : 'text-navy'}`}>
+                        <span className={`text-sm font-black tabular-nums ${row.value === null ? 'text-success' : 'text-navy'}`}>
                           {row.value === null ? 'Unlimited' : row.value}
                         </span>
                       </li>
@@ -185,7 +185,7 @@ export default function AiSettingsPage() {
           </section>
 
           {/* Mode preference */}
-          <section className="bg-surface rounded-[2.5rem] border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
+          <section className="bg-surface rounded-surface border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
             <div className="relative z-10 space-y-6">
               <div className="flex items-start gap-4 mb-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-lavender">
@@ -194,7 +194,7 @@ export default function AiSettingsPage() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-navy tracking-tight">How should we route AI calls?</h2>
-                    <Badge className="hidden sm:inline-flex bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Routing</Badge>
+                    <Badge className="hidden sm:inline-flex bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-3xs uppercase tracking-widest shadow-sm">Routing</Badge>
                   </div>
                   <p className="text-sm font-medium text-muted leading-relaxed max-w-2xl mt-2">
                     Your choice applies to non-scoring features (practice, summarisation, conversation). Scoring-critical
@@ -204,7 +204,7 @@ export default function AiSettingsPage() {
               </div>
 
               {prefs && (
-                <div className="space-y-5 bg-background-light p-6 rounded-[2rem] border border-border shadow-inner">
+                <div className="space-y-5 bg-background-light p-6 rounded-surface border border-border shadow-inner">
                   <Select
                     label="Preferred credential source"
                     value={prefs.mode}
@@ -217,14 +217,14 @@ export default function AiSettingsPage() {
                     ]}
                   />
                   <label className="flex items-center gap-3 text-sm font-bold text-navy cursor-pointer group/label hover:text-primary transition-colors ml-1">
-                    <div className="relative flex items-center justify-center w-6 h-6 rounded-[8px] border-2 border-border bg-surface group-hover/label:border-primary transition-colors shadow-inner">
+                    <div className="relative flex items-center justify-center w-6 h-6 rounded-md border-2 border-border bg-surface group-hover/label:border-primary transition-colors shadow-inner focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2">
                       <input
                         type="checkbox"
                         className="opacity-0 absolute inset-0 cursor-pointer"
                         checked={prefs.allowPlatformFallback}
                         onChange={(e) => void savePrefs({ ...prefs, allowPlatformFallback: e.target.checked })}
                       />
-                      {prefs.allowPlatformFallback && <div className="w-2.5 h-2.5 bg-primary rounded-[3px]" />}
+                      {prefs.allowPlatformFallback && <div className="w-2.5 h-2.5 bg-primary rounded-sm" />}
                     </div>
                     Allow platform fallback when my key fails (recommended)
                   </label>
@@ -234,7 +234,7 @@ export default function AiSettingsPage() {
           </section>
 
           {/* Stored credentials */}
-          <section className="bg-surface rounded-[2.5rem] border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
+          <section className="bg-surface rounded-surface border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
             <div className="relative z-10 space-y-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
@@ -248,13 +248,14 @@ export default function AiSettingsPage() {
                 </div>
                 <Button
                   onClick={() => setShowAdd(true)}
-                  className="bg-warning hover:bg-warning/90 text-white gap-2 font-bold rounded-2xl px-6 py-5 h-auto shadow-sm w-full sm:w-auto transition-[background-color,box-shadow] duration-200"
+                  size="lg"
+                  className="w-full font-bold sm:w-auto"
                 >
-                  <KeyRound className="w-4 h-4" /> Add key
+                  <KeyRound className="w-4 h-4" aria-hidden="true" /> Add key
                 </Button>
               </div>
 
-              <div className="bg-background-light rounded-[2rem] border border-border shadow-inner overflow-hidden">
+              <div className="bg-background-light rounded-surface border border-border shadow-inner overflow-hidden">
                 {loading ? (
                   <Skeleton className="h-24 w-full" />
                 ) : credentials.length === 0 ? (
@@ -269,7 +270,7 @@ export default function AiSettingsPage() {
                           <div className="font-black text-navy text-lg">{c.providerCode}</div>
                           <div className="text-sm text-muted font-mono font-medium mt-1">{c.keyHint}</div>
                           <div className="flex items-center gap-2 mt-3">
-                            <Badge variant={c.status === 'Active' ? 'success' : 'muted'} className="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest">
+                            <Badge variant={c.status === 'Active' ? 'success' : 'muted'} className="rounded-full px-2.5 py-0.5 text-3xs font-black uppercase tracking-widest">
                               {c.status}
                             </Badge>
                             <span className="text-xs font-bold text-muted">
@@ -280,7 +281,7 @@ export default function AiSettingsPage() {
                           </div>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => void handleRevoke(c.id)} className="text-danger hover:bg-danger/10 hover:text-danger rounded-xl font-bold bg-surface shadow-sm border border-border">
-                          <Trash2 className="w-4 h-4 mr-2" /> Revoke
+                          <Trash2 className="w-4 h-4" aria-hidden="true" /> Revoke
                         </Button>
                       </li>
                     ))}
@@ -308,6 +309,8 @@ export default function AiSettingsPage() {
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
                 placeholder="sk-…"
+                autoComplete="off"
+                spellCheck={false}
                 className="w-full rounded-2xl border border-border bg-surface px-5 py-4 text-base font-bold text-navy outline-none transition-[border-color,box-shadow] duration-200 shadow-inner focus:border-warning focus:ring-4 focus:ring-warning/20 h-14"
               />
               <p className="text-xs font-medium text-muted leading-relaxed">
@@ -316,9 +319,8 @@ export default function AiSettingsPage() {
               </p>
               {addError && <InlineAlert variant="error" className="shadow-sm rounded-xl">{addError}</InlineAlert>}
               <div className="flex gap-3 justify-end pt-2">
-                <Button variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); }} className="rounded-xl font-bold hover:bg-navy/5">Cancel</Button>
-                <Button variant="primary" onClick={() => void handleAdd()} disabled={saving || newKey.length < 16} className="rounded-xl font-bold px-6 bg-warning hover:bg-warning/90 border-none shadow-sm transition-[background-color,box-shadow]">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                <Button variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); }} className="font-bold">Cancel</Button>
+                <Button variant="primary" onClick={() => void handleAdd()} loading={saving} disabled={newKey.length < 16} className="font-bold">
                   Save key
                 </Button>
               </div>

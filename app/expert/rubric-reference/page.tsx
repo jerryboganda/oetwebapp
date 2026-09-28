@@ -113,7 +113,7 @@ export default function RubricReferencePage() {
       <PageViewBeacon event="expert_rubric_reference_viewed" />
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2"><BookOpen className="w-8 h-8" /> Expert Rubric Quick Reference</h1>
+          <h1 className="text-2xl font-bold text-navy flex items-center gap-2"><BookOpen className="w-7 h-7 text-primary" aria-hidden="true" /> Expert Rubric Quick Reference</h1>
           <p className="text-muted mt-2">Band descriptors and scoring guidance for OET review criteria.</p>
         </div>
 
@@ -162,7 +162,7 @@ export default function RubricReferencePage() {
         </MotionSection>
 
         <MotionSection>
-          <h2 className="text-xl font-semibold flex items-center gap-2 mb-4"><AlertTriangle className="w-5 h-5" /> Calibration Tips</h2>
+          <h2 className="text-xl font-semibold text-navy flex items-center gap-2 mb-4"><AlertTriangle className="w-5 h-5" aria-hidden="true" /> Calibration Tips</h2>
           <Card className="p-5">
             <ul className="space-y-2">
               {CALIBRATION_TIPS.map((tip, i) => (

@@ -6,6 +6,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { buttonClassName } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -83,12 +84,12 @@ export default function CertificatesPage() {
                     <p className="text-xs text-muted flex-1">{cert.description}</p>
                     <div className="mt-4 flex items-center justify-between">
                       <span className="flex items-center gap-1 text-xs text-muted/60">
-                        <Calendar className="w-3.5 h-3.5" />
+                        <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                         {new Date(cert.issuedAt).toLocaleDateString()}
                       </span>
                       {cert.downloadUrl && (
-                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2.5 text-xs font-semibold hover-primary transition-colors">
-                            <Download className="w-3.5 h-3.5" /> Download
+                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className={buttonClassName({ variant: 'outline', size: 'sm', className: 'font-semibold' })}>
+                            <Download className="w-3.5 h-3.5" aria-hidden="true" /> Download
                         </a>
                       )}
                     </div>

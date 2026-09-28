@@ -41,7 +41,7 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
               className={`flex ${isLearner ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                 isLearner
-                  ? 'bg-primary text-white dark:bg-violet-700 rounded-br-sm'
+                  ? 'bg-primary text-white dark:bg-primary-700 rounded-br-sm'
                   : 'bg-background-light text-navy rounded-bl-sm border border-border'
               }`}>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold opacity-70">

@@ -17,7 +17,8 @@ vi.mock('@/lib/mobile/haptics', () => ({
   triggerImpactHaptic: vi.fn(),
 }));
 
-import { BottomNav, Sidebar, learnNavItems, mobileNavItems, type NavGroup } from '../sidebar';
+import { Sidebar, learnNavItems, mobileNavItems, type NavGroup } from '../sidebar';
+import { BottomNav } from '../bottom-nav';
 import { within } from '@testing-library/react';
 
 const adminUser = {

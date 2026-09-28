@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle2, Clock3, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { PlacementDiagnosticArea, PlacementResultReport, PlacementSkillResult } from '@/lib/api/placement';
 
 /**
@@ -85,19 +86,15 @@ export function ResultReportCard({
       ) : null}
 
       {primaryLabel && onPrimary ? (
-        <button
-          type="button"
-          onClick={onPrimary}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 sm:w-auto"
-        >
+        <Button type="button" onClick={onPrimary} className="w-full sm:w-auto">
           {primaryLabel}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
 
   if (embedded) return body;
-  return <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-surface p-5 sm:p-6">{body}</div>;
+  return <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">{body}</div>;
 }
 
 const PRIMARY_SKILLS = ['RD', 'LSN', 'SPK', 'WRT'] as const;

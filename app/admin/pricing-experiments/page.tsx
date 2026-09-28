@@ -443,7 +443,7 @@ export default function AdminPricingExperimentsPage() {
                 <p className="text-sm text-admin-fg-muted">No assignments yet.</p>
               ) : (
                 <>
-                  <div className="overflow-hidden rounded-admin border border-admin-border">
+                  <div className="overflow-x-auto rounded-admin border border-admin-border">
                     <table className="w-full text-sm">
                       <thead className="bg-admin-bg-subtle">
                         <tr>
@@ -495,7 +495,7 @@ export default function AdminPricingExperimentsPage() {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                         Statistical significance (vs control)
                       </p>
-                      <div className="overflow-hidden rounded-admin border border-admin-border">
+                      <div className="overflow-x-auto rounded-admin border border-admin-border">
                         <table className="w-full text-sm">
                           <thead className="bg-admin-bg-subtle">
                             <tr>

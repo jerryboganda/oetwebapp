@@ -147,7 +147,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border">
+      <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-background-light text-xs uppercase tracking-wider text-muted">

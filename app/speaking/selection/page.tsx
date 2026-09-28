@@ -12,6 +12,7 @@ import { LearnerSurfaceCard } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { FREE_SPEAKING_SAMPLE_COPY } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
 import { WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import {
@@ -132,7 +133,7 @@ export default function SpeakingTaskSelection() {
               card={{
                 kind: 'navigation',
                 sourceType: 'frontend_navigation',
-                accent: 'purple',
+                accent: 'primary',
                 eyebrow: 'Reference',
                 eyebrowIcon: ClipboardList,
                 title: 'Speaking Assessment Criteria',
@@ -151,7 +152,7 @@ export default function SpeakingTaskSelection() {
               card={{
                 kind: 'navigation',
                 sourceType: 'frontend_navigation',
-                accent: 'purple',
+                accent: 'primary',
                 eyebrow: 'Reference',
                 eyebrowIcon: MessageCircleQuestion,
                 title: 'Speaking Intro Questions',
@@ -185,22 +186,13 @@ export default function SpeakingTaskSelection() {
           onClear={handleClear}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={!isDirty}
-            className="pressable inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-40 dark:bg-violet-700 dark:hover:bg-violet-600"
-          >
+          <Button type="button" onClick={handleApply} disabled={!isDirty}>
             Apply filters{draftTotal > 0 ? ` (${draftTotal})` : ''}
-          </button>
+          </Button>
           {appliedTotal > 0 && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-            >
+            <Button type="button" variant="outline" onClick={handleClear}>
               Clear all filters
-            </button>
+            </Button>
           )}
         </div>
 
@@ -211,13 +203,9 @@ export default function SpeakingTaskSelection() {
           <InlineAlert
             variant="error"
             action={(
-              <button
-                type="button"
-                onClick={() => fetchCards(applied)}
-                className="pressable rounded-lg border border-current px-3 py-1 text-xs font-semibold"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => fetchCards(applied)}>
                 Retry
-              </button>
+              </Button>
             )}
           >
             {error}

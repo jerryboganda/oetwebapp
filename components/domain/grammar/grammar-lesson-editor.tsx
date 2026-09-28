@@ -457,7 +457,7 @@ function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; 
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={addPair}>+ Pair</Button>
-      <p className="text-[11px] text-muted">Correct answer is inferred from the pairs above.</p>
+      <p className="text-2xs text-muted">Correct answer is inferred from the pairs above.</p>
     </div>
   );
 }

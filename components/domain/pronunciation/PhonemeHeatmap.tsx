@@ -22,7 +22,7 @@ export function PhonemeHeatmap({ wordScores }: { wordScores: WordScore[] }) {
           className={`rounded-full px-3 py-1 text-sm font-medium border ${bucketClass(ws.accuracyScore)}`}
         >
           <span>{ws.word}</span>{' '}
-          <span className="ml-1 font-mono text-[11px] opacity-80">
+          <span className="ml-1 font-mono text-2xs opacity-80">
             {Math.round(ws.accuracyScore)}
           </span>
         </div>

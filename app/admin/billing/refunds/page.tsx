@@ -86,7 +86,7 @@ export default function AdminRefundsPage() {
       cell: ({ row }) => (
         <div>
           <p className="text-sm text-admin-fg-default">{new Date(row.original.requestedAt).toLocaleString()}</p>
-          <p className="font-mono text-[10px] text-admin-fg-muted">{row.original.id}</p>
+          <p className="font-mono text-3xs text-admin-fg-muted">{row.original.id}</p>
         </div>
       ),
     },
@@ -96,7 +96,7 @@ export default function AdminRefundsPage() {
       cell: ({ row }) => (
         <div>
           <p className="text-sm text-admin-fg-default">{row.original.userName}</p>
-          <p className="font-mono text-[10px] text-admin-fg-muted">{row.original.userId}</p>
+          <p className="font-mono text-3xs text-admin-fg-muted">{row.original.userId}</p>
         </div>
       ),
     },
@@ -137,7 +137,7 @@ export default function AdminRefundsPage() {
         const refund = row.original;
         const disabled = !canWrite || busyId === refund.id;
         if (refund.status === 'issued') {
-          return <span className="text-xs text-emerald-700">Issued</span>;
+          return <span className="text-xs text-admin-success">Issued</span>;
         }
         return (
           <div className="flex flex-wrap justify-end gap-1.5">

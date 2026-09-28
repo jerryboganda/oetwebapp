@@ -79,20 +79,20 @@ function meanSigmaForSet(
 function bucketBadge(bucket: DriftBucket) {
   if (bucket === 'trained') {
     return (
-      <Badge variant="success" className="text-[10px]">
+      <Badge variant="success" className="text-3xs">
         Trained
       </Badge>
     );
   }
   if (bucket === 'drifting') {
     return (
-      <Badge variant="warning" className="text-[10px]">
+      <Badge variant="warning" className="text-3xs">
         Drifting
       </Badge>
     );
   }
   return (
-    <Badge variant="danger" className="text-[10px]">
+    <Badge variant="danger" className="text-3xs">
       Retrain
     </Badge>
   );
@@ -101,7 +101,7 @@ function bucketBadge(bucket: DriftBucket) {
 function TutorTable({ tutors }: { tutors: BucketedTutor[] }) {
   if (tutors.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No tutors have submitted calibration rubrics yet. Once they score the published gold samples,
         their drift will appear here.
       </p>
@@ -111,7 +111,7 @@ function TutorTable({ tutors }: { tutors: BucketedTutor[] }) {
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Tutor</th>
             <th scope="col" className="px-4 py-3">Last calibration</th>
             <th scope="col" className="px-4 py-3 text-right">Submissions</th>
@@ -123,16 +123,16 @@ function TutorTable({ tutors }: { tutors: BucketedTutor[] }) {
           {tutors.map((tutor) => (
             <tr key={tutor.tutorId}>
               <td className="py-3 pr-4">
-                <p className="font-semibold text-admin-text">{tutor.tutorName}</p>
-                <p className="text-xs text-admin-text-muted">{tutor.tutorId}</p>
+                <p className="font-semibold text-admin-fg-strong">{tutor.tutorName}</p>
+                <p className="text-xs text-admin-fg-muted">{tutor.tutorId}</p>
               </td>
-              <td className="px-4 py-3 text-admin-text-muted">
+              <td className="px-4 py-3 text-admin-fg-muted">
                 {formatDate(tutor.lastSubmittedAt)}
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-admin-text">
+              <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">
                 {tutor.submissionCount}
               </td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-text">
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-fg-strong">
                 {formatSigma(tutor.meanAbsoluteError)}
               </td>
               <td className="px-4 py-3 text-right">{bucketBadge(tutor.bucket)}</td>
@@ -153,7 +153,7 @@ function SetsTable({
 }) {
   if (sets.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No calibration sets exist yet. Curate gold-marked recordings to seed the calibration
         pipeline.
       </p>
@@ -163,7 +163,7 @@ function SetsTable({
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Set</th>
             <th scope="col" className="px-4 py-3">Profession</th>
             <th scope="col" className="px-4 py-3 text-right">Tutors scored</th>
@@ -178,14 +178,14 @@ function SetsTable({
             return (
               <tr key={set.sampleId}>
                 <td className="py-3 pr-4">
-                  <p className="font-semibold text-admin-text truncate">{set.title}</p>
-                  <p className="text-xs text-admin-text-muted">{set.sampleId}</p>
+                  <p className="font-semibold text-admin-fg-strong truncate">{set.title}</p>
+                  <p className="text-xs text-admin-fg-muted">{set.sampleId}</p>
                 </td>
-                <td className="px-4 py-3 text-admin-text-muted">{set.professionId}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-admin-text">
+                <td className="px-4 py-3 text-admin-fg-muted">{set.professionId}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">
                   {set.tutorSubmissionCount}
                 </td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-text">
+                <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-fg-strong">
                   {formatSigma(meanSigma)}
                 </td>
                 <td className="px-4 py-3">
@@ -197,7 +197,7 @@ function SetsTable({
                           ? 'default'
                           : 'info'
                     ) as any}
-                    className="text-[10px] uppercase"
+                    className="text-3xs uppercase"
                   >
                     {set.status}
                   </Badge>

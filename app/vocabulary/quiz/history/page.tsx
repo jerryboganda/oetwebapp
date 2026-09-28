@@ -8,6 +8,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { fetchVocabularyQuizHistory } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -63,8 +64,8 @@ export default function VocabularyQuizHistoryPage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
-          <ArrowLeft className="w-5 h-5" />
+        <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero
           eyebrow="Vocabulary"
@@ -95,9 +96,9 @@ export default function VocabularyQuizHistoryPage() {
         <Card className="border-dashed border-border p-8 text-center shadow-sm">
           <History className="mx-auto mb-3 h-10 w-10 text-muted/40" />
           <p className="text-muted">No past quiz sessions yet.</p>
-          <Link href="/vocabulary/quiz" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
-            Start your first quiz
-          </Link>
+          <Button asChild size="sm" className="mt-4">
+            <Link href="/vocabulary/quiz">Start your first quiz</Link>
+          </Button>
         </Card>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -122,21 +123,13 @@ export default function VocabularyQuizHistoryPage() {
 
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
             Prev
-          </button>
+          </Button>
           <span className="text-sm text-muted">{page} / {totalPages}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
-          >
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
             Next
-          </button>
+          </Button>
         </div>
       )}
     </LearnerDashboardShell>

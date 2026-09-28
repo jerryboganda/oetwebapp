@@ -336,45 +336,45 @@ export default function StudyPlanTemplateEditorPage() {
       {tab === 'metadata' && (
         <div className="space-y-4 max-w-2xl">
           <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded px-3 py-2" />
+            <label htmlFor="spt-meta-1" className="block text-sm font-medium mb-1">Name</label>
+            <input id="spt-meta-1" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <textarea
+            <label htmlFor="spt-meta-2" className="block text-sm font-medium mb-1">Description</label>
+            <textarea id="spt-meta-2"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full border rounded px-3 py-2"
+              className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Min weeks</label>
-              <input
+              <label htmlFor="spt-meta-3" className="block text-sm font-medium mb-1">Min weeks</label>
+              <input id="spt-meta-3"
                 type="number"
                 min={1}
                 value={minWeeks}
                 onChange={(e) => setMinWeeks(parseInt(e.target.value) || 1)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Max weeks</label>
-              <input
+              <label htmlFor="spt-meta-4" className="block text-sm font-medium mb-1">Max weeks</label>
+              <input id="spt-meta-4"
                 type="number"
                 min={1}
                 value={maxWeeks}
                 onChange={(e) => setMaxWeeks(parseInt(e.target.value) || 1)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Target band</label>
-              <select
+              <label htmlFor="spt-meta-5" className="block text-sm font-medium mb-1">Target band</label>
+              <select id="spt-meta-5"
                 value={targetBand}
                 onChange={(e) => setTargetBand(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
               >
                 <option value="">Any</option>
                 <option>A</option>
@@ -384,34 +384,34 @@ export default function StudyPlanTemplateEditorPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Profession</label>
-              <input
+              <label htmlFor="spt-meta-6" className="block text-sm font-medium mb-1">Profession</label>
+              <input id="spt-meta-6"
                 value={professionId}
                 onChange={(e) => setProfessionId(e.target.value)}
                 placeholder="any"
-                className="w-full border rounded px-3 py-2"
+                className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Default minutes/day</label>
-            <input
+            <label htmlFor="spt-meta-7" className="block text-sm font-medium mb-1">Default minutes/day</label>
+            <input id="spt-meta-7"
               type="number"
               min={5}
               max={480}
               value={defaultMinutesPerDay}
               onChange={(e) => setDefaultMinutesPerDay(parseInt(e.target.value) || 60)}
-              className="w-32 border rounded px-3 py-2"
+              className="w-32 rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="spt-meta-8" className="block text-sm font-medium mb-1">
               Focus tags (comma-separated, e.g. weak-writing, retake-rescue)
             </label>
-            <input
+            <input id="spt-meta-8"
               value={focusTagsText}
               onChange={(e) => setFocusTagsText(e.target.value)}
-              className="w-full border rounded px-3 py-2"
+              className="w-full rounded border border-admin-border bg-admin-bg-surface px-3 py-2"
             />
           </div>
           <div>
@@ -450,34 +450,29 @@ export default function StudyPlanTemplateEditorPage() {
             <p className="text-sm text-muted-foreground">
               {body.weeks.length} week(s). Each week has days, each day has slots.
             </p>
-            <button onClick={addWeek} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+            <Button size="sm" onClick={addWeek}>
               + Add week
-            </button>
+            </Button>
           </div>
 
           <div className="space-y-3">
             {body.weeks.map((week, weekIdx) => (
-              <div key={weekIdx} className="border rounded p-4">
+              <div key={weekIdx} className="rounded-admin border border-admin-border p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="font-medium">Week {weekIdx + 1}</span>
                   <input
                     value={week.label ?? ''}
                     placeholder="label"
+                    aria-label={`Week ${weekIdx + 1} label`}
                     onChange={(e) => updateWeek(weekIdx, { label: e.target.value })}
-                    className="border rounded px-2 py-1 text-sm flex-1"
+                    className="rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-sm flex-1"
                   />
-                  <button
-                    onClick={() => addDay(weekIdx)}
-                    className="px-2 py-1 border rounded text-xs"
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => addDay(weekIdx)}>
                     + Day
-                  </button>
-                  <button
-                    onClick={() => removeWeek(weekIdx)}
-                    className="px-2 py-1 border border-red-300 text-red-700 rounded text-xs"
-                  >
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-admin-danger" onClick={() => removeWeek(weekIdx)}>
                     Delete week
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="space-y-2 ml-4">
@@ -486,8 +481,9 @@ export default function StudyPlanTemplateEditorPage() {
                       <div className="flex items-center gap-2 mb-2">
                         <select
                           value={day.dayOfWeek}
+                          aria-label="Day of week"
                           onChange={(e) => updateDay(weekIdx, dayIdx, { dayOfWeek: e.target.value })}
-                          className="border rounded px-2 py-1 text-sm"
+                          className="rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-sm"
                         >
                           {DAYS_OF_WEEK.map((d) => (
                             <option key={d} value={d}>
@@ -495,32 +491,27 @@ export default function StudyPlanTemplateEditorPage() {
                             </option>
                           ))}
                         </select>
-                        <button
-                          onClick={() => addSlot(weekIdx, dayIdx)}
-                          className="px-2 py-1 border rounded text-xs"
-                        >
+                        <Button variant="secondary" size="sm" onClick={() => addSlot(weekIdx, dayIdx)}>
                           + Slot
-                        </button>
-                        <button
-                          onClick={() => removeDay(weekIdx, dayIdx)}
-                          className="px-2 py-1 border border-red-300 text-red-700 rounded text-xs"
-                        >
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-admin-danger" onClick={() => removeDay(weekIdx, dayIdx)}>
                           Remove day
-                        </button>
+                        </Button>
                       </div>
 
                       <div className="space-y-1">
                         {day.slots.map((slot, slotIdx) => (
                           <div
                             key={slotIdx}
-                            className="flex items-center gap-2 bg-muted p-2 rounded text-sm"
+                            className="flex items-center gap-2 bg-admin-bg-subtle p-2 rounded text-sm"
                           >
                             <select
                               value={slot.subtest}
+                              aria-label="Subtest"
                               onChange={(e) =>
                                 updateSlot(weekIdx, dayIdx, slotIdx, { subtest: e.target.value })
                               }
-                              className="border rounded px-2 py-1 text-xs"
+                              className="rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs"
                             >
                               {SUBTESTS.map((s) => (
                                 <option key={s}>{s}</option>
@@ -528,12 +519,13 @@ export default function StudyPlanTemplateEditorPage() {
                             </select>
                             <select
                               value={slot.kind}
+                              aria-label="Slot kind"
                               onChange={(e) =>
                                 updateSlot(weekIdx, dayIdx, slotIdx, {
                                   kind: e.target.value as StudyPlanSlotKind,
                                 })
                               }
-                              className="border rounded px-2 py-1 text-xs"
+                              className="rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs"
                             >
                               {SLOT_KINDS.map((k) => (
                                 <option key={k}>{k}</option>
@@ -543,26 +535,29 @@ export default function StudyPlanTemplateEditorPage() {
                               type="number"
                               min={1}
                               value={slot.minutes}
+                              aria-label="Minutes"
                               onChange={(e) =>
                                 updateSlot(weekIdx, dayIdx, slotIdx, {
                                   minutes: parseInt(e.target.value) || 0,
                                 })
                               }
-                              className="w-16 border rounded px-2 py-1 text-xs"
+                              className="w-16 rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs"
                               title="minutes"
                             />
                             <input
                               value={slot.rationaleHint ?? ''}
                               placeholder="rationale hint"
+                              aria-label="Rationale hint"
                               onChange={(e) =>
                                 updateSlot(weekIdx, dayIdx, slotIdx, { rationaleHint: e.target.value })
                               }
-                              className="flex-1 border rounded px-2 py-1 text-xs"
+                              className="flex-1 rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs"
                             />
                             {slot.kind === 'drill-by-tag' && (
                               <input
                                 value={(slot.tags ?? []).join(',')}
                                 placeholder="tags,comma"
+                                aria-label="Tags"
                                 onChange={(e) =>
                                   updateSlot(weekIdx, dayIdx, slotIdx, {
                                     tags: e.target.value
@@ -571,23 +566,26 @@ export default function StudyPlanTemplateEditorPage() {
                                       .filter(Boolean),
                                   })
                                 }
-                                className="w-32 border rounded px-2 py-1 text-xs"
+                                className="w-32 rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs"
                               />
                             )}
                             {slot.kind === 'custom-content' && (
                               <input
                                 value={slot.contentId ?? ''}
                                 placeholder="contentId"
+                                aria-label="Content ID"
                                 onChange={(e) =>
                                   updateSlot(weekIdx, dayIdx, slotIdx, { contentId: e.target.value })
                                 }
-                                className="w-40 border rounded px-2 py-1 text-xs font-mono"
+                                className="w-40 rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-xs font-mono"
                               />
                             )}
                             <button
                               onClick={() => removeSlot(weekIdx, dayIdx, slotIdx)}
-                              className="px-2 py-1 text-red-700 text-xs"
+                              type="button"
+                              className="rounded px-2 py-1 text-xs text-admin-danger hover:bg-admin-danger/10"
                               title="Remove slot"
+                              aria-label="Remove slot"
                             >
                               ✕
                             </button>
@@ -610,7 +608,8 @@ export default function StudyPlanTemplateEditorPage() {
             <p className="text-sm text-muted-foreground">
               Checkpoints inject mocks or expert-review prompts after specific weeks.
             </p>
-            <button
+            <Button
+              size="sm"
               onClick={() =>
                 setBody((b) => ({
                   ...b,
@@ -620,20 +619,20 @@ export default function StudyPlanTemplateEditorPage() {
                   ],
                 }))
               }
-              className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
             >
               + Add checkpoint
-            </button>
+            </Button>
           </div>
 
           <div className="space-y-2">
             {body.checkpoints.map((cp, idx) => (
-              <div key={idx} className="border rounded p-3 flex items-center gap-2">
+              <div key={idx} className="rounded-admin border border-admin-border p-3 flex items-center gap-2">
                 <span className="text-sm">After week</span>
                 <input
                   type="number"
                   min={0}
                   value={cp.afterWeek}
+                  aria-label="After week"
                   onChange={(e) =>
                     setBody((b) => ({
                       ...b,
@@ -642,10 +641,11 @@ export default function StudyPlanTemplateEditorPage() {
                       ),
                     }))
                   }
-                  className="w-20 border rounded px-2 py-1"
+                  className="w-20 rounded border border-admin-border bg-admin-bg-surface px-2 py-1"
                 />
                 <select
                   value={cp.kind}
+                  aria-label="Checkpoint kind"
                   onChange={(e) =>
                     setBody((b) => ({
                       ...b,
@@ -654,7 +654,7 @@ export default function StudyPlanTemplateEditorPage() {
                       ),
                     }))
                   }
-                  className="border rounded px-2 py-1"
+                  className="rounded border border-admin-border bg-admin-bg-surface px-2 py-1"
                 >
                   <option value="mini-mock">mini-mock</option>
                   <option value="full-mock">full-mock</option>
@@ -676,7 +676,8 @@ export default function StudyPlanTemplateEditorPage() {
                     }))
                   }
                   placeholder="subtests,comma"
-                  className="flex-1 border rounded px-2 py-1 text-sm"
+                  aria-label="Subtests"
+                  className="flex-1 rounded border border-admin-border bg-admin-bg-surface px-2 py-1 text-sm"
                 />
                 <button
                   onClick={() =>
@@ -685,7 +686,9 @@ export default function StudyPlanTemplateEditorPage() {
                       checkpoints: b.checkpoints.filter((_, i) => i !== idx),
                     }))
                   }
-                  className="px-2 py-1 text-red-700 text-sm"
+                  type="button"
+                  className="rounded px-2 py-1 text-sm text-admin-danger hover:bg-admin-danger/10"
+                  aria-label="Remove checkpoint"
                 >
                   ✕
                 </button>
@@ -701,15 +704,15 @@ export default function StudyPlanTemplateEditorPage() {
           {validation === null ? (
             <p className="text-muted-foreground">Click &quot;Validate&quot; above to check the template structure.</p>
           ) : validation.isValid ? (
-            <div className="bg-green-50 border border-green-200 text-green-800 rounded p-4">
+            <div role="status" className="rounded-admin border border-admin-success/30 bg-admin-success/10 p-4 text-emerald-800 dark:text-emerald-200">
               ✓ Template structure is valid.
             </div>
           ) : (
-            <div className="bg-red-50 border border-red-200 rounded p-4">
-              <div className="font-medium text-red-800 mb-2">
+            <div className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-4">
+              <div className="font-medium text-red-800 dark:text-red-200 mb-2">
                 {validation.errors.length} issue(s):
               </div>
-              <ul className="list-disc pl-5 text-sm text-red-700 space-y-1">
+              <ul className="list-disc pl-5 text-sm text-red-700 dark:text-red-300 space-y-1">
                 {validation.errors.map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
@@ -727,20 +730,20 @@ export default function StudyPlanTemplateEditorPage() {
           ) : (
             <div className="space-y-2">
               {preview.days.map((d, idx) => (
-                <div key={idx} className="border rounded p-3">
+                <div key={idx} className="rounded-admin border border-admin-border p-3">
                   <div className="text-sm font-medium mb-2">
                     Week {d.weekIndex + 1} · {d.dayOfWeek}
                   </div>
                   <div className="space-y-1">
                     {d.slots.map((s, si) => (
                       <div key={si} className="text-sm flex gap-3">
-                        <span className="font-mono text-xs px-2 py-0.5 bg-muted rounded">
+                        <span className="font-mono text-xs px-2 py-0.5 bg-admin-bg-subtle rounded">
                           {s.subtest}
                         </span>
                         <span className="text-muted-foreground">{s.kind}</span>
                         <span className="text-muted-foreground">{s.minutes}m</span>
                         <span className="flex-1">{s.title}</span>
-                        <a href={s.route} className="text-blue-600 hover:underline text-xs">
+                        <a href={s.route} className="text-admin-primary hover:underline text-xs">
                           {s.route}
                         </a>
                       </div>

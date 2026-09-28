@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Users, DollarSign, UserCheck, Clock } from 'lucide-react';
 import { fetchSponsorDashboard, isApiError, type SponsorDashboardData } from '@/lib/api';
-import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
 import { StatCard } from '@/components/ui/stat-card';
 
 export default function SponsorDashboardPage() {
   const [data, setData] = useState<SponsorDashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +34,7 @@ export default function SponsorDashboardPage() {
 
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   if (loading) {
     return (
@@ -52,9 +53,15 @@ export default function SponsorDashboardPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-navy">Sponsor Dashboard</h1>
-        <Card padding="lg" className="text-center">
-          <p className="text-sm text-danger">{error}</p>
-        </Card>
+        <ErrorState
+          title="Dashboard could not be loaded"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            setReloadKey((key) => key + 1);
+          }}
+        />
       </div>
     );
   }
