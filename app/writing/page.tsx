@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Card, CardContent } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { CreditsGuideButton } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
@@ -107,31 +108,33 @@ export default function WritingHome() {
 
         <LearnerSkillSwitcher compact />
 
-        <section className="space-y-4" data-tour="writing-hub">
-          <LearnerSurfaceSectionHeader
-            eyebrow={t('writing.hub.start.eyebrow')}
-            title={t('writing.hub.start.title')}
-            description={t('writing.hub.start.description')}
-          />
-          {/* Free Mocks: the FIRST action under Start Writing — one free AI-graded
-              letter per learner, for the learner's own profession (22 Sep 2026
-              handoff: no cross-profession picker). Renders nothing unless the
-              server offers a sample. */}
-          <FreeSampleLauncher
-            subtest="writing"
-            icon={PenTool}
-            testId="writing-free-mock-card"
-            title={t('writing.hub.freeSample.title')}
-            description={t('writing.hub.freeSample.description')}
-            badgeLabel={t('writing.hub.freeSample.badge')}
-            className=""
-          />
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {START_CARDS.map((card) => (
-              <WritingLandingCardItem key={card.key} card={card} />
-            ))}
-          </ul>
-        </section>
+        <MotionSection delayIndex={0}>
+          <section className="space-y-4" data-tour="writing-hub">
+            <LearnerSurfaceSectionHeader
+              eyebrow={t('writing.hub.start.eyebrow')}
+              title={t('writing.hub.start.title')}
+              description={t('writing.hub.start.description')}
+            />
+            {/* Free Mocks: the FIRST action under Start Writing — one free AI-graded
+                letter per learner, for the learner's own profession (22 Sep 2026
+                handoff: no cross-profession picker). Renders nothing unless the
+                server offers a sample. */}
+            <FreeSampleLauncher
+              subtest="writing"
+              icon={PenTool}
+              testId="writing-free-mock-card"
+              title={t('writing.hub.freeSample.title')}
+              description={t('writing.hub.freeSample.description')}
+              badgeLabel={t('writing.hub.freeSample.badge')}
+              className=""
+            />
+            <ul className="grid gap-4 sm:grid-cols-2">
+              {START_CARDS.map((card) => (
+                <WritingLandingCardItem key={card.key} card={card} />
+              ))}
+            </ul>
+          </section>
+        </MotionSection>
       </div>
     </LearnerDashboardShell>
   );

@@ -17,6 +17,7 @@ import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
@@ -228,69 +229,71 @@ export default function ReadingHome() {
 
         {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
-          <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Choose how to practice
-            </p>
-            <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
-              Practice by Part, or attempt the full exam
-            </h2>
-          </div>
-
-          <CreditUsageInfoCard module="reading" className="mb-4" />
-
-          {freeSampleHref ? (
-            <FreeSampleCard
-              testId="reading-free-mock-card"
-              icon={BookOpen}
-              title="Free Reading Mock"
-              description="Try one complete OET Reading mock for free."
-              href={freeSampleHref}
-              onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
-              className="mb-4"
-            />
-          ) : null}
-
-          {loading ? (
-            <LearnerSkeleton variant="card-grid" />
-          ) : (
-            <ul
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-              data-testid="reading-hub-cards"
-            >
-              {HUB_CARDS.map((card) => {
-                const accent = ACCENT_STYLES[card.accent];
-                return (
-                  <li key={card.href}>
-                    <Link
-                      href={card.href}
-                      data-testid={`reading-hub-card-${card.accent}`}
-                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
-                    >
-                      <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-navy">
-                            {card.title}
-                          </h3>
-                          <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
-                            {accent.chip}
-                          </span>
+        <MotionSection delayIndex={0}>
+          <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                Choose how to practice
+              </p>
+              <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
+                Practice by Part, or attempt the full exam
+              </h2>
+            </div>
+  
+            <CreditUsageInfoCard module="reading" className="mb-4" />
+  
+            {freeSampleHref ? (
+              <FreeSampleCard
+                testId="reading-free-mock-card"
+                icon={BookOpen}
+                title="Free Reading Mock"
+                description="Try one complete OET Reading mock for free."
+                href={freeSampleHref}
+                onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
+                className="mb-4"
+              />
+            ) : null}
+  
+            {loading ? (
+              <LearnerSkeleton variant="card-grid" />
+            ) : (
+              <ul
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+                data-testid="reading-hub-cards"
+              >
+                {HUB_CARDS.map((card) => {
+                  const accent = ACCENT_STYLES[card.accent];
+                  return (
+                    <li key={card.href}>
+                      <Link
+                        href={card.href}
+                        data-testid={`reading-hub-card-${card.accent}`}
+                        className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
+                      >
+                        <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h3 className="text-sm font-bold text-navy">
+                              {card.title}
+                            </h3>
+                            <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
+                              {accent.chip}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                         </div>
-                        <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
-                      </div>
-                      <PlayCircle
-                        className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                        aria-hidden
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                        <PlayCircle
+                          className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                          aria-hidden
+                        />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </MotionSection>
 
         {!loading && home ? (
           <ReadingSecondaryDashboard
