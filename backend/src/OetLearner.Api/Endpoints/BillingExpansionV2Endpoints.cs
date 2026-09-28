@@ -399,7 +399,7 @@ public static class BillingExpansionV2Endpoints
     {
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
         {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
         return value;
     }
