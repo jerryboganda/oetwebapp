@@ -156,18 +156,20 @@ export default function MobileQuickSessionPage() {
                 { mode: 'grammar', icon: BookOpen, label: 'Grammar Quick-Fix', desc: '8 sentence correction exercises', color: 'bg-success/10 text-success border-success/30' },
               ].map(m => (
                 <MotionItem key={m.mode}>
-                  <Card className="p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99] cursor-pointer" onClick={() => startSession(m.mode)}>
+                  <button type="button" onClick={() => startSession(m.mode)} className="block w-full rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                  <Card className="p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99] motion-reduce:active:scale-100">
                     <div className="flex items-start gap-4">
                       <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${m.color}`}>
-                        <m.icon className="h-5 w-5" />
+                        <m.icon className="h-5 w-5" aria-hidden="true" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-navy">{m.label}</p>
                         <p className="mt-1 text-sm leading-6 text-muted">{m.desc}</p>
                       </div>
-                      <ChevronRight className="mt-1 h-4 w-4 text-muted" />
+                      <ChevronRight className="mt-1 h-4 w-4 text-muted" aria-hidden="true" />
                     </div>
                   </Card>
+                  </button>
                 </MotionItem>
               ))}
             </MotionSection>
@@ -223,7 +225,7 @@ export default function MobileQuickSessionPage() {
                       <button
                         onClick={() => selectAnswer(i)}
                         disabled={revealed}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-[background-color,border-color,transform,box-shadow] duration-200 hover:shadow-sm active:scale-[0.99] ${cls}`}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left text-sm text-navy transition-[background-color,border-color,transform,box-shadow] duration-200 hover:shadow-sm active:scale-[0.99] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cls}`}
                       >
                         <div className="flex items-center gap-3">
                           <span className="h-6 w-6 rounded-full border flex items-center justify-center text-xs font-medium shrink-0">
@@ -266,7 +268,7 @@ export default function MobileQuickSessionPage() {
               description="The summary follows the same surface and hierarchy rules as the main dashboard."
             />
 
-            <div className="rounded-3xl border border-border bg-surface p-6 text-center shadow-sm">
+            <div className="rounded-surface border border-border bg-surface p-6 text-center shadow-sm">
               <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-primary/10 mb-4">
               <Trophy className="h-10 w-10 text-primary" />
               </div>
@@ -280,11 +282,11 @@ export default function MobileQuickSessionPage() {
                   <p className="text-xs text-muted">Correct</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{config.questions.length - correctCount}</p>
+                  <p className="text-2xl font-bold text-navy">{config.questions.length - correctCount}</p>
                   <p className="text-xs text-muted">Incorrect</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{Math.round((correctCount / config.questions.length) * 100)}%</p>
+                  <p className="text-2xl font-bold text-navy">{Math.round((correctCount / config.questions.length) * 100)}%</p>
                   <p className="text-xs text-muted">Accuracy</p>
                 </div>
                 </div>
@@ -297,7 +299,7 @@ export default function MobileQuickSessionPage() {
                 return (
                   <div key={q.id} className="flex items-center gap-2 text-sm">
                     {correct ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" /> : <XCircle className="h-4 w-4 text-danger shrink-0" />}
-                    <span className="truncate flex-1">{q.prompt.slice(0, 50)}…</span>
+                    <span className="truncate flex-1 text-navy">{q.prompt.slice(0, 50)}…</span>
                   </div>
                 );
               })}
