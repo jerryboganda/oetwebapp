@@ -10,6 +10,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   fetchMyVocabulary,
   fetchVocabularyStats,
@@ -101,7 +102,7 @@ export default function VocabularyPage() {
     { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: displayStats.dueToday > 0 ? `${displayStats.dueToday} due` : null, iconTile: 'bg-primary/10 text-primary' },
     { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, iconTile: 'bg-emerald-50 text-emerald-700' },
     { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, iconTile: 'bg-info/10 text-info' },
-    { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, iconTile: 'bg-purple-50 text-purple-700' },
+    { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, iconTile: 'bg-primary-50 text-primary-700 dark:bg-primary/10 dark:text-primary' },
   ];
 
   const heroHighlights = [
@@ -133,7 +134,7 @@ export default function VocabularyPage() {
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {quickLinks.map(link => (
-          <Link key={link.href} href={link.href}>
+          <Link key={link.href} href={link.href} className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
             <motion.div
               whileHover={microHover}
               className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:shadow-md"
@@ -153,7 +154,7 @@ export default function VocabularyPage() {
       {/* Stats */}
       {loading && !stats ? (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-surface" />)}
         </div>
       ) : (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -163,7 +164,7 @@ export default function VocabularyPage() {
             { label: 'Learning', value: displayStats.learning, color: 'text-blue-600 dark:text-blue-400' },
             { label: 'New', value: displayStats.new, color: 'text-muted' },
           ].map(s => (
-            <Card key={s.label} className="rounded-[24px] p-4 text-center shadow-sm">
+            <Card key={s.label} className="rounded-surface p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
               <div className="text-xs text-muted mt-1">{s.label}</div>
             </Card>
@@ -173,7 +174,7 @@ export default function VocabularyPage() {
 
       {/* Daily set CTA — surfaces due + new cards for today */}
       {dailySet && dailySet.cards.length > 0 && (
-        <Card className="rounded-[24px] border-primary/30 bg-lavender/40 p-5 shadow-sm">
+        <Card className="rounded-surface border-primary/30 bg-lavender/40 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-primary">
@@ -187,13 +188,12 @@ export default function VocabularyPage() {
                 A focused spaced-repetition session to keep your momentum.
               </p>
             </div>
-            <Link
-              href="/vocabulary/flashcards"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              <Layers className="h-4 w-4" />
-              Start today&apos;s set
-            </Link>
+            <Button asChild>
+              <Link href="/vocabulary/flashcards">
+                <Layers className="h-4 w-4" aria-hidden="true" />
+                Start today&apos;s set
+              </Link>
+            </Button>
           </div>
         </Card>
       )}
@@ -206,18 +206,20 @@ export default function VocabularyPage() {
       />
       {loading ? (
         <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-[24px]" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-surface" />)}
         </div>
       ) : myList.length === 0 ? (
         <Card className="border-dashed border-border p-8 text-center shadow-sm">
           <BookOpen className="mx-auto mb-3 h-10 w-10 text-muted/40" />
           <p className="text-muted">Your vocabulary list is empty.</p>
-          <Link href="/vocabulary/browse" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
-            <Plus className="w-4 h-4" /> Browse terms to add
-          </Link>
+          <Button asChild size="sm" className="mt-4">
+            <Link href="/vocabulary/browse">
+              <Plus className="w-4 h-4" aria-hidden="true" /> Browse terms to add
+            </Link>
+          </Button>
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
+        <div className="overflow-hidden rounded-surface border border-border bg-surface shadow-sm">
           {myList.slice(0, 20).map((item, i) => (
             <MotionItem
               key={item.termId}
@@ -233,7 +235,7 @@ export default function VocabularyPage() {
               <button
                 onClick={() => handleRemove(item.termId)}
                 disabled={removing.has(item.termId)}
-                className="rounded-lg p-1.5 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-danger/10 hover:text-danger disabled:opacity-50 focus:opacity-100"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                 aria-label={`Remove ${item.term} from my word list`}
                 title="Remove from my list"
               >

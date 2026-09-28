@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,14 +51,19 @@ export function RevisionPlanCard() {
   return (
     <Card padding="md">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
+        <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
         <h3 className="text-sm font-semibold text-navy">Today’s revision plan</h3>
       </div>
 
       {loading && !plan ? (
         <Skeleton className="mt-3 h-24 rounded-xl" />
       ) : error ? (
-        <div className="mt-3 text-xs text-warning">{error}</div>
+        <div className="mt-3 flex flex-wrap items-center gap-3" role="alert">
+          <p className="text-xs text-warning">{error}</p>
+          <Button onClick={refresh} variant="outline" size="sm">
+            Retry
+          </Button>
+        </div>
       ) : plan ? (
         <div className="mt-3 space-y-3 text-sm">
           <p className="font-medium text-navy">{plan.headline}</p>
@@ -73,8 +78,8 @@ export function RevisionPlanCard() {
             </div>
           )}
           <div>
-            <Button onClick={refresh} disabled={loading} variant="primary" className="text-xs">
-              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Refresh'}
+            <Button onClick={refresh} loading={loading} variant="primary" size="sm">
+              Refresh
             </Button>
           </div>
         </div>
