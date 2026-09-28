@@ -146,7 +146,7 @@ function CriterionSlider({
             className={cn(
               'inline-flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-xs font-bold transition-colors',
               value === i
-                ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                ? 'border-primary bg-primary text-white dark:bg-primary-700'
                 : 'border-border bg-surface text-navy hover:border-primary/40 hover:text-primary',
             )}
             aria-pressed={value === i}

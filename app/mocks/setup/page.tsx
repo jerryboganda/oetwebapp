@@ -555,7 +555,7 @@ export default function MockSetup() {
                         } ${disabled ? 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent' : ''}`}
                       >
                         <div className="mb-3 flex items-center justify-between">
-                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted'}`}>
+                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted'}`}>
                             <Icon className="h-5 w-5" />
                           </span>
                           {isSelected ? <Check className="h-5 w-5 text-primary" /> : null}

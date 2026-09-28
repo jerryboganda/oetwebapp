@@ -35,7 +35,7 @@ export function ConversationMicControl({ recording, disabled, ending, canEnd, tu
           className={`group relative flex h-16 w-16 items-center justify-center rounded-full transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
             recording
               ? 'motion-safe:animate-pulse bg-danger text-white shadow-lg shadow-danger/30 hover:bg-danger/90'
-              : 'bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600'
+              : 'bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600'
           } disabled:opacity-50`}
           aria-label={recording ? 'Stop recording' : actionLabel(recording, turnState)}>
           {recording ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
