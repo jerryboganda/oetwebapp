@@ -66,7 +66,7 @@ public record AdminSpeakingMockSetUpdateRequest(
 // validated server-side against `OetScoring.SpeakingCriterionScores`
 // limits (linguistic 0–6, clinical 0–3) — see
 // `AdminService.SpeakingCalibration.cs` and
-// `ExpertService.SpeakingCalibration.cs`.
+// `SpeakingTutorCalibrationService.cs` (tutor side).
 
 public record AdminSpeakingCalibrationSampleCreateRequest(
     string Title,

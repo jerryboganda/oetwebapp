@@ -8,7 +8,7 @@
 ## 1. Taxonomy (verified from code)
 
 **Professions** — `ExamProfession` (`Services/Rulebook/RulebookLoader.cs:229`) and the
-seeded catalogue (`Services/SeedData.cs:965-975`). The brief's seven:
+seeded catalogue (`Services/SeedData.ReferenceData.cs:14-25`). The brief's seven:
 
 | # | Profession | Seed code |
 | --- | --- | --- |

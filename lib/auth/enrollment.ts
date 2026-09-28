@@ -31,7 +31,7 @@ export const examTypes: ExamType[] = [
  *
  * The source of truth is the backend `SignupProfessionCatalog` table, served by
  * `GET /v1/professions/catalog` (see `lib/api/professions.ts`). This list must
- * mirror the seeded catalog (`SeedData.cs`) id-for-id — a divergence means a
+ * mirror the seeded catalog (`SeedData.SignupCatalog.cs`) id-for-id — a divergence means a
  * learner can register under an id the backend validator rejects, or an id the
  * discipline filters cannot join on.
  */

@@ -343,7 +343,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         using var learner = await CreateLearnerClientAsync("checkout-user");
 
         // Whop (embedded) is the default checkout gateway since PaymentGatewayCatalog made
-        // it MAIN (backend/src/OetLearner.Api/Services/LearnerService.cs's CreateCheckoutSessionAsync
+        // it MAIN (backend/src/OetLearner.Api/Services/LearnerService.Checkout.cs's CreateCheckoutSessionAsync
         // defaults an unspecified gateway to Whop, not Stripe). This test specifically covers a
         // hosted/redirect provider's checkout URL, so it must opt into Stripe explicitly — and
         // gateways are disabled unless an admin turns them on (PaymentGatewayCatalog.IsEnabledAsync

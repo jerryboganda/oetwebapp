@@ -19,7 +19,7 @@ namespace OetLearner.Api.Services;
 //       entire SaveChanges with a structured error.
 //    2. BillingPlan.Code, BillingAddOn.Code, BillingCoupon.Code are immutable
 //       after first reference (validated by `ThrowIfCatalogCodeChanged` in
-//       AdminService.cs). This partial adds an audit trail for every rejection.
+//       AdminService.CatalogValidation.cs). This partial adds an audit trail for every rejection.
 //    3. Race-safe coupon redemption via `TryReserveCouponAtomicAsync` which
 //       performs an atomic UPDATE … WHERE redemption-headroom-still-available.
 //    4. Server-enforced expiry / activation windows on every reservation —
