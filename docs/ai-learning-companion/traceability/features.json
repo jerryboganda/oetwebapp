@@ -2697,7 +2697,7 @@
       "dependencies": "Pricing + payments + entitlement service + cost telemetry",
       "implementation_status": "PARTIAL",
       "notes": "",
-      "repo_evidence": "`components/ui/price`, multi-gateway support (e.g. `easykash`), billing-country handling.",
+      "repo_evidence": "`lib/money` formatMoney, multi-gateway support (e.g. `easykash`), billing-country handling.",
       "repo_gap": "PPP bands and regional eligibility remain TV-023.",
       "repo_stage": "Stage 2",
       "risk": "Medium"
