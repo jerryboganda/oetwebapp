@@ -9,7 +9,8 @@ import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { BottomNav, type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { BottomNav } from './bottom-nav';
 import { TopNav, type MobileMenuSection } from './top-nav';
 import { TourAutoTrigger } from '@/components/onboarding/tour-auto-trigger';
 

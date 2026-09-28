@@ -24,6 +24,9 @@ vi.mock('@/components/layout/top-nav', () => ({
 
 vi.mock('@/components/layout/sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar" />,
+}));
+
+vi.mock('@/components/layout/bottom-nav', () => ({
   BottomNav: () => <div data-testid="bottom-nav" />,
 }));
 

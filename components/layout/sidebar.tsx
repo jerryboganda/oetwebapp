@@ -177,7 +177,7 @@ export const learnerMobileNavItems: NavItem[] = [
   learnerNavItemByHref('/videos'),
 ];
 
-function isActive(pathname: string | null, item: NavItem): boolean {
+export function isActive(pathname: string | null, item: NavItem): boolean {
   if (!pathname) return false;
   if (item.exact) return pathname === item.href;
   if (item.href === '/') return pathname === '/';
@@ -508,73 +508,5 @@ export function Sidebar({
       </div>
       )}
     </motion.aside>
-  );
-}
-
-/* ─── Mobile Bottom Nav ─── */
-export function BottomNav({ className, items = mobileNavItems }: { className?: string; items?: NavItem[] }) {
-  const pathname = usePathname();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const bottomNavMotion = getSurfaceMotion('overlay', reducedMotion);
-  // Only fetch the module list when this nav actually carries module-gated items (learner bottom
-  // nav). The admin/tutor bottom nav has none, so this stays a no-op fetch there.
-  const hasModuleItems = items.some((item) => Boolean(item.moduleKey));
-  const { isModuleEnabled, modules: enabledModules } = useEnabledModules(hasModuleItems);
-  const enabledModulesKey = enabledModules.join('|');
-  const visibleItems = useMemo(
-    () => items.filter((item) => isModuleEnabled(item.moduleKey)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, enabledModulesKey],
-  );
-  // Keep the column count in step with the visible items so hiding a module leaves no empty cells.
-  // Literal class strings so Tailwind's scanner keeps them.
-  const gridColsClass =
-    { 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6', 7: 'grid-cols-7' }[
-      Math.min(7, Math.max(3, visibleItems.length))
-    ] ?? 'grid-cols-7';
-
-  return (
-    <motion.nav
-      className={cn('lg:hidden fixed inset-x-2 z-40 glass-panel rounded-[1.25rem] border-border/60 px-1 py-1 shadow-[0_18px_40px_rgba(15,23,42,0.18)] keyboard-safe-floating-bottom', className)}
-      aria-label="Mobile navigation"
-      layout={!reducedMotion}
-      {...bottomNavMotion}
-    >
-      <ul className={cn('grid gap-1', gridColsClass)}>
-        {visibleItems.map((item, index) => {
-          const active = isActive(pathname, item);
-          return (
-            <li key={`${index}:${item.href}`}>
-              <Link
-                href={item.href}
-                prefetch={false}
-                onClick={() => {
-                  void triggerImpactHaptic('LIGHT');
-                }}
-                className={cn(
-                  'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-3xs font-semibold leading-none',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
-                )}
-                aria-current={active ? 'page' : undefined}
-              >
-                {!reducedMotion && active && (
-                  <motion.span
-                    aria-hidden="true"
-                    className="absolute inset-0 rounded-[1rem] bg-primary"
-                    layoutId="bottom-nav-active-pill"
-                    transition={getSurfaceTransition('item', reducedMotion)}
-                  />
-                )}
-                <div className={cn('relative z-10 rounded-full p-1 transition-colors [&_svg]:h-[18px] [&_svg]:w-[18px]', active ? 'bg-white/15' : 'bg-transparent')}>
-                  {item.icon}
-                </div>
-                <span className="relative z-10">{item.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </motion.nav>
   );
 }
