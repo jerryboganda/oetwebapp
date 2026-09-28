@@ -48,15 +48,8 @@
          text-embedding-3-small vectors with proper HNSW cosine search instead
          of the legacy C#-side cosine over JSON arrays. The legacy EmbeddingJson
          column remains the source of truth until BackfillFromJsonAsync runs
-         the JSON → vector population.
-         TODO(WS10.4): if `Pgvector.EntityFrameworkCore 0.3.0` does not yet
-         publish a build that targets EF Core 10 by the time this lands,
-         downgrade the EFCore package to the most recent EF Core 10–compatible
-         release (0.2.x line) or drop it entirely and rely on raw SQL via
-         `FromSql` — the `Pgvector` core package alone is enough to construct
-         the `Vector` type that Npgsql 10 already serialises natively. The
-         service has a JSON-cosine fallback so embeddings keep working either
-         way. License: Apache 2.0. -->
+         the JSON → vector population. The service has a JSON-cosine fallback
+         so embeddings keep working either way. License: Apache 2.0. -->
     <PackageReference Include="Pgvector" Version="0.3.2" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
@@ -65,10 +58,6 @@
          HTML (reading passages, grammar explanations, etc.) at persist time. DO NOT
          render raw admin HTML without routing it through HtmlSanitizerService first. -->
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
-    <!-- Polly-based HTTP resilience (retry + circuit breaker + timeout) for outbound
-         HttpClients. Used by BrevoEmailSender via AddStandardResilienceHandler() so
-         transient Brevo outages do not cascade into 5xx responses from our API. -->
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <!-- Sentry error/perf monitoring (H10). Passive until Sentry:Dsn is configured at runtime:
          Program.cs wires UseSentry() only when a DSN is present, so in tests / local dev the
          SDK is a complete no-op and never touches the network. PII scrubbing is centralised
@@ -81,8 +70,6 @@
          "PRACTICE COPY" overlay, per-page footer, invisible HMAC token and
          signed metadata. License: Community is free up to USD 1M ARR. -->
     <PackageReference Include="QuestPDF" Version="2024.10.3" />
-    <!-- Windows-1252 / Latin-1 fallback for CSV imports from legacy Excel exports. -->
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
     <!-- Stripe.net — official Stripe SDK. Used by StripeService for Checkout Sessions,
          Billing Portal, Subscriptions, Coupons and Webhook signature verification.
          Inactive until Billing:Stripe:SecretKey is configured at runtime. -->

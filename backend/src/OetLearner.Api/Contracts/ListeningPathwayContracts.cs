@@ -75,59 +75,6 @@ public sealed record ListeningQuestionQnaResponse(
     bool? Cached = null,
     int? RetryAfterSeconds = null);
 
-/// <summary>Returned when a learner begins the 23-question diagnostic (§6.1).</summary>
-public class StartDiagnosticResponse
-{
-    public Guid SessionId { get; set; }
-    public int TotalQuestions { get; set; } = 23;
-    public int EstimatedMinutes { get; set; } = 30;
-}
-
-/// <summary>Single MCQ option projection for a learner-facing question.</summary>
-public sealed record DiagnosticQuestionOptionDto(
-    string OptionKey,    // "A" | "B" | "C"
-    string Text);
-
-// learner-safe projection
-/// <summary>
-/// LEARNER-SAFE diagnostic question projection. NEVER carries
-/// CorrectAnswerJson, AcceptedSynonymsJson, ExplanationMarkdown, or
-/// TranscriptEvidenceText. Audio URLs are short-lived signed links.
-/// </summary>
-public class DiagnosticQuestionDto
-{
-    /// <summary>Matches <see cref="Domain.ListeningQuestion.Id"/> (string max 64).</summary>
-    public string Id { get; set; } = default!;
-    public int QuestionNumber { get; set; }
-
-    /// <summary>"A" | "B" | "C" | "accent_test"</summary>
-    public string Part { get; set; } = default!;
-
-    /// <summary>gap_fill | mcq3 | mcq4 | ...</summary>
-    public string QuestionType { get; set; } = default!;
-    public string Stem { get; set; } = default!;
-
-    /// <summary>Null for Part A gap-fill items where the learner types a phrase.</summary>
-    public List<DiagnosticQuestionOptionDto>? Options { get; set; }
-
-    public Guid? AudioAssetId { get; set; }
-
-    /// <summary>Short-lived signed playback URL — never expose raw S3 keys.</summary>
-    public string? AudioPlaybackUrl { get; set; }
-
-    /// <summary>One or more of L1..L8 (see <see cref="Domain.LearnerListeningSkillScore"/>).</summary>
-    public string[] SubSkillTags { get; set; } = Array.Empty<string>();
-
-    /// <summary>"en-GB" | "en-AU" | "en-US" | "en-XX" (non-native).</summary>
-    public string Accent { get; set; } = default!;
-
-    /// <summary>0 in diagnostic mode (no replays allowed); >0 in practice modes.</summary>
-    public int MaxReplays { get; set; } = 0;
-
-    /// <summary>False during diagnostic, true in review-mode after submission.</summary>
-    public bool TranscriptAvailable { get; set; } = false;
-}
-
 /// <summary>Single per-question answer payload inside a diagnostic submission.</summary>
 public sealed record DiagnosticAnswerSubmission(
     [property: Required, StringLength(64)] string QuestionId,
@@ -137,13 +84,6 @@ public sealed record DiagnosticAnswerSubmission(
     [property: Range(0, 36000)] int TimeSpentSeconds,
     [property: Range(0, 50)] int ReplaysUsed,
     bool MarkedForReview);
-
-/// <summary>Bulk submission of all 23 diagnostic answers plus optional notes (§6.3).</summary>
-public sealed record ListeningSubmitDiagnosticRequest(
-    [property: Required] Guid SessionId,
-    [property: Required] List<DiagnosticAnswerSubmission> Answers,
-    [property: Range(0, 36000)] int TotalDurationSeconds,
-    Dictionary<string, string>? NotesByQuestionId);
 
 /// <summary>Rolling per-sub-skill mastery score (L1..L8).</summary>
 public class SkillScoreDto
@@ -205,20 +145,6 @@ public class RoadmapWeekDto
 /// <summary>Spelling-vs-meaning example pair for the spelling-tolerance widget.</summary>
 public sealed record SpellingExampleDto(string Wrong, string Right);
 
-/// <summary>Hero band of the diagnostic results page (§6.4).</summary>
-public class DiagnosticHeroDto
-{
-    public int RawScore { get; set; }
-    public int TotalQuestions { get; set; }
-    public int ScaledScore { get; set; }
-
-    /// <summary>Display label such as "B+ (predicted)".</summary>
-    public string GradeLabel { get; set; } = default!;
-    public int ConfidenceLowerBound { get; set; }
-    public int ConfidenceUpperBound { get; set; }
-    public string TargetBandLabel { get; set; } = default!;
-}
-
 /// <summary>Note-taking volume + dropped-detail analytics block (§6.4).</summary>
 public class NoteTakingStatsDto
 {
@@ -236,32 +162,6 @@ public class SpellingStatsDto
     /// <summary>Count of items where meaning was right but spelling penalised.</summary>
     public int MeaningCorrectSpellingWrong { get; set; }
     public List<SpellingExampleDto> Examples { get; set; } = new();
-}
-
-/// <summary>Time-on-task breakdown by part plus hesitation pattern flags (§6.4).</summary>
-public class TimeAnalysisDto
-{
-    public int PartABreakdown { get; set; }
-    public int PartBBreakdown { get; set; }
-    public int PartCBreakdown { get; set; }
-
-    /// <summary>Short flag labels such as "long_hesitation_part_c", "rushed_part_a".</summary>
-    public string[] HesitationFlags { get; set; } = Array.Empty<string>();
-}
-
-/// <summary>Multi-section diagnostic results envelope rendered on the results screen (§6.4).</summary>
-public class ListeningDiagnosticResultResponse
-{
-    public Guid SessionId { get; set; }
-    public DateTimeOffset SubmittedAt { get; set; }
-
-    public DiagnosticHeroDto Hero { get; set; } = new();
-    public List<SkillScoreDto> SkillRadar { get; set; } = new();
-    public List<AccentProgressDto> AccentChart { get; set; } = new();
-    public NoteTakingStatsDto NoteTakingStats { get; set; } = new();
-    public SpellingStatsDto SpellingStats { get; set; } = new();
-    public TimeAnalysisDto TimeAnalysis { get; set; } = new();
-    public List<RoadmapWeekDto> Roadmap { get; set; } = new();
 }
 
 /// <summary>Lightweight pathway-status probe used by the listening landing page.</summary>

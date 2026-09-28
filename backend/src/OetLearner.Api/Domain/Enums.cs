@@ -208,20 +208,6 @@ public enum RiskLevel
     High
 }
 
-public enum ExpertReviewStatus
-{
-    Queued,
-    Assigned,
-    Claimed,
-    InReview,
-    DraftSaved,
-    Submitted,
-    ReworkRequested,
-    SecondReviewRequired,
-    Completed,
-    Cancelled
-}
-
 public enum ExpertAssignmentState
 {
     Unassigned,

@@ -84,14 +84,6 @@ public record UploadCompleteRequest(
 
 public record AnswersUpdateRequest(Dictionary<string, string?> Answers);
 
-public record DeviceCheckRequest(
-    bool MicrophoneGranted,
-    bool NetworkStable,
-    string? DeviceType,
-    string? TaskId = null,
-    double? NoiseLevel = null,
-    bool? NoiseAcceptable = null);
-
 // Wave 3 of docs/SPEAKING-MODULE-PLAN.md.
 public record StartSpeakingMockSetRequest(string? Mode = "exam");
 
@@ -114,10 +106,6 @@ public record CheckoutSessionCreateRequest(
     string? IdempotencyKey = null,
     string? Gateway = null,
     string? ParentSubscriptionId = null);
-
-public record BillingPaymentStatusRequest(
-    string? QuoteId,
-    string? SessionId);
 
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 

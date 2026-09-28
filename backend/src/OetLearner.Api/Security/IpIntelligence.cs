@@ -22,12 +22,6 @@ public interface IIpIntelligenceService
     Task<IpIntelligence?> LookupAsync(string? ipAddress, CancellationToken ct);
 }
 
-public sealed class NoopIpIntelligenceService : IIpIntelligenceService
-{
-    public Task<IpIntelligence?> LookupAsync(string? ipAddress, CancellationToken ct)
-        => Task.FromResult<IpIntelligence?>(null);
-}
-
 /// <summary>
 /// IPinfo-backed privacy/network lookup. Only public, parsed IP addresses are
 /// sent. The token travels in an Authorization header (never the URL), the

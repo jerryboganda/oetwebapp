@@ -1687,15 +1687,6 @@ public sealed class NotificationService(
         catch (Exception ex) when (ex is not ApiException)
         {
             logger.LogError(ex, "Notification proof trigger failed for {EventKey} to {RecipientEmail}. Base: {BaseMessage}", request.EventKey, request.RecipientEmail, ex.GetBaseException().Message);
-            try
-            {
-                var logPath = Path.Combine(Path.GetTempPath(), "oet-notification-proof-errors.log");
-                var logEntry = $"[{DateTimeOffset.UtcNow:O}] {request.EventKey} -> {request.RecipientEmail}{Environment.NewLine}{ex}{Environment.NewLine}{new string('-', 80)}{Environment.NewLine}";
-                await File.AppendAllTextAsync(logPath, logEntry, ct);
-            }
-            catch
-            {
-            }
             throw;
         }
     }

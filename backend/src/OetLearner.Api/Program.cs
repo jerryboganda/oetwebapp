@@ -1080,9 +1080,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionRecor
 // RULE_40 tone assessor — consumed by SpeakingTranscriptionEndpoints below.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingToneAssessor,
     OetLearner.Api.Services.Speaking.SpeakingToneAssessor>();
-// W2-E — Speaking + Writing AI pre-analysis services.
-builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingPreAnalysisService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreService>();
 // W2-F — Speaking expert review voice-note service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceNoteService>();
 // Phase 2 (B.3) — typed Speaking session lifecycle service.
@@ -1544,33 +1541,10 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddScoped<ContentGenerationService>();
 builder.Services.AddScoped<ConversationService>();
 
-// ── Multi-Exam Scoring Strategies & Session Drivers (Feature 11) ──
-// TEMPORARILY DISABLED 2026-09-01: this block references
-// OetLearner.Api.Services.Scoring.* / OetLearner.Api.Services.ExamSession.*
-// types that were never committed to source control on any branch (only ever
-// existed as uncommitted local files in a shared dev checkout) - the DI
-// registrations below don't compile, which was breaking every deploy off
-// main. Nothing else in the tracked codebase references these types (grep
-// confirmed), so disabling just this block is self-contained. Re-enable once
-// the actual Services/Scoring + Services/ExamSession implementation files
-// (IExamScoringStrategyFactory/ExamScoringStrategyFactory,
-// IExamSessionDriverFactory/ExamSessionDriverFactory, the four
-// *ExamSessionDriver classes, etc.) are committed.
+// ── Multi-Exam Scoring (Feature 11) ──
+// Services/Scoring/* and Services/ExamSession/* are committed but not wired;
+// wiring or deleting them is an owner decision (multi-exam is not live).
 builder.Services.AddScoped<OetLearner.Api.Services.IPteScoring, OetLearner.Api.Services.PteScoring>();
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IToeflScoring, OetLearner.Api.Services.Scoring.ToeflScoring>();
-//
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.OetScoringStrategy>();
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IeltsScoringStrategy>();
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.PteScoringStrategy>();
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.ToeflScoringStrategy>();
-// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IExamScoringStrategyFactory, OetLearner.Api.Services.Scoring.ExamScoringStrategyFactory>();
-//
-// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.OetExamSessionDriver>();
-// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IeltsExamSessionDriver>();
-// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.PteExamSessionDriver>();
-// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.ToeflExamSessionDriver>();
-// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IExamSessionDriverFactory, OetLearner.Api.Services.ExamSession.ExamSessionDriverFactory>();
-
 
 // ── Conversation subsystem ────────────────────────────────────────────────
 builder.Services.Configure<OetLearner.Api.Configuration.ConversationOptions>(
@@ -2248,8 +2222,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonService,
     OetLearner.Api.Services.Writing.WritingCanonService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDrillServiceV2,
     OetLearner.Api.Services.Writing.WritingDrillServiceV2>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCaseNoteDrillService,
-    OetLearner.Api.Services.Writing.WritingCaseNoteDrillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingLessonServiceV2,
     OetLearner.Api.Services.Writing.WritingLessonServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingMockService,
@@ -2504,7 +2476,8 @@ app.Use(async (context, next) =>
     context.Items["CorrelationId"] = correlationId;
     context.Response.Headers["X-Correlation-Id"] = correlationId;
 
-    using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId, ["UserId"] = context.User?.FindFirst("sub")?.Value ?? "anonymous" }))
+    // No UserId here: this runs before UseAuthentication, so context.User is always empty.
+    using (app.Logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
     {
         await next();
     }
@@ -2683,8 +2656,7 @@ app.UseExceptionHandler(handler =>
         // Invoice, SubscriptionItem, Evaluation, or any other entity mapped
         // with a concurrency token). Surface as 409 so the UI / caller can
         // reload state and retry. DO NOT auto-retry here — that is the
-        // caller's decision and, for idempotent server paths, happens inside
-        // ConcurrencyRetry.ExecuteAsync.
+        // caller's decision (e.g. AdminService.WithSubscriptionConcurrencyRetryAsync).
         if (exception is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException concurrencyException)
         {
             context.Response.StatusCode = StatusCodes.Status409Conflict;
@@ -3170,17 +3142,7 @@ await using (var scope = app.Services.CreateAsyncScope())
         .Value;
     await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
 
-    // Seed the RecallSetTags registry — DISABLED: admin manages recalls catalog manually.
-    // var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-    //     .CreateLogger("RecallSetTagRegistrySeeder");
-    // try
-    // {
-    //     await OetLearner.Api.Services.Recalls.RecallSetTagRegistrySeeder.EnsureAsync(db, seedLogger);
-    // }
-    // catch (Exception ex)
-    // {
-    //     seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
-    // }
+    // RecallSetTags are not seeded at boot: admin manages the recalls catalog manually.
 
     // Writing Module V2 *content* seeding (demo scenarios, mocks, lessons,
     // drills, exemplars, common mistakes, sample papers) has been removed
