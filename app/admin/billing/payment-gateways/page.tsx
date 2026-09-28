@@ -9,7 +9,7 @@ import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/admin/ui/input';
 import { Label } from '@/components/admin/ui/label';
 import { Switch } from '@/components/admin/ui/switch';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   listAdminPaymentGateways,

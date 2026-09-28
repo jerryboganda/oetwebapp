@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/admin/ui/select';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   readBillingMetrics,

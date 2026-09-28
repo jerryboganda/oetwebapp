@@ -18,7 +18,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Input } from '@/components/admin/ui/input';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { EmptyState } from '@/components/admin/ui/empty-state';
-import { toast as adminToast } from '@/components/admin/ui/toaster';
+import { toast as adminToast } from '@/components/ui/toaster';
 import {
   Dialog,
   DialogContent,

@@ -1,6 +1,6 @@
 'use client';
 
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { queryKeys } from '@/lib/query/hooks';
 import type { AiPackageCreditSnapshot, AiPackageCreditTransaction } from '@/lib/billing-types';
 
