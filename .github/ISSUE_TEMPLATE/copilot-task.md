@@ -17,7 +17,7 @@ assignees: []
 ## Constraints
 
 - Follow `AGENTS.md`.
-- Heavy validation runs in local Docker Desktop containers only.
+- Builds, tests and other compute run on GitHub Actions only (`qa-smoke.yml`); `pnpm run ship:gate` is the only local check.
 - Preserve unrelated worktree changes.
 - Ask before changing secrets, auth providers, production deploy settings, or broad admin UI patterns.
 

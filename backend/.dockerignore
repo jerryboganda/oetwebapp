@@ -1,9 +1,0 @@
-**/bin/
-**/bin-verify*/
-**/obj/
-**/TestResults/
-**/output/
-**/*.log
-**/.vs/
-**/*.user
-**/*.suo

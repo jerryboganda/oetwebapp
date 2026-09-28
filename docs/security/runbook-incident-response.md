@@ -2,16 +2,17 @@
 
 Security standard §14 (IR-01…IR-08). Status: **NOT YET EXERCISED** — the runbook below is written but IR-02 requires a tabletop test whose record is the evidence. An untested runbook is not a control.
 
+The operational incident runbook — named roles, SEV ladder, triage checklist,
+evidence commands and postmortem template — is
+[`docs/ops/incident-response-runbook.md`](../ops/incident-response-runbook.md).
+This page adds the security-specific kill switches, playbooks and secret
+rotation.
+
 ## Roles
 
-| Role | Owns | Named person |
-|---|---|---|
-| Incident lead | Declares severity, owns comms and the timeline | _unassigned_ |
-| Payments owner | Payment state, provider contact, refund/fraud decisions | _unassigned_ |
-| Platform owner | VPS, containers, DNS, WAF, database | _unassigned_ |
-| Comms owner | Learner-facing messages, provider notices, legal/privacy | _unassigned_ |
-
-Fill these in and keep them current (ARC-08). An unassigned role is itself a finding.
+Named roles live in [`docs/ops/incident-response-runbook.md` §Roles](../ops/incident-response-runbook.md#roles)
+(single-owner rotation for v1). Keep them current there (ARC-08). An unassigned
+role is itself a finding.
 
 ## Severity
 
@@ -41,7 +42,7 @@ These are the levers that already exist in the product. A tabletop exercise must
 | Compromised signing key | Rotate `AuthTokens:AccessTokenSigningKey`; every issued token becomes invalid, forcing re-authentication | VPS env / Runtime Settings, then restart |
 | Abusive traffic | Edge rate-limit tightening and managed challenge | See `runbook-waf-ddos.md` |
 | Stuck or runaway AI spend | Disable the affected feature via feature flags (`ICompanionFeatureFlags` / AI kill switches fail closed) | Admin → Feature Flags |
-| Bad deploy | Roll back to the previous blue/green slot | `scripts/deploy/rollout-release.sh` |
+| Bad deploy | Roll back to the previous blue/green slot | `docs/ops/deploy-gate.md` §Rollback Procedure (`DEPLOYMENT.md` §3) |
 
 ## Playbooks
 

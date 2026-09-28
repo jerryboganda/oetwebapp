@@ -1041,11 +1041,9 @@ public sealed class ListeningMockService : IListeningMockService
         IReadOnlyDictionary<string, ListeningMockQuestionSnapshot>? QuestionSnapshots = null);
 
     /// <summary>Recompute the learner's readiness score on
-    /// LearnerListeningProfile based on the latest skill + accent state. This
-    /// is a lightweight echo of <see cref="IListeningPathwayAnalyticsService"/>
-    /// — full computation lives there, but mocks should leave a fresh value
-    /// on the profile row so other surfaces (dashboard chips) see it
-    /// immediately without a separate trip through the analytics service.</summary>
+    /// LearnerListeningProfile based on the latest skill + accent state, so
+    /// other surfaces (dashboard chips) see a fresh value immediately after a
+    /// mock.</summary>
     private async Task RefreshReadinessAsync(string userId, CancellationToken ct)
     {
         var profile = await _db.LearnerListeningProfiles

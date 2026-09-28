@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -16,7 +17,7 @@ public sealed class SponsorServicePerformanceTests : IAsyncLifetime
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly SqlCaptureInterceptor _sql = new();
-    private readonly FixedClock _clock = new(Now);
+    private readonly FixedTimeProvider _clock = new(Now);
     private DbContextOptions<LearnerDbContext> _options = default!;
 
     public async Task InitializeAsync()
@@ -163,11 +164,6 @@ public sealed class SponsorServicePerformanceTests : IAsyncLifetime
     {
         var value = source.GetType().GetProperty(name)?.GetValue(source);
         return Assert.IsAssignableFrom<IEnumerable>(value).Cast<object>().ToList();
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class SqlCaptureInterceptor : DbCommandInterceptor

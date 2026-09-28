@@ -30,6 +30,8 @@ ENV ASPNETCORE_ENVIRONMENT=Development \
 COPY backend/src/OetLearner.Api/OetLearner.Api.csproj backend/src/OetLearner.Api/
 COPY rulebooks/ rulebooks/
 COPY backend/scripts/ backend/scripts/
+# Seed data linked into the build output by the .csproj (..\..\..\data\...).
+COPY data/speaking-candidate-resources.json data/speaking-candidate-resources.json
 
 # Restore dependencies
 RUN dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj

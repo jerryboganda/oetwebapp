@@ -22,25 +22,47 @@ agent-console/
   CONTRACT.md                 interface contract (sidecar ↔ API ↔ UI ↔ proxies)
   README.md                   this file
   Dockerfile                  node:22-bookworm-slim (digest-pinned); users agent (10002); pinned CLIs
-  package.json + lockfile     committed lockfile; npm ci only
-  tsconfig.json
+  package.json                exact-pinned direct deps; no lockfile committed yet (Dockerfile + CI fall back to npm install)
+  tsconfig.json, vitest.config.ts
   src/
-    server.ts                 Fastify control server :8410 (token + owner-account checks, routes of CONTRACT §3)
+    server.ts                 Fastify control server :8410 (token + owner-account checks, routes of CONTRACT §3) + runtime wiring
+    config.ts                 env + /run/secrets configuration; refuses to start without the internal token
+    contract.ts               wire shapes of the HTTP API and event stream (CONTRACT §3–§4)
+    errors.ts                 HttpError → CONTRACT error envelope
+    validate.ts               request-body validators (400 + stable code)
+    log.ts                    pino logger
     env.ts                    allow-listed child env for the engines (strips API keys / OWNER_AGENT_*)
+    exec.ts                   shell-free child-process runner (optionally as the agent uid)
     workspace.ts              clone, per-session worktrees on agent/<yyyymmdd>-<slug>, diff
     guard.ts                  table-driven classifier + modes + taint (seatbelt, not the boundary)
-    sessions.ts               SQLite index + per-session JSONL (monotonic seq), SSE replay, retention
+    approvals.ts              pending-approval registry (single-use nonces, expiry)
+    sessions.ts               SessionManager: session lifecycle, turns, Guard + approval routing
+    store.ts                  SQLite index + per-session JSONL (monotonic seq), 90-day retention sweep
+    sse.ts                    SSE framing for the session event stream
+    redact.ts                 redaction of every persisted / streamed event
+    retention.ts              90-day cleanup of engine-native transcripts (as the agent uid)
+    engine-registry.ts        lazy engine adapter loading
+    status.ts                 GET /v1/status aggregation
     ship.ts                   push agent/* → PR → visibility lease → merge → watch deploy → health
     lease.ts                  browser-heartbeat lease + kill switch / stop-all
+    github.ts                 agent PAT (uid agent) and Ship PAT (control only)
+    docker.ts                 control-plane Docker API client (through oet-agent-dockerproxy)
+    proxies.ts                control-plane calls to the egress / docker proxies (drop session grants)
+    snapshot.ts               DB pre-snapshot before a destructive operation
     engines/
       types.ts                engine-neutral interface (mirrors CONTRACT §3–§4)
       claude.ts               Agent SDK query() adapter (PreToolUse hook → Guard)
       codex.ts                codex app-server JSON-RPC adapter (approval requests → Guard)
+      codex-protocol.ts       hand-written app-server wire shapes + pure mappers
     auth/
       claude.ts               PTY-driven `claude auth login` (URL + paste-back code)
       codex.ts                ChatGPT device-code login
-      github.ts               agent PAT (uid agent) and Ship PAT (control only)
   tests/                      unit tests (no network, no real engines, no credentials)
+  bin/
+    entrypoint.sh             container entrypoint (control plane, uid 0)
+    as-agent                  run a command as the agent uid (10002)
+    claude-as-agent           SDK-bundled Claude Code binary as uid agent
+    oet-console-erase         GDPR erasure of one session
   etc/
     MANUAL.md                 operating manual appended to every session's system prompt
     managed-settings.json     /etc/claude-code/managed-settings.json (managed deny rules + hooks only)
@@ -90,9 +112,11 @@ The loop is: edit → push a branch → GitHub Actions → read logs → fix →
   `workflow_dispatch` (input `apply=true` recreates containers even with
   active turns — the console's **Apply update** drains first, then
   dispatches with it).
-- **Test job:** `npm ci` + `npm audit signatures`, type-check, the unit
-  tests in `tests/`, `codex execpolicy check` on `etc/oet.rules`, and the
-  egress/dockerproxy policy-table tests.
+- **Test job** (one matrix leg each for the sidecar, `egress/` and
+  `dockerproxy/`): install (`npm ci` when a lockfile exists, else
+  `npm install`), type-check, the unit tests in `tests/`, and
+  `codex execpolicy check` on `etc/oet.rules` (sidecar leg only).
+  `npm audit signatures` runs in the sidecar `Dockerfile` build stage.
 - **Build job:** three images →
   `ghcr.io/jerryboganda/oetwebapp-agent-console{,-egress,-dockerproxy}:<sha>`.
 - **Deploy job** (Environment `production`, `main` only): SSH to the VPS,
@@ -131,9 +155,11 @@ Never claim tests pass without quoting the Actions run, job and step.
   values; the redactor's own tests build token-shaped strings at runtime.
 - **Pinned versions.** Base image by digest; Agent SDK (with bundled CLI),
   `@openai/codex`, gitleaks and apt packages are pinned; auto-updaters stay
-  disabled. Bumps go by PR. Codex TypeScript bindings come from
-  `codex app-server generate-ts` of the pinned version, regenerated in CI,
-  never on a workstation.
+  disabled. Bumps go by PR. The Codex app-server wire shapes in
+  `src/engines/codex-protocol.ts` are hand-written; before a `@openai/codex`
+  bump, re-check every function marked VERIFY-ON-PIN against
+  `codex app-server generate-ts` output of the new version (on Actions,
+  never on a workstation).
 - **Resource budget.** Hard caps are 3 GiB RAM / 1.5 CPU / 512 pids, with at
   most 2 live Claude queries + 1 Codex app-server. Don't add hosted
   services to the .NET API for console work; it runs in three processes.

@@ -483,3 +483,14 @@ public sealed class OwnerAgentTestClock : TimeProvider
 
     public void Advance(TimeSpan by) => _now = _now.Add(by);
 }
+
+/// <summary>TOTP codes for the seeded owner's authenticator.</summary>
+internal static class TestWebApplicationFactoryCodes
+{
+    public static string Now(OwnerSeed owner)
+        => OetLearner.Api.Tests.Infrastructure.TestWebApplicationFactory.GenerateTotpCode(owner.SecretKey, DateTimeOffset.UtcNow);
+
+    /// <summary>The next 30-second step (inside the ±1 drift window, newer than "now").</summary>
+    public static string Next(OwnerSeed owner)
+        => OetLearner.Api.Tests.Infrastructure.TestWebApplicationFactory.GenerateTotpCode(owner.SecretKey, DateTimeOffset.UtcNow.AddSeconds(30));
+}

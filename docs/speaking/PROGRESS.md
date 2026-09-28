@@ -1,6 +1,6 @@
 # Speaking Module Progress
 
-> **Current status (2026-05-29)**: historical Speaking hardening ledger. The current cross-project source of pending work is [`../STATUS/REMAINING-WORK.md`](../STATUS/REMAINING-WORK.md), with security sign-off tracked separately in [`../security/speaking/checklist.md`](../security/speaking/checklist.md).
+> **Current status (2026-05-29)**: historical Speaking hardening ledger. The current cross-project source of pending work is the root [`PROGRESS.md`](../../PROGRESS.md) (the old `STATUS/REMAINING-WORK.md` was removed in 81506d1e0), with security sign-off tracked separately in [`../security/speaking/checklist.md`](../security/speaking/checklist.md).
 
 Last updated: 2026-05-07
 Mode: Ralph-style hardening loop

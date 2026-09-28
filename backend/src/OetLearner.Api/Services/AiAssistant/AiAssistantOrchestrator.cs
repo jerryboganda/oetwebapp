@@ -153,8 +153,8 @@ public sealed class AiAssistantOrchestrator(
             IReadOnlyList<AssistantCitation> citations = Array.Empty<AssistantCitation>();
             IReadOnlyList<CompanionEvidence> evidence = Array.Empty<CompanionEvidence>();
 
-            if (!string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(role, "expert", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
             {
                 var companion = await BuildCompanionPromptAsync(
                     scope.ServiceProvider, userId, userMessage, systemPrompt, context, turnCts.Token);
@@ -271,7 +271,7 @@ public sealed class AiAssistantOrchestrator(
                     yield return new AssistantToolCallStart(toolCall.Id, toolCall.Name, toolCall.Arguments);
 
                     var toolCtx = new AiToolContext(featureCode, userId, null, toolCallMsg.Id, iteration,
-                        IsAdmin: string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase));
+                        IsAdmin: string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase));
                     var argsElement = JsonSerializer.Deserialize<JsonElement>(toolCall.Arguments);
 
                     var result = await toolInvoker.InvokeAsync(toolCall.Name, argsElement, toolCtx, turnCts.Token);
@@ -522,8 +522,8 @@ public sealed class AiAssistantOrchestrator(
 
     private static string GetFeatureCode(string role) => role switch
     {
-        "admin" => AiFeatureCodes.AiAssistantAdmin,
-        "expert" => AiFeatureCodes.AiAssistantExpert,
+        ApplicationUserRoles.Admin => AiFeatureCodes.AiAssistantAdmin,
+        ApplicationUserRoles.Expert => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
     };
 

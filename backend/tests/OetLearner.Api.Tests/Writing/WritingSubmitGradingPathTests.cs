@@ -10,6 +10,7 @@ using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
 using OetLearner.Api.Services.Writing.Configuration;
 using OetLearner.Api.Services.Writing.Events;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Writing;
 
@@ -471,21 +472,5 @@ public sealed class WritingSubmitGradingPathTests : IAsyncDisposable
             ReleaseCalls++;
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class EmptyCanonEngine : IWritingCanonEngine
-    {
-        public Task<WritingCanonDetectionResult> DetectViolationsAsync(WritingCanonDetectionRequest request, CancellationToken ct)
-            => Task.FromResult(new WritingCanonDetectionResult(request.SubmissionId, Array.Empty<WritingCanonViolation>()));
-
-        public Task<WritingCanonRuleTestResponse?> TestRuleAsync(string adminUserId, string ruleId, WritingCanonRuleTestRequest request, CancellationToken ct)
-            => throw new NotImplementedException();
-    }
-
-    private sealed class NoopWritingEventBus : IWritingEventBus
-    {
-        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
-            where TEvent : WritingEvent
-            => Task.CompletedTask;
     }
 }

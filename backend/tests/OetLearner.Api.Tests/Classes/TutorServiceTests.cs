@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Classes;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Classes;
 
@@ -315,9 +316,4 @@ public sealed class TutorServiceTests
             TestRuntimeSettingsProvider.FromZoomOptions(zoomOptions ?? new ZoomOptions()),
             new FixedTimeProvider(now),
             NullLogger<TutorService>.Instance);
-
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
 }

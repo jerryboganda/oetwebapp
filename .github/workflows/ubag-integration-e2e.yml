@@ -67,8 +67,6 @@ jobs:
           --verbosity minimal
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
 
       - uses: actions/setup-node@v4
         with:
@@ -87,6 +85,8 @@ jobs:
   # suppress the live integration evidence.
   live-e2e:
     name: Live facade and browser target probes
+    # Root SSH to production: never from a push to a feature branch.
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Generous: the live worker is single-concurrency, and a provider awaiting
     # sign-in can take ~5-8 minutes to surface that state.

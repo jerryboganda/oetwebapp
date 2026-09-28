@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -128,10 +130,10 @@ public static class ExpertEndpoints
             HttpContext http,
             LearnerDbContext db,
             ListeningGradingService grading,
-            IConfiguration config,
+            IOptionsMonitor<FeatureFlagOptions> features,
             CancellationToken ct) =>
         {
-            if (!config.GetValue<bool>("Features:ListeningExpertOverride", false))
+            if (!features.CurrentValue.ListeningExpertOverride)
             {
                 return Results.NotFound();
             }

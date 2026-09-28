@@ -393,27 +393,6 @@ public record AdminSpeakingDrillAiDraftResponse(
     DateTimeOffset CreatedAt,
     string? Warning);
 
-/// <summary>Auto-pair two published role-play cards from the same
-/// profession into a draft mock set. The service picks two cards with
-/// complementary criteria focus (one info-giving heavy, one
-/// info-gathering heavy where possible).</summary>
-public record AdminSpeakingMockSetAutoPairRequest(
-    string ProfessionId,
-    string? Difficulty,
-    string? Title);
-
-/// <summary>Response from an auto-pair. Returns the new mock set id +
-/// the two role-play content ids that were chosen.</summary>
-public record AdminSpeakingMockSetAutoPairResponse(
-    string MockSetId,
-    string Title,
-    string ProfessionId,
-    string RolePlay1ContentId,
-    string RolePlay1Title,
-    string RolePlay2ContentId,
-    string RolePlay2Title,
-    string? Warning);
-
 // ── WS9 (SPK-007) — scanned/text PDF import → structured draft ──────────────
 
 /// <summary>One field-presence check in the import builder-validation report.

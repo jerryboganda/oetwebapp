@@ -24,7 +24,7 @@ access. Now:
 | Layer | Role | Where |
 |---|---|---|
 | `ModuleKeys.AiCompanion` | **THE GATE** — opt-in, never fails open | `Services/Entitlements/ModuleKeys.cs` |
-| `AiQuotaPlan.AllowedFeaturesCsv` | **THE METER ONLY** (20k/month, 5k/day) — not a way in | `Services/SeedData.cs` |
+| `AiQuotaPlan.AllowedFeaturesCsv` | **THE METER ONLY** (20k/month, 5k/day) — not a way in | `Services/SeedData.AiQuota.cs` |
 
 `EffectiveEntitlementSnapshot.IsModuleEnabled` fails **open** for legacy plans with no module list
 (correct for Materials/Videos) but is explicitly exempted for `Mocks`, `Recalls` and now

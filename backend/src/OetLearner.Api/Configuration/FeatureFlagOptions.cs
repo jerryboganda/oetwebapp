@@ -42,4 +42,17 @@ public sealed class FeatureFlagOptions
     /// (Swagger UI exposure) keep binding through the same section.
     /// </summary>
     public bool EnableSwagger { get; set; } = false;
+
+    /// <summary>
+    /// Kill-switch for the expert Listening score-override endpoint
+    /// (<c>Features:ListeningExpertOverride</c>). Listening is auto-graded;
+    /// the endpoint returns 404 unless this is <c>true</c>.
+    /// </summary>
+    public bool ListeningExpertOverride { get; set; } = false;
+
+    /// <summary>
+    /// Launch gate for the sponsor/cohort admin surfaces and the sponsor
+    /// portal routes (<c>Features:SponsorPortalEnabled</c>).
+    /// </summary>
+    public bool SponsorPortalEnabled { get; set; } = false;
 }

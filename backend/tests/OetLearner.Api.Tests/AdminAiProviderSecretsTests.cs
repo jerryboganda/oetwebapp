@@ -342,26 +342,6 @@ public sealed class AdminAiProviderSecretsTests
 
     // ── Helpers ────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Captures the previous value of <c>Auth__UseDevelopmentAuth</c>,
-    /// flips it on, and restores it on dispose. This mirrors the
-    /// save/restore pattern used by AdminFlowsTests so the env var
-    /// cannot leak into other test collections that expect production
-    /// auth behavior.
-    /// </summary>
-    private sealed class DevAuthEnv : IDisposable
-    {
-        private const string Key = "Auth__UseDevelopmentAuth";
-        private readonly string? _previous;
-        private DevAuthEnv()
-        {
-            _previous = Environment.GetEnvironmentVariable(Key);
-            Environment.SetEnvironmentVariable(Key, "true");
-        }
-        public static DevAuthEnv Enable() => new();
-        public void Dispose() => Environment.SetEnvironmentVariable(Key, _previous);
-    }
-
     private static HttpClient CreateAiConfigAdminClient(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();

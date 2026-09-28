@@ -84,14 +84,6 @@ public record UploadCompleteRequest(
 
 public record AnswersUpdateRequest(Dictionary<string, string?> Answers);
 
-public record DeviceCheckRequest(
-    bool MicrophoneGranted,
-    bool NetworkStable,
-    string? DeviceType,
-    string? TaskId = null,
-    double? NoiseLevel = null,
-    bool? NoiseAcceptable = null);
-
 // Wave 3 of docs/SPEAKING-MODULE-PLAN.md.
 public record StartSpeakingMockSetRequest(string? Mode = "exam");
 
@@ -114,10 +106,6 @@ public record CheckoutSessionCreateRequest(
     string? IdempotencyKey = null,
     string? Gateway = null,
     string? ParentSubscriptionId = null);
-
-public record BillingPaymentStatusRequest(
-    string? QuoteId,
-    string? SessionId);
 
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 
@@ -277,16 +265,6 @@ public record AdminMockBundleSectionRequest(
 public record AdminMockBundleReorderRequest(IReadOnlyList<string> SectionIds);
 
 public record RevisionSubmitRequest(string Content, string? IdempotencyKey);
-
-/// <summary>
-/// Generates a payout batch for completed expert reviews in a pay window.
-/// All fields optional: defaults to last 30 days, $5/review when not set on
-/// the review row. Used by <c>AdminService.GenerateExpertPayoutsAsync</c>.
-/// </summary>
-public record GenerateExpertPayoutsRequest(
-    DateTimeOffset? PayPeriodStart = null,
-    DateTimeOffset? PayPeriodEnd = null,
-    decimal? DefaultCompensationPerReview = null);
 
 public record WalletTopUpRequest(
     int Amount,

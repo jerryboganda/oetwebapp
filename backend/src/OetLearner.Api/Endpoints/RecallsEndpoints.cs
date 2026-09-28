@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Recalls;
@@ -58,7 +59,7 @@ public static class RecallsEndpoints
             var userId = http.UserId();
             http.Response.Headers.CacheControl = "private, no-store";
             http.Response.Headers.Vary = "Authorization";
-            var isAdmin = http.User.IsInRole("admin");
+            var isAdmin = http.User.IsInRole(ApplicationUserRoles.Admin);
             if (!isAdmin)
             {
                 var snapshot = await entitlements.ResolveAsync(userId, ct);
@@ -224,7 +225,7 @@ public static class RecallsEndpoints
     static async Task<bool> ResolveIsPremiumAsync(
         HttpContext http, IEffectiveEntitlementResolver entitlements, CancellationToken ct)
     {
-        if (http.User.IsInRole("admin")) return true;
+        if (http.User.IsInRole(ApplicationUserRoles.Admin)) return true;
         var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
         return snapshot.HasEligibleSubscription && !snapshot.IsFrozen
             && snapshot.IsModuleEnabled(ModuleKeys.Recalls);
@@ -239,7 +240,7 @@ public static class RecallsEndpoints
     static async Task<IResult?> RequireRecallEnrolmentAsync(
         HttpContext http, IEffectiveEntitlementResolver entitlements, CancellationToken ct)
     {
-        if (http.User.IsInRole("admin")) return null;
+        if (http.User.IsInRole(ApplicationUserRoles.Admin)) return null;
         var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
         if (snapshot.HasEligibleSubscription && !snapshot.IsFrozen
             && snapshot.IsModuleEnabled(ModuleKeys.Recalls)) return null;

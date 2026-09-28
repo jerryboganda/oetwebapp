@@ -24,7 +24,7 @@ namespace OetLearner.Api.Tests.Writing;
 /// Allowed/Unlimited. (The legacy Writing-Tasks content-item flow,
 /// <c>LearnerService.CreateWritingAttemptAsync</c>, was deliberately left on
 /// its original gate — confirmed unreachable from any current frontend page
-/// — see LearnerService.cs for why.)
+/// — see LearnerService.Writing.cs for why.)
 ///
 /// Uses the REAL <see cref="AiPackageCreditService"/> (via
 /// <see cref="AiPackageCreditService.GrantPackageAsync"/>, mirroring

@@ -36,14 +36,7 @@ public class AiAssistantHub(
         => context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
 
     private static string GetUserRole(HubCallerContext context)
-    {
-        var claims = context.User;
-        if (claims?.IsInRole("admin") == true || claims?.IsInRole("system_admin") == true)
-            return "admin";
-        if (claims?.IsInRole("expert") == true)
-            return "expert";
-        return "learner";
-    }
+        => Endpoints.AiAssistantEndpoints.GetUserRole(context.User);
 
     public override async Task OnConnectedAsync()
     {

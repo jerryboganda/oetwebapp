@@ -16,6 +16,7 @@ new slot is healthy.
 3. Confirm the workflow built and pushed:
    - `ghcr.io/jerryboganda/oetwebapp-web:<sha>`
    - `ghcr.io/jerryboganda/oetwebapp-api:<sha>`
+   - `ghcr.io/jerryboganda/oetwebapp-db-backup:<sha>`
 4. Confirm the workflow SSH deploy step ran `scripts/deploy/auto-deploy-ghcr.sh`
    on the VPS.
 5. Verify production:
@@ -36,10 +37,16 @@ git reset --hard <exact-sha>
 docker login ghcr.io
 WEB_IMAGE=ghcr.io/jerryboganda/oetwebapp-web:<exact-sha> \
 API_IMAGE=ghcr.io/jerryboganda/oetwebapp-api:<exact-sha> \
+DB_BACKUP_IMAGE=ghcr.io/jerryboganda/oetwebapp-db-backup:<exact-sha> \
 bash scripts/deploy/auto-deploy-ghcr.sh
 ```
 
 Those commands pull and run existing images. They must not build images.
+`DB_BACKUP_IMAGE` is required; `AGENT_GATEWAY_IMAGE` is optional (when unset
+the gateway container is left untouched). The previous blue/green slot stays
+running, and `.deploy/auto-deploy-history.tsv` lists earlier image refs for a
+rollback. The digest-pinned incident path (`scripts/deploy/deploy-prod.sh`) is
+in `DEPLOYMENT.md` §3.
 
 ## Forbidden On The Production VPS
 

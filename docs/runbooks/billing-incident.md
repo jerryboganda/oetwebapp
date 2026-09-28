@@ -1,7 +1,7 @@
 # Billing Incident Runbook
 
 > Audience: on-call engineer, billing slice owner, support escalation lead.
-> Companion: [`docs/BILLING.md`](../BILLING.md), [`mission-critical-execution-ledger.md`](../../mission-critical-execution-ledger.md).
+> Companion: [`docs/BILLING.md`](../BILLING.md), [`docs/ops/incident-response-runbook.md`](../ops/incident-response-runbook.md). (`mission-critical-execution-ledger.md` is a gitignored, local-only file.)
 
 This runbook is the **first thing** an on-call engineer reads when a billing
 alert fires. Every scenario below assumes:
@@ -262,7 +262,7 @@ docker compose exec api dotnet ef database update <PreviousMigrationName> \
 ## 5. Escalation
 
 1. Primary on-call: see PagerDuty rotation `oet-billing-primary`
-   *(placeholder — confirm rota in `mission-critical-execution-ledger.md`)*.
+   *(placeholder — named roles are in `docs/ops/incident-response-runbook.md` §Roles)*.
 2. Slice owner escalation:
    * Wallet → slice A.
    * Payments / webhooks / refunds → billing owner.
@@ -271,7 +271,7 @@ docker compose exec api dotnet ef database update <PreviousMigrationName> \
    * Entitlement / AI quota → slice E.
 3. If learner-facing impact lasts > 30 minutes, post status to
    `status.oetwithdrhesham.co.uk` and notify product lead.
-4. Append a runbook entry to
-   [`mission-critical-execution-ledger.md`](../../mission-critical-execution-ledger.md)
-   under the "Billing incidents" section with: timestamp, symptom, action
-   taken, follow-up defect id.
+4. Record the incident with the postmortem template in
+   [`docs/ops/incident-response-runbook.md`](../ops/incident-response-runbook.md)
+   (past examples: `docs/incidents/`), including timestamp, symptom, action
+   taken and follow-up defect id.

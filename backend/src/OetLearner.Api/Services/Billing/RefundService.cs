@@ -567,7 +567,7 @@ public sealed class RefundService
         var legacySubscription = subscriptions.FirstOrDefault();
         foreach (var purchase in purchaseEntries)
         {
-            var reversalReferenceId = BuildAiCreditRefundReference(purchase.ReferenceId!);
+            var reversalReferenceId = AiPackageCreditSources.RefundReference(purchase.ReferenceId!);
             if (reversalReferenceId is null) continue;
             var alreadyReversed = await _db.AiCreditLedger.AsNoTracking()
                 .AnyAsync(entry => entry.UserId == transaction.LearnerUserId
@@ -625,21 +625,6 @@ public sealed class RefundService
     {
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= max ? value : value[..max];
-    }
-
-    private static string? BuildAiCreditRefundReference(string purchaseReferenceId)
-    {
-        if (purchaseReferenceId.StartsWith("addon:", StringComparison.Ordinal))
-        {
-            return "addon-refund:" + purchaseReferenceId["addon:".Length..];
-        }
-
-        if (purchaseReferenceId.StartsWith("plan:", StringComparison.Ordinal))
-        {
-            return "plan-refund:" + purchaseReferenceId["plan:".Length..];
-        }
-
-        return null;
     }
 
     private static bool IsFullRefund(OrderRefund refund)

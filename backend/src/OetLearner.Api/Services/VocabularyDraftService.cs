@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services;
@@ -52,7 +53,7 @@ public sealed class VocabularyDraftService(
         if (string.IsNullOrWhiteSpace(request.Category))
             throw ApiException.Validation("VOCAB_DRAFT_CATEGORY", "Category is required.");
 
-        var profession = ParseProfession(request.ProfessionId);
+        var profession = AiReplyParsing.ParseProfessionOrMedicine(request.ProfessionId);
         OetRulebook rulebook;
         try
         {
@@ -201,7 +202,7 @@ public sealed class VocabularyDraftService(
     {
         if (string.IsNullOrWhiteSpace(completion)) return new();
 
-        var jsonText = ExtractJsonBlock(completion);
+        var jsonText = AiReplyParsing.ExtractFencedJsonObject(completion);
         if (jsonText is null) return new();
 
         try
@@ -216,16 +217,16 @@ public sealed class VocabularyDraftService(
             var results = new List<AdminVocabularyDraftTerm>();
             foreach (var t in termsEl.EnumerateArray())
             {
-                var term = SafeString(t, "term")?.Trim();
-                var definition = SafeString(t, "definition")?.Trim();
-                var example = SafeString(t, "exampleSentence")?.Trim();
+                var term = AiReplyParsing.SafeString(t, "term")?.Trim();
+                var definition = AiReplyParsing.SafeString(t, "definition")?.Trim();
+                var example = AiReplyParsing.SafeString(t, "exampleSentence")?.Trim();
                 if (string.IsNullOrWhiteSpace(term) || string.IsNullOrWhiteSpace(definition) || string.IsNullOrWhiteSpace(example))
                     continue;
 
-                var category = SafeString(t, "category")?.Trim() ?? fallbackCategory;
-                var difficulty = NormaliseDifficulty(SafeString(t, "difficulty") ?? fallbackDifficulty);
-                var ipa = SafeString(t, "ipaPronunciation");
-                var context = SafeString(t, "contextNotes");
+                var category = AiReplyParsing.SafeString(t, "category")?.Trim() ?? fallbackCategory;
+                var difficulty = NormaliseDifficulty(AiReplyParsing.SafeString(t, "difficulty") ?? fallbackDifficulty);
+                var ipa = AiReplyParsing.SafeString(t, "ipaPronunciation");
+                var context = AiReplyParsing.SafeString(t, "contextNotes");
                 var synonyms = ParseArrayOfStrings(t, "synonyms");
                 var collocations = ParseArrayOfStrings(t, "collocations");
                 var related = ParseArrayOfStrings(t, "relatedTerms");
@@ -255,32 +256,6 @@ public sealed class VocabularyDraftService(
         }
     }
 
-    private static string? ExtractJsonBlock(string raw)
-    {
-        var trimmed = raw.Trim();
-        if (trimmed.StartsWith("{") && trimmed.EndsWith("}")) return trimmed;
-        var fenceStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
-        if (fenceStart < 0) fenceStart = trimmed.IndexOf("```", StringComparison.Ordinal);
-        if (fenceStart < 0) return null;
-        var afterFence = trimmed.IndexOf('\n', fenceStart);
-        if (afterFence < 0) return null;
-        var closeFence = trimmed.IndexOf("```", afterFence + 1, StringComparison.Ordinal);
-        if (closeFence < 0) return null;
-        var inner = trimmed[(afterFence + 1)..closeFence].Trim();
-        return inner.StartsWith("{") && inner.EndsWith("}") ? inner : null;
-    }
-
-    private static string? SafeString(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var v)) return null;
-        return v.ValueKind switch
-        {
-            JsonValueKind.String => v.GetString(),
-            JsonValueKind.Number => v.ToString(),
-            _ => null,
-        };
-    }
-
     private static List<string> ParseArrayOfStrings(JsonElement el, string property)
     {
         var result = new List<string>();
@@ -305,14 +280,6 @@ public sealed class VocabularyDraftService(
             "easy" or "medium" or "hard" => v,
             _ => "medium",
         };
-    }
-
-    private static ExamProfession ParseProfession(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
-        return Enum.TryParse<ExamProfession>(raw.Replace("-", ""), ignoreCase: true, out var p)
-            ? p
-            : ExamProfession.Medicine;
     }
 
     private static string BuildUserMessage(AdminVocabularyAiDraftRequest request, ExamProfession profession)

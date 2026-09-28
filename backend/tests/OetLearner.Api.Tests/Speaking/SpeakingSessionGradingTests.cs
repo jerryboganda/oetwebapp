@@ -12,6 +12,7 @@ using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Speaking;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -586,18 +587,5 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
             => throw new NotImplementedException();
         public Task<bool> HasObjectivePracticeAllowanceAsync(string userId, string subtest, CancellationToken ct)
             => throw new NotImplementedException();
-    }
-
-    private sealed class TestHostEnvironment(string contentRootPath)
-        : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
-    {
-        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
-        public Microsoft.Extensions.FileProviders.IFileProvider WebRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
-        public string WebRootPath { get; set; } = string.Empty;
-        public string EnvironmentName { get; set; } = "Development";
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

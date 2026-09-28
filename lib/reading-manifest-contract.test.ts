@@ -122,6 +122,15 @@ describe('reading-manifest-contract', () => {
     expect(errors).toContain('MCQ3 must have exactly 3 options.');
   });
 
+  it('rejects duplicate MCQ options and unsafe option keys (matches the backend)', () => {
+    expect(validateQuestionPayload('MultipleChoice3', '["gloves","Gloves","gowns"]', '"A"')).toContain(
+      'MCQ options must be non-empty and unique.',
+    );
+    expect(
+      validateQuestionPayload('MultipleChoice3', '[{"label":"a","isCorrect":"true"},{"label":"b"},{"label":"c"}]', '"A"'),
+    ).toContain('MCQ option objects may only contain string id, value, label, text, title, or letter fields.');
+  });
+
   it('requires explanation and evidence for publish-ready papers', () => {
     const manifest = buildCanonicalReadingManifest();
     manifest.parts![0].questions![0].explanationMarkdown = '';

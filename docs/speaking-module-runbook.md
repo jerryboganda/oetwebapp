@@ -61,26 +61,19 @@ mock with assessment seeding, and live-tutor calibration banner.
 
 ## 4. Production deploy
 
-Production deploys are exact-SHA only. After CI publishes immutable digest image
-refs for the target SHA:
+Follow `DEPLOY-MANUAL.md`: merge to `main` and let
+`.github/workflows/deploy.yml` (**Build & Deploy (web + API)**) build the images
+on Actions and run `scripts/deploy/auto-deploy-ghcr.sh` on the VPS. The
+blue/green rollout:
 
-```bash
-ssh root@185.252.233.186
-cd /opt/oetwebapp
-DEPLOY_REF=<40-char-sha> \
-WEB_IMAGE=<web-image@sha256:...> \
-API_IMAGE=<api-image@sha256:...> \
-DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
-ROUTER_IMAGE=<router-image@sha256:...> \
-bash ./scripts/deploy/deploy-prod.sh
-```
+1. Pulls the `:<sha>` GHCR images built for the target commit.
+2. Recreates the inactive web/API slot and health-gates it.
+3. Switches the stable routers only after the slot is healthy, then checks the
+   public health URLs.
+4. Keeps the previous slot running for rollback.
 
-The blue/green rollout will:
-
-1. Pull the immutable image digest supplied by the deploy workflow.
-2. Roll the inactive web slot forward; run health probes.
-3. Switch the stable router only after `GET /api/health` returns 200.
-4. Preserve at least one previous-good release for rollback.
+The digest-pinned manual incident path (`scripts/deploy/deploy-prod.sh`) is in
+`DEPLOYMENT.md` §3.
 
 ## 5. Post-deploy verification
 
@@ -116,14 +109,28 @@ This rolls back **without restarting** any container.
 
 If the issue is broader (auth, API, scoring, gateway):
 
+There is no one-shot rollback script. Either:
+
+- redeploy the previous good `:<sha>` images listed in
+  `.deploy/auto-deploy-history.tsv` with the `auto-deploy-ghcr.sh` command in
+  `DEPLOY-MANUAL.md` ("VPS Role"), or
+- use the digest-pinned incident rollout (`DEPLOYMENT.md` §3, rollback
+  procedure in `docs/ops/deploy-gate.md`) with the SHA and digests from
+  `.deploy/rollback-target.env` (written only by the `deploy-prod.sh` path):
+
 ```bash
 ssh root@185.252.233.186
 cd /opt/oetwebapp
-bash ./scripts/deploy/rollback-prod.sh   # rolls to previous-good image digests
+DEPLOY_REF=<previous-good-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
-Verify health endpoints return 200, then post incident summary in
-`mission-critical-execution-ledger.md`.
+Verify health endpoints return 200, then write the postmortem with the template
+in `docs/ops/incident-response-runbook.md` (past examples: `docs/incidents/`).
 
 ## 7. Audio retention
 

@@ -218,6 +218,7 @@ agent-gateway/**/*.egg-info/
 # Tauri desktop shell
 src-tauri/target/
 src-tauri/binaries/
+src-tauri/gen/
 src-tauri/tauri.build.conf.json
 src-tauri/*.log
 src-tauri/cdp-*.mjs
@@ -283,4 +284,9 @@ scripts/materials/.cache/
 .claude.backup-*/
 .mcp.json
 ruvector.db
+.superpowers/
+# backend one-off scratch scripts/queries and local test output
+backend/_*.sql
+backend/_*.ps1
+backend/TestResults/
 

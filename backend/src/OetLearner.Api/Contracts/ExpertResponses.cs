@@ -512,11 +512,6 @@ public sealed record ExpertMessageThreadDetailResponse(
     DateTimeOffset UpdatedAt);
 
 // ── Compensation ──
-public sealed record ExpertCompensationRateResponse(
-    string SubtestCode,
-    long RateMinorUnits,
-    string Currency);
-
 public sealed record ExpertCompensationSummaryResponse(
     long PendingEarningsMinorUnits,
     long PaidThisMonthMinorUnits,

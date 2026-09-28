@@ -168,7 +168,7 @@ public sealed class WritingDrillService(LearnerDbContext db, TimeProvider clock)
         var drill = new WritingDrill { Id = Guid.NewGuid(), CreatedAt = clock.GetUtcNow() };
         ApplyUpsert(drill, request);
         db.WritingDrills.Add(drill);
-        AddAuditEvent(adminUserId, "WritingDrill", drill.Id.ToString("D"), "writing.drill.created", drill.TargetSubSkill);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingDrill", drill.Id.ToString("D"), "writing.drill.created", drill.TargetSubSkill);
         await db.SaveChangesAsync(ct);
         return ToV2Response(drill, includeAnswers: true);
     }
@@ -185,7 +185,7 @@ public sealed class WritingDrillService(LearnerDbContext db, TimeProvider clock)
         var drill = await db.WritingDrills.FirstOrDefaultAsync(d => d.Id == id, ct);
         if (drill is null) return null;
         ApplyUpsert(drill, request);
-        AddAuditEvent(adminUserId, "WritingDrill", id.ToString("D"), "writing.drill.updated", drill.TargetSubSkill);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingDrill", id.ToString("D"), "writing.drill.updated", drill.TargetSubSkill);
         await db.SaveChangesAsync(ct);
         return ToV2Response(drill, includeAnswers: true);
     }
@@ -195,24 +195,9 @@ public sealed class WritingDrillService(LearnerDbContext db, TimeProvider clock)
         var drill = await db.WritingDrills.FirstOrDefaultAsync(d => d.Id == id, ct);
         if (drill is null) return false;
         db.WritingDrills.Remove(drill);
-        AddAuditEvent(adminUserId, "WritingDrill", id.ToString("D"), "writing.drill.deleted", drill.TargetSubSkill);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingDrill", id.ToString("D"), "writing.drill.deleted", drill.TargetSubSkill);
         await db.SaveChangesAsync(ct);
         return true;
-    }
-
-    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
-    {
-        db.AuditEvents.Add(new AuditEvent
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            Action = action,
-            ResourceType = resourceType,
-            ResourceId = resourceId,
-            Details = details,
-            OccurredAt = clock.GetUtcNow(),
-        });
     }
 
     public async Task<IReadOnlyList<WritingCaseNoteDrillSummaryResponse>> ListCaseNoteDrillsAsync(string userId, CancellationToken ct)

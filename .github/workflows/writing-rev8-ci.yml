@@ -66,7 +66,7 @@ jobs:
     # No Postgres service: [PostgreSqlFact] tests self-skip without
     # OET_TEST_POSTGRES_CONNECTION.
     env:
-      DOTNET_FILTER: ${{ inputs.dotnet_filter || 'FullyQualifiedName~OetLearner.Api.Tests.WritingRuleEngineTests|FullyQualifiedName~OetLearner.Api.Tests.WritingRulebookCoverageValidatorTests|FullyQualifiedName~OetLearner.Api.Tests.RulebookLoaderTests|FullyQualifiedName~OetLearner.Api.Tests.AiGatewayAndPromptTests|FullyQualifiedName~OetLearner.Api.Tests.Rulebook.|FullyQualifiedName~OetLearner.Api.Tests.Writing.|FullyQualifiedName~OetLearner.Api.Tests.WritingCoachServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingEntitlementServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingLearnerVisibilityTests' }}
+      DOTNET_FILTER: ${{ inputs.dotnet_filter || 'FullyQualifiedName~OetLearner.Api.Tests.Rulebook.|FullyQualifiedName~OetLearner.Api.Tests.Writing.|FullyQualifiedName~OetLearner.Api.Tests.WritingCoachServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingLearnerVisibilityTests' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -135,8 +135,6 @@ jobs:
           fetch-depth: 0
           filter: blob:none
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

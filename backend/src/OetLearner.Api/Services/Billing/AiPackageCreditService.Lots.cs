@@ -1,0 +1,654 @@
+﻿using System.Data;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
+
+namespace OetLearner.Api.Services.Billing;
+
+public sealed partial class AiPackageCreditService
+{
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is not null || db.Database.IsInMemory())
+        {
+            return null;
+        }
+
+        return await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+    }
+
+    private static DateTimeOffset? Later(DateTimeOffset? current, DateTimeOffset next)
+        => current is null || next > current ? next : current;
+
+    private static string NormalizeSubtest(string value)
+        => value.Trim().ToLowerInvariant();
+
+    private static string NewId(string prefix)
+        => $"{prefix}-{Guid.NewGuid():N}"[..Math.Min(64, prefix.Length + 33)];
+
+    private void AddLot(AiPackageCreditAccount account, AiPackageCreditLot lot)
+    {
+        lot.UserId = account.UserId;
+        lot.AccountId = account.Id;
+        db.AiPackageCreditLots.Add(lot);
+    }
+
+    private async Task EnsureLotsLoadedAsync(AiPackageCreditAccount account, CancellationToken ct)
+    {
+        if (db.AiPackageCreditLots.Local.Any(lot => lot.AccountId == account.Id))
+        {
+            return;
+        }
+
+        await db.AiPackageCreditLots
+            .Where(lot => lot.AccountId == account.Id)
+            .LoadAsync(ct);
+    }
+
+    private void EnsureSyntheticLotIfNeeded(AiPackageCreditAccount account)
+    {
+        if (AccountLots(account).Count > 0)
+        {
+            return;
+        }
+
+        if (account.SharedCredits <= 0
+            && account.FlexibleCredits <= 0
+            && account.WritingOnlyCredits <= 0
+            && account.SpeakingOnlyCredits <= 0
+            && (account.ListeningTestsRemaining ?? 0) <= 0
+            && (account.ReadingTestsRemaining ?? 0) <= 0
+            && account.MockExamsRemaining <= 0
+            && account.ListeningTestsRemaining is not null
+            && account.ReadingTestsRemaining is not null)
+        {
+            return;
+        }
+
+        AddLot(account, new AiPackageCreditLot
+        {
+            Id = NewId("aipkg-lot"),
+            PackageId = LegacySyntheticPackageId,
+            PackageType = "legacy",
+            SharedCredits = Math.Max(0, account.SharedCredits),
+            FlexibleCredits = Math.Max(0, account.FlexibleCredits),
+            WritingOnlyCredits = Math.Max(0, account.WritingOnlyCredits),
+            SpeakingOnlyCredits = Math.Max(0, account.SpeakingOnlyCredits),
+            ListeningTestsRemaining = account.ListeningTestsRemaining,
+            ReadingTestsRemaining = account.ReadingTestsRemaining,
+            MockExamsRemaining = Math.Max(0, account.MockExamsRemaining),
+            UnlimitedListening = account.ListeningTestsRemaining is null,
+            UnlimitedReading = account.ReadingTestsRemaining is null,
+            ValidFrom = DateTimeOffset.UtcNow,
+            ExpiresAt = account.ExpiresAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
+    private bool HasUnlimitedObjective(AiPackageCreditAccount account, string subtest)
+        => subtest == "listening"
+            ? LiveLots(account).Any(lot => lot.UnlimitedListening)
+            : LiveLots(account).Any(lot => lot.UnlimitedReading);
+
+    /// <summary>
+    /// Authorization-grade unlimited check: synthetic <c>"legacy"</c> lots only
+    /// mirror pre-lot account balances and carry no grant provenance, so they
+    /// can never authorize unlimited practice on their own. A stuck null pool
+    /// from a deleted source therefore denies instead of granting.
+    /// </summary>
+    private bool HasLiveRealUnlimited(AiPackageCreditAccount account, string subtest)
+        => LiveLots(account).Any(lot =>
+            !string.Equals(lot.PackageId, LegacySyntheticPackageId, StringComparison.OrdinalIgnoreCase)
+            && (subtest == "listening" ? lot.UnlimitedListening : lot.UnlimitedReading));
+
+    private List<AiPackageCreditLot> LiveLots(AiPackageCreditAccount account)
+        => db.AiPackageCreditLots.Local
+            .Where(lot => lot.AccountId == account.Id && IsLive(lot, DateTimeOffset.UtcNow))
+            .OrderBy(lot => lot.ExpiresAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(lot => lot.CreatedAt)
+            .ThenBy(lot => lot.Id)
+            .ToList();
+
+    private List<AiPackageCreditLot> AccountLots(AiPackageCreditAccount account)
+        => db.AiPackageCreditLots.Local
+            .Where(lot => lot.AccountId == account.Id)
+            .OrderBy(lot => lot.ExpiresAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(lot => lot.CreatedAt)
+            .ThenBy(lot => lot.Id)
+            .ToList();
+
+    private void RebuildAccountFromLots(AiPackageCreditAccount account)
+    {
+        if (!db.AiPackageCreditLots.Local.Any(lot => lot.AccountId == account.Id))
+        {
+            return;
+        }
+
+        var lots = LiveLots(account);
+        account.SharedCredits = Math.Max(0, lots.Sum(lot => lot.SharedCredits));
+        account.FlexibleCredits = Math.Max(0, lots.Sum(lot => lot.FlexibleCredits));
+        account.WritingOnlyCredits = Math.Max(0, lots.Sum(lot => lot.WritingOnlyCredits));
+        account.SpeakingOnlyCredits = Math.Max(0, lots.Sum(lot => lot.SpeakingOnlyCredits));
+        account.MockExamsRemaining = Math.Max(0, lots.Sum(lot => lot.MockExamsRemaining));
+        account.ListeningTestsRemaining = lots.Any(lot => lot.UnlimitedListening)
+            ? null
+            : lots.Sum(lot => lot.ListeningTestsRemaining ?? 0);
+        account.ReadingTestsRemaining = lots.Any(lot => lot.UnlimitedReading)
+            ? null
+            : lots.Sum(lot => lot.ReadingTestsRemaining ?? 0);
+        account.ExpiresAt = lots
+            .Select(lot => lot.ExpiresAt)
+            .Where(expires => expires is not null)
+            .DefaultIfEmpty()
+            .Max();
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static int ResolveGradingActivities(AiPackageCreditAccount account, string subtest, int quantity)
+    {
+        // FINAL 2026-09-06: quantity is always a count of complete activities
+        // (1 letter / 1 card). Every pool costs 2 AI credits per activity, so
+        // no denomination conversion happens here — just a floor of 1.
+        _ = account;
+        _ = subtest;
+        return Math.Max(1, quantity);
+    }
+
+    private bool CanFundWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
+    {
+        // FINAL 2026-09-06: 2 AI credits per letter/card from any pool.
+        // Uses the exact greedy simulation the debit uses so gates and
+        // debits can never disagree.
+        var dedicated = subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
+        return AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(dedicated, account.FlexibleCredits, account.SharedCredits) >= quantity;
+    }
+
+    private SpendResult SpendWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
+    {
+        // FINAL 2026-09-06: every pool is denominated in AI credits and one
+        // activity (one Writing letter / one Speaking card) costs exactly 2
+        // from whichever pool funds it. Priority is unchanged: dedicated
+        // pool first, then Flexible W/S, then Shared (whole activities only —
+        // a lone stranded credit can never pair with Shared).
+        var unitsPerActivity = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        var remainingUnits = quantity * unitsPerActivity;
+        var writing = 0;
+        var speaking = 0;
+        var flexible = 0;
+        var sharedActivities = 0;
+        var allocations = new Dictionary<string, LotAllocation>(StringComparer.Ordinal);
+
+        LotAllocation Track(AiPackageCreditLot lot) =>
+            allocations.TryGetValue(lot.Id, out var existing)
+                ? existing
+                : allocations[lot.Id] = new LotAllocation(lot.Id, 0, 0, 0, 0, 0, 0, 0);
+
+        foreach (var lot in LiveLots(account))
+        {
+            if (remainingUnits <= 0) break;
+            var dedicated = subtest == "writing" ? lot.WritingOnlyCredits : lot.SpeakingOnlyCredits;
+            var takeDedicated = Math.Min(dedicated, remainingUnits);
+            if (takeDedicated <= 0) continue;
+            if (subtest == "writing")
+            {
+                lot.WritingOnlyCredits -= takeDedicated;
+                writing += takeDedicated;
+                allocations[lot.Id] = Track(lot) with { Writing = Track(lot).Writing + takeDedicated };
+            }
+            else
+            {
+                lot.SpeakingOnlyCredits -= takeDedicated;
+                speaking += takeDedicated;
+                allocations[lot.Id] = Track(lot) with { Speaking = Track(lot).Speaking + takeDedicated };
+            }
+            remainingUnits -= takeDedicated;
+        }
+
+        foreach (var lot in LiveLots(account))
+        {
+            if (remainingUnits <= 0) break;
+            var takeFlexible = Math.Min(lot.FlexibleCredits, remainingUnits);
+            if (takeFlexible <= 0) continue;
+            lot.FlexibleCredits -= takeFlexible;
+            remainingUnits -= takeFlexible;
+            flexible += takeFlexible;
+            allocations[lot.Id] = Track(lot) with { Flexible = Track(lot).Flexible + takeFlexible };
+        }
+
+        foreach (var lot in LiveLots(account))
+        {
+            if (remainingUnits <= 0) break;
+            var takeSharedActivities = Math.Min(remainingUnits / unitsPerActivity, lot.SharedCredits / unitsPerActivity);
+            if (takeSharedActivities <= 0) continue;
+            var sharedUnitsTaken = takeSharedActivities * unitsPerActivity;
+            lot.SharedCredits -= sharedUnitsTaken;
+            remainingUnits -= sharedUnitsTaken;
+            sharedActivities += takeSharedActivities;
+            allocations[lot.Id] = Track(lot) with { Shared = Track(lot).Shared + sharedUnitsTaken };
+        }
+
+        RebuildAccountFromLots(account);
+        var sharedUnits = sharedActivities * unitsPerActivity;
+        var label = subtest == "writing" ? "Writing" : "Speaking";
+        string feedback;
+        string balanceSource;
+        if (sharedActivities > 0 && writing + speaking + flexible == 0)
+        {
+            feedback = FormatSharedUsed(label, sharedUnits, account.SharedCredits);
+            balanceSource = "shared";
+        }
+        else if (writing + speaking > 0 && flexible == 0 && sharedActivities == 0)
+        {
+            feedback = FormatUsedRemaining($"{label} Credit", writing + speaking, subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits);
+            balanceSource = "dedicated";
+        }
+        else if (flexible > 0 && writing + speaking == 0 && sharedActivities == 0)
+        {
+            feedback = FormatUsedRemaining("Flexible Writing/Speaking Credit", flexible, account.FlexibleCredits);
+            balanceSource = "flexible_ws";
+        }
+        else
+        {
+            var unitsSpent = writing + speaking + flexible + sharedUnits;
+            feedback = FormatUsedRemaining($"{label} Credit", unitsSpent, RemainingAfterSpend(account, subtest));
+            balanceSource = "mixed";
+        }
+
+        return new SpendResult(
+            -sharedUnits,
+            -flexible,
+            -writing,
+            -speaking,
+            SerializeAllocations(allocations.Values),
+            feedback,
+            balanceSource,
+            writing + speaking + flexible + sharedUnits);
+    }
+
+    private static int RemainingAfterSpend(AiPackageCreditAccount account, string subtest)
+        // Complete activities still fundable — same simulation as the gates.
+        => subtest == "writing"
+            ? AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(account.WritingOnlyCredits, account.FlexibleCredits, account.SharedCredits)
+            : AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(account.SpeakingOnlyCredits, account.FlexibleCredits, account.SharedCredits);
+
+    private List<LotAllocation> SpendDedicatedObjective(AiPackageCreditAccount account, string subtest, int quantity)
+    {
+        var remaining = quantity;
+        var allocations = new List<LotAllocation>();
+        foreach (var lot in LiveLots(account))
+        {
+            if (remaining <= 0) break;
+            if (subtest == "listening")
+            {
+                if (lot.UnlimitedListening || lot.ListeningTestsRemaining is null) continue;
+                var take = Math.Min(lot.ListeningTestsRemaining.Value, remaining);
+                if (take <= 0) continue;
+                lot.ListeningTestsRemaining -= take;
+                remaining -= take;
+                allocations.Add(new LotAllocation(lot.Id, 0, 0, 0, 0, take, 0, 0));
+            }
+            else
+            {
+                if (lot.UnlimitedReading || lot.ReadingTestsRemaining is null) continue;
+                var take = Math.Min(lot.ReadingTestsRemaining.Value, remaining);
+                if (take <= 0) continue;
+                lot.ReadingTestsRemaining -= take;
+                remaining -= take;
+                allocations.Add(new LotAllocation(lot.Id, 0, 0, 0, 0, 0, take, 0));
+            }
+        }
+
+        RebuildAccountFromLots(account);
+        return allocations;
+    }
+
+    private List<LotAllocation> SpendSharedFromLots(AiPackageCreditAccount account, int units)
+    {
+        var remaining = units;
+        var allocations = new List<LotAllocation>();
+        foreach (var lot in LiveLots(account))
+        {
+            if (remaining <= 0) break;
+            var take = Math.Min(lot.SharedCredits, remaining);
+            if (take <= 0) continue;
+            lot.SharedCredits -= take;
+            remaining -= take;
+            allocations.Add(new LotAllocation(lot.Id, take, 0, 0, 0, 0, 0, 0));
+        }
+
+        RebuildAccountFromLots(account);
+        return allocations;
+    }
+
+    private List<LotAllocation> SpendMockFromLots(AiPackageCreditAccount account, int units)
+    {
+        var remaining = units;
+        var allocations = new List<LotAllocation>();
+        foreach (var lot in LiveLots(account))
+        {
+            if (remaining <= 0) break;
+            var take = Math.Min(lot.MockExamsRemaining, remaining);
+            if (take <= 0) continue;
+            lot.MockExamsRemaining -= take;
+            remaining -= take;
+            allocations.Add(new LotAllocation(lot.Id, 0, 0, 0, 0, 0, 0, take));
+        }
+
+        RebuildAccountFromLots(account);
+        return allocations;
+    }
+
+    private void RestoreAllocation(AiPackageCreditAccount account, AiPackageCreditTransaction debit)
+    {
+        var allocations = ParseAllocations(debit.AllocationJson);
+        if (allocations.Count == 0)
+        {
+            var fallbackLot = LiveLots(account).FirstOrDefault() ?? CreateAdminLot(account, debit.ExpiresAt);
+            fallbackLot.SharedCredits += Math.Abs(debit.SharedCreditsDelta);
+            fallbackLot.FlexibleCredits += Math.Abs(debit.FlexibleCreditsDelta);
+            fallbackLot.WritingOnlyCredits += Math.Abs(debit.WritingOnlyCreditsDelta);
+            fallbackLot.SpeakingOnlyCredits += Math.Abs(debit.SpeakingOnlyCreditsDelta);
+            fallbackLot.MockExamsRemaining += Math.Abs(debit.MockExamsDelta);
+            if (debit.ListeningTestsDelta != 0)
+            {
+                fallbackLot.ListeningTestsRemaining = (fallbackLot.ListeningTestsRemaining ?? 0) + Math.Abs(debit.ListeningTestsDelta);
+            }
+            if (debit.ReadingTestsDelta != 0)
+            {
+                fallbackLot.ReadingTestsRemaining = (fallbackLot.ReadingTestsRemaining ?? 0) + Math.Abs(debit.ReadingTestsDelta);
+            }
+            RebuildAccountFromLots(account);
+            return;
+        }
+
+        foreach (var allocation in allocations)
+        {
+            var lot = db.AiPackageCreditLots.Local.FirstOrDefault(row => row.Id == allocation.LotId)
+                      ?? LiveLots(account).FirstOrDefault();
+            if (lot is null)
+            {
+                lot = CreateAdminLot(account, debit.ExpiresAt);
+            }
+
+            lot.Expired = false;
+            lot.ExpiredAt = null;
+            lot.SharedCredits += allocation.Shared;
+            lot.FlexibleCredits += allocation.Flexible;
+            lot.WritingOnlyCredits += allocation.Writing;
+            lot.SpeakingOnlyCredits += allocation.Speaking;
+            lot.MockExamsRemaining += allocation.Mocks;
+            if (allocation.Listening != 0)
+            {
+                lot.ListeningTestsRemaining = (lot.ListeningTestsRemaining ?? 0) + allocation.Listening;
+            }
+            if (allocation.Reading != 0)
+            {
+                lot.ReadingTestsRemaining = (lot.ReadingTestsRemaining ?? 0) + allocation.Reading;
+            }
+        }
+
+        RebuildAccountFromLots(account);
+    }
+
+    private AiPackageCreditLot CreateAdminLot(AiPackageCreditAccount account, DateTimeOffset? expiresAt)
+    {
+        var lot = new AiPackageCreditLot
+        {
+            Id = NewId("aipkg-lot"),
+            PackageId = "admin",
+            PackageType = "admin",
+            ExpiresAt = expiresAt ?? account.ExpiresAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        AddLot(account, lot);
+        return lot;
+    }
+
+    private void ApplyAdminAdjustmentToLots(
+        AiPackageCreditAccount account,
+        int sharedDelta,
+        int flexibleDelta,
+        int writingDelta,
+        int speakingDelta,
+        int listeningDelta,
+        int readingDelta,
+        int mockDelta,
+        DateTimeOffset? expiresAt)
+    {
+        if (sharedDelta > 0 || flexibleDelta > 0 || writingDelta > 0 || speakingDelta > 0 || listeningDelta > 0 || readingDelta > 0 || mockDelta > 0)
+        {
+            AddLot(account, new AiPackageCreditLot
+            {
+                Id = NewId("aipkg-lot"),
+                PackageId = "admin",
+                PackageType = "admin",
+                SharedCredits = Math.Max(0, sharedDelta),
+                FlexibleCredits = Math.Max(0, flexibleDelta),
+                WritingOnlyCredits = Math.Max(0, writingDelta),
+                SpeakingOnlyCredits = Math.Max(0, speakingDelta),
+                ListeningTestsRemaining = listeningDelta > 0 ? listeningDelta : 0,
+                ReadingTestsRemaining = readingDelta > 0 ? readingDelta : 0,
+                MockExamsRemaining = Math.Max(0, mockDelta),
+                ExpiresAt = expiresAt ?? account.ExpiresAt,
+                SourceReferenceId = $"admin-adjust:{account.Id}",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        if (sharedDelta < 0)
+        {
+            SpendSharedFromLots(account, -sharedDelta);
+        }
+        if (flexibleDelta < 0)
+        {
+            var remaining = -flexibleDelta;
+            foreach (var lot in LiveLots(account))
+            {
+                if (remaining <= 0) break;
+                var take = Math.Min(lot.FlexibleCredits, remaining);
+                lot.FlexibleCredits -= take;
+                remaining -= take;
+            }
+        }
+        if (writingDelta < 0)
+        {
+            var remaining = -writingDelta;
+            foreach (var lot in LiveLots(account))
+            {
+                if (remaining <= 0) break;
+                var take = Math.Min(lot.WritingOnlyCredits, remaining);
+                lot.WritingOnlyCredits -= take;
+                remaining -= take;
+            }
+        }
+        if (speakingDelta < 0)
+        {
+            var remaining = -speakingDelta;
+            foreach (var lot in LiveLots(account))
+            {
+                if (remaining <= 0) break;
+                var take = Math.Min(lot.SpeakingOnlyCredits, remaining);
+                lot.SpeakingOnlyCredits -= take;
+                remaining -= take;
+            }
+        }
+        if (listeningDelta < 0) SpendDedicatedObjective(account, "listening", -listeningDelta);
+        if (readingDelta < 0) SpendDedicatedObjective(account, "reading", -readingDelta);
+        if (mockDelta < 0) SpendMockFromLots(account, -mockDelta);
+    }
+
+    private void ZeroAllLots(AiPackageCreditAccount account, DateTimeOffset now)
+    {
+        foreach (var lot in AccountLots(account).Where(lot => !lot.Expired))
+        {
+            lot.SharedCredits = 0;
+            lot.FlexibleCredits = 0;
+            lot.WritingOnlyCredits = 0;
+            lot.SpeakingOnlyCredits = 0;
+            lot.ListeningTestsRemaining = 0;
+            lot.ReadingTestsRemaining = 0;
+            lot.MockExamsRemaining = 0;
+            lot.UnlimitedGrading = false;
+            lot.UnlimitedListening = false;
+            lot.UnlimitedReading = false;
+            lot.Expired = true;
+            lot.ExpiredAt = now;
+        }
+
+        RebuildAccountFromLots(account);
+    }
+
+    private static int ResolveAdminDelta(int currentRemaining, int used, int delta, int? set, string label)
+    {
+        if (set is int targetTotal)
+        {
+            // SetExact targets TOTAL. Validate Total must never be lower than Used.
+            if (targetTotal < used)
+            {
+                throw ApiException.Validation(
+                    "credits_total_below_used",
+                    $"Cannot set {label} to {targetTotal}: the learner has already used {used}, " +
+                    $"and Total can never be lower than Used");
+            }
+            // Remaining = Total - Used. Delta moves currentRemaining to (targetTotal - used).
+            var targetRemaining = targetTotal - used;
+            return targetRemaining - currentRemaining;
+        }
+
+        // Delta mode: validation applies to negative admin adjustments too — the
+        // resulting Remaining (and therefore Total) must never dip below Used.
+        if (delta < 0 && currentRemaining + delta < 0)
+        {
+            throw ApiException.Validation(
+                "credits_total_below_used",
+                $"Cannot remove {Math.Abs(delta)} {label}: only {currentRemaining} remaining ({used} used), " +
+                "and Total can never fall below Used");
+        }
+
+        return delta;
+    }
+
+    private static string FormatUsedRemaining(string unit, int used, int remaining)
+        => $"{used} {unit}{(used == 1 ? "" : "s")} used. {remaining} {unit}{(remaining == 1 ? "" : "s")} remaining.";
+
+    private static string FormatSharedUsed(string activity, int used, int remaining)
+        => $"{used} Shared Credit{(used == 1 ? "" : "s")} used for {ToTitle(activity)}. {remaining} Shared Credit{(remaining == 1 ? "" : "s")} remaining.";
+
+    private static string ToTitle(string value)
+        => string.IsNullOrWhiteSpace(value)
+            ? value
+            : char.ToUpperInvariant(value[0]) + value[1..];
+
+    private static string InferActivitySubtest(string description)
+    {
+        var lower = description.ToLowerInvariant();
+        if (lower.Contains("writing")) return "writing";
+        if (lower.Contains("speaking")) return "speaking";
+        if (lower.Contains("listening")) return "listening";
+        if (lower.Contains("reading")) return "reading";
+        return "shared";
+    }
+
+    private static string SerializeAllocations(IEnumerable<LotAllocation> allocations)
+        => JsonSerializer.Serialize(allocations.Select(item => new
+        {
+            lotId = item.LotId,
+            shared = item.Shared,
+            flexible = item.Flexible,
+            writing = item.Writing,
+            speaking = item.Speaking,
+            listening = item.Listening,
+            reading = item.Reading,
+            mocks = item.Mocks,
+        }));
+
+    private static List<LotAllocation> ParseAllocations(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return doc.RootElement.EnumerateArray()
+                    .Select(ParseAllocation)
+                    .Where(item => item is not null)
+                    .Cast<LotAllocation>()
+                    .ToList();
+            }
+
+            var single = ParseAllocation(doc.RootElement);
+            return single is null ? [] : [single];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static LotAllocation? ParseAllocation(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        return new LotAllocation(
+            element.TryGetProperty("lotId", out var lotId) ? lotId.GetString() : null,
+            ReadAbs(element, "shared"),
+            ReadAbs(element, "flexible"),
+            ReadAbs(element, "writing"),
+            ReadAbs(element, "speaking"),
+            ReadAbs(element, "listening"),
+            ReadAbs(element, "reading"),
+            ReadAbs(element, "mocks"));
+    }
+
+    private static int ReadAbs(JsonElement element, string name)
+        => element.TryGetProperty(name, out var value) && value.TryGetInt32(out var parsed)
+            ? Math.Abs(parsed)
+            : 0;
+
+    private static AiPackageCreditBucketSnapshot BuildBucket(
+        IReadOnlyList<AiPackageCreditLot> liveLots,
+        IReadOnlyList<AiPackageCreditLot> allLots,
+        string kind,
+        bool unlimitedGrading,
+        DateTimeOffset now)
+    {
+        var unlimited = kind switch
+        {
+            "writing" or "speaking" or "flexible" => unlimitedGrading || liveLots.Any(lot => lot.UnlimitedGrading),
+            "listening" => liveLots.Any(lot => lot.UnlimitedListening),
+            "reading" => liveLots.Any(lot => lot.UnlimitedReading),
+            _ => false,
+        };
+        int Remaining(AiPackageCreditLot lot) => kind switch
+        {
+            "shared" => lot.SharedCredits,
+            "flexible" => lot.FlexibleCredits,
+            "writing" => lot.WritingOnlyCredits,
+            "speaking" => lot.SpeakingOnlyCredits,
+            "listening" => lot.ListeningTestsRemaining ?? 0,
+            "reading" => lot.ReadingTestsRemaining ?? 0,
+            "mocks" => lot.MockExamsRemaining,
+            _ => 0,
+        };
+        var remaining = unlimited && kind is "writing" or "speaking" or "flexible" ? 0 : liveLots.Sum(Remaining);
+        var granted = allLots.Sum(Remaining);
+        var used = Math.Max(0, granted - remaining);
+        var expires = liveLots
+            .Where(lot => Remaining(lot) > 0 || (unlimited && kind is "writing" or "speaking" or "listening" or "reading"))
+            .Select(lot => lot.ExpiresAt)
+            .Where(value => value is not null)
+            .OrderBy(value => value)
+            .FirstOrDefault();
+        var sources = liveLots
+            .Where(lot => Remaining(lot) > 0 || lot.UnlimitedGrading || lot.UnlimitedListening || lot.UnlimitedReading)
+            .Select(lot => lot.PackageId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+        int? daysLeft = expires is { } expiry ? Math.Max(0, (int)Math.Ceiling((expiry - now).TotalDays)) : null;
+        return new AiPackageCreditBucketSnapshot(granted, used, remaining, unlimited, sources, expires, daysLeft);
+    }
+}

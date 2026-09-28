@@ -46,6 +46,7 @@ import {
   fetchWebhookSummary,
   fetchAdminScoreGuaranteeClaims,
 } from './api';
+import { asArray, asRecord, toNullableString } from './api/client';
 import type {
   AdminAIConfig,
   AdminAuditLogDetail,
@@ -99,14 +100,6 @@ import type {
 
 type ApiRecord = Record<string, any>;
 
-function asRecord(value: unknown): ApiRecord {
-  return value && typeof value === 'object' ? (value as ApiRecord) : {};
-}
-
-function asArray(value: unknown): ApiRecord[] {
-  return Array.isArray(value) ? value.map(asRecord) : [];
-}
-
 function asStringRecord(value: unknown): Record<string, string> {
   const record = asRecord(value);
   return Object.fromEntries(
@@ -118,10 +111,6 @@ function asStringRecord(value: unknown): Record<string, string> {
 
 function toStringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
-}
-
-function toNullableString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 function toNumberValue(value: unknown, fallback = 0): number {
@@ -1656,10 +1645,6 @@ export async function getAdminBusinessIntelligenceData(): Promise<AdminBusinessI
     contentEffectiveness,
     expertEfficiency,
   };
-}
-
-export async function fetchAdminAlerts() {
-  return apiClient.get('/v1/admin/alerts');
 }
 
 function normalizeEfficiency(value: unknown): AdminExpertEfficiencyData['experts'][number]['efficiency'] {

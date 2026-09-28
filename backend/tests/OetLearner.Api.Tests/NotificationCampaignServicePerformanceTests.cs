@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -82,7 +83,7 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
         await using var db = new LearnerDbContext(_options);
         var service = new NotificationCampaignService(
             db,
-            new FixedClock(Now),
+            new FixedTimeProvider(Now),
             NullLogger<NotificationCampaignService>.Instance);
 
         _sql.Commands.Clear();
@@ -193,11 +194,11 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
         {
             var firstService = new NotificationCampaignService(
                 firstDb,
-                new FixedClock(Now),
+                new FixedTimeProvider(Now),
                 NullLogger<NotificationCampaignService>.Instance);
             var secondService = new NotificationCampaignService(
                 secondDb,
-                new FixedClock(Now),
+                new FixedTimeProvider(Now),
                 NullLogger<NotificationCampaignService>.Instance);
 
             var outcomes = await Task.WhenAll(
@@ -277,11 +278,11 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
         {
             var sendService = new NotificationCampaignService(
                 sendDb,
-                new FixedClock(Now),
+                new FixedTimeProvider(Now),
                 NullLogger<NotificationCampaignService>.Instance);
             var cancelService = new NotificationCampaignService(
                 cancelDb,
-                new FixedClock(Now.AddMinutes(1)),
+                new FixedTimeProvider(Now.AddMinutes(1)),
                 NullLogger<NotificationCampaignService>.Instance);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
@@ -369,7 +370,7 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
         await using var sendDb = new LearnerDbContext(sendOptions);
         var sendService = new NotificationCampaignService(
             sendDb,
-            new FixedClock(Now),
+            new FixedTimeProvider(Now),
             NullLogger<NotificationCampaignService>.Instance);
 
         var result = await sendService.SendAsync(campaignId, default);
@@ -434,7 +435,7 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
 
         var service = new NotificationCampaignService(
             db,
-            new FixedClock(Now),
+            new FixedTimeProvider(Now),
             NullLogger<NotificationCampaignService>.Instance);
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -486,11 +487,6 @@ public sealed class NotificationCampaignServicePerformanceTests : IAsyncLifetime
             CreatedAt = Now.AddDays(-1),
             UpdatedAt = Now.AddDays(-1),
         };
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
 
     private sealed class SqlCaptureInterceptor : DbCommandInterceptor
     {

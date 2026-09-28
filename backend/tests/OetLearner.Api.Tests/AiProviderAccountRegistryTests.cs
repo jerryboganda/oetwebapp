@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -18,7 +19,7 @@ public sealed class AiProviderAccountRegistryTests : IAsyncDisposable
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<LearnerDbContext> _options;
     private readonly EphemeralDataProtectionProvider _dpProvider;
-    private readonly FixedClock _clock;
+    private readonly FixedTimeProvider _clock;
 
     public AiProviderAccountRegistryTests()
     {
@@ -32,7 +33,7 @@ public sealed class AiProviderAccountRegistryTests : IAsyncDisposable
             seed.Database.EnsureCreated();
         }
         _dpProvider = new EphemeralDataProtectionProvider();
-        _clock = new FixedClock(DateTimeOffset.Parse("2026-05-08T12:00:00Z"));
+        _clock = new FixedTimeProvider(DateTimeOffset.Parse("2026-05-08T12:00:00Z"));
     }
 
     public async ValueTask DisposeAsync()
@@ -284,10 +285,5 @@ public sealed class AiProviderAccountRegistryTests : IAsyncDisposable
         db.AiProviderAccounts.Add(account);
         await db.SaveChangesAsync();
         return account.Id;
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
@@ -79,21 +80,11 @@ public static class WritingPdfEndpoints
         var role = http.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
         var isExpertReviewer = string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase);
         var isAdminReviewer = string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase)
-            && HasAdminPermission(http, AdminPermissions.ContentRead);
+            && AdminPermissionEvaluator.HasAny(
+                http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType),
+                AdminPermissions.ContentRead,
+                AdminPermissions.SystemAdmin);
         return (userId, isExpertReviewer, isAdminReviewer);
-    }
-
-    private static bool HasAdminPermission(HttpContext http, string permission)
-    {
-        var permissionsClaim = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
-        if (string.IsNullOrWhiteSpace(permissionsClaim))
-        {
-            return false;
-        }
-
-        var permissions = permissionsClaim.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return permissions.Contains(AdminPermissions.SystemAdmin, StringComparer.Ordinal)
-            || permissions.Contains(permission, StringComparer.Ordinal);
     }
 
     private static void WritePdfHeaders(HttpContext http, string filename)

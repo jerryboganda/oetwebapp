@@ -51,7 +51,7 @@ actually delivered, not what is scaffolded.
 - `Services/Companion/CompanionFeatureFlags.cs` *(new)* — fail-closed kill switches
 - `Services/AiManagement/AiCredentialResolver.cs` — companion codes added to `PlatformOnlyFeatures`
 - `Services/AiTools/AiToolRegistry.cs` — learner tool-boundary guard
-- `Services/SeedData.cs` — `flg-026`…`flg-030`
+- `Services/SeedData.DemoUserData.cs` — `flg-026`…`flg-030`
 - `Endpoints/LearningContentEndpoints.cs` — learner-visible flag
 - `Services/Companion/CompanionContextResolver.cs`, `CompanionRetriever.cs`, `CompanionRulebookIndexer.cs`, `CompanionPromptComposer.cs` *(new)*
 - `Services/Companion/CompanionDestinationRegistry.cs` *(new)* — closed destination catalog + server-side resolution

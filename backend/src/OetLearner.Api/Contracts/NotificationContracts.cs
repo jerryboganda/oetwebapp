@@ -96,8 +96,6 @@ public sealed record AdminNotificationSuppressionResponse(
     int Page,
     int PageSize);
 
-public sealed record AdminEmailDeliveryInspectRequest(string Email);
-
 public sealed record AdminEmailDeliveryUnblockRequest(string Email);
 
 public sealed record AdminEmailOtpDeliveryItem(

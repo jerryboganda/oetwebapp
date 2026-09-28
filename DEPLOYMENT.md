@@ -15,14 +15,20 @@ right pair for the scenario:
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Primary multi-stage image — builds Next.js (`output: 'standalone'`) + .NET API from source. Used by every `docker-compose.production*.yml`. |
-| `Dockerfile.prebuilt` | Thin image that copies an already-built `.next/standalone` tree. Pair with `docker-compose.production.prebuilt-web.yml` when CI builds the web app and the VPS only needs to run it. |
+| `Dockerfile` | Web-only multi-stage image (Next.js `output: 'standalone'`, `runner` target). Built and pushed to GHCR by `deploy.yml` `build-web`; also used by the local, desktop, staging and emergency source-build stacks. It does not build the API. |
+| `backend/Dockerfile.runtime` | Production API image. `deploy.yml` `build-api` runs `dotnet publish` on the Actions host and packages `backend/publish` with this file. |
+| `backend/Dockerfile` | API image built from source (SDK build stage). Used by the local, dev, backend, desktop, staging, vps and emergency source-build compose files. |
+| `backend/Dockerfile.dev` | `dotnet watch` API image for `docker-compose.hotreload.yml`. |
+| `scripts/backup/Dockerfile` | `db-backup` sidecar image, built by `deploy.yml` `build-backup`. |
+| `agent-gateway/Dockerfile` | Agent gateway image, built by `deploy.yml` `build-agent-gateway`. |
 | `docker-compose.local.yml` | Full local stack (postgres + API + web) for Docker Desktop development. Mirrors production topology with simplified networking. Use with `--env-file .env.docker-local`. |
 | `docker-compose.dev.yml` | Backend-only (postgres + API) in Docker; run Next.js on the host with `npm run dev` for hot-reload. Use with `--env-file .env.docker-local`. |
-| `docker-compose.production.yml` | Default VPS stack: stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`. |
+| `docker-compose.hotreload.yml` | Podman hot-reload stack (Next.js HMR + `dotnet watch`) started by `start-dev.ps1`; see `docs/QUICK-START.md`. |
+| `docker-compose.production.yml` | The production stack (project `oetwebsite`): stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, AI worker, agent gateway and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`, and the only compose file `deploy.yml` ships to the VPS. |
 | `docker-compose.production.hostports.yml` | Override — exposes ports on the host (no reverse proxy). Use for bare-metal / single-host installs without NPM. |
-| `docker-compose.production.prebuilt-web.yml` | Override — uses prebuilt web image instead of building on the VPS. Use when VPS CPU/RAM is too small to build. |
-| `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. |
+| `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. Needs explicit owner approval on the VPS (see §3). |
+| `docker-compose.vps.yml` | Legacy single-host source-build stack. No deploy path uses it. It reuses the production project name and container names, so never run it against the live VPS project. |
+| `docker-compose.agent-console.yml` | Owner Agent Console, its own compose project (`oet-agent-console`). Deployed only by `.github/workflows/agent-console.yml`. |
 | `docker-compose.staging.yml` | Full staging stack with pg_stat_statements. Use with `--env-file .env.staging`. |
 | `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |
 | `docker-compose.desktop.yml` | Local full-stack with demo accounts for Playwright E2E. Not production-safe. |
@@ -118,34 +124,49 @@ Notes:
 - `AUTH__USEDEVELOPMENTAUTH` is only for local development and should remain `false` in production.
 - The Reading/media smoke learner should have only the fixture entitlement needed by `scripts/deploy/reading-media-smoke.sh` and should not require MFA.
 
-## 3. Build and start the stack
+## 3. Build and deploy (GitHub Actions)
 
 Production builds run on GitHub Actions. The production VPS must not run
 frontend, API, backend, Next.js, or .NET build work. Its deploy role is limited
-to fetching the exact commit, pulling the prebuilt GHCR images, recreating
-containers, hosting the latest native installers under
-`/var/opt/oet-learner/releases`, and running health gates. If Actions is
-unavailable, fix Actions first; do not silently move heavy build work to the
-VPS. Desktop/mobile release workflows upload only the latest artifact per
-channel and delete the previous VPS copy automatically.
+to pulling the prebuilt GHCR images, recreating containers, hosting the latest
+native installers under `/var/opt/oet-learner/releases`, and running health
+gates. If Actions is unavailable, fix Actions first; do not silently move heavy
+build work to the VPS. Desktop/mobile release workflows upload only the latest
+artifact per channel and delete the previous VPS copy automatically.
 
-Production rollout is exact-SHA only. First run the protected `Build Release
-Images` workflow for the target commit. It checks out the exact 40-character
-SHA, builds and pushes the web, API, DB-backup, and router images to GHCR, and
-uploads `release-images-<sha>/release-images.env` with immutable `@sha256`
-refs for `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE`.
+The normal path is `.github/workflows/deploy.yml` (**Build & Deploy (web +
+API)**). It runs on every push to `main` and can be dispatched manually:
 
-Then run the protected `Deploy Production` workflow with the same `target_sha`
-and the four refs from `release-images.env`. The deploy workflow downloads the
-matching release-image artifact, rejects any image ref that does not exactly
-match that artifact, requires successful `qa-smoke.yml` and `sbom-sca.yml` runs
-for the exact SHA, downloads the matching SBOM/SCA artifact, logs the VPS into
-GHCR with a temporary Docker config, and passes the digest refs to the VPS
-deploy helper with `DEPLOY_REF=<sha>`.
+1. `syntax-gate` — ship-gate self-test plus the Writing model-answer
+   regression tests.
+2. `build-web`, `build-api`, `build-backup`, `build-agent-gateway` — build the
+   images on Actions and push them to GHCR tagged `:<sha>` (and `:latest`).
+3. `migrate-production` — generates idempotent EF migration SQL on Actions and
+   applies it through the production PostgreSQL container
+   (`scripts/deploy/apply-migrations-from-ci.sh`). Migrations are forward-only.
+4. `deploy` — streams `scripts/deploy/auto-deploy-ghcr.sh`,
+   `docker-compose.production.yml`, `validate-production-env.sh` and the nginx
+   router templates to the VPS and runs the script with the `:<sha>` image
+   refs. The script validates `.env.production`, pulls the images, recreates
+   only the inactive blue/green slot (`--no-build --no-deps`), health-gates it,
+   switches the stable `web`/`learner-api` routers, checks the public health
+   URLs (switching the routers back if they fail), and records
+   `.deploy/active-slot.env` and `.deploy/auto-deploy-history.tsv`. The
+   previous slot stays running for fast rollback. A last step prunes stale OET
+   images.
 
-Manual shell rollout is reserved for incident use and still uses prebuilt
-images. Prefer the protected workflow; if shell rollout is required, pass the
-exact SHA plus all four immutable image refs:
+This path does not wait for `qa-smoke.yml` or `sbom-sca.yml`; run those
+separately when a change needs them. Operator checklist, forbidden commands and
+topology: [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md). Compute boundary:
+[`docs/ops/production-compute-offload.md`](docs/ops/production-compute-offload.md).
+
+### Manual incident rollout (digest-pinned)
+
+`scripts/deploy/deploy-prod.sh` is the manual incident path. It still uses
+prebuilt images, pinned by digest, and needs the exact SHA plus all four
+immutable image refs. `ROUTER_IMAGE` is an `nginx`-compatible `@sha256:`
+digest; `deploy.yml` does not build a router image (the compose default is
+`nginx:1.27-alpine`).
 
 ```bash
 DEPLOY_REF=<40-character-sha> \
@@ -163,11 +184,14 @@ switches the stable `web`/`learner-api` router containers to the new slot, and
 runs post-deploy verification, observability smoke, and Reading/media smoke
 before a release is recorded as previous-good.
 
-Rollback operators should read `.deploy/rollback-target.env` first. The rollout
-copies the prior known-good release there before overwriting
-`.deploy/previous-good.env` with the newly successful release.
+Only this manual path (via `rollout-release.sh`) writes `.deploy/previous-good.env`,
+`.deploy/rollback-target.env` and `.deploy/release-history.tsv`: it copies the
+prior known-good release to `rollback-target.env` before overwriting
+`previous-good.env` with the newly successful release. After automatic deploys,
+read `.deploy/auto-deploy-history.tsv` for the previous image refs instead.
 
-The API runs database migrations automatically on startup when `AUTO_MIGRATE=true`.
+Migrations normally come from the `migrate-production` job. Startup migration
+is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).
 
 Production normally uses immutable image digest inputs. Local rehearsal may use
 the build override away from the production VPS. Emergency source-build fallback
@@ -274,30 +298,13 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 8. Updating the deployment
 
-For a clean production deploy, use GitHub Actions first, then let the protected
-deploy workflow SSH to the VPS and run the pull-only deploy helper for the exact
-SHA. The VPS must not build frontend, API, backend, Next.js, or .NET artifacts.
-If a manual incident rollout is required, use the CI-recorded immutable image
-digest handoff:
-
-```bash
-DEPLOY_REF=<40-character-sha> \
-WEB_IMAGE=<web-image@sha256:...> \
-API_IMAGE=<api-image@sha256:...> \
-DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
-ROUTER_IMAGE=<router-image@sha256:...> \
-bash ./scripts/deploy/deploy-prod.sh
-```
-
-That script preserves named volumes, validates immutable image digests, runs
-pre-flight, rolls out digest-pinned images into the inactive blue/green slot, and
-only records `.deploy/previous-good.env` and `.deploy/active-slot.env` after the
-health and smoke gates pass. The prior known-good record is copied to
-`.deploy/rollback-target.env` before it is overwritten, and every successful
-rollout appends `.deploy/release-history.tsv`. By default the previous slot
-remains running for fast router rollback; set `KEEP_PREVIOUS_SLOT_RUNNING=false`
-only after confirming VPS capacity and a separate rollback image path. Keep at
-least one previous-good SHA, slot, and image digest set available for rollback.
+Merge or push to `main` and let `deploy.yml` build and deploy that exact SHA
+(§3). The VPS must not build frontend, API, backend, Next.js, or .NET
+artifacts. The step-by-step checklist is [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md);
+the digest-pinned `deploy-prod.sh` incident path is described in §3. On that
+path, set `KEEP_PREVIOUS_SLOT_RUNNING=false` only after confirming VPS capacity
+and a separate rollback image path, and keep at least one previous-good SHA,
+slot and image digest set available for rollback.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
@@ -308,8 +315,10 @@ exception in the current conversation. These commands bypass the production
 digest-input gate and can overload the shared host.
 
 Destructive or irreversible EF migrations require a maintenance window, fresh
-verified backup ID, non-live restore drill evidence, and owner approval before
-`scripts/deploy/pre-flight.sh` will proceed.
+verified backup ID, non-live restore drill evidence, and owner approval.
+`scripts/deploy/pre-flight.sh` (run by `deploy-prod.sh`) enforces this; the
+`deploy.yml` `migrate-production` job does not, so review such migrations
+before they reach `main`.
 
 ## Troubleshooting
 
@@ -425,3 +434,25 @@ A successful run ends with `[backup] ok: /backups/oet-...dump.gpg` and
 48 hours, the sidecar is not running; check `BACKUP_SCHEDULE` and
 `docker compose --env-file .env.production -f docker-compose.production.yml ps
 db-backup`.
+
+### Host cron jobs (outside Compose)
+
+These host scripts sit next to the sidecar. The Google Drive backup runs from
+the VPS root crontab and must not be disabled without restore-parity evidence
+(`docs/ops/production-compute-offload.md`); the weekly audit scripts are
+written for host cron as well:
+
+- `scripts/db-nightly-backup-gdrive.sh` — `pg_dump` from `oet-postgres`,
+  gzip, upload to Google Drive with `rclone` (remote `gdrive`); keeps 3 local
+  dumps in `/root/backups/nightly` and only the latest remote copy.
+- `scripts/db-weekly-audit.sh` — read-only DB audit report into
+  `/root/backups/db-audits`. It needs `scripts/db-audit.sql` (and optionally
+  `scripts/db-retention-audit.sql`) on the host; both are gitignored
+  (`scripts/*.sql`) and exist only on the VPS.
+- `scripts/db-weekly-audit-with-alerts.sh` — wraps the weekly audit and alerts
+  through Sentry and Brevo (settings in `/root/.audit-alerts.env`).
+
+The crontab lines themselves are not recorded in git yet (capturing them and a
+SELECT-only `db-audit.sql` is an open owner item). Deploys no longer update the
+source tree on the VPS, so the host copies of these scripts can drift from the
+repository.

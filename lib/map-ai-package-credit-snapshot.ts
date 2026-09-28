@@ -1,18 +1,5 @@
 import type { AiPackageCreditBucket, AiPackageCreditSnapshot } from './billing-types';
-
-type ApiRecord = Record<string, any>;
-
-function asRecord(value: unknown): ApiRecord {
-  return value && typeof value === 'object' ? (value as ApiRecord) : {};
-}
-
-function asArray(value: unknown): ApiRecord[] {
-  return Array.isArray(value) ? value.map(asRecord) : [];
-}
-
-function toNullableString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
+import { asArray, asRecord, toNullableString, type ApiRecord } from './api/client';
 
 function mapNamedBucket(value: unknown) {
   const data = asRecord(value);

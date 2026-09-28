@@ -1,3 +1,6 @@
+// Kept byte-identical in egress/src/ and dockerproxy/src/ (drift check:
+// agent-console/tests/proxy-shared-files.test.ts). Edit both copies.
+//
 // Approval callback to the sidecar (CONTRACT.md §6):
 //   POST http://oet-agent-console:8410/internal/approvals
 //   X-Oet-Proxy-Token: <shared proxy token>

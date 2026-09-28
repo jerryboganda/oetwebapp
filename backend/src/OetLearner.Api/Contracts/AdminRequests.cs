@@ -31,8 +31,6 @@ public record AdminContentUpdateRequest(
     string? QaStatus,
     string? ChangeNote);
 
-public record AdminContentStatusRequest(string? Reason);
-
 // ── Speaking mock sets (Wave 3 of docs/SPEAKING-MODULE-PLAN.md) ──
 //
 // A mock set is the curatorial pairing of two speaking role-plays. Both
@@ -68,7 +66,7 @@ public record AdminSpeakingMockSetUpdateRequest(
 // validated server-side against `OetScoring.SpeakingCriterionScores`
 // limits (linguistic 0–6, clinical 0–3) — see
 // `AdminService.SpeakingCalibration.cs` and
-// `ExpertService.SpeakingCalibration.cs`.
+// `SpeakingTutorCalibrationService.cs` (tutor side).
 
 public record AdminSpeakingCalibrationSampleCreateRequest(
     string Title,
@@ -662,14 +660,8 @@ public record ExpertAnnotationTemplateRequest(string SubtestCode, string Criteri
 
 // ── Phase 2 DTOs ─────────────────────────────────────
 
-// L3 Profession Learning Paths
-public record LearningPathRequest(string ProfessionId, string ExamTypeCode);
-
 // L5 Weak-Area Remediation
 public record RemediationStartRequest(string SubtestCode, string? CriterionCode);
-
-// A4 Content Quality Scoring
-public record ContentQualityScoreRequest(string ContentId);
 
 // A6 Bulk Learner Operations
 public record AdminBulkCreditRequest(string[] UserIds, int CreditAmount, string Reason);
@@ -682,7 +674,6 @@ public record SponsorUpdateRequest(string? Name, string? ContactEmail, string? O
 public record CohortCreateRequest(string SponsorId, string Name, string ExamTypeCode, DateOnly? StartDate, DateOnly? EndDate, int MaxSeats);
 public record CohortUpdateRequest(string? Name, DateOnly? StartDate, DateOnly? EndDate, int? MaxSeats, string? Status);
 public record CohortMemberAddRequest(string LearnerId);
-public record SponsorLearnerLinkRequest(string SponsorId, string LearnerId);
 
 // ── Grammar Admin ──
 
@@ -734,25 +725,6 @@ public record AdminWritingOptionsUpdateRequest(
 public sealed record AdminFreeTierContentSelectionUpdateRequest(
     IReadOnlyDictionary<string, string?> WritingScenarioByProfession,
     IReadOnlyDictionary<string, string?> SpeakingCardByProfession);
-
-// ── Vocabulary Admin ──
-
-public record AdminVocabularyItemCreateRequest(
-    string Term,
-    string Definition,
-    string? ProfessionId,
-    string? Category,
-    string? Pronunciation,
-    string? ExampleSentence);
-
-public record AdminVocabularyItemUpdateRequest(
-    string? Term,
-    string? Definition,
-    string? ProfessionId,
-    string? Category,
-    string? Pronunciation,
-    string? ExampleSentence,
-    string? Status);
 
 // ── Conversation Template Admin ──
 

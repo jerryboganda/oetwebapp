@@ -5,15 +5,11 @@ name: Writing Rev8 render verify (production)
 # verifies the rendered Grounded Model Answer spacing (screenshots + rendered
 # text uploaded as an artifact). Read-only against production.
 on:
-  push:
-    branches:
-      - 'ci/writing-rev8-render/**'
   workflow_dispatch:
     inputs:
       cells_json_b64:
-        description: "base64 JSON [{cell, submissionId, taskId}] (blank = tests/e2e/fixtures/writing-rev8-render-cells.json)"
-        required: false
-        default: ""
+        description: "base64 JSON [{cell, submissionId, taskId}] (production submission ids for this run)"
+        required: true
         type: string
 
 permissions:
@@ -30,8 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

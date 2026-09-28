@@ -21,15 +21,16 @@ public static class LearnerEndpoints
 {
     public static IEndpointRouteBuilder MapLearnerEndpoints(this IEndpointRouteBuilder app)
     {
-        // Public endpoints (no auth required)
-        var publicV1 = app.MapGroup("/v1/public");
+        // Public endpoints (no auth required). Anonymous is explicit so the
+        // route-auth guard test can tell "public on purpose" from "forgot auth".
+        var publicV1 = app.MapGroup("/v1/public").AllowAnonymous();
         publicV1.MapGet("/plans", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(string.Empty, ct)));
         // Wave 5 — secret-free public runtime config so the browser can read boot
         // values (Sentry DSN, Soketi public key, VAPID public key, platform URLs)
         // from the DB at runtime instead of build-time NEXT_PUBLIC_* bundle values.
         publicV1.MapPublicRuntimeConfig();
-        app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
-        app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct)));
+        app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync())).AllowAnonymous();
+        app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct))).AllowAnonymous();
 
         var participantV1 = app.MapGroup("/v1").RequireAuthorization("RulebookReader");
         participantV1.MapGet("/speaking/compliance", async (
@@ -429,7 +430,7 @@ public static class LearnerEndpoints
         // any rate limit here causes missed fulfilment. Do NOT add
         // RequireRateLimiting to this group. Compensating controls: signature
         // verification at ingestion, replay window, and idempotent event dedup.
-        var webhooks = app.MapGroup("/v1/payment/webhooks");
+        var webhooks = app.MapGroup("/v1/payment/webhooks").AllowAnonymous();
 
         // One status contract for every gateway:
         //   400 — the delivery was refused at ingestion (bad/missing signature,

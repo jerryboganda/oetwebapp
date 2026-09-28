@@ -51,7 +51,7 @@ public static class AiAssistantEndpoints
             var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
-            var role = GetUserRole(ctx);
+            var role = GetUserRole(ctx.User);
             var thread = await orchestrator.CreateThreadAsync(userId, role, req?.Title, ct);
             return Results.Created($"/v1/ai-assistant/threads/{thread.Id}", thread);
         });
@@ -664,7 +664,7 @@ public static class AiAssistantEndpoints
     }
 
     /// <summary>Roles the assistant exposes, in admin-UI display order.</summary>
-    private static readonly string[] AssistantRoles = ["admin", "expert", "learner"];
+    private static readonly string[] AssistantRoles = [ApplicationUserRoles.Admin, ApplicationUserRoles.Expert, ApplicationUserRoles.Learner];
 
     /// <summary>
     /// Fields the config editor renders that have no column in this schema.
@@ -758,17 +758,17 @@ public static class AiAssistantEndpoints
 
     private static string AssistantFeatureCodeForRole(string role) => role switch
     {
-        "admin" => AiFeatureCodes.AiAssistantAdmin,
-        "expert" => AiFeatureCodes.AiAssistantExpert,
+        ApplicationUserRoles.Admin => AiFeatureCodes.AiAssistantAdmin,
+        ApplicationUserRoles.Expert => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
     };
 
-    private static string GetUserRole(HttpContext ctx)
+    /// <summary>Assistant role for a caller; shared by these endpoints and <c>AiAssistantHub</c>.</summary>
+    internal static string GetUserRole(ClaimsPrincipal? user)
     {
-        var user = ctx.User;
-        if (user.IsInRole("admin") || user.IsInRole("system_admin")) return "admin";
-        if (user.IsInRole("expert")) return "expert";
-        return "learner";
+        if (user?.IsInRole(ApplicationUserRoles.Admin) == true || user?.IsInRole("system_admin") == true) return ApplicationUserRoles.Admin;
+        if (user?.IsInRole(ApplicationUserRoles.Expert) == true) return ApplicationUserRoles.Expert;
+        return ApplicationUserRoles.Learner;
     }
 }
 

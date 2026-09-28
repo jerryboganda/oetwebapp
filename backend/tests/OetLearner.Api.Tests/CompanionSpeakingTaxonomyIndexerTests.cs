@@ -8,6 +8,7 @@ using OetLearner.Api.Services.AiAssistant.Indexing;
 using OetLearner.Api.Services.Companion;
 using OetLearner.Api.Services.Speaking;
 using Xunit;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -181,14 +182,5 @@ public sealed class CompanionSpeakingTaxonomyIndexerTests : IAsyncDisposable
         };
 
         return await retriever.RetrieveAsync(query, context, maxResults: 8, CancellationToken.None);
-    }
-
-    private sealed class UnusedEmbeddings : IEmbeddingService
-    {
-        public Task<float[]> EmbedAsync(string text, CancellationToken ct) =>
-            throw new InvalidOperationException("vector path must not run on SQLite");
-
-        public Task<List<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct) =>
-            throw new InvalidOperationException("vector path must not run on SQLite");
     }
 }

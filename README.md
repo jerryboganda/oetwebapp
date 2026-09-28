@@ -7,7 +7,7 @@ OET preparation platform with a Next.js 16 web app, ASP.NET Core 10 API, a Tauri
 - Frontend: Next.js App Router, React 19, TypeScript 5.9, Tailwind CSS 4, motion v12
 - Backend: ASP.NET Core 10, EF Core, PostgreSQL 17, SignalR
 - Desktop: Tauri 2 (Rust core) — a remote-only thin client (see "Desktop app" below)
-- Mobile: Capacitor 6 for iOS and Android
+- Mobile: Capacitor 7 for iOS and Android
 
 ### Rust toolchain (desktop)
 
@@ -19,7 +19,7 @@ MSVC build tools; on macOS, Xcode command-line tools. See <https://v2.tauri.app/
 
 - Frontend URL: `http://localhost:3000`
 - Backend URL: `http://localhost:5198`
-- .NET SDK: `10.0.300`
+- .NET SDK: `10.0.201` or later (`global.json`, `rollForward: latestMajor`)
 
 ## Quick Start
 
@@ -149,14 +149,9 @@ pnpm run test:e2e:report
 
 ## Key Docs
 
-- [AGENTS.md](./AGENTS.md)
-- [Scoring](docs/SCORING.md)
-- [Rulebooks](docs/RULEBOOKS.md)
-- [AI Usage Policy](docs/AI-USAGE-POLICY.md)
-- [Content Upload Plan](docs/CONTENT-UPLOAD-PLAN.md)
-- [Result Card Spec](docs/OET-RESULT-CARD-SPEC.md)
-- [Product Manual](docs/product-manual/README.md)
-- [App Release Playbook](docs/app-release-playbook.md)
+Start with [AGENTS.md](./AGENTS.md), the repository map [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+then the docs index: [docs/README.md](docs/README.md)
+(scoring, rulebooks, AI policy, module specs, deploy, release and incident runbooks).
 
 ## Working Model
 

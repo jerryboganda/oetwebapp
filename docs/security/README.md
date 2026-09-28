@@ -17,6 +17,9 @@ Evidence pass: **2026-09-12** (working tree; uncommitted remediations from a par
 | `pv-matrix.md` | `PV-01..PV-20` execution matrix: PASS criterion, harness step, per-gateway verification columns, repeat-per-purchase-type rule, release gate |
 | `threat-model-outline.md` | Text trust-boundary diagram (browser → BFF → API → DB/storage → mail/push → gateways → AI → native shells) and the per-flow threat list |
 | `pentest-scope.md` | Scoped targets, mandated tests, rules of engagement, retest requirement |
+| `runbook-backup-restore.md` | BCP-01..04 backup/restore control status and restore-evidence steps (procedure: `DEPLOYMENT.md` §Disaster Recovery) |
+| `runbook-incident-response.md` | IR-* kill switches, security playbooks and secret rotation (roles and SEV ladder: `docs/ops/incident-response-runbook.md`) |
+| `runbook-waf-ddos.md` | Edge/WAF and DDoS response |
 
 Related pre-existing material (not part of this pack): `docs/security/speaking/**`, `docs/SECURITY-*.md`.
 

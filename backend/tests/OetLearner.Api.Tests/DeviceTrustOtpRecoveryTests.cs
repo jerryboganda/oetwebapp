@@ -4,6 +4,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -204,15 +205,6 @@ public class DeviceTrustOtpRecoveryTests
         LearnerDbContext ServiceDb) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync() => await ServiceDb.DisposeAsync();
-    }
-
-    private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider
-    {
-        private DateTimeOffset _utcNow = start;
-
-        public override DateTimeOffset GetUtcNow() => _utcNow;
-
-        public void Advance(TimeSpan amount) => _utcNow = _utcNow.Add(amount);
     }
 
     private sealed class ControllableEmailSender : IEmailSender

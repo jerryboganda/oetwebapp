@@ -9,6 +9,7 @@ using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -374,16 +375,5 @@ public sealed class ListeningStartGovernanceTests
             forceNewAttempt: true,
             CancellationToken.None));
         Assert.Contains("attempt cap", capError.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private sealed class AllowAllContentEntitlementService : IContentEntitlementService
-    {
-        public Task<ContentEntitlementResult> AllowAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.FromResult(new ContentEntitlementResult(true, "test", "premium", null));
-
-        public Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal) => false;
     }
 }

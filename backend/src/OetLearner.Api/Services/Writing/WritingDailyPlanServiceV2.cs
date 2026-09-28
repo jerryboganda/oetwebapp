@@ -106,7 +106,7 @@ public sealed class WritingDailyPlanServiceV2(
         var now = clock.GetUtcNow();
         var profile = await db.LearnerWritingProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct);
         var pathway = await db.LearnerWritingPathways.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct);
-        var focus = profile is null ? new List<string>() : DeserializeStringList(profile.LetterTypeFocusJson);
+        var focus = profile is null ? new List<string>() : WritingServiceHelpers.DeserializeStringList(profile.LetterTypeFocusJson);
         var weakness = pathway is null ? new Dictionary<string, double>() : DeserializeDoubleMap(pathway.WeaknessVectorJson);
 
         var picks = await picker.PickAsync(userId, new WritingPracticeSelectionRequest(
@@ -202,12 +202,6 @@ public sealed class WritingDailyPlanServiceV2(
             Status = "pending",
             CreatedAt = now,
         };
-
-    private static List<string> DeserializeStringList(string json)
-    {
-        try { return JsonSerializer.Deserialize<List<string>>(json, JsonOptions) ?? []; }
-        catch (JsonException) { return []; }
-    }
 
     private static IReadOnlyDictionary<string, double> DeserializeDoubleMap(string? json)
     {

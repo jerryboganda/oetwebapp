@@ -2,6 +2,13 @@
 # OET Prep Platform — single-container compose for local rehearsal or approved
 # emergency source-build fallback.
 #
+# DANGER — STALE, NOT USED BY ANY DEPLOY PATH. Never run this file against the
+# live `oetwebsite` project on the VPS. It predates blue/green: it has no
+# learner-api/web blue+green slots and no ai-worker, so `up --remove-orphans`
+# would delete the live oet-*-blue, oet-*-green and oet-ai-worker containers.
+# Production uses docker-compose.production.yml (plus production.build.yml for
+# the gated emergency source build).
+#
 # PRODUCTION RULE:
 # Heavy frontend, API, backend, Next.js, and .NET builds must run on GitHub
 # Actions. The production VPS only pulls prebuilt GHCR images and runs health

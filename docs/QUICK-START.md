@@ -80,7 +80,6 @@ another project already using 5432. Inside the compose network the API still use
 - `.env.local` — native frontend env (`NEXT_PUBLIC_API_BASE_URL`)
 - `start-dev.ps1` — one-command launcher
 - `backend/Dockerfile.dev` — .NET dev image (`dotnet watch`)
-- `Dockerfile.dev` — Next.js dev image (kept for reference; not used in hybrid)
 
 ---
 

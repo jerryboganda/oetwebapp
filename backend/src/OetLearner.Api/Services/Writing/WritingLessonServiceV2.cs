@@ -131,7 +131,7 @@ public sealed class WritingLessonServiceV2(LearnerDbContext db, TimeProvider clo
         entity.EstimatedMinutes = lesson.EstimatedMinutes;
         entity.QuizQuestionsJson = JsonSerializer.Serialize(lesson.QuizQuestions ?? Array.Empty<WritingLessonV2QuizQuestion>(), JsonOptions);
         entity.Status = lesson.Status;
-        AddAuditEvent(adminId, "WritingLesson", entity.Id.ToString("D"), created ? "writing.lesson.created" : "writing.lesson.updated", entity.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminId, "WritingLesson", entity.Id.ToString("D"), created ? "writing.lesson.created" : "writing.lesson.updated", entity.Title);
         await db.SaveChangesAsync(ct);
         return ToView(entity, null);
     }
@@ -255,23 +255,8 @@ public sealed class WritingLessonServiceV2(LearnerDbContext db, TimeProvider clo
         var entity = await db.WritingLessonsV2.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (entity is null) return false;
         db.WritingLessonsV2.Remove(entity);
-        AddAuditEvent(adminUserId, "WritingLesson", id.ToString("D"), "writing.lesson.deleted", entity.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingLesson", id.ToString("D"), "writing.lesson.deleted", entity.Title);
         await db.SaveChangesAsync(ct);
         return true;
-    }
-
-    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
-    {
-        db.AuditEvents.Add(new AuditEvent
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            Action = action,
-            ResourceType = resourceType,
-            ResourceId = resourceId,
-            Details = details,
-            OccurredAt = clock.GetUtcNow(),
-        });
     }
 }

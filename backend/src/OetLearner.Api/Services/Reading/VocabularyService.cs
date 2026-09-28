@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Reading;
@@ -449,7 +450,7 @@ public sealed class ReadingVocabularyService(
     private static GeneratedWordCard? TryParseWordCard(string completion)
     {
         if (string.IsNullOrWhiteSpace(completion)) return null;
-        var json = ExtractJsonBlock(completion);
+        var json = AiReplyParsing.ExtractFencedJsonObject(completion);
         if (json is null) return null;
         try
         {
@@ -489,21 +490,6 @@ public sealed class ReadingVocabularyService(
         string HealthcareContext,
         string ProfessionRelevanceJson,
         int Difficulty);
-
-    private static string? ExtractJsonBlock(string raw)
-    {
-        var trimmed = raw.Trim();
-        if (trimmed.StartsWith("{") && trimmed.EndsWith("}")) return trimmed;
-        var fenceStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
-        if (fenceStart < 0) fenceStart = trimmed.IndexOf("```", StringComparison.Ordinal);
-        if (fenceStart < 0) return null;
-        var afterFence = trimmed.IndexOf('\n', fenceStart);
-        if (afterFence < 0) return null;
-        var closeFence = trimmed.IndexOf("```", afterFence + 1, StringComparison.Ordinal);
-        if (closeFence < 0) return null;
-        var inner = trimmed[(afterFence + 1)..closeFence].Trim();
-        return inner.StartsWith("{") && inner.EndsWith("}") ? inner : null;
-    }
 
     private static string? SafeString(JsonElement el, string property)
     {

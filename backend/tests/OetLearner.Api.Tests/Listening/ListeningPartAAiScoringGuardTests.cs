@@ -9,6 +9,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -772,7 +773,7 @@ public sealed class ListeningPartAAiScoringGuardTests
         // worker really would keep picking this row up.
         for (var round = 1; round <= ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds; round++)
         {
-            var service = NewService(db, handler, recorder, clock: new FixedClock(Now.AddHours(round)));
+            var service = NewService(db, handler, recorder, clock: new FixedTimeProvider(Now.AddHours(round)));
             await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
         }
 
@@ -844,7 +845,7 @@ public sealed class ListeningPartAAiScoringGuardTests
             Microsoft.Extensions.Options.Options.Create(
                 new OetLearner.Api.Configuration.AiProviderOptions()),
             recorder ?? new RecordingUsageRecorder(),
-            clock ?? new FixedClock(Now),
+            clock ?? new FixedTimeProvider(Now),
             NullLogger<ListeningPartAAiScoringService>.Instance,
             pricingResolver);
 
@@ -1180,10 +1181,5 @@ public sealed class ListeningPartAAiScoringGuardTests
             CompletedOperationIds.Add(operationId);
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

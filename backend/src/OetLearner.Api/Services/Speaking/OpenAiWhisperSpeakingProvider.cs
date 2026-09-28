@@ -308,14 +308,3 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
         _ => "audio.webm",
     };
 }
-
-/// <summary>
-/// Bindable configuration section for the Speaking Whisper provider.
-/// Mapped from <c>Speaking:Whisper</c> in appsettings.
-/// </summary>
-public sealed class WhisperSpeakingOptions
-{
-    public string? ApiKey { get; set; }
-    public string? BaseUrl { get; set; } = "https://api.openai.com/v1";
-    public string Model { get; set; } = "whisper-1";
-}

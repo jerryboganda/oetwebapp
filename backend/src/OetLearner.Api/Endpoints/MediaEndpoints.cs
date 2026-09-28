@@ -173,7 +173,7 @@ public static class MediaEndpoints
         if (asset is null)
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
 
-        var isAdmin = string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase);
+        var isAdmin = string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
         var isOwner = string.Equals(asset.UploadedBy, userId, StringComparison.OrdinalIgnoreCase);
         if (!isAdmin && !isOwner)
             return Results.Json(new { code = "forbidden", message = "You can only delete your own media." }, statusCode: StatusCodes.Status403Forbidden);

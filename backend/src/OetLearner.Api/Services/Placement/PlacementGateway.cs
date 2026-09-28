@@ -31,16 +31,13 @@ public sealed class PlacementGateway
     }
 
     /// <summary>Build a service-authenticated request. The service token is
-    /// injected per call from configuration (rotating it only needs a
-    /// restart, not a gateway change). Session-scoped calls carry the
-    /// on-behalf-of candidate uid; reviewer/admin calls pass empty.</summary>
+    /// the client's default Authorization header, which the typed-client
+    /// registration in Program.cs sets from GEPA_SERVICE_TOKEN (rotating it
+    /// only needs a restart, not a gateway change). Session-scoped calls carry
+    /// the on-behalf-of candidate uid; reviewer/admin calls pass empty.</summary>
     private async Task<HttpRequestMessage> AuthenticatedAsync(HttpMethod method, string path, string candidateUid, HttpContent? content = null)
     {
         var token = _http.DefaultRequestHeaders.Authorization?.Parameter;
-        if (string.IsNullOrEmpty(token))
-        {
-            token = Environment.GetEnvironmentVariable("GEPA_SERVICE_TOKEN");
-        }
         if (string.IsNullOrEmpty(token))
         {
             throw ApiException.ServiceUnavailable(

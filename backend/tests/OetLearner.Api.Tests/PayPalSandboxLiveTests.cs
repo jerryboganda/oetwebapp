@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -11,7 +12,7 @@ namespace OetLearner.Api.Tests;
 /// resolution → OAuth → order create / host selection), not just raw PayPal calls.
 ///
 /// They are gated on the <c>PAYPAL_SANDBOX_CLIENT_ID</c> / <c>PAYPAL_SANDBOX_SECRET</c>
-/// environment variables and no-op (return) when those are absent, so CI and other
+/// environment variables and are reported as Skipped when those are absent, so CI and other
 /// developers are never blocked or charged. To run them:
 ///
 ///   PAYPAL_SANDBOX_CLIENT_ID=... PAYPAL_SANDBOX_SECRET=... \
@@ -19,14 +20,10 @@ namespace OetLearner.Api.Tests;
 /// </summary>
 public class PayPalSandboxLiveTests
 {
-    private static (string ClientId, string Secret)? SandboxCreds()
-    {
-        var clientId = Environment.GetEnvironmentVariable("PAYPAL_SANDBOX_CLIENT_ID");
-        var secret = Environment.GetEnvironmentVariable("PAYPAL_SANDBOX_SECRET");
-        return string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret)
-            ? null
-            : (clientId, secret);
-    }
+    // Only called from [RequiresEnvFact] tests, so both variables are set.
+    private static (string ClientId, string Secret) SandboxCreds()
+        => (Environment.GetEnvironmentVariable("PAYPAL_SANDBOX_CLIENT_ID")!,
+            Environment.GetEnvironmentVariable("PAYPAL_SANDBOX_SECRET")!);
 
     private static IRuntimeSettingsProvider RuntimeFor(string clientId, string secret, bool useSandbox)
         => TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
@@ -42,20 +39,15 @@ public class PayPalSandboxLiveTests
             PayPalCancelUrl: "https://app.example/checkout/cancel",
             PayPalUseSandbox: useSandbox));
 
-    [Fact]
+    [RequiresEnvFact("PAYPAL_SANDBOX_CLIENT_ID", "PAYPAL_SANDBOX_SECRET")]
     public async Task PayPalGateway_AgainstRealSandbox_CreatesOrder()
     {
         var creds = SandboxCreds();
-        if (creds is null)
-        {
-            return; // live test — only runs when sandbox creds are supplied via env vars
-        }
-
         var options = new BillingOptions { AllowSandboxFallbacks = false };
         var gateway = new PayPalGateway(
             new HttpClient(),
             Options.Create(options),
-            RuntimeFor(creds.Value.ClientId, creds.Value.Secret, useSandbox: true));
+            RuntimeFor(creds.ClientId, creds.Secret, useSandbox: true));
 
         var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
             UserId: "live-sandbox-test",
@@ -73,15 +65,10 @@ public class PayPalSandboxLiveTests
         Assert.Contains("sandbox.paypal.com", result.CheckoutUrl, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [RequiresEnvFact("PAYPAL_SANDBOX_CLIENT_ID", "PAYPAL_SANDBOX_SECRET")]
     public async Task PayPalGateway_LiveHostWithSandboxCreds_Throws()
     {
         var creds = SandboxCreds();
-        if (creds is null)
-        {
-            return;
-        }
-
         var options = new BillingOptions { AllowSandboxFallbacks = false };
         // UseSandbox=false → the gateway must call the LIVE host. Sandbox creds against the
         // live host are rejected (401 invalid_client), so order creation throws. This is the
@@ -92,7 +79,7 @@ public class PayPalSandboxLiveTests
         var gateway = new PayPalGateway(
             new HttpClient(),
             Options.Create(options),
-            RuntimeFor(creds.Value.ClientId, creds.Value.Secret, useSandbox: false));
+            RuntimeFor(creds.ClientId, creds.Secret, useSandbox: false));
 
         var ex = await Assert.ThrowsAsync<PaymentGatewayApiException>(() => gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
             UserId: "live-sandbox-test",

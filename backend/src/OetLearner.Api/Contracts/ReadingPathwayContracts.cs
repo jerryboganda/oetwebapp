@@ -62,10 +62,6 @@ public sealed record MockSessionResultResponse(
     bool? ScoreConversionPassed = null,
     string? ScoreConversionGrade = null);
 
-public sealed record SubmitDiagnosticRequest(
-    Guid SessionId,
-    Dictionary<string, string> Answers);  // questionId -> selectedOption
-
 public sealed record VocabAddRequest(string Word, string Source);
 public sealed record VocabReviewRequest(int Quality);  // 0,3,4,5
 
@@ -112,28 +108,6 @@ public sealed record ReadingProfileResponse(
     DateTimeOffset? PathwayGeneratedAt,
     int? WeeksRemaining,
     bool DiagnosticCompleted);
-
-public sealed record DiagnosticQuestionResponse(
-    string Id,
-    string PartCode,
-    string QuestionType,
-    int DisplayOrder,
-    string Stem,
-    JsonElement Options,
-    string? TextTitle,
-    string? TextHtml,
-    string? SkillCode);
-
-public sealed record DiagnosticResultResponse(
-    Guid SessionId,
-    int Score,
-    int TotalQuestions,
-    Dictionary<string, decimal> SkillScores,
-    string EstimatedOetBand,
-    int EstimatedScaledScore,
-    int? DurationSeconds,
-    int RoadmapWeeks,
-    DateTimeOffset? CompletedAt);
 
 public sealed record ReadingPathwayResponse(
     string CurrentStage,

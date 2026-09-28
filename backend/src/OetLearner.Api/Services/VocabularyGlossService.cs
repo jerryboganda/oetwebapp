@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services;
@@ -57,7 +58,7 @@ public sealed class VocabularyGlossService(
                 ExistingTermId: existing.Id);
         }
 
-        var profession = ParseProfession(request.Profession);
+        var profession = AiReplyParsing.ParseProfessionOrMedicine(request.Profession);
         OetRulebook rulebook;
         try { rulebook = rulebookLoader.Load(RuleKind.Vocabulary, profession); }
         catch (RulebookNotFoundException)
@@ -143,7 +144,7 @@ public sealed class VocabularyGlossService(
     {
         if (string.IsNullOrWhiteSpace(completion)) return null;
 
-        var jsonText = ExtractJsonBlock(completion);
+        var jsonText = AiReplyParsing.ExtractFencedJsonObject(completion);
         if (jsonText is null) return null;
 
         try
@@ -152,15 +153,15 @@ public sealed class VocabularyGlossService(
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
 
-            var term = (SafeString(root, "term") ?? word).Trim();
-            var shortDef = SafeString(root, "shortDefinition")?.Trim();
-            var example = SafeString(root, "exampleSentence")?.Trim();
+            var term = (AiReplyParsing.SafeString(root, "term") ?? word).Trim();
+            var shortDef = AiReplyParsing.SafeString(root, "shortDefinition")?.Trim();
+            var example = AiReplyParsing.SafeString(root, "exampleSentence")?.Trim();
             if (string.IsNullOrWhiteSpace(shortDef) || string.IsNullOrWhiteSpace(example))
                 return null;
 
-            var ipa = SafeString(root, "ipaPronunciation");
-            var contextNotes = SafeString(root, "contextNotes");
-            var register = (SafeString(root, "register") ?? "clinical").Trim().ToLowerInvariant();
+            var ipa = AiReplyParsing.SafeString(root, "ipaPronunciation");
+            var contextNotes = AiReplyParsing.SafeString(root, "contextNotes");
+            var register = (AiReplyParsing.SafeString(root, "register") ?? "clinical").Trim().ToLowerInvariant();
             var synonyms = ParseStringArray(root, "synonyms");
             var applied = ParseStringArray(root, "appliedRuleIds")
                 .Where(id => validRuleIds.Contains(id))
@@ -185,32 +186,6 @@ public sealed class VocabularyGlossService(
         }
     }
 
-    private static string? ExtractJsonBlock(string raw)
-    {
-        var trimmed = raw.Trim();
-        if (trimmed.StartsWith("{") && trimmed.EndsWith("}")) return trimmed;
-        var fenceStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
-        if (fenceStart < 0) fenceStart = trimmed.IndexOf("```", StringComparison.Ordinal);
-        if (fenceStart < 0) return null;
-        var afterFence = trimmed.IndexOf('\n', fenceStart);
-        if (afterFence < 0) return null;
-        var closeFence = trimmed.IndexOf("```", afterFence + 1, StringComparison.Ordinal);
-        if (closeFence < 0) return null;
-        var inner = trimmed[(afterFence + 1)..closeFence].Trim();
-        return inner.StartsWith("{") && inner.EndsWith("}") ? inner : null;
-    }
-
-    private static string? SafeString(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var v)) return null;
-        return v.ValueKind switch
-        {
-            JsonValueKind.String => v.GetString(),
-            JsonValueKind.Number => v.ToString(),
-            _ => null,
-        };
-    }
-
     private static List<string> ParseStringArray(JsonElement el, string property)
     {
         var result = new List<string>();
@@ -228,14 +203,6 @@ public sealed class VocabularyGlossService(
         if (string.IsNullOrWhiteSpace(json)) return new();
         try { return JsonSerializer.Deserialize<List<string>>(json!) ?? new(); }
         catch { return new(); }
-    }
-
-    private static ExamProfession ParseProfession(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
-        return Enum.TryParse<ExamProfession>(raw.Replace("-", ""), ignoreCase: true, out var p)
-            ? p
-            : ExamProfession.Medicine;
     }
 
     private static string Truncate(string raw, int max)

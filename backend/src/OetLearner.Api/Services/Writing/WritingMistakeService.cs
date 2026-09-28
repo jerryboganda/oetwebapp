@@ -188,7 +188,7 @@ public sealed class WritingMistakeService(LearnerDbContext db, TimeProvider cloc
         entity.ExampleRight = mistake.ExampleRight;
         entity.CanonRuleId = mistake.CanonRuleId;
         entity.RelatedSubSkill = mistake.RelatedSubSkill;
-        AddAuditEvent(adminId, "WritingCommonMistake", entity.Id.ToString("D"), created ? "writing.mistake.created" : "writing.mistake.updated", entity.Summary);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminId, "WritingCommonMistake", entity.Id.ToString("D"), created ? "writing.mistake.created" : "writing.mistake.updated", entity.Summary);
         await db.SaveChangesAsync(ct);
         return ToView(entity);
     }
@@ -286,23 +286,8 @@ public sealed class WritingMistakeService(LearnerDbContext db, TimeProvider cloc
         var entity = await db.WritingCommonMistakes.FirstOrDefaultAsync(m => m.Id == id, ct);
         if (entity is null) return false;
         db.WritingCommonMistakes.Remove(entity);
-        AddAuditEvent(adminUserId, "WritingCommonMistake", id.ToString("D"), "writing.mistake.deleted", entity.Summary);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingCommonMistake", id.ToString("D"), "writing.mistake.deleted", entity.Summary);
         await db.SaveChangesAsync(ct);
         return true;
-    }
-
-    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
-    {
-        db.AuditEvents.Add(new AuditEvent
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            Action = action,
-            ResourceType = resourceType,
-            ResourceId = resourceId,
-            Details = details,
-            OccurredAt = clock.GetUtcNow(),
-        });
     }
 }

@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -337,18 +338,5 @@ public sealed class LearnerRolePlayCardListTests : IAsyncLifetime
         }
 
         await _db.SaveChangesAsync();
-    }
-
-    private sealed class TestHostEnvironment(string contentRootPath)
-        : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
-    {
-        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
-        public Microsoft.Extensions.FileProviders.IFileProvider WebRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
-        public string WebRootPath { get; set; } = string.Empty;
-        public string EnvironmentName { get; set; } = "Development";
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

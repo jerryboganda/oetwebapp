@@ -61,7 +61,6 @@ B + C share one 45-minute window so they can be combined in a single PDF.
 ### 1.3 What's already in the codebase
 
 **Schemas present:**
-- `lib/types/subtest-content-schemas.ts` — `ReadingPassage`, `ReadingQuestion`, `ReadingTaskDetail`, `ReadingModelAnswer` types exist but nothing persists or renders them
 - `lib/scoring.ts` — canonical raw↔scaled conversion for Listening/Reading (30/42 = 350)
 - `ContentPaper` / `ContentPaperAsset` / `MediaAsset` — PDF storage working
 - `ContentPaperAsset.Part` — already supports "A" / "B+C"

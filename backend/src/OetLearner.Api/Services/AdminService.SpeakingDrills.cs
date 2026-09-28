@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services;
 
@@ -200,7 +201,7 @@ public partial class AdminService
             {
                 instructionText = request.InstructionText.Trim(),
                 drillKind = drill.DrillKind.ToString(),
-                targetCriteria = request.TargetCriteria ?? ParseTargetCriteria(drill.TargetCriteriaJson),
+                targetCriteria = request.TargetCriteria ?? SpeakingDrillService.ParseTargetCriteria(drill.TargetCriteriaJson),
             });
         }
         if (request.TargetCriteria is not null)
@@ -210,7 +211,7 @@ public partial class AdminService
             // Keep DetailJson aligned with the new criteria.
             content.DetailJson = JsonSupport.Serialize(new
             {
-                instructionText = ParseInstructionText(content.DetailJson),
+                instructionText = SpeakingDrillService.ParseInstructionText(content.DetailJson),
                 drillKind = drill.DrillKind.ToString(),
                 targetCriteria = request.TargetCriteria,
             });
@@ -529,50 +530,6 @@ public partial class AdminService
         }
     }
 
-    private static string[] ParseTargetCriteria(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
-            var list = new List<string>();
-            foreach (var el in doc.RootElement.EnumerateArray())
-            {
-                if (el.ValueKind == JsonValueKind.String)
-                {
-                    var s = el.GetString();
-                    if (!string.IsNullOrWhiteSpace(s)) list.Add(s);
-                }
-            }
-            return list.ToArray();
-        }
-        catch (JsonException)
-        {
-            return Array.Empty<string>();
-        }
-    }
-
-    private static string ParseInstructionText(string? detailJson)
-    {
-        if (string.IsNullOrWhiteSpace(detailJson)) return string.Empty;
-        try
-        {
-            using var doc = JsonDocument.Parse(detailJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return string.Empty;
-            if (doc.RootElement.TryGetProperty("instructionText", out var prop)
-                && prop.ValueKind == JsonValueKind.String)
-            {
-                return prop.GetString() ?? string.Empty;
-            }
-            return string.Empty;
-        }
-        catch (JsonException)
-        {
-            return string.Empty;
-        }
-    }
-
     private static object ProjectSummaryRow(SpeakingDrillItem drill, ContentItem content)
         => new
         {
@@ -581,8 +538,8 @@ public partial class AdminService
             drillKind = drill.DrillKind.ToString(),
             professionId = content.ProfessionId,
             title = content.Title,
-            instructionText = ParseInstructionText(content.DetailJson),
-            targetCriteria = ParseTargetCriteria(drill.TargetCriteriaJson),
+            instructionText = SpeakingDrillService.ParseInstructionText(content.DetailJson),
+            targetCriteria = SpeakingDrillService.ParseTargetCriteria(drill.TargetCriteriaJson),
             recommendedAfterSessionScoreBelow = drill.RecommendedAfterSessionScoreBelow,
             status = content.Status.ToString().ToLowerInvariant(),
             createdAt = drill.CreatedAt,
@@ -599,8 +556,8 @@ public partial class AdminService
             drillKind = drill.DrillKind.ToString(),
             professionId = content.ProfessionId,
             title = content.Title,
-            instructionText = ParseInstructionText(content.DetailJson),
-            targetCriteria = ParseTargetCriteria(drill.TargetCriteriaJson),
+            instructionText = SpeakingDrillService.ParseInstructionText(content.DetailJson),
+            targetCriteria = SpeakingDrillService.ParseTargetCriteria(drill.TargetCriteriaJson),
             recommendedAfterSessionScoreBelow = drill.RecommendedAfterSessionScoreBelow,
             status = content.Status.ToString().ToLowerInvariant(),
             createdAt = drill.CreatedAt,

@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Speaking;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -278,18 +279,5 @@ public sealed class SpeakingCardCategoryProvenanceTests : IAsyncLifetime
         Assert.Equal("Other Cards", detail.PrimaryCategory);
         Assert.Equal("classifier", detail.CategorySource);
         Assert.True(detail.CategoryNeedsReview);
-    }
-
-    private sealed class TestHostEnvironment(string contentRootPath)
-        : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
-    {
-        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
-        public Microsoft.Extensions.FileProviders.IFileProvider WebRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
-        public string WebRootPath { get; set; } = string.Empty;
-        public string EnvironmentName { get; set; } = "Development";
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

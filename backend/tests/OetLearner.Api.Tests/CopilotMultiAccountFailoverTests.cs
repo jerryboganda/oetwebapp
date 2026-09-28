@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -24,7 +25,7 @@ public sealed class CopilotMultiAccountFailoverTests : IAsyncDisposable
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<LearnerDbContext> _options;
     private readonly EphemeralDataProtectionProvider _dpProvider = new();
-    private readonly FixedClock _clock = new(DateTimeOffset.Parse("2026-05-08T12:00:00Z"));
+    private readonly FixedTimeProvider _clock = new(DateTimeOffset.Parse("2026-05-08T12:00:00Z"));
 
     public CopilotMultiAccountFailoverTests()
     {
@@ -319,10 +320,5 @@ public sealed class CopilotMultiAccountFailoverTests : IAsyncDisposable
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => await responder(request);
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

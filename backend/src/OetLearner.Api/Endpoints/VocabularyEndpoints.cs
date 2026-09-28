@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Entitlements;
 
@@ -176,7 +177,7 @@ file static class VocabularyHttpContextExtensions
     internal static bool IsPremium(this HttpContext httpContext)
     {
         var user = httpContext.User;
-        if (user.IsInRole("admin") || user.IsInRole("Admin")) return true;
+        if (user.IsInRole(ApplicationUserRoles.Admin) || user.IsInRole("Admin")) return true;
         var tier = user.FindFirstValue("subscription_tier")?.ToLowerInvariant();
         if (tier is "premium" or "pro" or "sponsor" or "paid") return true;
         var entitlements = user.FindAll("entitlement").Select(c => c.Value)

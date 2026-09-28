@@ -15,7 +15,7 @@ namespace OetLearner.Api.Services.Rulebook;
 /// Model-Answer-only detectors live in WritingRuleEngine.SeniorAuditG1..G7.cs;
 /// the cross-model audit (17 Sep 2026, OA6) detectors live in
 /// WritingRuleEngine.CrossModelAudit.cs.
-/// Regression coverage: RulebookEngineTests.cs (WritingRuleEngineTests),
+/// Regression coverage: Rulebook/WritingRuleEngineTests.cs,
 /// Rulebook/WritingRev8*Tests.cs, Writing/WritingSeniorAuditG*RegressionTests.cs and
 /// Writing/WritingCrossModelAuditRegressionTests.cs.
 /// </summary>

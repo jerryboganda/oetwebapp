@@ -8,22 +8,12 @@ using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
 public class ListeningRelationalRuntimeTests
 {
-    private sealed class AllowAllContentEntitlementService : IContentEntitlementService
-    {
-        public Task<ContentEntitlementResult> AllowAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.FromResult(new ContentEntitlementResult(true, "test", "premium", null));
-
-        public Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal) => false;
-    }
-
     private static (LearnerDbContext db, ListeningLearnerService svc) Build()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()

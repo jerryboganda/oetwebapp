@@ -3,13 +3,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
-/// <summary>Assessment subtests governed by the v1.1 score/marking model.</summary>
-public enum AssessmentSubtest
-{
-    Listening = 1,
-    Reading = 2,
-}
-
 /// <summary>Lifecycle for owner-controlled assessment governance records.</summary>
 public enum AssessmentGovernanceStatus
 {

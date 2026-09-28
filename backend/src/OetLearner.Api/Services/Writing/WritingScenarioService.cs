@@ -151,7 +151,7 @@ public sealed class WritingScenarioService(
         };
         db.WritingScenarios.Add(entity);
         await PersistSentencesAsync(entity.Id, scenario.CaseNotesStructured, ct);
-        AddAuditEvent(userId, "WritingScenario", entity.Id.ToString("D"), "writing.scenario.created", scenario.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, userId, "WritingScenario", entity.Id.ToString("D"), "writing.scenario.created", scenario.Title);
         await db.SaveChangesAsync(ct);
         // Best-effort exemplar embedding (writing.exemplar.embed.v1): the
         // shared IEmbeddingService calls POST /embeddings on the configured
@@ -180,7 +180,7 @@ public sealed class WritingScenarioService(
             .ToListAsync(ct);
         db.WritingScenarioStructuredSentences.RemoveRange(existing);
         await PersistSentencesAsync(id, scenario.CaseNotesStructured, ct);
-        AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.updated", scenario.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, userId, "WritingScenario", id.ToString("D"), "writing.scenario.updated", scenario.Title);
         await db.SaveChangesAsync(ct);
         await RefreshExemplarEmbeddingAsync(id, CancellationToken.None);
         return (await GetAsync(userId, id, ct))!;
@@ -210,7 +210,7 @@ public sealed class WritingScenarioService(
         entity.Status = "published";
         entity.ApprovedById = userId;
         entity.PublishedAt = clock.GetUtcNow();
-        AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.approved", entity.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, userId, "WritingScenario", id.ToString("D"), "writing.scenario.approved", entity.Title);
         await db.SaveChangesAsync(ct);
         return (await GetAsync(userId, id, ct))!;
     }
@@ -581,7 +581,7 @@ public sealed class WritingScenarioService(
         var entity = await db.WritingScenarios.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (entity is null) return false;
         db.WritingScenarios.Remove(entity);
-        AddAuditEvent(adminUserId, "WritingScenario", id.ToString("D"), "writing.scenario.deleted", entity.Title);
+        WritingServiceHelpers.AddAuditEvent(db, clock, adminUserId, "WritingScenario", id.ToString("D"), "writing.scenario.deleted", entity.Title);
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -612,18 +612,4 @@ public sealed class WritingScenarioService(
             IsDiagnostic: req.IsDiagnostic ?? false,
             Status: string.IsNullOrWhiteSpace(req.Status) ? "draft" : req.Status!,
             CreatedAt: DateTimeOffset.UtcNow);
-    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
-    {
-        db.AuditEvents.Add(new AuditEvent
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
-            Action = action,
-            ResourceType = resourceType,
-            ResourceId = resourceId,
-            Details = details,
-            OccurredAt = clock.GetUtcNow(),
-        });
-    }
 }

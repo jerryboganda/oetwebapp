@@ -1820,24 +1820,6 @@ public partial class AdminService
     }
 
     /// <summary>
-    /// Adds <paramref name="recallSetCode"/> to the term's multi-tag
-    /// <see cref="VocabularyTerm.RecallSetCodesJson"/> array if not already
-    /// present. Returns true only when the code was NEWLY added — callers use
-    /// this to decide whether the appearance is a fresh exam-session membership
-    /// (bump ×N) or a redundant re-tag (leave ×N untouched).
-    /// </summary>
-    private static bool AddRecallSetCode(VocabularyTerm term, string recallSetCode)
-    {
-        var codes = new List<string>();
-        try { codes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new(); } catch { }
-        if (codes.Contains(recallSetCode, StringComparer.OrdinalIgnoreCase))
-            return false;
-        codes.Add(recallSetCode);
-        term.RecallSetCodesJson = System.Text.Json.JsonSerializer.Serialize(codes);
-        return true;
-    }
-
-    /// <summary>
     /// Parses the per-set occurrence map (set code → count). Case-insensitive
     /// keys; never throws — returns an empty map on malformed/empty JSON.
     /// </summary>
@@ -2662,25 +2644,6 @@ public partial class AdminService
             mismatches.Add(new AdminVocabularyImportReconciliationFieldMismatch("sourceProvenance", expected, storedSourceProvenance));
     }
 
-    public async Task<object> BulkImportVocabularyAsync(
-        string adminId, string adminName, IFormFile file, CancellationToken ct)
-    {
-        // Backward-compat thin wrapper: keep legacy callers non-committing.
-        // No recall set code on v1 (legacy callers don't supply one) — the v2
-        // validator throws RECALL_SET_CODE_REQUIRED, which legacy CLI/scripts
-        // can intercept and pass --recall-set-code instead.
-        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: true, importBatchId: null, recallSetCode: null, ct);
-        return new
-        {
-            importBatchId = res.ImportBatchId,
-            imported = res.Imported,
-            skipped = res.Skipped,
-            duplicates = res.Duplicates,
-            failedRows = res.FailedRows,
-            errors = res.Errors.Take(20),
-        };
-    }
-
     // ════════════════════════════════════════════
     //  Conversation Templates
     // ════════════════════════════════════════════
@@ -2957,7 +2920,7 @@ public partial class AdminService
             ExampleWordsJson = request.ExampleWordsJson ?? "[]",
             MinimalPairsJson = request.MinimalPairsJson ?? "[]",
             SentencesJson = request.SentencesJson ?? "[]",
-            TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml),
+            TipsHtml = OetLearner.Api.Services.Content.HtmlSanitizerService.SanitizePassageHtml(request.TipsHtml),
             Difficulty = request.Difficulty ?? "medium",
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status!,
             OrderIndex = request.OrderIndex ?? 0,
@@ -2988,7 +2951,7 @@ public partial class AdminService
         if (request.ExampleWordsJson is not null) entity.ExampleWordsJson = request.ExampleWordsJson;
         if (request.MinimalPairsJson is not null) entity.MinimalPairsJson = request.MinimalPairsJson;
         if (request.SentencesJson is not null) entity.SentencesJson = request.SentencesJson;
-        if (request.TipsHtml is not null) entity.TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml);
+        if (request.TipsHtml is not null) entity.TipsHtml = OetLearner.Api.Services.Content.HtmlSanitizerService.SanitizePassageHtml(request.TipsHtml);
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.Status is not null)
         {

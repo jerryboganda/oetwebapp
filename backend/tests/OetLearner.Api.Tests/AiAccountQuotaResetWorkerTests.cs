@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -165,7 +166,7 @@ public sealed class AiAccountQuotaResetWorkerTests : IAsyncDisposable
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         return new AiAccountQuotaResetWorker(
             scopeFactory,
-            new FixedClock(now),
+            new FixedTimeProvider(now),
             NullLogger<AiAccountQuotaResetWorker>.Instance);
     }
 
@@ -211,10 +212,5 @@ public sealed class AiAccountQuotaResetWorkerTests : IAsyncDisposable
             UpdatedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

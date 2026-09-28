@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
@@ -88,7 +89,7 @@ public sealed class WritingDraftService(
         if (string.IsNullOrWhiteSpace(request.Prompt))
             throw new ArgumentException("Prompt is required.", nameof(request));
 
-        var profession = ParseProfession(request.Profession);
+        var profession = AiReplyParsing.ParseProfessionOrMedicine(request.Profession);
         var letterType = NormaliseLetterType(request.LetterType);
         var difficulty = NormaliseDifficulty(request.Difficulty);
 
@@ -262,7 +263,7 @@ public sealed class WritingDraftService(
     {
         if (string.IsNullOrWhiteSpace(completion)) return null;
 
-        var jsonText = ExtractJsonBlock(completion);
+        var jsonText = AiReplyParsing.ExtractFencedJsonObject(completion);
         if (jsonText is null) return null;
 
         try
@@ -271,11 +272,11 @@ public sealed class WritingDraftService(
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
 
-            var title = SafeString(root, "title")?.Trim();
-            var letterType = NormaliseLetterType(SafeString(root, "letterType"));
-            var caseNotes = SafeString(root, "caseNotes")?.Trim();
-            var modelLetter = SafeString(root, "modelLetterMarkdown")?.Trim();
-            var difficulty = NormaliseDifficulty(SafeString(root, "difficulty"));
+            var title = AiReplyParsing.SafeString(root, "title")?.Trim();
+            var letterType = NormaliseLetterType(AiReplyParsing.SafeString(root, "letterType"));
+            var caseNotes = AiReplyParsing.SafeString(root, "caseNotes")?.Trim();
+            var modelLetter = AiReplyParsing.SafeString(root, "modelLetterMarkdown")?.Trim();
+            var difficulty = NormaliseDifficulty(AiReplyParsing.SafeString(root, "difficulty"));
             var estimatedWordCount = root.TryGetProperty("estimatedWordCount", out var ewc) && ewc.TryGetInt32(out var ewcv)
                 ? ewcv
                 : EstimateWordCount(modelLetter);
@@ -311,32 +312,6 @@ public sealed class WritingDraftService(
         }
     }
 
-    private static string? ExtractJsonBlock(string raw)
-    {
-        var trimmed = raw.Trim();
-        if (trimmed.StartsWith("{") && trimmed.EndsWith("}")) return trimmed;
-        var fenceStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
-        if (fenceStart < 0) fenceStart = trimmed.IndexOf("```", StringComparison.Ordinal);
-        if (fenceStart < 0) return null;
-        var afterFence = trimmed.IndexOf('\n', fenceStart);
-        if (afterFence < 0) return null;
-        var closeFence = trimmed.IndexOf("```", afterFence + 1, StringComparison.Ordinal);
-        if (closeFence < 0) return null;
-        var inner = trimmed[(afterFence + 1)..closeFence].Trim();
-        return inner.StartsWith("{") && inner.EndsWith("}") ? inner : null;
-    }
-
-    private static string? SafeString(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var v)) return null;
-        return v.ValueKind switch
-        {
-            JsonValueKind.String => v.GetString(),
-            JsonValueKind.Number => v.ToString(),
-            _ => null,
-        };
-    }
-
     private static string NormaliseDifficulty(string? raw)
     {
         var v = (raw ?? "medium").Trim().ToLowerInvariant();
@@ -353,14 +328,6 @@ public sealed class WritingDraftService(
     {
         var v = (raw ?? "routine_referral").Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
         return ValidLetterTypes.Contains(v) ? v : "routine_referral";
-    }
-
-    private static ExamProfession ParseProfession(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
-        return Enum.TryParse<ExamProfession>(raw.Replace("-", ""), ignoreCase: true, out var p)
-            ? p
-            : ExamProfession.Medicine;
     }
 
     private static int EstimateWordCount(string? text)

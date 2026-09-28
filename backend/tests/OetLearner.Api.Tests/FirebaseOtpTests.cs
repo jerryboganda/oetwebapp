@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -343,15 +344,6 @@ public class FirebaseOtpTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class MutableTimeProvider(DateTimeOffset start) : TimeProvider
-    {
-        private DateTimeOffset _utcNow = start;
-
-        public override DateTimeOffset GetUtcNow() => _utcNow;
-
-        public void Advance(TimeSpan amount) => _utcNow = _utcNow.Add(amount);
     }
 
     private sealed class FakeOtpDeliveryOrchestrator : IOtpDeliveryOrchestrator

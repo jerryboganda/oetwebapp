@@ -23,3 +23,25 @@ tmp
 .cache
 .turbopack
 pnpm-store
+
+# .NET build output. Backend images build from this repo-root context, so a
+# backend/.dockerignore would never apply.
+backend/src/**/bin
+backend/src/**/obj
+backend/scripts/**/bin
+backend/scripts/**/obj
+backend/tests/**/bin
+backend/tests/**/obj
+backend/**/TestResults
+
+# Not build inputs for any root-context image (web, api, db-backup). Keep
+# rulebooks/, data/, messages/, public/ and scripts/ in the context.
+docs
+ops
+agents
+.github
+.codex
+.superpowers
+OET with Dr. Ahmed Hesham ( Medicine Only )
+/*.pdf
+/*.md

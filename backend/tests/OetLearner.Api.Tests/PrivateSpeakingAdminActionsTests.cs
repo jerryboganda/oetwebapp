@@ -9,6 +9,7 @@ using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Speaking;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -780,18 +781,6 @@ public sealed class PrivateSpeakingAdminActionsTests
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance,
             liveKitGateway: liveKitGateway);
-    }
-
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    // No calendar connection is ever seeded, so this factory must never be called.
-    private sealed class ThrowingHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("HTTP client should not be used without a calendar connection.");
     }
 
     private sealed class FakeEntitlementResolver(string subscriptionId, int speakingRemaining)

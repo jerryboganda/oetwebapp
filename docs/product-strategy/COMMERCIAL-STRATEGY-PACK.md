@@ -24,13 +24,13 @@ The product spans **three user surfaces**: a learner app (60+ routes), an expert
 
 | Metric | Value | Derivation |
 |--------|-------|------------|
-| **Total Active Subscribers** | 6,010 | Sum of all plan subscribers [Source: SeedData.cs] |
-| **Subscriber Distribution** | Basic 56.6% · Premium 20.8% · Yearly 13.6% · Intensive 9.0% | [Source: SeedData.cs] |
-| **Estimated MRR** | **$200,979 AUD** | See §7.1 calculation [Source: derived from SeedData.cs] |
+| **Total Active Subscribers** | 6,010 | Sum of all plan subscribers. ⚠️ NEEDS VALIDATION: historical or unverified figure with no source in the current code. SeedData.DemoUserData.cs seeds `ActiveSubscribers = 0` for every plan, and no current seed file sets a non-zero count. |
+| **Subscriber Distribution** | Basic 56.6% · Premium 20.8% · Yearly 13.6% · Intensive 9.0% | ⚠️ NEEDS VALIDATION: split of the unverified 6,010 figure above; no source in the current seed data |
+| **Estimated MRR** | **$200,979 AUD** | See §7.1 calculation [Source: plan prices from SeedData.DemoUserData.cs L828-832 × the unverified subscriber counts above] |
 | **Estimated ARR** | **$2.41M AUD** | MRR × 12 [Source: derived] |
 | **Blended ARPU** | **$33.44 AUD/mo** | MRR ÷ 6,010 [Source: derived] |
-| **Active Plans** | 4 paid + 1 legacy (hidden) | [Source: SeedData.cs] |
-| **Add-on Products** | 3 (credit packs + priority review) | [Source: SeedData.cs] |
+| **Active Plans** | 4 paid + 1 legacy (hidden) | [Source: SeedData.DemoUserData.cs] |
+| **Add-on Products** | 3 (credit packs + priority review) | [Source: SeedData.DemoUserData.cs] |
 | **Wallet Top-up Tiers** | Admin-configurable (seeded with 4 historical AUD tiers) | [Source: WalletTopUpTierConfig + `/admin/billing/wallet-tiers`] |
 | **Private Speaking** | $50 AUD/session (30 min) | [Source: PrivateSpeakingEntities.cs] |
 | **Revenue Streams** | 5 (subscriptions, credits, wallet, speaking, priority) | [Source: multiple backend files] |
@@ -51,11 +51,11 @@ OET is taken by healthcare professionals across 12 professions in 40+ countries.
 | **Premium Monthly** | `premium-monthly` | $49.99 | Monthly | 3 | $16.66 | $49.99 | — |
 | **Premium Yearly** | `premium-yearly` | $399.99 | Annual | 6 | $66.67 | **$33.33** | **$200/yr vs Premium Monthly** |
 
-> **⚠️ YEARLY CREDIT DEFICIT:** Premium Monthly provides 3 credits/month = 36 credits/year for $599.88. Premium Yearly provides only 6 total credits/year for $399.99. While the learner saves $200/yr on subscription cost, they lose 30 credits worth $270–$300 at add-on pricing ($9.00–$10.00/credit). **Net value for active reviewers is negative.** Validate whether Yearly credits are granted upfront (6 at purchase) or dripped monthly. This affects the Annual conversion upsell messaging. [Source: SeedData.cs L1483]
+> **⚠️ YEARLY CREDIT DEFICIT:** Premium Monthly provides 3 credits/month = 36 credits/year for $599.88. Premium Yearly provides only 6 total credits/year for $399.99. While the learner saves $200/yr on subscription cost, they lose 30 credits worth $270–$300 at add-on pricing ($9.00–$10.00/credit). **Net value for active reviewers is negative.** Validate whether Yearly credits are granted upfront (6 at purchase) or dripped monthly. This affects the Annual conversion upsell messaging. [Source: SeedData.DemoUserData.cs L829]
 | **Intensive Monthly** | `intensive-monthly` | $79.99 | Monthly | 8 | $10.00 | $79.99 | — |
 | Legacy Trial | `legacy-trial` | $0 | 14 days | 0 | N/A | $0 | — |
 
-[Source: SeedData.cs L1482-1486]
+[Source: SeedData.DemoUserData.cs L828-832]
 
 ### 2.2 Add-On Products
 
@@ -65,7 +65,7 @@ OET is taken by healthcare professionals across 12 professions in 40+ countries.
 | 5 Review Credits | `credits-5` | $44.99 | 5 | **$9.00** | One-time | Yes | 5 | All paid plans |
 | Priority Review | `priority-review` | $14.99 | 0 (entitlement) | N/A | 30 days | Yes | 1 | Premium/Yearly/Intensive only |
 
-[Source: SeedData.cs L1505-1507]
+[Source: SeedData.DemoUserData.cs L853-855]
 
 ### 2.3 Wallet Top-Up Tiers
 
@@ -137,7 +137,7 @@ Wallet top-up tiers are now an admin-configurable catalog managed at `/admin/bil
 | **Social proof** | Not evidenced in pricing UI | ✗ Gap |
 | **Loss aversion** | Freeze feature preserves progress instead of cancellation | ✓ Retention mechanism |
 
-[Source: SeedData.cs, WalletService.cs — pricing structure analysis]
+[Source: SeedData.DemoUserData.cs, WalletService.cs — pricing structure analysis]
 
 ---
 
@@ -173,7 +173,7 @@ Wallet top-up tiers are now an admin-configurable catalog managed at `/admin/bil
 
 **Legend:** ✓ = Included · ✗ = Not available · $ = Paid add-on · Number = credit quantity
 
-[Source: SeedData.cs, BillingEntities.cs, DatabaseBootstrapper.cs]
+[Source: SeedData.DemoUserData.cs, BillingEntities.cs, DatabaseBootstrapper.cs]
 
 ---
 
@@ -217,7 +217,7 @@ Wallet top-up tiers are now an admin-configurable catalog managed at `/admin/bil
 | Any Paid → Priority | Needs faster turnaround on review | Priority review option in review drawer | +$14.99/30d |
 | Any Paid → Wallet | Wants flexible premium credit balance | Wallet top-up from billing page | +$10–$100 (one-time) |
 
-[Source: SeedData.cs, components/domain/review-request-drawer.tsx, lib/analytics.ts]
+[Source: SeedData.DemoUserData.cs, components/domain/review-request-drawer.tsx, lib/analytics.ts]
 
 ### 4.3 Cross-Sell Compatibility Matrix
 
@@ -228,7 +228,7 @@ Wallet top-up tiers are now an admin-configurable catalog managed at `/admin/bil
 | **Premium Yearly** | ✓ | ✓ | ✓ | ✓ | Not yet enabled | Not yet enabled |
 | **Intensive** | ✓ | ✓ | ✓ | ✓ | Not yet enabled | Not yet enabled |
 
-[Source: SeedData.cs L1505-1507 — compatible plan codes per add-on]
+[Source: SeedData.DemoUserData.cs L853-855 — compatible plan codes per add-on]
 
 ### 4.4 The Golden Path (Highest-LTV Sequence)
 
@@ -254,7 +254,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | **3. Onboarding** | Day 0–1 | Completes profile, sets goals | — | Goal-setting wizard | Track `onboarding_completed`, `goals_saved` [Source: lib/analytics.ts L8-9] |
 | **4. Free Practice** | Day 1–7 | Reading & Listening AI practice | $0 | Free value demonstration | Serve enough free value to build habit, surface score gaps |
 | **5. Diagnostic** | Day 3–7 | Takes diagnostic assessment | $0 | Score gap revelation | Track `diagnostic_completed` [Source: lib/analytics.ts L11]. Show clear gap between current and target score. |
-| **6. First Subscription** | Day 7–14 | Subscribes to Basic or Premium | **$19.99–$49.99/mo** | Post-diagnostic upgrade CTA | Track `subscription_started` [Source: lib/analytics.ts L27]. Apply WELCOME10 coupon (10% off). [Source: SeedData.cs L1525] |
+| **6. First Subscription** | Day 7–14 | Subscribes to Basic or Premium | **$19.99–$49.99/mo** | Post-diagnostic upgrade CTA | Track `subscription_started` [Source: lib/analytics.ts L27]. Apply WELCOME10 coupon (10% off). [Source: SeedData.DemoUserData.cs L873] |
 | **7. Active Study** | Week 2–8 | Writing & Speaking practice with AI eval | Subscription recurring | Study plan adherence | Track `task_submitted`, `evaluation_viewed` [Source: lib/analytics.ts L15-16] |
 | **8. First Review** | Week 3–6 | Requests first expert review | 1–3 credits | AI score + "get expert verification" prompt | Track `review_requested` [Source: lib/analytics.ts L21]. This is the key conversion to credit economy. |
 | **9. Credit Depletion** | Week 4–8 | Runs out of included credits | **$29.99–$44.99 add-on** | Zero-credit state + active study momentum | Prompt credit pack purchase or plan upgrade. Track `billing_upgrade_path_viewed` [Source: lib/analytics.ts L116] |
@@ -282,7 +282,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | 4 | **Private Speaking** | Service delivery | **~40–55%** | Tutor compensation (⚠️ NEEDS VALIDATION), Zoom costs, scheduling overhead, Stripe fees | Low — each session requires a paid tutor for 30 min |
 | 5 | **Priority Review Premium** | Entitlement add-on | **~80–85%** | SLA enforcement cost (faster expert routing), Stripe fees | Medium — requires sufficient expert supply |
 
-[Source: PrivateSpeakingEntities.cs, SeedData.cs — structural analysis; compensation models ⚠️ NEEDS VALIDATION]
+[Source: PrivateSpeakingEntities.cs, SeedData.DemoUserData.cs — structural analysis; compensation models ⚠️ NEEDS VALIDATION]
 
 ### 6.2 Contribution Margin by Plan Tier
 
@@ -318,7 +318,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | Intensive Monthly | 540 | $79.99 | $43,194.60 |
 | **Subscription MRR** | **6,010** | | **$200,978.70** |
 
-[Source: SeedData.cs — subscriber counts × plan prices]
+[Source: plan prices from SeedData.DemoUserData.cs L828-832. The subscriber counts are historical or unverified: that file seeds `ActiveSubscribers = 0` for every plan, and no current seed file is a source for them. ⚠️ NEEDS VALIDATION]
 
 ### 7.2 ARPU by Tier
 
@@ -330,7 +330,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | Intensive | 540 | 9.0% | $79.99 | $7.20 |
 | **Blended** | **6,010** | **100%** | — | **$33.44** |
 
-[Source: derived from SeedData.cs]
+[Source: derived from the §7.1 subscriber counts (unverified, see §7.1) and plan prices in SeedData.DemoUserData.cs L828-832]
 
 ### 7.3 Revenue Mix Model (Estimated)
 
@@ -413,7 +413,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | 5 | Full rollout (100%) with email notification to existing users | Week 6 |
 | 6 | Add referral CTA to post-exam and post-review flows | Week 8 |
 
-**Referral economics:** Referrer gets $10 AUD credit, referred gets 10% off first purchase. CAC equivalent: ~$10–$15 per referred subscriber (vs estimated $30–$80 for paid acquisition in EdTech). [Source: DatabaseBootstrapper.cs, SeedData.cs L1442]
+**Referral economics:** Referrer gets $10 AUD credit, referred gets 10% off first purchase. CAC equivalent: ~$10–$15 per referred subscriber (vs estimated $30–$80 for paid acquisition in EdTech). [Source: DatabaseBootstrapper.cs, SeedData.DemoUserData.cs L770]
 
 ### 8.5 Score Guarantee as Trust Mechanism
 
@@ -534,7 +534,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 
 | Risk | Category | Probability | Impact | Mitigation Strategy |
 |------|----------|------------|--------|---------------------|
-| **Wallet vs. add-on pricing confusion** | Pricing | High | Medium | Wallet credits at $0.63/credit vs add-on at $10/credit creates 16x price disparity. Clarify whether these serve different purposes. If not, rationalize pricing. [Source: WalletService.cs, SeedData.cs] |
+| **Wallet vs. add-on pricing confusion** | Pricing | High | Medium | Wallet credits at $0.63/credit vs add-on at $10/credit creates 16x price disparity. Clarify whether these serve different purposes. If not, rationalize pricing. [Source: WalletService.cs, SeedData.DemoUserData.cs] |
 | **Expert reviewer supply bottleneck** | Operational | Medium | High | If subscriber growth outpaces expert pool, SLA breaks. Compensation model not evidenced. Build reviewer recruitment pipeline and compensation structure. [Source: known gap] |
 | **AI evaluation accuracy trust** | Technology | Medium | High | False or inconsistent AI scores erode subscription value. Leverage calibration system and confidence bands. AI accuracy tracked at entity level. [Source: session notes — AIConfigVersion] |
 | **Single-exam dependency** | Market | Medium | Medium | 100% revenue from OET. If OET changes format or adds official AI prep, platform value narrows. Accelerate IELTS expansion. [Source: 01_business_requirement_and_product_thesis.md] |
@@ -626,7 +626,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 
 | File | Content Type | Key Data Points |
 |------|-------------|-----------------|
-| `backend/src/OetLearner.Api/Services/SeedData.cs` | Seed data | Plans (L1482-1486), add-ons (L1505-1507), coupons (L1525-1526), subscriber counts, pricing |
+| `backend/src/OetLearner.Api/Services/SeedData.DemoUserData.cs` | Seed data | Plans (L828-832), add-ons (L853-855), coupons (L873-874), pricing. Seeds `ActiveSubscribers = 0` for every plan, so it is not a source for the subscriber counts |
 | `backend/src/OetLearner.Api/Services/WalletService.cs` | Business logic | Wallet top-up tiers (L127-134), bonus multipliers |
 | `backend/src/OetLearner.Api/Domain/PrivateSpeakingEntities.cs` | Domain entities | Speaking session config (L5-49), pricing, duration, policies |
 | `backend/src/OetLearner.Api/Domain/BillingEntities.cs` | Domain entities | Score guarantee (L363-395), referral entities (L409-428) |
@@ -644,8 +644,8 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 
 | Data Type | Source | Freshness | Confidence |
 |-----------|--------|-----------|------------|
-| Plan pricing | SeedData.cs | Production code — current | High |
-| Subscriber counts | SeedData.cs | Seed data values — reflect production counts | High |
+| Plan pricing | SeedData.DemoUserData.cs | Production code — current | High |
+| Subscriber counts | None in current code (SeedData.DemoUserData.cs seeds `ActiveSubscribers = 0` for every plan) | Historical or unverified | Low — ⚠️ NEEDS VALIDATION |
 | Wallet tiers | WalletService.cs | Production code — current | High |
 | Speaking config | PrivateSpeakingEntities.cs | Production code — current | High |
 | Analytics events | lib/analytics.ts | Production code — current | High |
@@ -660,7 +660,7 @@ Estimated Year-1 Golden Path LTV: ~$1,200–$1,600 AUD
 | Wallet credit vs review credit fungibility | Two credit systems with 16x price gap; unclear if interchangeable | P0 |
 | Expert reviewer compensation model | Not evidenced in any backend code | P0 |
 | AI API cost per evaluation | Depends on actual usage patterns and provider pricing | P1 |
-| Add-on/speaking actual purchase volumes | Subscriber counts available; add-on purchase frequency not evidenced | P1 |
+| Add-on/speaking actual purchase volumes | Subscriber counts unverified (see Data Freshness); add-on purchase frequency not evidenced | P1 |
 | Data privacy/compliance audit status | GDPR/Privacy Act compliance assumed but not verified | P2 |
 | Actual monthly churn rate | 3% assumed from industry benchmarks; no evidence in code | P1 |
 

@@ -4,6 +4,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -21,17 +22,6 @@ public class ListeningSessionNotesBodyTests
 {
     private const string A1Body =
         "Patient: Mr Jones\n## History\n- Presenting complaint: ____\n- Onset: ____";
-
-    private sealed class AllowAllContentEntitlementService : IContentEntitlementService
-    {
-        public Task<ContentEntitlementResult> AllowAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.FromResult(new ContentEntitlementResult(true, "test", "premium", null));
-
-        public Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal) => false;
-    }
 
     private static (LearnerDbContext db, ListeningLearnerService svc) Build()
     {
