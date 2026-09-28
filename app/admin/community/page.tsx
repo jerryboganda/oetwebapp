@@ -145,12 +145,12 @@ export default function AdminCommunityPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             {row.isPinned && (
-              <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+              <Badge variant="warning" className="text-3xs px-1.5 py-0">
                 <Pin className="mr-0.5 h-2.5 w-2.5" /> Pinned
               </Badge>
             )}
             {row.isLocked && (
-              <Badge variant="default" className="text-[10px] px-1.5 py-0">
+              <Badge variant="default" className="text-3xs px-1.5 py-0">
                 <Lock className="mr-0.5 h-2.5 w-2.5" /> Locked
               </Badge>
             )}

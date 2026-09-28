@@ -100,7 +100,7 @@ export function AccentBarChart({
                 {needsWork ? (
                   <span
                     className={[
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-semibold',
                       'bg-warning/10 text-warning',
                     ].join(' ')}
                   >

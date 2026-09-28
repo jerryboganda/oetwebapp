@@ -287,7 +287,7 @@ function ListeningResultsContent() {
             <div>
               <h2 id="listening-show-script-heading" className="text-lg font-black text-navy">
                 Show Script
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-widest text-white">
+                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-3xs font-black uppercase tracking-widest text-white">
                   Post-submit
                 </span>
               </h2>
@@ -359,7 +359,7 @@ function ListeningResultsContent() {
                         <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
-                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                              <span className={`mb-2 block text-3xs font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 Your Answer
                               </span>
                               <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
@@ -368,7 +368,7 @@ function ListeningResultsContent() {
                             </div>
                             {!item.isCorrect && !item.isInvalid ? (
                               <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-                                <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-success">
+                                <span className="mb-2 block text-3xs font-black uppercase tracking-widest text-success">
                                   Correct Answer
                                 </span>
                                 <p className="text-sm font-medium text-success">{item.correctAnswer}</p>

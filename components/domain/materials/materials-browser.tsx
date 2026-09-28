@@ -120,7 +120,7 @@ function skinFor(name: string): SectionSkin {
 /** Small icon + value chip for folder-card metadata (folders / files / size). */
 function MetaChip({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted">
+    <span className="inline-flex items-center gap-1 text-2xs font-medium text-muted">
       <Icon className="h-3 w-3 opacity-70" />
       {children}
     </span>
@@ -198,7 +198,7 @@ function FolderCard({
             )}
             <MetaChip icon={FileText}>{stats.files} file{stats.files === 1 ? '' : 's'}</MetaChip>
             {stats.bytes > 0 && <MetaChip icon={HardDrive}>{formatBytes(stats.bytes)}</MetaChip>}
-            {error && <span className="text-[11px] font-semibold text-red-500">· download failed</span>}
+            {error && <span className="text-2xs font-semibold text-red-500">· download failed</span>}
           </span>
         </span>
       </button>
@@ -324,7 +324,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
                 {count ? (
                   <span
                     className={cn(
-                      'rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums',
+                      'rounded-full px-1.5 py-px text-3xs font-bold tabular-nums',
                       active ? 'bg-white/25 text-white' : 'bg-muted/15 text-muted',
                     )}
                   >
@@ -391,7 +391,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
 
           {visibleFolders.length > 0 && (
             <div className="space-y-2">
-              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+              <p className="px-1 text-2xs font-bold uppercase tracking-wider text-muted">
                 {atRoot ? 'Sections' : 'Folders'}
                 <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
                   {visibleFolders.length}
@@ -408,7 +408,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
           {visibleFiles.length > 0 && (
             <div className="space-y-2">
               {visibleFolders.length > 0 && (
-                <p className="px-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+                <p className="px-1 pt-2 text-2xs font-bold uppercase tracking-wider text-muted">
                   Files
                   <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
                     {visibleFiles.length}

@@ -264,7 +264,7 @@ export default function AdminListeningPapersPage() {
                 key={r}
                 title={`${r}: ${ok ? 'present' : 'missing'}`}
                 className={
-                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ' +
+                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold ' +
                   (ok ? 'bg-[var(--admin-success-tint)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]')
                 }
               >

@@ -61,7 +61,7 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-muted">
+        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-2xs font-black uppercase tracking-[0.16em] text-muted">
           Stage {index + 1}
         </span>
         <StatusBadge status={stage.status} />

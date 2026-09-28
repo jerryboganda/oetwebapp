@@ -96,14 +96,57 @@
   --color-admin-text:              #0f172a;
   --color-admin-text-muted:        #64748b;
 
+  /* Brand ramp — static (does not flip in dark mode). `primary` itself is the
+     themed role colour; use the ramp for tints, charts and fixed fills
+     (e.g. bg-primary-50, text-primary-700). One violet across learner,
+     expert, tutor, sponsor and admin. */
+  --color-primary-50:  #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+  --color-primary-950: #2e1065;
+
+  /* Micro type — rem-based so Settings → Accessibility "large text" scales
+     them (the old text-[10px]/text-[11px] literals did not). No paired
+     line-height on purpose: they inherit, exactly like the literals did. */
+  --text-3xs: 0.625rem;  /* 10px — dense badges, chart ticks */
+  --text-2xs: 0.6875rem; /* 11px — eyebrows, captions, metadata */
+
+  /* Radius roles. Prefer these over raw rounded-* on shared primitives. */
+  --radius-control: 0.625rem; /* inputs, buttons, chips (10px) */
+  --radius-card:    1rem;     /* cards, panels (16px) */
+  --radius-surface: 1.5rem;   /* hero surfaces, modals, sheets (24px) */
+
   /* Decisive ease-out for toggles and controls: no overshoot or bounce
      (motion law), ease-out-quint, matching the safe-area and hover curves. */
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 
+  /* Elevation: xs (hairline lift) < sm (resting card) < clinical (hover /
+     raised card) < md (popover) < lg (dialog). */
+  --shadow-xs: 0 1px 1px 0 rgb(15 23 42 / 0.04);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-clinical: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Motion — the single source for CSS timing. `static` so the vars are always
+   emitted (components read them via var() in plain CSS). lib/motion.ts
+   mirrors the same values for motion/react. Utilities: ease-standard,
+   ease-enter, ease-exit; use duration-[var(--duration-fast)] sparingly. */
+@theme static {
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 /* ----------------------------------------------------------------------
@@ -312,10 +355,10 @@
 
   .pressable {
     transition:
-      transform var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
-      background-color var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
-      color var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1);
+      transform var(--pressable-transition-duration, 180ms) var(--ease-standard),
+      box-shadow var(--pressable-transition-duration, 180ms) var(--ease-standard),
+      background-color var(--pressable-transition-duration, 180ms) var(--ease-standard),
+      color var(--pressable-transition-duration, 180ms) var(--ease-standard);
   }
 
   @media (hover: hover) {
@@ -388,7 +431,7 @@
   }
 
   .page-enter {
-    animation: page-enter var(--page-enter-duration, 320ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: page-enter var(--page-enter-duration, 320ms) var(--ease-standard) both;
   }
 }
 
@@ -423,6 +466,7 @@
       --color-muted: #94a3b8;
       --color-border: #1f2937;
       --color-border-hover: #334155;
+      --shadow-xs: 0 1px 1px 0 rgb(2 6 23 / 0.3);
       --shadow-sm: 0 1px 2px 0 rgb(2 6 23 / 0.35);
       --shadow-clinical: 0 20px 50px -20px rgb(2 6 23 / 0.85);
       --shadow-md: 0 4px 12px -2px rgb(2 6 23 / 0.35);
@@ -449,8 +493,8 @@
 
   /* Desktop focus/blur lifecycle: subtle opacity shift for premium feel */
   html[data-runtime-kind='desktop'] body {
-    transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-                filter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.22s var(--ease-standard),
+                filter 0.22s var(--ease-standard);
   }
 
   html[data-runtime-kind='desktop'][data-app-active='false'] body {
@@ -460,7 +504,7 @@
 
   /* Capacitor mobile resume: brief fade-in after foregrounding */
   html[data-runtime-kind='capacitor-native'][data-app-resuming='true'] body {
-    animation: mobile-resume-fade 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: mobile-resume-fade 0.16s var(--ease-enter) both;
   }
 
   @keyframes mobile-resume-fade {
@@ -480,14 +524,14 @@
   /* Desktop dense surfaces: subtler hover for table rows and data-dense cards */
   html[data-runtime-kind='desktop'] tr.hoverable-row:hover {
     background-color: rgba(124, 58, 237, 0.04);
-    transition: background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: background-color 0.16s var(--ease-standard);
   }
 
   html[data-runtime-kind='desktop'] .card-hover-subtle:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-clinical);
-    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
-                box-shadow 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 0.16s var(--ease-standard),
+                box-shadow 0.16s var(--ease-standard);
   }
 
   html[data-runtime-kind='capacitor-native'] {

@@ -88,11 +88,11 @@ export function RulebookComplianceChips({ chips, title = 'Rulebook compliance' }
               </span>
               <Badge variant={STATUS_VARIANT[chip.status]} size="sm">{STATUS_LABEL[chip.status]}</Badge>
             </div>
-            <p className="text-[11px] text-muted">
+            <p className="text-2xs text-muted">
               {chip.totalRules} rules · {chip.criticalRules} critical · {chip.unenforcedCount} unenforced ·{' '}
               {chip.aiGroundedCount} AI-grounded · {chip.humanReviewCount} human-review
             </p>
-            {chip.note ? <p className="mt-1 text-[11px] text-warning">{chip.note}</p> : null}
+            {chip.note ? <p className="mt-1 text-2xs text-warning">{chip.note}</p> : null}
           </li>
         ))}
       </ul>

@@ -146,7 +146,7 @@ export default function LearningPathsPage() {
               <Mic className="h-5 w-5" />
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+              <p className="text-2xs font-bold uppercase tracking-widest text-primary">
                 Speaking Foundations
               </p>
               <h3 className="text-base font-black text-navy">Short, focused speaking drills</h3>

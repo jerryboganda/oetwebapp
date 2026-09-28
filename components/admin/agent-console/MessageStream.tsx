@@ -76,7 +76,7 @@ const StreamItem = memo(function StreamItem({
   switch (item.kind) {
     case 'turn':
       return (
-        <div className="flex items-center gap-2 pt-2 text-[11px] uppercase tracking-wide text-admin-fg-muted" role="separator">
+        <div className="flex items-center gap-2 pt-2 text-2xs uppercase tracking-wide text-admin-fg-muted" role="separator">
           <span className="h-px flex-1 bg-admin-border" aria-hidden="true" />
           <span className="font-mono normal-case">
             {item.model || 'model'}
@@ -89,7 +89,7 @@ const StreamItem = memo(function StreamItem({
     case 'user':
       return (
         <div className="ml-auto max-w-[85%] rounded-lg bg-[var(--admin-primary-tint)] px-3 py-2 text-sm text-admin-fg-strong" data-testid="user-message">
-          <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-admin-fg-muted">
+          <p className="mb-1 flex items-center gap-1 text-3xs font-semibold uppercase tracking-wide text-admin-fg-muted">
             <User className="h-3 w-3" aria-hidden="true" /> You
           </p>
           <p className="whitespace-pre-wrap break-words">
@@ -167,7 +167,7 @@ const StreamItem = memo(function StreamItem({
       );
     case 'turn_complete':
       return (
-        <p className="flex items-center gap-2 text-[11px] text-admin-fg-muted">
+        <p className="flex items-center gap-2 text-2xs text-admin-fg-muted">
           <Flag className="h-3 w-3" aria-hidden="true" />
           Turn {item.status === 'ok' ? 'finished' : item.status.replace('_', ' ')}
           {formatDuration(item.durationMs) ? ` in ${formatDuration(item.durationMs)}` : ''}

@@ -262,7 +262,7 @@ export function VideoScopePicker({
                             <span className="text-xs font-semibold uppercase tracking-wide text-muted">
                               {lang.label}
                             </span>
-                            <span className="text-[11px] text-muted">
+                            <span className="text-2xs text-muted">
                               {langSelected}/{langIds.length}
                             </span>
                           </button>

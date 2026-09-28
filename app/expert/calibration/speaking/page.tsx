@@ -107,7 +107,7 @@ export default function ExpertSpeakingCalibrationPage() {
           <span className="font-bold">{row.title}</span>
           <Link
             href={`/expert/queue?search=${encodeURIComponent(row.sourceAttemptId)}`}
-            className="text-[10px] uppercase tracking-widest text-primary hover:underline"
+            className="text-3xs uppercase tracking-widest text-primary hover:underline"
             aria-label={`Find attempt ${row.sourceAttemptId} in the review queue`}
           >
             attempt {row.sourceAttemptId}
@@ -198,7 +198,7 @@ export default function ExpertSpeakingCalibrationPage() {
               <label key={c.key} className="flex items-center justify-between gap-2 rounded border border-border-subtle px-3 py-2">
                 <span className="flex flex-col">
                   <span className="text-sm font-bold">{c.label}</span>
-                  <span className="text-[10px] uppercase tracking-widest text-muted">
+                  <span className="text-3xs uppercase tracking-widest text-muted">
                     {c.band} · 0–{c.max}
                   </span>
                 </span>

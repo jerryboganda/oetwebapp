@@ -712,12 +712,12 @@ export default function AdminPaymentProofsPage() {
           </p>
           <p className="text-admin-fg-muted">{row.original.paymentMethod ?? row.original.gateway ?? '—'}</p>
           {row.original.transactionId ? (
-            <p className="truncate font-mono text-[11px] text-admin-fg-muted" title={row.original.transactionId}>
+            <p className="truncate font-mono text-2xs text-admin-fg-muted" title={row.original.transactionId}>
               {row.original.transactionId}
             </p>
           ) : null}
           {row.original.paidAt ? (
-            <p className="text-[11px] text-admin-fg-muted">{new Date(row.original.paidAt).toLocaleString()}</p>
+            <p className="text-2xs text-admin-fg-muted">{new Date(row.original.paidAt).toLocaleString()}</p>
           ) : null}
         </div>
       ),

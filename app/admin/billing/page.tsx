@@ -453,7 +453,7 @@ function EvidenceSection({ title, children }: { title: string; children: ReactNo
 function EvidenceField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-lg bg-admin-bg-subtle px-3 py-2">
-      <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{label}</dt>
+      <dt className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</dt>
       <dd className="mt-1 break-words text-sm font-medium text-admin-fg-strong">{children || 'Not recorded'}</dd>
     </div>
   );
@@ -1813,23 +1813,23 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Pricing</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Subscribers</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Subscribers</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{plan.activeSubscribers.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gifted Shared AI Credits</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Gifted Shared AI Credits</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{(plan.bundledAiCredits ?? 0).toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Visibility</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Visibility</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{plan.isVisible ? 'Visible' : 'Hidden'}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2 sm:col-span-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Diagnostic mocks</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Diagnostic mocks</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{(plan.diagnosticMockEntitlement ?? 'one_per_lifetime').replace(/_/g, ' ')}</p>
         </div>
       </div>
@@ -1863,19 +1863,19 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Pricing</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Credits</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{addOn.grantCredits.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Scope</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{addOn.appliesToAllPlans ? 'All plans' : (addOn.compatiblePlanCodes.join(', ') || 'Restricted')}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Type</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
         </div>
       </div>
@@ -1909,7 +1909,7 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Discount</p>
           <p className="mt-1 font-medium text-admin-fg-strong">
             {coupon.discountType === 'percentage'
               ? `${coupon.discountValue}%`
@@ -1917,15 +1917,15 @@ export default function BillingPage() {
           </p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redemptions</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Redemptions</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{coupon.redemptionCount.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Usage limit</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Usage limit</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{coupon.usageLimitTotal == null ? 'Unlimited' : coupon.usageLimitTotal.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Scope</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{coupon.isStackable ? 'Stackable' : 'Single use'}</p>
         </div>
       </div>
@@ -1956,23 +1956,23 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Plan</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Plan</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{subscription.planName}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Billing</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Billing</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Add-ons</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Add-ons</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{subscription.addOnCount.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Timer</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Timer</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{subscription.remainingDays == null ? 'N/A' : `${subscription.remainingDays} days`}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Freeze</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Freeze</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{subscription.freezeAllowanceRemaining ?? subscription.maxFreezeDays ?? 365} days left</p>
         </div>
       </div>
@@ -1993,11 +1993,11 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Discount</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(redemption.discountAmount, redemption.currency)}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redeemed</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Redeemed</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{new Date(redemption.redeemedAt).toLocaleString()}</p>
         </div>
       </div>
@@ -2018,15 +2018,15 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Invoice</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Invoice</p>
           <p className="mt-1 font-mono text-xs text-admin-fg-strong">{invoice.id}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Amount</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(invoice.amount, invoice.currency)}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Issued</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Issued</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{new Date(invoice.date).toLocaleString()}</p>
         </div>
       </div>
@@ -2057,19 +2057,19 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Amount</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(payment.amount, payment.currency)}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Gateway</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{payment.gateway || 'unknown'}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Type</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{paymentTypeLabel(payment.transactionType)}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Created</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatDateTime(payment.createdAt)}</p>
         </div>
       </div>
@@ -2093,19 +2093,19 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Category</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Category</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{labelSummaryKey(signal.category)}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Gateway</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{signal.gateway || 'unknown'}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Processing</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Processing</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{signal.processingStatus}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Received</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Received</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{formatDateTime(signal.receivedAt)}</p>
         </div>
       </div>
@@ -3097,7 +3097,7 @@ export default function BillingPage() {
                           <dl className="grid gap-2 text-sm sm:grid-cols-2">
                             {summaryEntries.map(([key, value]) => (
                               <div key={key} className="rounded-lg bg-admin-bg-subtle px-3 py-2">
-                                <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{labelSummaryKey(key)}</dt>
+                                <dt className="text-2xs uppercase tracking-[0.12em] text-muted">{labelSummaryKey(key)}</dt>
                                 <dd className="mt-1 break-words font-medium text-admin-fg-strong">{formatSummaryValue(value)}</dd>
                               </div>
                             ))}
@@ -3441,7 +3441,7 @@ export default function BillingPage() {
                 <Checkbox label="Speaking Practice Card Access" checked={planForm.speakingPracticeAccessEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingPracticeAccessEnabled: event.target.checked }))} />
                 <Checkbox label="TB £32: Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
               </div>
-              <p className="mt-2 text-[11px] text-admin-text-secondary">
+              <p className="mt-2 text-2xs text-admin-text-secondary">
                 &ldquo;Human Tutor Speaking&rdquo; (bookable live-tutor sessions) and AI Speaking Credits (self-practice + full mock exam, sold separately as AI Packages) are distinct quotas — see the AI Packages editor for the latter. Speaking Practice Card Access gates ai_self_practice for this plan; disabling it blocks self-practice regardless of any AI credit balance the learner holds. Plans without the Human Tutor Speaking flag cannot book live-tutor sessions at all (server-enforced); AI-credit ownership alone never grants access.
               </p>
             </div>

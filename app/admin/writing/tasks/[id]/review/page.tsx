@@ -288,7 +288,7 @@ export default function AdminWritingReviewPage() {
 function MetadataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 rounded-admin border border-admin-border bg-admin-bg-subtle p-3">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-admin-fg-muted">{label}</dt>
+      <dt className="text-3xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">{label}</dt>
       <dd className="text-sm text-admin-fg-strong">{value}</dd>
     </div>
   );

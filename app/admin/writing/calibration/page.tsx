@@ -379,7 +379,7 @@ export default function AdminWritingCalibrationPage() {
                     ['c6', 7, 'C6 Language'],
                   ] as Array<[keyof NewLetterForm, number, string]>
                 ).map(([key, max, label]) => (
-                  <label key={String(key)} className="block text-[10px] font-bold uppercase tracking-wider text-muted">
+                  <label key={String(key)} className="block text-3xs font-bold uppercase tracking-wider text-muted">
                     {label}
                     <input
                       type="number"

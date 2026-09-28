@@ -272,7 +272,7 @@ export default function ReadingHome() {
                           <h3 className="text-sm font-bold text-navy">
                             {card.title}
                           </h3>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
                             {accent.chip}
                           </span>
                         </div>
@@ -378,7 +378,7 @@ function ReadingSecondaryDashboard({
             {recentResults.map((result) => (
               <li key={result.attemptId}>
                 <article className="rounded-xl border border-border/70 bg-white p-3 text-sm dark:bg-surface">
-                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-blue-700">
                     {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
                   </span>
                   <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>

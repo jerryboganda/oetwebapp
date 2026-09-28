@@ -343,7 +343,7 @@ export default function SpeakingResultSummary() {
                 }
               >
                 <span className="text-2xl font-black text-navy dark:text-white">{result.estimatedScaledScore}</span>
-                <span className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">/ 500</span>
+                <span className="mt-0.5 text-3xs font-bold uppercase tracking-widest text-muted">/ 500</span>
               </ResultGauge>
             ) : null}
             <div className="flex-1 text-center md:text-left">
@@ -446,7 +446,7 @@ export default function SpeakingResultSummary() {
                   if (items.length === 0) return null;
                   return (
                     <div key={family} className="rounded-2xl border border-border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted mb-3">
+                      <p className="text-2xs uppercase tracking-[0.18em] text-muted mb-3">
                         {family === 'linguistic' ? 'Linguistic (0–6)' : 'Clinical communication (0–3)'}
                       </p>
                       <ul className="space-y-3">
@@ -546,7 +546,7 @@ export default function SpeakingResultSummary() {
                   ['Overall', pronunciationInsight.overall],
                 ].map(([label, value]) => (
                   <div key={label as string} className="rounded-2xl border border-border p-3">
-                    <div className="text-[11px] uppercase tracking-[0.15em] text-muted">{label}</div>
+                    <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
                     <div className="mt-1 font-mono text-xl font-semibold text-navy">{Math.round(value as number)}</div>
                   </div>
                 ))}

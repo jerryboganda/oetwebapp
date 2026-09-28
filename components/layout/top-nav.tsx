@@ -123,7 +123,7 @@ function ProfileMenu({
         <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-7 w-7 lg:h-9 lg:w-9" />
         <span className="hidden min-w-0 text-left leading-tight xl:block">
           <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
-          <span className="block text-[11px] text-muted">{roleLabel}</span>
+          <span className="block text-2xs text-muted">{roleLabel}</span>
         </span>
         <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted lg:block" aria-hidden="true" />
       </button>
@@ -432,7 +432,7 @@ export function TopNav({
                 <TourLauncher workspaceRole={workspaceRole} />
                 <ThemeToggle />
                 <NotificationCenter />
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-2xs font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
                   {initials}
                 </div>
               </>
@@ -471,7 +471,7 @@ export function TopNav({
                     <div className="space-y-4">
                       {visibleSectionedItems?.map((section) => (
                         <div key={section.label}>
-                          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
+                          <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
                           <ul className="flex flex-col gap-1">
                             {section.items.map((item, itemIndex) => {
                               const active = sectionedActiveHref === item.href;
@@ -505,7 +505,7 @@ export function TopNav({
                       ))}
 
                       <div className="border-t border-border/60 pt-4">
-                        <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
+                        <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={getWorkspaceSettingsHref(workspaceRole)}

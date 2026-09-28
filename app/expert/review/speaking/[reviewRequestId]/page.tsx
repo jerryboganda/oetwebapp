@@ -1039,7 +1039,7 @@ export default function SpeakingReviewWorkspace() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-navy">{note.fileName}</p>
-                          <p className="text-[11px] text-muted">
+                          <p className="text-2xs text-muted">
                             {formatDuration(note.durationSeconds)} • {new Date(note.createdAt).toLocaleString()}
                           </p>
                         </div>
@@ -1050,7 +1050,7 @@ export default function SpeakingReviewWorkspace() {
                               type="button"
                               onClick={() => void handleDeleteVoiceNote(note.id)}
                               disabled={deletingVoiceNoteId === note.id}
-                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-2xs font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
                               aria-label={`Delete voice note ${note.fileName}`}
                             >
                               <Trash2 className="h-3 w-3" /> {deletingVoiceNoteId === note.id ? 'Deleting...' : 'Delete'}

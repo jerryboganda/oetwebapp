@@ -57,7 +57,7 @@ function StageHistoryRow({ entry, isCurrent }: StageHistoryRowProps) {
     <li className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-admin-fg-strong">{label}</p>
-        <Badge variant={isCurrent ? 'info' : status === 'approved' ? 'success' : 'muted'} className="text-[10px] capitalize">
+        <Badge variant={isCurrent ? 'info' : status === 'approved' ? 'success' : 'muted'} className="text-3xs capitalize">
           {status}
         </Badge>
         {entry.resolvedAt ? (
@@ -188,7 +188,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
                 >
                   <span
                     className={
-                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] ' +
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-2xs ' +
                       (isCurrent ? 'bg-admin-primary-fg/25' : isComplete ? 'bg-admin-success-tint-strong' : 'bg-admin-bg-surface/70')
                     }
                   >
@@ -196,7 +196,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
                   </span>
                   {STAGE_LABELS[stage]}
                   {entry?.resolvedAt ? (
-                    <span className="ml-1 text-[10px] opacity-80">
+                    <span className="ml-1 text-3xs opacity-80">
                       {new Date(entry.resolvedAt).toLocaleDateString()}
                     </span>
                   ) : null}

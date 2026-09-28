@@ -85,7 +85,7 @@ export function CreditBucketAdjuster({
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           Adjust credit buckets (ledgered)
         </p>
-        <div className="flex overflow-hidden rounded border border-gray-300 text-[11px] font-medium" role="group" aria-label="Adjustment mode">
+        <div className="flex overflow-hidden rounded border border-gray-300 text-2xs font-medium" role="group" aria-label="Adjustment mode">
           {(['add', 'set'] as const).map((option) => (
             <button
               key={option}

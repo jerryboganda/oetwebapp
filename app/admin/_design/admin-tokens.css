@@ -1,25 +1,21 @@
 /* ============================================================================
- * OET Admin — Design Tokens (Foundation)
+ * OET Admin — Design Tokens
  *
- * Source of truth: docs/admin-redesign/axelit-study/06-DESIGN_TOKENS.md
- *                  docs/admin-redesign/axelit-study/13-DARK-MODE-COMPLETE.md
+ * The admin workspace shares the product design system in app/globals.css
+ * (one violet brand, one neutral set, one dark mode — see DESIGN.md). The
+ * `--admin-*` names are kept as a stable alias layer so the admin primitives
+ * in components/admin/** keep working unchanged; the VALUES now match the
+ * shared palette instead of the former standalone clinical-blue system.
  *
- * Conventions
- *   - All tokens are prefixed `--admin-*` to avoid leakage into learner UI
- *     and to prevent collisions with the legacy `--bs-*` Bootstrap layer.
- *   - Light mode is the default; both `[data-theme="light"]` and
- *     `:root:not(.dark)` resolve to the same block so consumers may toggle
- *     either via the next-themes `attribute="class"` strategy (`html.dark`)
- *     OR via an explicit `data-theme` attribute.
- *   - Dark-mode brand colors are desaturated ~25% (per file 13 §4.3) to
- *     avoid visual vibration on dark surfaces.
- *   - Elevation in dark mode is encoded via LIGHTNESS, not shadow
- *     (per file 13 §4.1 — the four-layer surface system).
+ * Admin keeps its own DENSITY (type scale, spacing, layout — below). That is
+ * the only thing that should differ from learner surfaces.
+ *
+ * docs/admin-redesign/axelit-study/06-DESIGN_TOKENS.md describes the former
+ * blue palette; superseded 2026-09-28 (owner decision: violet everywhere).
  * ========================================================================== */
 
 /* --------------------------------------------------------------------------
  * LIGHT MODE
- * Default for :root:not(.dark) and explicit [data-theme="light"].
  * -------------------------------------------------------------------------- */
 :root,
 :root:not(.dark),
@@ -27,15 +23,15 @@
   color-scheme: light;
 
   /* ---------- Brand role colors -------------------------------------- */
-  --admin-primary:              #2563eb;            /* Clinical blue */
-  --admin-primary-hover:        #1d4ed8;
-  --admin-primary-active:       #1e40af;
+  --admin-primary:              #7c3aed;            /* = --color-primary-600 */
+  --admin-primary-hover:        #6d28d9;
+  --admin-primary-active:       #5b21b6;
   --admin-primary-fg:           #ffffff;
-  --admin-primary-tint:         rgba(37, 99, 235, 0.12);
-  --admin-primary-tint-strong:  rgba(37, 99, 235, 0.24);
-  --admin-primary-rgb:          37, 99, 235;
+  --admin-primary-tint:         rgba(124, 58, 237, 0.10);
+  --admin-primary-tint-strong:  rgba(124, 58, 237, 0.20);
+  --admin-primary-rgb:          124, 58, 237;
 
-  --admin-secondary:            #64748b;            /* Slate */
+  --admin-secondary:            #64748b;
   --admin-secondary-hover:      #475569;
   --admin-secondary-active:     #334155;
   --admin-secondary-fg:         #ffffff;
@@ -43,7 +39,7 @@
   --admin-secondary-tint-strong: rgba(100, 116, 139, 0.24);
   --admin-secondary-rgb:        100, 116, 139;
 
-  --admin-success:              #10b981;
+  --admin-success:              #10b981;            /* = --color-success */
   --admin-success-hover:        #059669;
   --admin-success-active:       #047857;
   --admin-success-fg:           #ffffff;
@@ -59,7 +55,7 @@
   --admin-warning-tint-strong:  rgba(245, 158, 11, 0.24);
   --admin-warning-rgb:          245, 158, 11;
 
-  --admin-danger:               #ef4444;
+  --admin-danger:               #ef4444;            /* = --color-danger */
   --admin-danger-hover:         #dc2626;
   --admin-danger-active:        #b91c1c;
   --admin-danger-fg:            #ffffff;
@@ -67,70 +63,64 @@
   --admin-danger-tint-strong:   rgba(239, 68, 68, 0.24);
   --admin-danger-rgb:           239, 68, 68;
 
-  --admin-info:                 #06b6d4;
-  --admin-info-hover:           #0891b2;
-  --admin-info-active:          #0e7490;
+  --admin-info:                 #2563eb;            /* = --color-info */
+  --admin-info-hover:           #1d4ed8;
+  --admin-info-active:          #1e40af;
   --admin-info-fg:              #ffffff;
-  --admin-info-tint:            rgba(6, 182, 212, 0.12);
-  --admin-info-tint-strong:     rgba(6, 182, 212, 0.24);
-  --admin-info-rgb:             6, 182, 212;
+  --admin-info-tint:            rgba(37, 99, 235, 0.12);
+  --admin-info-tint-strong:     rgba(37, 99, 235, 0.24);
+  --admin-info-rgb:             37, 99, 235;
 
   /* ---------- Surfaces ----------------------------------------------- */
-  --admin-bg-page:              #f8fafc;            /* App background  */
-  --admin-bg-surface:           #ffffff;            /* Cards/panels    */
-  --admin-bg-elevated:          #ffffff;            /* Modals/popovers (paired with shadow-lg) */
-  --admin-bg-subtle:            #f1f5f9;            /* Table header strip, inset wells */
-  --admin-bg-inverse:           #0f172a;            /* Dark surface on light UI (e.g. tooltips) */
+  --admin-bg-page:              #f8fafc;
+  --admin-bg-surface:           #ffffff;
+  --admin-bg-elevated:          #ffffff;
+  --admin-bg-subtle:            #f5f6f9;            /* table header strip, inset wells */
+  --admin-bg-inverse:           #0f172a;
 
-  /* ---------- Text --------------------------------------------------- */
-  --admin-fg-strong:            #0f172a;            /* H1, KPI numbers */
-  --admin-fg-default:           #334155;            /* Body */
-  --admin-fg-muted:             #64748b;            /* Helper, captions */
+  /* ---------- Text (= navy / muted roles) ---------------------------- */
+  --admin-fg-strong:            #0f172a;
+  --admin-fg-default:           #334155;
+  --admin-fg-muted:             #526072;            /* = --color-muted */
   --admin-fg-disabled:          #94a3b8;
-  --admin-fg-inverse:           #ffffff;            /* Text on dark surfaces */
+  --admin-fg-inverse:           #ffffff;
 
   /* ---------- Borders ----------------------------------------------- */
-  --admin-border-default:       #e2e8f0;
+  --admin-border-default:       #e4e7ec;
   --admin-border-strong:        #cbd5e1;
   --admin-border-focus:         var(--admin-primary);
 
-  /* ---------- State overlays (universal — same idea for both modes) -- */
-  --admin-state-hover:          rgba(15, 23, 42, 0.05);
-  --admin-state-active:         rgba(15, 23, 42, 0.10);
+  /* ---------- State overlays ----------------------------------------- */
+  --admin-state-hover:          rgba(15, 23, 42, 0.04);
+  --admin-state-active:         rgba(15, 23, 42, 0.08);
   --admin-state-selected:       var(--admin-primary-tint);
   --admin-state-disabled-opacity: 0.45;
 
-  /* ---------- Shadows (ambient halo — Axelit / Aria-Labs style) ------- */
+  /* ---------- Shadows (= shared elevation scale) ---------------------- */
   --admin-shadow-sm:            0 1px 2px rgba(15, 23, 42, 0.04);
-  --admin-shadow-md:            0 0 21px 3px rgba(15, 23, 42, 0.05);
+  --admin-shadow-md:            0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
   --admin-shadow-lg:            0 12px 24px rgba(15, 23, 42, 0.08);
-  --admin-shadow-focus-ring:    0 0 0 3px rgba(37, 99, 235, 0.30);
+  --admin-shadow-focus-ring:    0 0 0 3px rgba(124, 58, 237, 0.30);
 }
 
 /* --------------------------------------------------------------------------
- * DARK MODE
- * Activated by `html.dark` (next-themes `attribute="class"`) and by the
- * explicit `[data-theme="dark"]` attribute. We intentionally support BOTH
- * selectors so any consumer (next-themes, Storybook, manual override) works.
+ * DARK MODE — html.dark (next-themes) or explicit [data-theme="dark"].
+ * Previously the surface/text tokens here still held LIGHT values, so admin
+ * primitives rendered white cards with dark text inside the dark admin chrome
+ * (.admin-compact-theme). They now use the same dark palette as that chrome.
  * -------------------------------------------------------------------------- */
 .dark,
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* ---------- Brand role colors (desaturated 25% per file 13 §4.3) ---- */
-  /* Original light-mode HSL values:                                       */
-  /*   primary  hsl(217 91% 56%)  → dark hsl(217 66% 60%)                  */
-  /*   success  hsl(160 84% 39%)  → dark hsl(160 59% 50%)                  */
-  /*   warning  hsl(38 92% 50%)   → dark hsl(38 67% 56%)                   */
-  /*   danger   hsl(0 84% 60%)    → dark hsl(0 59% 64%)                    */
-  /*   info     hsl(189 94% 43%)  → dark hsl(189 69% 52%)                  */
-  --admin-primary:              hsl(217 66% 60%);
-  --admin-primary-hover:        hsl(217 66% 66%);
-  --admin-primary-active:       hsl(217 66% 72%);
-  --admin-primary-fg:           hsl(217 30% 12%);
-  --admin-primary-tint:         hsla(217, 66%, 60%, 0.18);
-  --admin-primary-tint-strong:  hsla(217, 66%, 60%, 0.32);
-  --admin-primary-rgb:          90, 142, 224;       /* hsl(217 66% 60%) ≈ rgb(90,142,224) */
+  /* violet-400 accent on dark surfaces; dark ink on the fill keeps AA contrast */
+  --admin-primary:              #a78bfa;
+  --admin-primary-hover:        #c4b5fd;
+  --admin-primary-active:       #ddd6fe;
+  --admin-primary-fg:           #1e1b4b;
+  --admin-primary-tint:         rgba(167, 139, 250, 0.16);
+  --admin-primary-tint-strong:  rgba(167, 139, 250, 0.30);
+  --admin-primary-rgb:          167, 139, 250;
 
   --admin-secondary:            hsl(215 14% 65%);
   --admin-secondary-hover:      hsl(215 14% 72%);
@@ -164,44 +154,44 @@
   --admin-danger-tint-strong:   hsla(0, 59%, 64%, 0.32);
   --admin-danger-rgb:           220, 117, 117;
 
-  --admin-info:                 hsl(189 69% 52%);
-  --admin-info-hover:           hsl(189 69% 58%);
-  --admin-info-active:          hsl(189 69% 64%);
-  --admin-info-fg:              hsl(189 30% 10%);
-  --admin-info-tint:            hsla(189, 69%, 52%, 0.18);
-  --admin-info-tint-strong:     hsla(189, 69%, 52%, 0.32);
-  --admin-info-rgb:             49, 178, 213;
+  --admin-info:                 hsl(217 66% 64%);
+  --admin-info-hover:           hsl(217 66% 70%);
+  --admin-info-active:          hsl(217 66% 76%);
+  --admin-info-fg:              hsl(217 30% 10%);
+  --admin-info-tint:            hsla(217, 66%, 64%, 0.18);
+  --admin-info-tint-strong:     hsla(217, 66%, 64%, 0.32);
+  --admin-info-rgb:             97, 146, 226;
 
-  /* ---------- Surfaces (4-layer elevation — file 13 §4.1) ----------- */
-  --admin-bg-page:              #f8fafc;            /* App background  */
-  --admin-bg-surface:           #ffffff;            /* Cards/panels    */
-  --admin-bg-elevated:          #ffffff;            /* Modals/popovers (paired with shadow-lg) */
-  --admin-bg-subtle:            #f1f5f9;            /* Table header strip, inset wells */
-  --admin-bg-inverse:           #0f172a;            /* Light surface on dark UI (e.g. tooltips) */
+  /* ---------- Surfaces (lightness encodes elevation) ------------------ */
+  --admin-bg-page:              #060912;
+  --admin-bg-surface:           #0b1220;
+  --admin-bg-elevated:          #111a2e;
+  --admin-bg-subtle:            #131c30;
+  --admin-bg-inverse:           #e5eef9;
 
-  /* ---------- Text (opacity-tinted white — file 13 §4.5) ------------ */
-  --admin-fg-strong:            #0f172a;
-  --admin-fg-default:           #334155;
-  --admin-fg-muted:             #64748b;
-  --admin-fg-disabled:          #94a3b8;
-  --admin-fg-inverse:           #ffffff;
+  /* ---------- Text ---------------------------------------------------- */
+  --admin-fg-strong:            #e5eef9;
+  --admin-fg-default:           #cbd5e1;
+  --admin-fg-muted:             #94a3b8;
+  --admin-fg-disabled:          #64748b;
+  --admin-fg-inverse:           #0f172a;
 
-  /* ---------- Borders (lighter than surface — file 13 §4.6) --------- */
-  --admin-border-default:       #e2e8f0;
-  --admin-border-strong:        #cbd5e1;
+  /* ---------- Borders ------------------------------------------------- */
+  --admin-border-default:       #1f2937;
+  --admin-border-strong:        #334155;
   --admin-border-focus:         var(--admin-primary);
 
-  /* ---------- State overlays (6/14% white per file 13 §4.4) --------- */
+  /* ---------- State overlays ----------------------------------------- */
   --admin-state-hover:          rgba(255, 255, 255, 0.06);
-  --admin-state-active:         rgba(255, 255, 255, 0.14);
-  --admin-state-selected:       rgba(90, 142, 224, 0.18);
+  --admin-state-active:         rgba(255, 255, 255, 0.12);
+  --admin-state-selected:       rgba(167, 139, 250, 0.18);
   --admin-state-disabled-opacity: 0.40;
 
-  /* ---------- Shadows (TRUE dark — file 13 §4.7) -------------------- */
+  /* ---------- Shadows ------------------------------------------------- */
   --admin-shadow-sm:            0 1px 2px rgba(0, 0, 0, 0.5);
   --admin-shadow-md:            0 4px 12px rgba(0, 0, 0, 0.55);
   --admin-shadow-lg:            0 12px 32px rgba(0, 0, 0, 0.6);
-  --admin-shadow-focus-ring:    0 0 0 3px hsla(217, 66%, 60%, 0.45);
+  --admin-shadow-focus-ring:    0 0 0 3px rgba(167, 139, 250, 0.45);
 
   /* Native scrollbar coloring */
   scrollbar-color: rgba(255, 255, 255, 0.20) transparent;
@@ -253,17 +243,17 @@
   --admin-font-weight-semibold: 600;
   --admin-font-weight-bold:     700;
 
-  /* Font families — Montserrat loaded in app/layout.tsx via next/font */
-  --admin-font-display:         var(--font-montserrat), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --admin-font-body:            var(--font-montserrat), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Font families — the product typeface (Manrope, app/layout.tsx) */
+  --admin-font-display:         var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --admin-font-body:            var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --admin-font-mono:            ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
   /* ---------- Motion ----------------------------------------------- */
-  --admin-dur-fast:             100ms;
-  --admin-dur-base:             200ms;
-  --admin-dur-slow:             300ms;
+  --admin-dur-fast:             var(--duration-fast);
+  --admin-dur-base:             var(--duration-normal);
+  --admin-dur-slow:             var(--duration-slow);
 
-  --admin-ease-out:             cubic-bezier(0.16, 1, 0.3, 1);
+  --admin-ease-out:             var(--ease-enter);
   --admin-ease-in:              cubic-bezier(0.7, 0, 0.84, 0);
   --admin-ease-in-out:          cubic-bezier(0.87, 0, 0.13, 1);
 

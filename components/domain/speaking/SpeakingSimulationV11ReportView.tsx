@@ -42,7 +42,7 @@ function JsonSummary({ value }: { value: Record<string, unknown> }) {
     <dl className="grid gap-2 sm:grid-cols-2">
       {entries.map(([key, item]) => (
         <div key={key} className="rounded-lg border border-border bg-background-light px-3 py-2">
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <dt className="text-2xs font-semibold uppercase tracking-wide text-muted">
             {key.replace(/([A-Z])/g, ' $1')}
           </dt>
           <dd className="mt-1 text-sm text-foreground">
@@ -393,7 +393,7 @@ export function SpeakingSimulationV11ReportView({
             >
               <div className="grid h-24 w-24 place-items-center rounded-full bg-white text-center">
                 <span className="text-3xl font-black tabular-nums text-slate-900">{score ?? '—'}</span>
-                <span className="text-[11px] font-semibold text-muted">/ 500</span>
+                <span className="text-2xs font-semibold text-muted">/ 500</span>
               </div>
             </div>
             <div className="text-sm">

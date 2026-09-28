@@ -82,7 +82,7 @@ export function CanonViolationCard({ violation, onDispute, className }: CanonVio
                 {violation.ruleId}
                 <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
               </Link>
-              <span className={cn('text-[10px] uppercase tracking-wider font-bold', meta.tone)}>
+              <span className={cn('text-3xs uppercase tracking-wider font-bold', meta.tone)}>
                 {meta.label}
               </span>
             </div>

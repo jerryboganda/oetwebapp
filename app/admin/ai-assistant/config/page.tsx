@@ -186,7 +186,7 @@ export default function AiAssistantConfigPage() {
                             className="h-8 text-xs"
                             disabled
                           />
-                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
+                          <p className="mt-1 text-3xs text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Tokens/Day</label>
@@ -197,7 +197,7 @@ export default function AiAssistantConfigPage() {
                             className="h-8 text-xs"
                             disabled
                           />
-                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
+                          <p className="mt-1 text-3xs text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Iterations</label>
@@ -208,7 +208,7 @@ export default function AiAssistantConfigPage() {
                             className="h-8 text-xs"
                             disabled
                           />
-                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
+                          <p className="mt-1 text-3xs text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                       </div>
                     </CardContent>
@@ -295,7 +295,7 @@ export default function AiAssistantConfigPage() {
                             className="h-8 text-xs"
                             disabled
                           />
-                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
+                          <p className="mt-1 text-3xs text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Requests per Hour</label>
@@ -306,7 +306,7 @@ export default function AiAssistantConfigPage() {
                             className="h-8 text-xs"
                             disabled
                           />
-                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
+                          <p className="mt-1 text-3xs text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                       </div>
                     </CardContent>

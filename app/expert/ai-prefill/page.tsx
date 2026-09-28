@@ -304,7 +304,7 @@ export default function AiPreFillPage() {
                     {data.suggestedComments.map((c, i) => (
                       <MotionItem key={i}>
                         <Card className="p-3">
-                          {c.criterion && <Badge variant="outline" className="mb-1 capitalize text-[10px]">{c.criterion}</Badge>}
+                          {c.criterion && <Badge variant="outline" className="mb-1 capitalize text-3xs">{c.criterion}</Badge>}
                           <p className="text-sm">{c.text}</p>
                         </Card>
                       </MotionItem>

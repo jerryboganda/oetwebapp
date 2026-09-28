@@ -376,7 +376,7 @@ function QuestionCard({
             </span>
             <Badge
               variant={item.isInvalid ? 'warning' : item.isCorrect ? 'success' : 'danger'}
-              className="text-[10px]"
+              className="text-3xs"
             >
               {item.isInvalid ? 'Invalid — review' : item.isCorrect ? 'Correct' : 'Incorrect'}
             </Badge>
@@ -409,12 +409,12 @@ function QuestionCard({
           {(item.selectedDistractorCategory || item.speakerAttitude) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {item.selectedDistractorCategory && (
-                <Badge variant="warning" className="text-[10px] capitalize">
+                <Badge variant="warning" className="text-3xs capitalize">
                   Trap: {humaniseTag(item.selectedDistractorCategory)}
                 </Badge>
               )}
               {item.speakerAttitude && (
-                <Badge variant="violet" className="text-[10px] capitalize">
+                <Badge variant="violet" className="text-3xs capitalize">
                   Attitude: {humaniseTag(item.speakerAttitude)}
                 </Badge>
               )}
@@ -432,12 +432,12 @@ function QuestionCard({
                       ? 'warning'
                       : 'danger'
                 }
-                className="text-[10px] capitalize"
+                className="text-3xs capitalize"
               >
                 AI: {item.aiVerdict}
               </Badge>
               {item.aiRationale && (
-                <span className="text-[11px] text-muted line-clamp-1" title={item.aiRationale}>
+                <span className="text-2xs text-muted line-clamp-1" title={item.aiRationale}>
                   {item.aiRationale}
                 </span>
               )}
@@ -461,13 +461,13 @@ function QuestionCard({
                       {opt.key}. {opt.text}
                     </span>
                     {opt.isCorrect ? (
-                      <Badge variant="success" className="shrink-0 text-[10px]">
+                      <Badge variant="success" className="shrink-0 text-3xs">
                         Correct
                       </Badge>
                     ) : opt.distractorCategory ? (
                       <Badge
                         variant="muted"
-                        className="shrink-0 text-[10px] capitalize"
+                        className="shrink-0 text-3xs capitalize"
                       >
                         {humaniseTag(opt.distractorCategory)}
                       </Badge>

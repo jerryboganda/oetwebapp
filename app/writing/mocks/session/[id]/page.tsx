@@ -346,11 +346,11 @@ function WritingMockSessionInner() {
                 {strict ? (
                   // Exam-fidelity disclosure (spec §20): make the strict
                   // constraints explicit so learners know what is withheld.
-                  <span className="text-[11px] font-medium text-muted">
+                  <span className="text-2xs font-medium text-muted">
                     No spellcheck · no hints · no AI · no model answer
                   </span>
                 ) : (
-                  <span className="text-[11px] font-medium text-muted">
+                  <span className="text-2xs font-medium text-muted">
                     Spellcheck on · not exam-timed pressure
                   </span>
                 )}

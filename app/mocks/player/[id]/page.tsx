@@ -270,7 +270,7 @@ export default function MockPlayerPage() {
 
             {session.reviewReservation ? (
               <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-                <p className="text-[11px] font-black uppercase tracking-widest">Review reservation</p>
+                <p className="text-2xs font-black uppercase tracking-widest">Review reservation</p>
                 <p className="mt-1">
                   {session.reviewReservation.pendingCredits} pending / {session.reviewReservation.consumedCredits} consumed / state {session.reviewReservation.state.replace(/_/g, ' ')}
                 </p>
@@ -327,7 +327,7 @@ export default function MockPlayerPage() {
                       <p className="mt-1">Delivery: {session.config.deliveryMode?.replace(/_/g, ' ') ?? 'computer'}</p>
                       <p className="mt-1">Review attached: {selectedSection.reviewSelected ? 'Yes' : 'No'}</p>
                       <p className="mt-1">Content: {selectedSection.contentPaperTitle ?? selectedSection.contentPaperId ?? 'Published section'}</p>
-                      <p className="mt-1 break-all">Launch path: <span className="font-mono text-[11px]">{selectedSection.launchRoute}</span></p>
+                      <p className="mt-1 break-all">Launch path: <span className="font-mono text-2xs">{selectedSection.launchRoute}</span></p>
                     </div>
 
                     {selectedSectionPolicy ? (
@@ -359,7 +359,7 @@ export default function MockPlayerPage() {
                             <div className="mt-3 rounded-2xl border border-warning/30 bg-warning/5 p-3">
                               <div className="flex items-center gap-2">
                                 <ShieldCheck className="h-4 w-4 text-warning" />
-                                <p className="text-[11px] font-black uppercase tracking-widest text-warning">Active locks:</p>
+                                <p className="text-2xs font-black uppercase tracking-widest text-warning">Active locks:</p>
                               </div>
                               <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-muted">
                                 {lockRules.map((rule) => (
@@ -515,7 +515,7 @@ export default function MockPlayerPage() {
                 <ol className="grid gap-3 sm:grid-cols-2">
                   {MOCK_REVIEW_RELEASE_STEPS.map((step, index) => (
                     <li key={step} className="rounded-2xl border border-border bg-background-light p-4">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-primary">Step {index + 1}</span>
+                      <span className="text-3xs font-black uppercase tracking-widest text-primary">Step {index + 1}</span>
                       <p className="mt-1 text-sm leading-6 text-navy">{step}</p>
                     </li>
                   ))}

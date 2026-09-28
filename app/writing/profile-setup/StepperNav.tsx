@@ -39,7 +39,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                 >
                   <span
                     className={cn(
-                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold',
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-3xs font-bold',
                       isCurrent
                         ? 'bg-primary text-white dark:bg-violet-700'
                         : isComplete
@@ -56,7 +56,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                   className="flex items-center gap-2 rounded-full border border-dashed border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted"
                   aria-label={`Step ${step.index} of ${WIZARD_STEPS.length}: ${step.label}, locked`}
                 >
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background-light text-[10px] font-bold text-muted">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background-light text-3xs font-bold text-muted">
                     {step.index}
                   </span>
                   {step.label}

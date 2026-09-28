@@ -144,7 +144,7 @@ function SubscriptionPackageCard({
 
       <div className="flex h-full flex-col gap-4 p-5">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Package {pkg.packageNo}</span>
+          <span className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Package {pkg.packageNo}</span>
           <div className="text-right">
             <div className="text-2xl font-bold text-navy">{formatPrice(price, currency)}</div>
             {hasDiscount ? (
@@ -160,7 +160,7 @@ function SubscriptionPackageCard({
               {pkg.metaChips.map((chip) => (
                 <span
                   key={chip}
-                  className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+                  className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
                 >
                   {chip}
                 </span>
@@ -185,7 +185,7 @@ function SubscriptionPackageCard({
             {pkg.badges.map((badge) => (
               <span
                 key={badge}
-                className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary"
+                className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary"
               >
                 {badge}
               </span>
@@ -405,7 +405,7 @@ export function SubscriptionsCatalog() {
         className="relative w-full rounded-2xl border border-border/80 bg-surface p-1.5 shadow-xs sm:p-2"
       >
         <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain py-1 px-1 [-webkit-overflow-scrolling:touch] touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="shrink-0 pl-1.5 text-[11px] font-bold uppercase tracking-wider text-muted select-none">
+          <span className="shrink-0 pl-1.5 text-2xs font-bold uppercase tracking-wider text-muted select-none">
             Quick jump:
           </span>
           {CATALOG_SHORTCUTS.map((shortcut) => (

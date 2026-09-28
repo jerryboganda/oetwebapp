@@ -328,11 +328,11 @@ export default function UsersPage() {
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Last login</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Last login</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-muted">Created</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</p>
         </div>
       </div>
@@ -956,7 +956,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                   {tpl.description ? <p className="text-xs text-muted">{tpl.description}</p> : null}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {tpl.permissions.map((p) => (
-                      <Badge key={p} variant="default" className="text-[10px]">{permLabel(p)}</Badge>
+                      <Badge key={p} variant="default" className="text-3xs">{permLabel(p)}</Badge>
                     ))}
                   </div>
                 </div>
@@ -988,7 +988,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
                     {tpl.description ? <p className="text-xs text-muted">{tpl.description}</p> : null}
                     <div className="mt-1 flex flex-wrap gap-1">
                       {tpl.permissions.map((p) => (
-                        <Badge key={p} variant="default" className="text-[10px]">{permLabel(p)}</Badge>
+                        <Badge key={p} variant="default" className="text-3xs">{permLabel(p)}</Badge>
                       ))}
                     </div>
                   </div>

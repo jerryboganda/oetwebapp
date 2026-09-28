@@ -243,7 +243,7 @@ function NotificationItem({
           <p className={cn('text-[13px] leading-snug', item.isRead ? 'font-medium text-navy/75' : 'font-semibold text-navy')}>
             {item.title}
           </p>
-          <span className="mt-0.5 shrink-0 text-[11px] tabular-nums text-muted/70">{relativeTime(item.createdAt)}</span>
+          <span className="mt-0.5 shrink-0 text-2xs tabular-nums text-muted/70">{relativeTime(item.createdAt)}</span>
         </div>
         <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted">{item.body}</p>
         <div className="mt-1.5 flex items-center gap-2">
@@ -354,7 +354,7 @@ function NotificationCenterContent({
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-[15px] font-semibold tracking-tight text-navy">Notifications</h2>
-            <p className="mt-0.5 text-[11px] text-muted/70">
+            <p className="mt-0.5 text-2xs text-muted/70">
               {unreadCount > 0 ? `${unreadCount} unread · ${totalCount} total` : 'All caught up'}
             </p>
           </div>
@@ -432,7 +432,7 @@ function NotificationCenterContent({
               {facet.unread > 0 && (
                 <span
                   className={cn(
-                    'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums',
+                    'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-3xs font-bold tabular-nums',
                     category === facet.key ? 'bg-white/25 text-white' : 'bg-primary/15 text-primary',
                   )}
                 >
@@ -461,10 +461,10 @@ function NotificationCenterContent({
       {adminAlerts.length > 0 && (
         <div className="mx-0.5 mt-2 shrink-0 overflow-hidden rounded-xl border border-amber-200/70 dark:border-amber-900/50">
           <div className="flex items-center justify-between border-b border-inherit bg-amber-50/80 px-3 py-2 dark:bg-amber-950/40">
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">
+            <p className="text-3xs font-bold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">
               Admin alerts
             </p>
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold tabular-nums leading-none text-white">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-3xs font-bold tabular-nums leading-none text-white">
               {adminAlerts.length}
             </span>
           </div>
@@ -533,7 +533,7 @@ function NotificationCenterContent({
         {dateGroups.map((group) => (
           <div key={group.label} className="mb-1">
             <div className="sticky top-0 z-10 bg-surface/90 px-3 pb-1 pt-2 backdrop-blur-md">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted/50">{group.label}</p>
+              <p className="text-3xs font-bold uppercase tracking-[0.1em] text-muted/50">{group.label}</p>
             </div>
             <div className="space-y-0.5 px-1">
               {group.items.map((item) => {
@@ -568,10 +568,10 @@ function NotificationCenterContent({
             Load older notifications
           </Button>
         ) : filtered.length > 0 ? (
-          <p className="pb-1 text-center text-[11px] text-muted/50">You&apos;re all caught up — end of notifications</p>
+          <p className="pb-1 text-center text-2xs text-muted/50">You&apos;re all caught up — end of notifications</p>
         ) : null}
         <div className="flex items-center justify-between px-1 pb-0.5">
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted/60">
+          <span className="inline-flex items-center gap-1.5 text-2xs text-muted/60">
             <span
               className={cn(
                 'h-1.5 w-1.5 rounded-full',
@@ -587,7 +587,7 @@ function NotificationCenterContent({
           <Link
             href="/settings/notifications"
             onClick={() => onNavigate?.()}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-muted/70 transition-colors hover:text-primary"
+            className="inline-flex items-center gap-1 text-2xs font-medium text-muted/70 transition-colors hover:text-primary"
           >
             <Settings className="h-3 w-3" />
             Settings
@@ -629,7 +629,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
       >
         <Bell className="h-5 w-5" aria-hidden="true" />
         {displayUnreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-[10px]">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-3xs">
             {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
           </span>
         )}

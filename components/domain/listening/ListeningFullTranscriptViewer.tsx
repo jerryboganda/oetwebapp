@@ -160,24 +160,24 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
                 hl ? 'border-info/40 bg-info/10 ring-1 ring-info/30' : 'border-border bg-background-light hover:border-border-hover hover:bg-surface',
               )}
             >
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-widest text-muted">
+              <div className="flex flex-wrap items-center gap-2 text-2xs font-black uppercase tracking-widest text-muted">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatMs(seg.startMs)}–{formatMs(seg.endMs)}
                 </span>
                 {seg.partCode ? <span>{seg.partCode}</span> : null}
-                {seg.speakerId ? <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] leading-none">{seg.speakerId}</span> : null}
+                {seg.speakerId ? <span className="rounded bg-surface px-1.5 py-0.5 text-3xs leading-none">{seg.speakerId}</span> : null}
                 <button
                   type="button"
                   onClick={() => onPlayEvidence(seg.startMs, seg.endMs, seg.partCode)}
-                  className="ml-auto inline-flex items-center gap-1 rounded-full bg-info/10 px-2 py-1 text-[11px] font-bold text-info hover:bg-info/20"
+                  className="ml-auto inline-flex items-center gap-1 rounded-full bg-info/10 px-2 py-1 text-2xs font-bold text-info hover:bg-info/20"
                   aria-label={`Play audio for ${formatMs(seg.startMs)} to ${formatMs(seg.endMs)}`}
                 >
                   <Play className="h-3 w-3" /> Play
                 </button>
               </div>
               <p className="mt-2 text-sm leading-6 text-navy">{seg.text}</p>
-              {hl ? <span className="absolute right-2 top-2 rounded-full bg-info px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">Highlighted · Q{highlightedEvidence?.questionNumber}</span> : null}
+              {hl ? <span className="absolute right-2 top-2 rounded-full bg-info px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-white">Highlighted · Q{highlightedEvidence?.questionNumber}</span> : null}
             </div>
           );
         })}

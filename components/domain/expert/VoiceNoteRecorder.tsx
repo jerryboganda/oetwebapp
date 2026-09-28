@@ -252,7 +252,7 @@ export function VoiceNoteRecorder({
             className="h-8 flex-1 min-w-0"
             aria-label={`Existing voice note for ${criterionCode}`}
           />
-          <span className="text-[11px] text-muted">Existing note</span>
+          <span className="text-2xs text-muted">Existing note</span>
         </div>
       ) : null}
 
@@ -314,7 +314,7 @@ export function VoiceNoteRecorder({
 
         {state === 'uploaded' && (
           <>
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-[11px] font-semibold text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700">
               Uploaded
             </span>
             <Button
@@ -349,7 +349,7 @@ export function VoiceNoteRecorder({
         )}
 
         {state === 'recording' && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600" aria-live="polite">
+          <span className="inline-flex items-center gap-1 text-2xs font-semibold text-red-600" aria-live="polite">
             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" /> Recording
           </span>
         )}
@@ -366,7 +366,7 @@ export function VoiceNoteRecorder({
       )}
 
       {errorMessage && (
-        <p className="text-[11px] font-medium text-red-600" role="alert">{errorMessage}</p>
+        <p className="text-2xs font-medium text-red-600" role="alert">{errorMessage}</p>
       )}
     </div>
   );

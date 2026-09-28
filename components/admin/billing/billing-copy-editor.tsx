@@ -213,7 +213,7 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
                   <div key={field.key} className={field.multiline ? 'md:col-span-2' : undefined}>
                     {control}
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="font-mono text-[10px] text-muted/70">{field.key}</span>
+                      <span className="font-mono text-3xs text-muted/70">{field.key}</span>
                       {isOverridden || hasStoredOverride ? (
                         <div className="flex items-center gap-3">
                           {isOverridden ? (
@@ -221,7 +221,7 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
                               type="button"
                               onClick={() => resetField(field)}
                               disabled={!canWrite}
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-2xs font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
                             >
                               <RotateCcw className="h-3 w-3" /> Reset to default
                             </button>
@@ -234,14 +234,14 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
                                 setDeleteConfirmInput('');
                               }}
                               disabled={!canWrite}
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-2xs font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-50"
                             >
                               <Trash2 className="h-3 w-3" /> Delete override
                             </button>
                           ) : null}
                         </div>
                       ) : (
-                        <span className="text-[10px] text-muted/60">default</span>
+                        <span className="text-3xs text-muted/60">default</span>
                       )}
                     </div>
                   </div>

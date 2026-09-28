@@ -137,7 +137,7 @@ export default function AiSettingsPage() {
                   </div>
                   <h2 className="text-xl font-black text-navy tracking-tight">AI credit balances</h2>
                 </div>
-                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Credits</Badge>
+                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-3xs uppercase tracking-widest shadow-sm">Credits</Badge>
               </div>
 
               {loading ? (
@@ -194,7 +194,7 @@ export default function AiSettingsPage() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-navy tracking-tight">How should we route AI calls?</h2>
-                    <Badge className="hidden sm:inline-flex bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Routing</Badge>
+                    <Badge className="hidden sm:inline-flex bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-3xs uppercase tracking-widest shadow-sm">Routing</Badge>
                   </div>
                   <p className="text-sm font-medium text-muted leading-relaxed max-w-2xl mt-2">
                     Your choice applies to non-scoring features (practice, summarisation, conversation). Scoring-critical
@@ -269,7 +269,7 @@ export default function AiSettingsPage() {
                           <div className="font-black text-navy text-lg">{c.providerCode}</div>
                           <div className="text-sm text-muted font-mono font-medium mt-1">{c.keyHint}</div>
                           <div className="flex items-center gap-2 mt-3">
-                            <Badge variant={c.status === 'Active' ? 'success' : 'muted'} className="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest">
+                            <Badge variant={c.status === 'Active' ? 'success' : 'muted'} className="rounded-full px-2.5 py-0.5 text-3xs font-black uppercase tracking-widest">
                               {c.status}
                             </Badge>
                             <span className="text-xs font-bold text-muted">

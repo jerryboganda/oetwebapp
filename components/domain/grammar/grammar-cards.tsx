@@ -58,7 +58,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
               {topic.iconEmoji ? <span className="text-xl" aria-hidden>{topic.iconEmoji}</span> : <LayoutGrid className="h-5 w-5" aria-hidden />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">{titleCase(topic.levelHint || 'OET')}</p>
+              <p className="text-2xs font-black uppercase tracking-[0.18em] text-muted">{titleCase(topic.levelHint || 'OET')}</p>
               <h3 className="mt-1 text-lg font-bold leading-tight text-navy">{topic.name}</h3>
             </div>
             <Badge variant="info">{topic.lessonCount} lessons</Badge>
@@ -115,7 +115,7 @@ export function GrammarLessonCard({ lesson }: { lesson: GrammarLessonSummary }) 
               <Sparkles className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{titleCase(topicLabel)}</p>
+              <p className="text-2xs font-semibold uppercase tracking-[0.16em] text-muted">{titleCase(topicLabel)}</p>
               <h3 className="mt-0.5 text-base font-bold leading-snug text-navy">{lesson.title}</h3>
             </div>
             <Badge variant={status.variant}>{status.label}</Badge>
@@ -185,7 +185,7 @@ export function GrammarRecommendationStrip({
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">Recommended next</p>
+            <p className="text-2xs font-black uppercase tracking-[0.18em] text-muted">Recommended next</p>
             <h3 className="text-lg font-bold text-navy">Pick up where you left off</h3>
           </div>
         </div>
@@ -206,7 +206,7 @@ export function GrammarRecommendationStrip({
                     <Target className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-muted">
+                    <p className="truncate text-2xs font-black uppercase tracking-[0.16em] text-muted">
                       {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
                     </p>
                     <h4 className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h4>
@@ -397,7 +397,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
           : 'border-border/70 bg-surface text-navy',
       )}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
+      <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
       <p className="mt-1 whitespace-pre-wrap leading-6">{value || '-'}</p>
     </div>
   );
@@ -406,7 +406,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
 function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
     <div className="rounded-2xl border border-border/60 bg-surface px-3 py-2 shadow-sm">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+      <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-muted">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>
       <div className="mt-0.5 text-base font-bold text-navy">{value}</div>

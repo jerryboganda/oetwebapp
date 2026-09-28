@@ -63,7 +63,7 @@ export function CatalogCompareMatrix({ plans, config }: CatalogCompareMatrixProp
                 <tr key={plan.code} className="hover:bg-background-light/60">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-navy">{plan.name}</div>
-                    <div className="text-[11px] uppercase tracking-wider text-muted">{professionLabel(config, plan.profession)}</div>
+                    <div className="text-2xs uppercase tracking-wider text-muted">{professionLabel(config, plan.profession)}</div>
                   </td>
                   <td className="px-4 py-3 text-muted">{categoryLabel(config, plan.productCategory)}</td>
                   <td className="px-4 py-3 text-muted">{formatAccessDuration(plan.accessDurationDays)}</td>

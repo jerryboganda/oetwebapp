@@ -202,7 +202,7 @@ export default function ScoreCalculatorPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <GraduationCap className="h-4 w-4 text-muted shrink-0" />
                           <span className="font-medium text-sm">{req.body}</span>
-                          <Badge variant="outline" className="text-[10px]">{req.country}</Badge>
+                          <Badge variant="outline" className="text-3xs">{req.country}</Badge>
                         </div>
                         <p className="text-xs text-muted ml-6">
                           Min OET: <strong>{req.oetMinGrade}</strong> ({req.oetMinScore}) · Min IELTS: <strong>{req.ieltsMin}</strong>

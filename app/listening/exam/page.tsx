@@ -201,7 +201,7 @@ export default function ListeningFullExamPage() {
                       </span>
                     ) : null}
                     {partial ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900">
                         Partial · Q37–42 unavailable
                       </span>
                     ) : null}

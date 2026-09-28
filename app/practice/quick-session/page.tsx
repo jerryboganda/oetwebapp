@@ -199,7 +199,7 @@ export default function MobileQuickSessionPage() {
 
               {/* question */}
               <Card className="p-5 shadow-sm">
-                <Badge variant="outline" className="mb-3 text-[10px] capitalize">{q.type}</Badge>
+                <Badge variant="outline" className="mb-3 text-3xs capitalize">{q.type}</Badge>
                 <p className="text-sm font-medium leading-relaxed text-navy">{q.prompt}</p>
                 {q.audioUrl && (
                   <button className="mt-3 flex items-center gap-2 text-sm text-primary">

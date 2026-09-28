@@ -33,7 +33,7 @@ export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlemen
             <Lock className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Free tier limit reached</p>
+            <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-amber-700">Free tier limit reached</p>
             <h2 className="mt-0.5 text-base font-bold text-navy">You&apos;ve reached your free grammar lessons for this week.</h2>
             <p className="mt-1 text-sm leading-6 text-muted">
               {entitlement.reason}

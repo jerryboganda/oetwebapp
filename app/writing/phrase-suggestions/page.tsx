@@ -203,9 +203,9 @@ export default function PhraseSuggestionsPage() {
                   <Card className={`overflow-hidden border ${expanded ? cfg.bg : ''}`}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2 mb-3">
-                        <Badge variant="outline" className={`${cfg.color} text-[10px] shrink-0`}>{cfg.label}</Badge>
+                        <Badge variant="outline" className={`${cfg.color} text-3xs shrink-0`}>{cfg.label}</Badge>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted">{Math.round(s.confidence * 100)}%</span>
+                          <span className="text-3xs text-muted">{Math.round(s.confidence * 100)}%</span>
                           <button
                             type="button"
                             onClick={() => setExpandedId(expanded ? null : s.id)}
@@ -221,11 +221,11 @@ export default function PhraseSuggestionsPage() {
                       {/* original → suggested */}
                       <div className="space-y-2 mb-3">
                         <div className="flex items-start gap-2">
-                          <span className="text-[10px] text-muted mt-1 shrink-0 w-12">Before</span>
+                          <span className="text-3xs text-muted mt-1 shrink-0 w-12">Before</span>
                           <p className="text-sm line-through text-muted">{s.originalText}</p>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className="text-[10px] text-primary mt-1 shrink-0 w-12">After</span>
+                          <span className="text-3xs text-primary mt-1 shrink-0 w-12">After</span>
                           <p className="text-sm font-medium text-navy">{s.suggestedText}</p>
                         </div>
                       </div>

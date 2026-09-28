@@ -253,11 +253,11 @@ export function LearnerDashboardDetails({
                 {readinessRecentTrend}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-[11px] font-semibold text-navy ring-1 ring-border/70">
+                <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-2xs font-semibold text-navy ring-1 ring-border/70">
                   <Timer className="h-3 w-3 text-primary" aria-hidden="true" />
                   {liveReadiness.weeksRemaining} weeks to exam
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-[11px] font-semibold capitalize text-navy ring-1 ring-border/70">
+                <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2.5 py-1 text-2xs font-semibold capitalize text-navy ring-1 ring-border/70">
                   <Flag className="h-3 w-3 text-primary" aria-hidden="true" />
                   {liveReadiness.overallRisk} risk
                 </span>
@@ -365,7 +365,7 @@ export function LearnerDashboardDetails({
               </div>
 
               <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">This Week</p>
+                <p className="mb-2 text-2xs font-bold uppercase tracking-wider text-muted">This Week</p>
                 <div className="grid grid-cols-7 gap-1.5">
                   {engagement.weeklyActivity.map((day, index, all) => {
                     const isToday = index === all.length - 1;
@@ -373,7 +373,7 @@ export function LearnerDashboardDetails({
                       <div
                         key={day.day}
                         title={day.day}
-                        className={`flex h-9 items-center justify-center rounded-lg text-[11px] font-bold uppercase transition-colors duration-200 ${
+                        className={`flex h-9 items-center justify-center rounded-lg text-2xs font-bold uppercase transition-colors duration-200 ${
                           day.active
                             ? 'bg-amber-600 text-white shadow-sm shadow-amber-200/70'
                             : `bg-background-light text-muted/70 ${isToday ? 'ring-2 ring-inset ring-amber-400/60' : 'border border-border'}`
@@ -392,11 +392,11 @@ export function LearnerDashboardDetails({
                     <Timer className="h-3.5 w-3.5 text-amber-700" />
                     {Math.round(engagement.totalPracticeMinutes / 60)}h
                   </div>
-                  <div className="text-[11px] text-muted">Total Practice</div>
+                  <div className="text-2xs text-muted">Total Practice</div>
                 </div>
                 <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
                   <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
-                  <div className="text-[11px] text-muted">Sessions</div>
+                  <div className="text-2xs text-muted">Sessions</div>
                 </div>
               </div>
             </CardContent>

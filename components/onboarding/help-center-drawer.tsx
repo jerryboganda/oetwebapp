@@ -67,7 +67,7 @@ export function HelpCenterDrawer({ open, onClose, workspaceRole }: HelpCenterDra
                       <span className="min-w-0">
                         <span className="flex items-center gap-2 text-sm font-semibold text-navy">
                           {tour.title}
-                          {done ? <span className="text-[11px] font-medium text-success">Completed</span> : null}
+                          {done ? <span className="text-2xs font-medium text-success">Completed</span> : null}
                         </span>
                         <span className="mt-0.5 block text-xs text-muted">{tour.description}</span>
                       </span>

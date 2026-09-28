@@ -443,7 +443,7 @@ export default function AiProvidersPage() {
         ? (
           <div className="flex flex-col gap-1">
             <Badge variant={testStatusVariant(p.lastTestStatus)}>{p.lastTestStatus}</Badge>
-            {p.lastTestedAt && <span className="text-[10px] text-admin-fg-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
+            {p.lastTestedAt && <span className="text-3xs text-admin-fg-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
           </div>
         )
         : <span className="text-xs text-admin-fg-muted">-</span>,

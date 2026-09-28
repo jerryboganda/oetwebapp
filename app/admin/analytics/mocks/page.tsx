@@ -138,7 +138,7 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
               <td className="px-4 py-3 text-right">
                 <Badge
                   variant={row.pendingBookings > 5 ? 'warning' : 'outline'}
-                  className="text-[10px] tabular-nums"
+                  className="text-3xs tabular-nums"
                 >
                   {row.pendingBookings}
                 </Badge>
@@ -176,10 +176,10 @@ function LowQualityPanel({ rows }: { rows: AdminMocksAnalyticsLowQualityRow[] })
           </div>
           <div className="flex flex-wrap gap-1.5">
             {row.flags.length === 0 ? (
-              <Badge variant="muted" className="text-[10px]">no flags</Badge>
+              <Badge variant="muted" className="text-3xs">no flags</Badge>
             ) : (
               row.flags.map((flag) => (
-                <Badge key={`${row.bundleId}-${flag}`} variant="warning" className="text-[10px]">
+                <Badge key={`${row.bundleId}-${flag}`} variant="warning" className="text-3xs">
                   {flag}
                 </Badge>
               ))
@@ -317,7 +317,7 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
               <td className="px-4 py-3 text-right">
                 <Badge
                   variant={row.predictedPassRate < 0.5 ? 'warning' : 'outline'}
-                  className="text-[10px] tabular-nums"
+                  className="text-3xs tabular-nums"
                 >
                   {formatPercent(row.predictedPassRate)}
                 </Badge>
@@ -361,7 +361,7 @@ function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) 
               <td className="px-4 py-3 text-right">
                 <Badge
                   variant={row.p95DelayHours > 48 ? 'warning' : 'outline'}
-                  className="text-[10px] tabular-nums"
+                  className="text-3xs tabular-nums"
                 >
                   {formatHours(row.p95DelayHours)}
                 </Badge>

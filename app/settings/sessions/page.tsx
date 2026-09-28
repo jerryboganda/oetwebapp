@@ -190,7 +190,7 @@ export default function SessionsPage() {
                   Trusted device: {trustedDevice.deviceName || platformLabel(trustedDevice.platform) || 'Unknown device'}
                 </h3>
                 {trustedDevice.isCurrentDevice ? (
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-2xs font-semibold text-emerald-700">
                     This device
                   </span>
                 ) : null}
@@ -199,10 +199,10 @@ export default function SessionsPage() {
                 {platformLabel(trustedDevice.platform) ? `${platformLabel(trustedDevice.platform)} · ` : ''}
                 Trusted {formatRelativeTime(trustedDevice.trustedAt)} · Last seen {formatRelativeTime(trustedDevice.lastSeenAt)}
               </p>
-              <p className="text-[11px] text-muted mt-1">
+              <p className="text-2xs text-muted mt-1">
                 Approved client identities: {trustedDevice.activeDeviceCount ?? 1}/{trustedDevice.maxDevices ?? 1}
               </p>
-              <p className="text-[11px] text-muted/60 mt-0.5">
+              <p className="text-2xs text-muted/60 mt-0.5">
                 Browser profiles and official app installations count separately, even on the same physical hardware. A new approved identity signs out any identity it replaces; an admin override can retain more identities but only one live session remains active.
               </p>
             </div>
@@ -264,7 +264,7 @@ export default function SessionsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-sm font-bold text-navy truncate">{deviceLabel}</h3>
                           {session.isCurrent ? (
-                            <span className="inline-flex items-center rounded-full bg-navy/10 border border-navy/20 px-2 py-0.5 text-[11px] font-semibold text-navy">
+                            <span className="inline-flex items-center rounded-full bg-navy/10 border border-navy/20 px-2 py-0.5 text-2xs font-semibold text-navy">
                               Current Session
                             </span>
                           ) : null}
@@ -275,7 +275,7 @@ export default function SessionsPage() {
                           {platformLabel(session.platform) ? ` · ${platformLabel(session.platform)}` : ''}
                           {` · ${lastActive}`}
                         </p>
-                        <p className="text-[11px] text-muted/60 mt-0.5">
+                        <p className="text-2xs text-muted/60 mt-0.5">
                           Created {formatRelativeTime(session.createdAt)}
                         </p>
                       </div>

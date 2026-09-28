@@ -742,7 +742,7 @@ function LiveSpeakingTaskContent() {
       {/* Top Bar */}
       <header className="z-20 flex items-center justify-between gap-3 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
+          <div className={`px-3 py-1 rounded-full text-3xs font-black uppercase tracking-widest flex items-center gap-2 ${
             mode === 'self' ? 'bg-primary/10 text-primary border border-primary/30' :
             'bg-warning/10 text-warning border border-warning/30'
           }`}>
@@ -750,14 +750,14 @@ function LiveSpeakingTaskContent() {
             {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
           {deliveryModeParam ? (
-            <div className="hidden items-center rounded-full border border-border bg-background-light px-3 py-1 text-[10px] font-black uppercase tracking-widest text-muted sm:flex">
+            <div className="hidden items-center rounded-full border border-border bg-background-light px-3 py-1 text-3xs font-black uppercase tracking-widest text-muted sm:flex">
               {deliveryModeLabel(deliveryMode)}
             </div>
           ) : null}
           <div className="hidden h-4 w-px bg-border sm:block" />
           <div className="hidden sm:flex items-center gap-2 text-muted">
             <ShieldCheck className="w-4 h-4 text-success" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">
+            <span className="text-3xs font-bold uppercase tracking-wider">
               Recorder ready
             </span>
           </div>
@@ -765,13 +765,13 @@ function LiveSpeakingTaskContent() {
 
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[10px] font-black text-muted uppercase tracking-widest">
+            <span className="text-3xs font-black text-muted uppercase tracking-widest">
               {mode === 'exam' ? 'Exam timer' : 'Elapsed Time'}
             </span>
             <Timer mode="elapsed" running={recordingState === 'recording'} size="lg" />
             {mode === 'exam' && (
               <span
-                className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${
+                className={`mt-1 text-3xs font-bold uppercase tracking-widest ${
                   warningPlayedRef.current && recordingState === 'recording'
                     ? 'animate-pulse text-danger'
                     : 'text-warning'
@@ -864,7 +864,7 @@ function LiveSpeakingTaskContent() {
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-danger/5 group-hover:border-danger/30 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm">
               <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-muted group-hover:text-danger transition-colors" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-danger transition-colors">Cancel Task</span>
+            <span className="text-[9px] sm:text-3xs font-black uppercase tracking-widest text-muted group-hover:text-danger transition-colors">Cancel Task</span>
           </button>
 
           <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
@@ -894,7 +894,7 @@ function LiveSpeakingTaskContent() {
                 {micPermissionDenied && <OpenAppSettingsButton />}
               </>
             ) : (
-              <p className="text-[9px] sm:text-[10px] text-muted font-bold uppercase tracking-[0.3em] opacity-80">OET Speaking Simulation</p>
+              <p className="text-[9px] sm:text-3xs text-muted font-bold uppercase tracking-[0.3em] opacity-80">OET Speaking Simulation</p>
             )}
           </div>
 

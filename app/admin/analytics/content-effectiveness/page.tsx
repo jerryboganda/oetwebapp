@@ -119,19 +119,19 @@ export default function ContentEffectivenessPage() {
                       <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                         <div>
                           <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.totalAttempts}</p>
-                          <p className="text-[10px] text-admin-fg-muted">Attempts</p>
+                          <p className="text-3xs text-admin-fg-muted">Attempts</p>
                         </div>
                         <div>
                           <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.completionRate}%</p>
-                          <p className="text-[10px] text-admin-fg-muted">Complete</p>
+                          <p className="text-3xs text-admin-fg-muted">Complete</p>
                         </div>
                         <div>
                           <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.averageScore ?? '--'}</p>
-                          <p className="text-[10px] text-admin-fg-muted">Avg Score</p>
+                          <p className="text-3xs text-admin-fg-muted">Avg Score</p>
                         </div>
                         <div>
                           <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.effectivenessScore ?? '--'}</p>
-                          <p className="text-[10px] text-admin-fg-muted">Score</p>
+                          <p className="text-3xs text-admin-fg-muted">Score</p>
                         </div>
                       </div>
                     </CardContent>

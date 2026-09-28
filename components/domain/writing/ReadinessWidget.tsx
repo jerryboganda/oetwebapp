@@ -125,7 +125,7 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
                   />
                 </div>
                 <span className="w-10 text-right tabular-nums font-bold">{value}</span>
-                <span className="w-8 text-right text-[10px] text-muted">{weight}%</span>
+                <span className="w-8 text-right text-3xs text-muted">{weight}%</span>
               </li>
             );
           })}

@@ -229,7 +229,7 @@ export default function AdminSecurityPage() {
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-admin-fg-muted">Account-sharing control</p>
+              <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-admin-fg-muted">Account-sharing control</p>
               <h2 id="anti-sharing-policy-heading" className="mt-1 text-base font-semibold text-admin-fg-strong">Required anti-sharing behaviour</h2>
             </div>
             <Badge variant="success">Enforced</Badge>
@@ -254,20 +254,20 @@ export default function AdminSecurityPage() {
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-left text-xs text-admin-fg-muted" aria-label="Device policy trigger chart">
                 <thead>
-                  <tr className="border-b border-admin-border text-[11px] uppercase tracking-wide">
+                  <tr className="border-b border-admin-border text-2xs uppercase tracking-wide">
                     <th className="py-2 pr-3">Trigger</th>
                     <th className="py-2">Value</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-border">
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Identity key</td><td className="py-2">Persisted <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-[11px]">X-OET-Device-Id</code> (web: <code className="font-mono text-[11px]">localStorage</code> + <code className="font-mono text-[11px]">oet_device_binding</code> cookie; native/desktop: secure storage).</td></tr>
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Threshold</td><td className="py-2">Default <code className="font-mono text-[11px]">2</code>; Admin override <code className="font-mono text-[11px]">1-5</code> (<code className="font-mono text-[11px]">null</code> = <code className="font-mono text-[11px]">2</code>).</td></tr>
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Window</td><td className="py-2">Runtime <code className="font-mono text-[11px]">DeviceChangeWindowDays</code>, default <code className="font-mono text-[11px]">7</code>.</td></tr>
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Limit</td><td className="py-2">Runtime <code className="font-mono text-[11px]">DeviceChangeMaxPerWindow</code>, default <code className="font-mono text-[11px]">3</code>.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Identity key</td><td className="py-2">Persisted <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-2xs">X-OET-Device-Id</code> (web: <code className="font-mono text-2xs">localStorage</code> + <code className="font-mono text-2xs">oet_device_binding</code> cookie; native/desktop: secure storage).</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Threshold</td><td className="py-2">Default <code className="font-mono text-2xs">2</code>; Admin override <code className="font-mono text-2xs">1-5</code> (<code className="font-mono text-2xs">null</code> = <code className="font-mono text-2xs">2</code>).</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Window</td><td className="py-2">Runtime <code className="font-mono text-2xs">DeviceChangeWindowDays</code>, default <code className="font-mono text-2xs">7</code>.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Limit</td><td className="py-2">Runtime <code className="font-mono text-2xs">DeviceChangeMaxPerWindow</code>, default <code className="font-mono text-2xs">3</code>.</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Counted</td><td className="py-2">OTP-approved replacements only; bootstrap is not counted.</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Not counted</td><td className="py-2">Same browser/app identity after IP/location change or web storage recovery through the continuity cookie.</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Reset</td><td className="py-2">Admin device reset clears identities and live sessions; learner recovery is password plus email OTP.</td></tr>
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Cooldown evidence</td><td className="py-2"><code className="font-mono text-[11px]">cooldownUntil</code>, exact <code className="font-mono text-[11px]">secondsRemaining</code>, configured <code className="font-mono text-[11px]">window</code>/<code className="font-mono text-[11px]">limit</code>, live <code className="font-mono text-[11px]">countdown</code>. Learners keep OTP recovery; privileged get <code className="font-mono text-[11px]">device_change_cooldown</code>.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Cooldown evidence</td><td className="py-2"><code className="font-mono text-2xs">cooldownUntil</code>, exact <code className="font-mono text-2xs">secondsRemaining</code>, configured <code className="font-mono text-2xs">window</code>/<code className="font-mono text-2xs">limit</code>, live <code className="font-mono text-2xs">countdown</code>. Learners keep OTP recovery; privileged get <code className="font-mono text-2xs">device_change_cooldown</code>.</td></tr>
                 </tbody>
               </table>
             </div>

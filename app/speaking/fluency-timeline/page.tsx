@@ -85,7 +85,7 @@ export default function FluencyTimelinePage() {
                   <Card className="p-3 flex items-start gap-3">
                     <div className="flex-shrink-0 w-16 text-center">
                       <p className="text-xs font-mono text-muted">{seg.startTime.toFixed(1)}s</p>
-                      <Badge className={`mt-1 text-[10px] ${RATING_COLORS[seg.fluencyRating]}`}>{seg.fluencyRating}</Badge>
+                      <Badge className={`mt-1 text-3xs ${RATING_COLORS[seg.fluencyRating]}`}>{seg.fluencyRating}</Badge>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">{seg.text}</p>

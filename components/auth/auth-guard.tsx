@@ -34,7 +34,7 @@ function LearnerMobileNavigationLoadingState() {
       <ul className="grid grid-cols-7 gap-1">
         {learnerMobileNavItems.map((item) => (
           <li key={item.href}>
-            <span className="relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-[10px] font-semibold leading-none text-muted">
+            <span className="relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-3xs font-semibold leading-none text-muted">
               <span className="relative z-10 rounded-full p-1 [&_svg]:h-[18px] [&_svg]:w-[18px]">
                 {item.icon}
               </span>

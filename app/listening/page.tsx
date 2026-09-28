@@ -373,7 +373,7 @@ export default function ListeningHome() {
                         <h3 className="text-sm font-bold text-navy">
                           {card.title}
                         </h3>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
                           {accent.chip}
                         </span>
                       </div>
@@ -489,16 +489,16 @@ function PaperCard({
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900">
                 <Lock className="h-3 w-3" aria-hidden />
                 Premium
               </span>
             ) : partial ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900">
                 Partial · Q37–42 unavailable
               </span>
             ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-emerald-800">
                 Full exam
               </span>
             )}
@@ -541,7 +541,7 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
 
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-violet-300">
-      <span className="inline-flex w-fit rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+      <span className="inline-flex w-fit rounded-full bg-violet-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-violet-700">
         {scopeLabel}
       </span>
       <span className="mt-2 font-semibold text-navy">{result.paperTitle}</span>

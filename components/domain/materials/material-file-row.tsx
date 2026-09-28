@@ -109,7 +109,7 @@ export function MaterialFileRow({
 
         <div className="min-w-0 flex-1">
           {path && path.length > 0 && (
-            <p className="mb-0.5 flex items-center gap-0.5 truncate text-[10px] text-muted">
+            <p className="mb-0.5 flex items-center gap-0.5 truncate text-3xs text-muted">
               {path.map((segment, i) => (
                 <span key={`${segment}-${i}`} className="flex items-center gap-0.5">
                   {i > 0 && <ChevronRight className="h-2.5 w-2.5 shrink-0 opacity-60" />}
@@ -124,16 +124,16 @@ export function MaterialFileRow({
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize',
+                'inline-flex items-center rounded-full px-2 py-0.5 text-3xs font-semibold capitalize',
                 SUBTEST_TONE[file.subtestCode?.toLowerCase()] ?? 'bg-muted/20 text-muted',
               )}
             >
               {file.subtestCode}
             </span>
             {file.sizeBytes ? (
-              <span className="text-[10px] text-muted">{formatBytes(file.sizeBytes)}</span>
+              <span className="text-3xs text-muted">{formatBytes(file.sizeBytes)}</span>
             ) : null}
-            {error && <span className="text-[10px] font-semibold text-red-500">Download failed — try again</span>}
+            {error && <span className="text-3xs font-semibold text-red-500">Download failed — try again</span>}
           </div>
         </div>
 

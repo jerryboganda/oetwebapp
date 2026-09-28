@@ -316,7 +316,7 @@ export default function BillingPage() {
             <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.currentSubscription')}</p>
+                  <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.currentSubscription')}</p>
                   <h2 className="mt-2 text-xl font-semibold leading-snug tracking-tight text-navy sm:text-2xl">{data.currentPlan}</h2>
                   <p className="mt-1 text-sm font-semibold text-primary">
                     {data.price} <span className="font-medium text-muted">/ {formatBillingInterval(data.interval)}</span>
@@ -328,7 +328,7 @@ export default function BillingPage() {
 
               <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
-                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                  <dt className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.1em] text-muted/80">
                     <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
                     Ends
                   </dt>
@@ -337,7 +337,7 @@ export default function BillingPage() {
                   </dd>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
-                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                  <dt className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.1em] text-muted/80">
                     <Stethoscope className="h-3.5 w-3.5" aria-hidden="true" />
                     Profession
                   </dt>
@@ -346,7 +346,7 @@ export default function BillingPage() {
                   </dd>
                 </div>
                 <div className="col-span-2 rounded-xl border border-border/70 bg-background-light/60 p-3.5 sm:col-span-1">
-                  <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">
+                  <dt className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.1em] text-muted/80">
                     <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                     {copy('billing.overview.invoiceAccess')}
                   </dt>
@@ -367,7 +367,7 @@ export default function BillingPage() {
             <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Subscription</p>
+                  <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Subscription</p>
                   <h3 className="mt-2 text-lg font-semibold tracking-tight text-navy">Subscription freeze</h3>
                 </div>
                 <div className={`rounded-xl p-2.5 ${isFrozen ? 'bg-sky-500/10 text-sky-600' : 'bg-success/10 text-success'}`}>
@@ -426,7 +426,7 @@ export default function BillingPage() {
                   </Button>
                 ) : null}
                 {!isFrozen && !freezeEligible ? (
-                  <p className="text-center text-[11px] leading-4 text-muted">{freezeDisabledReason}</p>
+                  <p className="text-center text-2xs leading-4 text-muted">{freezeDisabledReason}</p>
                 ) : null}
                 <Button variant="outline" fullWidth onClick={() => router.push('/freeze')}>
                   View freeze details &amp; history
@@ -439,7 +439,7 @@ export default function BillingPage() {
           <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.activity')}</p>
+                <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.activity')}</p>
                 <h3 className="mt-1 text-base font-semibold text-navy">{copy('billing.overview.recentInvoices')}</h3>
               </div>
               <button
@@ -467,7 +467,7 @@ export default function BillingPage() {
                         <p className="text-sm font-semibold text-navy">
                           {new Date(invoice.date).toLocaleDateString()}
                         </p>
-                        <p className="text-[11px] text-muted">
+                        <p className="text-2xs text-muted">
                           {invoice.amount} · <span title="Invoice reference (masked)">{maskProviderId(invoice.id)}</span>
                         </p>
                       </div>

@@ -181,7 +181,7 @@ function PassagePanel({
           );
         })}
         {activeTool ? (
-          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-primary" aria-live="polite">
+          <span className="ml-2 text-3xs font-semibold uppercase tracking-wide text-primary" aria-live="polite">
             {activeTool} on
           </span>
         ) : null}

@@ -195,7 +195,7 @@ function ProfileField({
 }) {
   return (
     <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+      <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted">
         {locked ? <LockKeyhole className="h-3 w-3" /> : null}
         {label}
       </p>
@@ -1139,11 +1139,11 @@ export default function UserDetailPage() {
               <div className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}</p>
+                    <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">{user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}</p>
                     <p className="mt-1 text-2xl font-semibold text-admin-fg-strong">{(user.role === 'expert' ? user.tasksGraded : user.tasksCompleted) ?? 0}</p>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last Login</p>
+                    <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Last Login</p>
                     <p className="mt-1 text-sm font-semibold text-admin-fg-strong">{formatDate(user.lastLogin, 'Never')}</p>
                   </div>
                 </div>
@@ -1222,7 +1222,7 @@ export default function UserDetailPage() {
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-1.5">
                           {adminPermissions.map((p) => (
-                            <Badge key={p.permission} variant="info" className="text-[11px]">
+                            <Badge key={p.permission} variant="info" className="text-2xs">
                               {p.permission}
                             </Badge>
                           ))}
@@ -1267,25 +1267,25 @@ export default function UserDetailPage() {
                   {user.security ? (
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">MFA</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">MFA</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.mfaEnabled ? 'Authenticator enrolled' : 'Not enrolled'}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Failed sign-ins</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Failed sign-ins</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.failedSignInCount}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Lockout state</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Lockout state</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">
                           {user.security.lockedOut ? `Locked until ${formatDate(user.security.lockoutUntil)}` : 'Not locked'}
                         </p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.activeSessionCount}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4 md:col-span-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last seen</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Last seen</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">
                           {formatDate(user.security.lastSessionAt, '-')}
                           {user.security.lastSessionIp ? ` - ${user.security.lastSessionIp}` : ''}
@@ -1308,7 +1308,7 @@ export default function UserDetailPage() {
                     <div className="space-y-4">
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
+                          <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
                           <Button variant="outline" onClick={handleBlockPlayback} loading={isMutating} className="gap-2">
                             <Video className="h-3.5 w-3.5" />
                             Block Playback
@@ -1378,7 +1378,7 @@ export default function UserDetailPage() {
                         </div>
 
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Registered Client Identities</p>
+                          <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Registered Client Identities</p>
                           {securityDevices.some((device) => !device.revokedAt) ? (
                             <Button variant="outline" onClick={handleResetDevice} loading={isMutating} className="gap-2">
                               <ShieldAlert className="h-3.5 w-3.5" />
@@ -1491,19 +1491,19 @@ export default function UserDetailPage() {
                   <SettingsSection title="Subscription" description="Current billing relationship for this learner.">
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{subscriptionLabel}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Status</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Status</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.subscription.status}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Started</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Started</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{formatDate(user.subscription.startedAt)}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Access ends</p>
+                        <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted">Access ends</p>
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">
                           {formatDate(user.subscription.expiresAt ?? user.subscription.nextRenewalAt)}
                         </p>

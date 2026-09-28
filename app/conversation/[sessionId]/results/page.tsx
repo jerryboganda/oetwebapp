@@ -259,7 +259,7 @@ export default function ConversationResultsPage() {
                     <div className="mb-2 flex items-center justify-between text-xs font-semibold text-muted/60">
                       <span>Turn {t.turnNumber} · {t.role === 'learner' ? 'You' : 'AI Partner'}</span>
                       {t.confidence != null && t.role === 'learner' && (
-                        <span className="text-[10px]">ASR conf {(t.confidence * 100).toFixed(0)}%</span>
+                        <span className="text-3xs">ASR conf {(t.confidence * 100).toFixed(0)}%</span>
                       )}
                     </div>
                     <p className="text-sm text-navy">{t.content}</p>
@@ -272,7 +272,7 @@ export default function ConversationResultsPage() {
                       <div className="mt-2 space-y-1.5">
                         {turnAnnotations.map((a) => (
                           <div key={a.id} className="flex items-start gap-2">
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                            <span className={`rounded px-1.5 py-0.5 text-3xs font-bold uppercase ${
                               a.type === 'strength'
                                 ? 'bg-success/10 text-success'
                                 : a.type === 'error'
@@ -281,7 +281,7 @@ export default function ConversationResultsPage() {
                             }`}>{a.type}</span>
                             <div className="flex-1 text-sm text-navy">
                               {a.evidence}
-                              {a.ruleId && (<span className="ml-2 text-[10px] font-mono text-primary">{a.ruleId}</span>)}
+                              {a.ruleId && (<span className="ml-2 text-3xs font-mono text-primary">{a.ruleId}</span>)}
                               {a.suggestion && (<div className="mt-0.5 text-xs text-primary">💡 {a.suggestion}</div>)}
                             </div>
                           </div>

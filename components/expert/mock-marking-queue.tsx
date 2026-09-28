@@ -155,7 +155,7 @@ export function MockMarkingQueue({ items, slaHours = 24, className }: MockMarkin
                   <tr key={item.reviewRequestId} className="border-t border-border">
                     <td className="px-4 py-3 align-middle">
                       <div className="font-semibold text-navy">{item.learnerName}</div>
-                      <div className="font-mono text-[11px] text-muted">{item.reviewRequestId}</div>
+                      <div className="font-mono text-2xs text-muted">{item.reviewRequestId}</div>
                     </td>
                     <td className="px-4 py-3 align-middle capitalize text-navy">{item.subtest}</td>
                     <td className="px-4 py-3 align-middle text-xs text-muted">{formatSubmitted(item.submittedAt)}</td>

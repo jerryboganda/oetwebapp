@@ -192,7 +192,7 @@ function SubmissionHistoryInner() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-navy">
                           {attempt.title}
-                          <span className="ml-2 font-mono text-[11px] font-medium text-muted">{attempt.attemptId}</span>
+                          <span className="ml-2 font-mono text-2xs font-medium text-muted">{attempt.attemptId}</span>
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
                           <span className="capitalize">{attempt.subtest}</span>

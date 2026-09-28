@@ -242,7 +242,7 @@ function NavRail({
               {/* Full agreed names on the desktop rail (13 Sep 2026 addendum):
                   "Listening Practice" etc. — sidebarLabel wraps to two lines
                   here; the compact bottom nav keeps the short `label`. */}
-              <span className="w-full px-0.5 text-[11px] font-medium leading-tight">{item.sidebarLabel ?? item.label}</span>
+              <span className="w-full px-0.5 text-2xs font-medium leading-tight">{item.sidebarLabel ?? item.label}</span>
             </Link>
           </li>
         );
@@ -298,7 +298,7 @@ function NavSection({
                 </span>
                 <span className="relative z-10">{item.sidebarLabel ?? item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
-                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm">
+                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-3xs font-bold tabular-nums text-white shadow-sm">
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}
@@ -552,7 +552,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                   void triggerImpactHaptic('LIGHT');
                 }}
                 className={cn(
-                  'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-[10px] font-semibold leading-none',
+                  'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-3xs font-semibold leading-none',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                 )}

@@ -128,11 +128,11 @@ export default function ExpertEfficiencyPage() {
                               <Badge variant={variant} intensity="tinted">{label} Efficiency</Badge>
                             </div>
                             <div className="grid grid-cols-5 gap-3 text-center text-sm">
-                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.assignmentsReceived}</p><p className="text-[10px] text-admin-fg-muted">Assigned</p></div>
-                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.reviewsCompleted}</p><p className="text-[10px] text-admin-fg-muted">Completed</p></div>
-                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.averageReviewTimeMinutes ?? '--'}m</p><p className="text-[10px] text-admin-fg-muted">Avg Time</p></div>
-                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.reviewsPerDay}/day</p><p className="text-[10px] text-admin-fg-muted">Throughput</p></div>
-                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.aiAlignmentScore ?? '--'}</p><p className="text-[10px] text-admin-fg-muted">AI Align</p></div>
+                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.assignmentsReceived}</p><p className="text-3xs text-admin-fg-muted">Assigned</p></div>
+                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.reviewsCompleted}</p><p className="text-3xs text-admin-fg-muted">Completed</p></div>
+                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.averageReviewTimeMinutes ?? '--'}m</p><p className="text-3xs text-admin-fg-muted">Avg Time</p></div>
+                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.reviewsPerDay}/day</p><p className="text-3xs text-admin-fg-muted">Throughput</p></div>
+                              <div><p className="font-bold tabular-nums text-admin-fg-strong">{e.aiAlignmentScore ?? '--'}</p><p className="text-3xs text-admin-fg-muted">AI Align</p></div>
                             </div>
                           </CardContent>
                         </Card>

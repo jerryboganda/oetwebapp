@@ -124,7 +124,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
               >
                 Proceed to checkout <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
-              <p className="mt-3 text-center text-[11px] text-muted">
+              <p className="mt-3 text-center text-2xs text-muted">
                 Secure checkout - Stripe handles your card details.
               </p>
             </Card>

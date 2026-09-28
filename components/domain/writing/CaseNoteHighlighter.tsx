@@ -171,7 +171,7 @@ export function CaseNoteHighlighter({
                   )}
                   <span className="text-sm flex-1 leading-snug">{s.text}</span>
                   {scored ? (
-                    <span className="text-[10px] uppercase tracking-wider font-bold opacity-80">{meta.label}</span>
+                    <span className="text-3xs uppercase tracking-wider font-bold opacity-80">{meta.label}</span>
                   ) : null}
                 </button>
               </li>

@@ -259,7 +259,7 @@ export function UnifiedMockCoordinator({
                   <Badge
                     variant={isDone ? 'success' : isInProgress ? 'info' : 'outline'}
                     className={cn(
-                      'text-[11px] font-semibold uppercase',
+                      'text-2xs font-semibold uppercase',
                       isDone && 'bg-emerald-600 text-white',
                     )}
                   >
@@ -268,7 +268,7 @@ export function UnifiedMockCoordinator({
                 </div>
 
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-muted">
                     Sub-Test {idx + 1}
                   </span>
                   <h3 className="text-base font-bold text-navy">{section.title || meta.title}</h3>
@@ -395,7 +395,7 @@ export function UnifiedMockCoordinator({
                   <div>
                     <h4 className="font-bold text-navy">{meta.title}</h4>
                     <p className="text-xs text-muted mt-0.5">{meta.description}</p>
-                    <Badge variant="outline" className="mt-2 text-[11px]">
+                    <Badge variant="outline" className="mt-2 text-2xs">
                       Duration: {meta.durationMinutes} Minutes
                     </Badge>
                   </div>

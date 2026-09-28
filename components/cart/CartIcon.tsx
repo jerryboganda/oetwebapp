@@ -26,7 +26,7 @@ export function CartIcon({ className, href = '/cart', asButton, onClick }: CartI
   const itemCount = useCartCount();
 
   const badgeMarkup = itemCount > 0 ? (
-    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white dark:bg-violet-700">
+    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-3xs font-semibold text-white dark:bg-violet-700">
       {itemCount > 99 ? '99+' : itemCount}
     </span>
   ) : null;

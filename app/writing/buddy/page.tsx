@@ -264,7 +264,7 @@ export default function WritingBuddyPage() {
                       >
                         <p className="whitespace-pre-wrap">{m.bodyMarkdown}</p>
                         <time
-                          className={`mt-1 block text-[10px] uppercase tracking-wider ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
+                          className={`mt-1 block text-3xs uppercase tracking-wider ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
                           dateTime={m.sentAt}
                         >
                           {new Date(m.sentAt).toLocaleString()}

@@ -49,7 +49,7 @@ export function SessionsList({ sessions, loading = false, error, onCreate }: Ses
         </p>
       ) : null}
       <table className="min-w-full text-left text-xs">
-        <thead className="bg-admin-bg-subtle text-[11px] uppercase tracking-wide text-admin-fg-muted">
+        <thead className="bg-admin-bg-subtle text-2xs uppercase tracking-wide text-admin-fg-muted">
           <tr>
             <th scope="col" className="px-3 py-2 font-semibold">Session</th>
             <th scope="col" className="px-3 py-2 font-semibold">Engine / model</th>

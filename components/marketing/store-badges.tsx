@@ -105,7 +105,7 @@ export function PlatformDownloadBadge({ platform, href, disabledNote = 'Soon', c
         />
         <span className={cn(labelClassName, 'text-muted')}>
           {label}
-          <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide opacity-80">
+          <span className="ml-1.5 text-3xs font-medium uppercase tracking-wide opacity-80">
             {disabledNote}
           </span>
         </span>

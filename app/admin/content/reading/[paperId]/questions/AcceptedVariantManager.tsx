@@ -51,7 +51,7 @@ export function AcceptedVariantManager({ variants, onChange }: AcceptedVariantMa
               <Badge variant="secondary" className="gap-1.5 pr-1">
                 <span>{variant.value}</span>
                 {variant.category !== 'other' && (
-                  <span className="text-[10px] uppercase tracking-wide opacity-70">
+                  <span className="text-3xs uppercase tracking-wide opacity-70">
                     {CATEGORY_LABELS.get(variant.category)}
                   </span>
                 )}

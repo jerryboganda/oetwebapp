@@ -105,7 +105,7 @@ export default function SpeakingAssessmentCriteriaPage() {
                 <div className="space-y-3">
                   {criterion.bands.map((band) => (
                     <div key={band.band} className="rounded-xl border border-border bg-surface p-3">
-                      <p className="text-[11px] font-black uppercase tracking-wider text-muted">Band {band.band}</p>
+                      <p className="text-2xs font-black uppercase tracking-wider text-muted">Band {band.band}</p>
                       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-navy/90 dark:text-white/90">
                         {band.descriptors.map((descriptor) => (
                           <li key={`${criterion.id}-${band.band}-${descriptor}`}>{descriptor}</li>

@@ -31,7 +31,7 @@ export function AddOnsGrid({ addOns }: AddOnsGridProps) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="font-bold">{addon.name}</h4>
-                  <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
+                  <p className="mt-1 text-2xs uppercase tracking-wider text-muted">
                     requires <code>{addon.eligibilityFlag || 'n/a'}</code>
                   </p>
                 </div>

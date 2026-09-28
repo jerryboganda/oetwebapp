@@ -190,7 +190,7 @@ export function CandidateFeedbackVideos({ className }: { className?: string }) {
                     <Play className="ml-1 h-6 w-6 fill-current" />
                   </span>
                 </button>
-                <span className="absolute bottom-2.5 left-2.5 rounded-md bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">
+                <span className="absolute bottom-2.5 left-2.5 rounded-md bg-black/70 px-2 py-0.5 text-2xs font-semibold text-white backdrop-blur">
                   {video.badge}
                 </span>
               </div>
@@ -213,20 +213,20 @@ export function CandidateFeedbackVideos({ className }: { className?: string }) {
 
                 {/* Score breakdown pills */}
                 <div className="mt-4 border-t border-border/80 pt-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+                  <p className="text-3xs font-bold uppercase tracking-wider text-muted">
                     Official OET Result
                   </p>
                   <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-navy">
+                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-2xs font-semibold text-navy">
                       <CheckCircle2 className="h-3 w-3 text-success" /> L: {video.scores.listening}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-navy">
+                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-2xs font-semibold text-navy">
                       <CheckCircle2 className="h-3 w-3 text-success" /> R: {video.scores.reading}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-navy">
+                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-2xs font-semibold text-navy">
                       <CheckCircle2 className="h-3 w-3 text-success" /> W: {video.scores.writing}
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-navy">
+                    <span className="inline-flex items-center gap-1 rounded bg-surface px-2 py-1 text-2xs font-semibold text-navy">
                       <CheckCircle2 className="h-3 w-3 text-success" /> S: {video.scores.speaking}
                     </span>
                   </div>

@@ -654,7 +654,7 @@ export default function AdminVoiceDesignPage() {
                         onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
                         className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
-                      <p className="text-[11px] text-admin-text-muted">Used for all ElevenLabs generations (recalls, vocabulary, conversation, listening) when no override is set.</p>
+                      <p className="text-2xs text-admin-text-muted">Used for all ElevenLabs generations (recalls, vocabulary, conversation, listening) when no override is set.</p>
                     </label>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-bold text-admin-text-muted">Model</span>

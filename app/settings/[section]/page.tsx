@@ -602,7 +602,7 @@ function renderTag(label: string, accent: LearnerSurfaceAccent, tone: FieldTagTo
   const className = tone === 'section' ? accentStyles[accent].badge : tagToneStyles[tone];
 
   return (
-    <Badge key={`${label}-${tone}`} className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]', className)}>
+    <Badge key={`${label}-${tone}`} className={cn('rounded-full px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.14em]', className)}>
       {label}
     </Badge>
   );
@@ -829,10 +829,10 @@ function SettingsSectionForm({
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-1.5">
                         <label className="text-xl font-black text-navy tracking-tight" htmlFor={field.key}>{field.label}</label>
-                        <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
+                        <Badge className={cn('rounded-full px-3 py-1 font-bold text-3xs uppercase tracking-widest', palette.badge)}>
                           Personal Info
                         </Badge>
-                        <Badge variant={isLocked ? 'muted' : status.variant} className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        <Badge variant={isLocked ? 'muted' : status.variant} className="rounded-full px-2.5 py-1 text-3xs font-black uppercase tracking-widest shadow-sm">
                           {isLocked ? 'Locked' : status.label}
                         </Badge>
                       </div>
@@ -1069,7 +1069,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="text-xl font-black text-navy tracking-tight">Profile photo</span>
-              <Badge className={cn('rounded-full px-3 py-1 font-bold text-[10px] uppercase tracking-widest', palette.badge)}>
+              <Badge className={cn('rounded-full px-3 py-1 font-bold text-3xs uppercase tracking-widest', palette.badge)}>
                 Personal Info
               </Badge>
             </div>
@@ -1504,10 +1504,10 @@ export default function LearnerSettingsSectionPage() {
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">
-                      <Badge className={cn('rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
+                      <Badge className={cn('rounded-full px-3 py-1.5 text-3xs font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
                         {configuredFieldCount}/{config.fields.length} configured
                       </Badge>
-                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-surface shadow-sm border border-border">
+                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-3xs font-black uppercase tracking-[0.14em] bg-surface shadow-sm border border-border">
                         {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
                       </Badge>
                     </div>

@@ -578,7 +578,7 @@ function CheckoutReviewContent() {
                                   <span className="flex items-center gap-2">
                                     <span className="block text-sm font-bold text-navy">{brand.title}</span>
                                     {method.badge ? (
-                                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-primary">
                                         {method.badge}
                                       </span>
                                     ) : null}
@@ -710,7 +710,7 @@ function CheckoutReviewContent() {
                       {item.description ? (
                         <p className="mt-0.5 line-clamp-2 text-xs text-muted">{item.description}</p>
                       ) : null}
-                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted">Qty {item.quantity}</p>
+                      <p className="mt-1 text-2xs font-medium uppercase tracking-wide text-muted">Qty {item.quantity}</p>
                     </div>
                     <p className="shrink-0 text-sm font-bold text-navy">
                       {formatMoney(item.amount, { currency: item.currency })}

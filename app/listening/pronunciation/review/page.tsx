@@ -348,7 +348,7 @@ export default function PronunciationReviewPage() {
                   {emoji}
                 </span>
                 <span className="mt-1">{label}</span>
-                <span className="text-[10px] font-normal opacity-70">{description}</span>
+                <span className="text-3xs font-normal opacity-70">{description}</span>
               </button>
             ))}
           </div>

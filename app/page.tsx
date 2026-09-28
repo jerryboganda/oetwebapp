@@ -190,13 +190,13 @@ function DashboardSubscriptionStrip({
           <button
             type="button"
             onClick={onReloadPaymentStatus}
-            className="shrink-0 rounded-md bg-lavender/60 px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-lavender"
+            className="shrink-0 rounded-md bg-lavender/60 px-2 py-0.5 text-2xs font-semibold text-primary transition-colors hover:bg-lavender"
           >
             Reload payment status
           </button>
         ) : null}
         {!isLoading && !hasError ? (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
           </span>
         ) : null}
@@ -207,7 +207,7 @@ function DashboardSubscriptionStrip({
           {facts.map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-[11px] font-semibold text-navy ring-1 ring-border/70 transition-colors hoverable:bg-lavender/50 hoverable:ring-primary/25"
+              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-2xs font-semibold text-navy ring-1 ring-border/70 transition-colors hoverable:bg-lavender/50 hoverable:ring-primary/25"
             >
               <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
               <span className="truncate">{label}</span>
@@ -463,7 +463,7 @@ export default function Dashboard() {
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700">Read-only mode</p>
+                    <p className="text-3xs font-medium uppercase tracking-wide text-amber-700">Read-only mode</p>
                     <CardTitle className="mt-2 flex items-center gap-2 text-xl text-amber-950">
                       <Shield className="h-5 w-5" />
                       Your account is currently frozen
@@ -476,17 +476,17 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Status</p>
+                  <p className="text-3xs font-medium uppercase tracking-wide text-amber-700/70">Status</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Started</p>
+                  <p className="text-3xs font-medium uppercase tracking-wide text-amber-700/70">Started</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Ends</p>
+                  <p className="text-3xs font-medium uppercase tracking-wide text-amber-700/70">Ends</p>
                   <p className="mt-1 text-sm font-normal text-amber-950">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>

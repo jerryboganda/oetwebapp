@@ -255,7 +255,7 @@ export default function WritingAnalyticsPage() {
                     );
                   })}
                 </div>
-                <div className="mt-2 flex justify-between text-[10px] text-muted">
+                <div className="mt-2 flex justify-between text-3xs text-muted">
                   <span>{summary.trend[0]?.date.slice(5)}</span>
                   <span>{summary.trend[summary.trend.length - 1]?.date.slice(5)}</span>
                 </div>
@@ -280,7 +280,7 @@ export default function WritingAnalyticsPage() {
                           <span className="text-3xl font-bold text-navy">{latestGrade.gradeRange}</span>
                           <span className="text-sm text-muted">({latestGrade.scoreRange})</span>
                         </div>
-                        <div className="mt-1 text-[11px] text-muted">{latestGrade.date}</div>
+                        <div className="mt-1 text-2xs text-muted">{latestGrade.date}</div>
                       </div>
                     )}
                     {latestPurpose && (
@@ -291,7 +291,7 @@ export default function WritingAnalyticsPage() {
                             {latestPurpose.score}<span className="text-sm text-muted">/{latestPurpose.maxScore}</span>
                           </span>
                         </div>
-                        <div className="mt-1 text-[11px] text-muted">{latestPurpose.date}</div>
+                        <div className="mt-1 text-2xs text-muted">{latestPurpose.date}</div>
                       </div>
                     )}
                   </div>

@@ -82,7 +82,7 @@ export function FeatureMatrix({ plans, loading, error, emptyMessage }: FeatureMa
               <tr key={plan.code} className="hover:bg-background-light/50">
                 <td className="px-4 py-3">
                   <div className="font-medium">{plan.name}</div>
-                  <div className="text-[11px] uppercase tracking-wider text-muted">
+                  <div className="text-2xs uppercase tracking-wider text-muted">
                     {PROFESSION_LABEL[plan.profession] ?? plan.profession}
                   </div>
                 </td>

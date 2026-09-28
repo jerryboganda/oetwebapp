@@ -107,7 +107,7 @@ function StatusPill({ status }: { status: string }) {
           : 'bg-background-light text-muted';
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${tone}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone}`}
     >
       {status || 'unknown'}
     </span>

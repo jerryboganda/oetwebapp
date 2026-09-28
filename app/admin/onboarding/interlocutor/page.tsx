@@ -56,20 +56,20 @@ function formatSigma(sigma: number | null): string {
 function statusBadge(status: InterlocutorTrainingStatusLabel) {
   if (status === 'Trained') {
     return (
-      <Badge variant="success" className="text-[10px]">
+      <Badge variant="success" className="text-3xs">
         Trained
       </Badge>
     );
   }
   if (status === 'Failed') {
     return (
-      <Badge variant="danger" className="text-[10px]">
+      <Badge variant="danger" className="text-3xs">
         Failed
       </Badge>
     );
   }
   return (
-    <Badge variant="warning" className="text-[10px]">
+    <Badge variant="warning" className="text-3xs">
       In Progress
     </Badge>
   );
@@ -411,7 +411,7 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
                         ? 'danger'
                         : 'info'
                   ) as any}
-                  className="text-[10px]"
+                  className="text-3xs"
                 >
                   {row.status}
                 </Badge>

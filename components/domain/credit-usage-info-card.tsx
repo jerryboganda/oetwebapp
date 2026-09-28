@@ -81,7 +81,7 @@ export function CreditUsageInfoCard({
           <Ticket className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className={`text-[11px] font-bold uppercase tracking-widest ${theme.eyebrow}`}>
+          <p className={`text-2xs font-bold uppercase tracking-widest ${theme.eyebrow}`}>
             How your credits work
           </p>
           <h3 className="mt-0.5 text-base font-bold text-navy">

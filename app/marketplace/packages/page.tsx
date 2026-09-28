@@ -142,7 +142,7 @@ export default function PackagesPage() {
                       >
                         {websitePackage ? (
                           <>
-                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
                               Package {websitePackage.packageNo}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -156,7 +156,7 @@ export default function PackagesPage() {
                               {websitePackage.metaChips.map((chip) => (
                                 <span
                                   key={chip}
-                                  className="rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+                                  className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
                                 >
                                   {chip}
                                 </span>
@@ -169,7 +169,7 @@ export default function PackagesPage() {
                           </>
                         ) : (
                           <Badge
-                            className={`mb-3 self-start text-[10px] ${
+                            className={`mb-3 self-start text-3xs ${
                               PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-muted'
                             }`}
                           >
@@ -242,7 +242,7 @@ export default function PackagesPage() {
                         href="/videos"
                         className="group block rounded-lg border border-border bg-surface p-4 hover:shadow-sm transition-shadow"
                       >
-                        <Badge variant="muted" className="text-[10px] mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
+                        <Badge variant="muted" className="text-3xs mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
                         <h3 className="text-sm font-medium leading-tight group-hover:text-primary transition-colors">{preview.title}</h3>
                         {preview.conversionCtaText && (
                           <p className="text-xs text-primary mt-2">{preview.conversionCtaText}</p>

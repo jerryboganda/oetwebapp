@@ -162,7 +162,7 @@ export function LearnerSurfaceSectionHeader({
     <div className={cn('flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4', className)}>
       <div>
         {eyebrow ? (
-          <p className="text-[11px] font-bold text-muted uppercase tracking-wider mb-1 sm:mb-1.5 sm:text-xs">{eyebrow}</p>
+          <p className="text-2xs font-bold text-muted uppercase tracking-wider mb-1 sm:mb-1.5 sm:text-xs">{eyebrow}</p>
         ) : null}
         <div className="flex items-center gap-2">
           {icon ? <span className="text-primary">{renderIcon(icon, 'h-4 w-4')}</span> : null}
@@ -200,7 +200,7 @@ export function LearnerPageHero({
           </div>
         ) : null}
         <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted sm:text-[11px] sm:tracking-[0.16em]">{item.label}</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted sm:text-2xs sm:tracking-[0.16em]">{item.label}</p>
           <p className="text-xs font-semibold text-navy break-words sm:text-sm">{item.value}</p>
         </div>
       </div>
@@ -218,7 +218,7 @@ export function LearnerPageHero({
             </div>
           ) : null}
             <div className="min-w-0">
-              {eyebrow ? <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-[11px] sm:tracking-[0.18em]">{eyebrow}</p> : null}
+              {eyebrow ? <p className="mb-0.5 text-3xs font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
               <h1 className="text-[17px] font-bold leading-tight tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
@@ -258,7 +258,7 @@ export function LearnerSurfaceCard({
           <div className="flex items-start justify-between gap-3">
             <div>
               {card.eyebrow ? (
-                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider sm:text-xs', palette.eyebrow)}>
+                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold uppercase tracking-wider sm:text-xs', palette.eyebrow)}>
                   {EyebrowIcon ? <EyebrowIcon className="w-3.5 h-3.5" /> : null}
                   {card.eyebrow}
                 </div>

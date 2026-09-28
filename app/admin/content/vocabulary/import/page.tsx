@@ -606,23 +606,23 @@ export default function AdminVocabularyImportPage() {
                       <div className="grid grid-cols-2 gap-3 text-center md:grid-cols-5">
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{knownRowCount}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Total</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Total</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-emerald-600">{audioReadyCount}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Done</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Done</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-amber-600">{remaining}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Remaining</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Remaining</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-blue-600">{queued}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Queued</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">Queued</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '-'}</div>
-                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">ETA</div>
+                          <div className="text-3xs text-admin-fg-muted uppercase tracking-wide">ETA</div>
                         </div>
                       </div>
 

@@ -79,20 +79,20 @@ function meanSigmaForSet(
 function bucketBadge(bucket: DriftBucket) {
   if (bucket === 'trained') {
     return (
-      <Badge variant="success" className="text-[10px]">
+      <Badge variant="success" className="text-3xs">
         Trained
       </Badge>
     );
   }
   if (bucket === 'drifting') {
     return (
-      <Badge variant="warning" className="text-[10px]">
+      <Badge variant="warning" className="text-3xs">
         Drifting
       </Badge>
     );
   }
   return (
-    <Badge variant="danger" className="text-[10px]">
+    <Badge variant="danger" className="text-3xs">
       Retrain
     </Badge>
   );
@@ -197,7 +197,7 @@ function SetsTable({
                           ? 'default'
                           : 'info'
                     ) as any}
-                    className="text-[10px] uppercase"
+                    className="text-3xs uppercase"
                   >
                     {set.status}
                   </Badge>

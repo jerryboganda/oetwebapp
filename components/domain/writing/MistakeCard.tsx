@@ -50,13 +50,13 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
           <div className="rounded border border-danger/30 bg-danger/10 p-2">
-            <dt className="text-[10px] uppercase tracking-wider font-bold text-danger mb-0.5">
+            <dt className="text-3xs uppercase tracking-wider font-bold text-danger mb-0.5">
               Wrong
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleWrong}</dd>
           </div>
           <div className="rounded border border-success/30 bg-success/10 p-2">
-            <dt className="text-[10px] uppercase tracking-wider font-bold text-success mb-0.5">
+            <dt className="text-3xs uppercase tracking-wider font-bold text-success mb-0.5">
               Right
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleRight}</dd>

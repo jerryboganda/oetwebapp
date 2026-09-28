@@ -263,9 +263,9 @@ function PriceRow({ price }: { price: AdminBillingProductPrice }) {
         <p className="font-medium text-admin-fg-default">
           {formatMoney(price.amount, { currency: price.currency })}
         </p>
-        <p className="text-[11px] uppercase tracking-wider text-admin-fg-muted">{price.interval}</p>
+        <p className="text-2xs uppercase tracking-wider text-admin-fg-muted">{price.interval}</p>
       </div>
-      <p className="font-mono text-[10px] text-admin-fg-muted">{price.priceId}</p>
+      <p className="font-mono text-3xs text-admin-fg-muted">{price.priceId}</p>
     </div>
   );
 }

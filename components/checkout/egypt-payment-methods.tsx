@@ -96,7 +96,7 @@ export function EgyptPaymentMethods({ egyptHref, disabled }: { egyptHref: string
           </span>
           <p className="text-sm font-bold text-navy">{active.title}</p>
           {active.badge ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-semibold text-amber-700">
               {active.badge}
             </span>
           ) : null}

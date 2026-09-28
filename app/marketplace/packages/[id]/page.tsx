@@ -161,7 +161,7 @@ export default function PackageDetailPage() {
                   Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
                 </button>
               )}
-              <p className="mt-2 text-[10px] text-white/60">
+              <p className="mt-2 text-3xs text-white/60">
                 {plan.code === 'tutor-book'
                   ? 'We check your eligibility automatically — £32 if you have an eligible course, £45 otherwise.'
                   : 'Charged in GBP. No auto-renewal.'}
@@ -274,7 +274,7 @@ export default function PackageDetailPage() {
                   >
                     <TagIcon className="h-3 w-3" /> Add to order
                   </button>
-                  <p className="mt-2 text-[10px] text-muted">After payment, contact us on WhatsApp for manual delivery. No platform access is unlocked.</p>
+                  <p className="mt-2 text-3xs text-muted">After payment, contact us on WhatsApp for manual delivery. No platform access is unlocked.</p>
                 </div>
               </div>
             )}

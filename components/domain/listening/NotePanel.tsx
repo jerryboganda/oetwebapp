@@ -231,7 +231,7 @@ export function NotePanel({
                     <span className="text-xs font-medium text-muted">
                       {formatTimestamp(note.transcriptMs, note.createdAt)}
                       {note.extractId ? (
-                        <span className="ml-1 rounded bg-background-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                        <span className="ml-1 rounded bg-background-light px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-muted">
                           extract
                         </span>
                       ) : null}
@@ -285,7 +285,7 @@ export function NotePanel({
 
         {/* Footer hint */}
         <div className="border-t border-border px-4 py-2">
-          <p className="text-center text-xs text-muted">Press <kbd className="rounded border border-border px-1 font-mono text-[10px]">N</kbd> to toggle notes</p>
+          <p className="text-center text-xs text-muted">Press <kbd className="rounded border border-border px-1 font-mono text-3xs">N</kbd> to toggle notes</p>
         </div>
       </div>
     </>

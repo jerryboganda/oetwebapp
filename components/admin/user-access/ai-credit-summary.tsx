@@ -79,7 +79,7 @@ export function AiCreditSummary({
       ) : (
         <div className="overflow-hidden rounded-lg border border-gray-200">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-2xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Balance</th>
                 <th className="px-3 py-2 font-medium">Total</th>
@@ -116,7 +116,7 @@ export function AiCreditSummary({
                     <tr key={`${bucket.key}-grants`} data-testid={`admin-bucket-${bucket.key}-grants`}>
                       <td colSpan={6} className="bg-gray-50/60 px-3 py-2">
                         <div className="space-y-1">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                          <p className="text-2xs font-semibold uppercase tracking-wide text-gray-500">
                             Grants · {bucket.grants.length}
                           </p>
                           <ul className="space-y-1">
@@ -124,14 +124,14 @@ export function AiCreditSummary({
                               <li
                                 key={`${grant.sourceReferenceId ?? grant.packageId ?? grant.description}-${index}`}
                                 data-testid={`admin-bucket-${bucket.key}-grant-${index}`}
-                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-4 text-gray-600"
+                                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs leading-4 text-gray-600"
                               >
                                 <span className="font-medium text-gray-700">
                                   {grant.description || grant.packageId || 'grant'} · {grant.totalGranted}
                                 </span>
                                 {grant.sourceReferenceId ? (
                                   <span
-                                    className="max-w-[14rem] truncate font-mono text-[10px] text-gray-500"
+                                    className="max-w-[14rem] truncate font-mono text-3xs text-gray-500"
                                     title={grant.sourceReferenceId}
                                   >
                                     {shortSource(grant.sourceReferenceId)}

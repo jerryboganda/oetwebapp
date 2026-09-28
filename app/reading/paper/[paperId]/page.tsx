@@ -1641,7 +1641,7 @@ function ReadingA11ySettings({
             <span className="font-semibold text-navy">Extra screen-reader hints</span>
           </label>
         ) : null}
-        <p className="text-[10px] text-muted">
+        <p className="text-3xs text-muted">
           <Eye className="mr-1 inline h-3 w-3" aria-hidden />
           Settings are saved per paper. Changes here only affect this paper.
         </p>

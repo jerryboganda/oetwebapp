@@ -71,7 +71,7 @@ function StageCard({ stage, index }: { stage: ListeningPathwayStageView; index: 
       <header className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-navy">Stage {index + 1}</h3>
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${style.badge}`}
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-3xs font-bold uppercase tracking-wide ${style.badge}`}
         >
           {stage.status}
         </span>
@@ -79,7 +79,7 @@ function StageCard({ stage, index }: { stage: ListeningPathwayStageView; index: 
 
       <p className={`text-sm font-semibold ${style.text}`}>{stageLabel(stage.stage)}</p>
 
-      <div className="mt-auto flex items-center justify-between border-t border-border pt-3 text-[11px] text-muted">
+      <div className="mt-auto flex items-center justify-between border-t border-border pt-3 text-2xs text-muted">
         <span className="font-semibold">
           {stage.scaledScore === null ? 'No score yet' : `${stage.scaledScore}/500`}
         </span>

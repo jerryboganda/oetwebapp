@@ -1170,14 +1170,14 @@ function FolderTreeNode({
         {!visibility.ok && (
           <span
             title={visibility.reason}
-            className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-medium"
+            className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 text-3xs font-medium"
           >
             {visibility.label}
           </span>
         )}
 
         {/* Audience badge — shown when hovering */}
-        <span className="shrink-0 text-[10px] text-admin-fg-muted hidden group-hover:inline">
+        <span className="shrink-0 text-3xs text-admin-fg-muted hidden group-hover:inline">
           {folder.audienceMode === 'Everyone' ? '🌐' : folder.audienceMode === 'Restricted' ? '🔒' : '↑'}
         </span>
 

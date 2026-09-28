@@ -99,7 +99,7 @@ export function ListeningSectionStepper({
           </span>
         );
       })}
-      <span className="ml-auto hidden text-[10px] normal-case tracking-normal text-muted sm:inline">
+      <span className="ml-auto hidden text-3xs normal-case tracking-normal text-muted sm:inline">
         {freeNavigation
           ? 'Review navigation. Jump between available sections.'
           : 'Forward-only. Completed sections cannot be revisited.'}

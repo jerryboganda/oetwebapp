@@ -410,7 +410,7 @@ function ResultSummary({ result }: { result: GrammarAttemptResult }) {
 
         {/* Score */}
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+          <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">
             {mastered ? 'Mastery achieved!' : 'Lesson complete'}
           </p>
           <div className="mt-1 text-5xl font-extrabold text-primary">{score}%</div>

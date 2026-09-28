@@ -86,7 +86,7 @@ export default function AdminRefundsPage() {
       cell: ({ row }) => (
         <div>
           <p className="text-sm text-admin-fg-default">{new Date(row.original.requestedAt).toLocaleString()}</p>
-          <p className="font-mono text-[10px] text-admin-fg-muted">{row.original.id}</p>
+          <p className="font-mono text-3xs text-admin-fg-muted">{row.original.id}</p>
         </div>
       ),
     },
@@ -96,7 +96,7 @@ export default function AdminRefundsPage() {
       cell: ({ row }) => (
         <div>
           <p className="text-sm text-admin-fg-default">{row.original.userName}</p>
-          <p className="font-mono text-[10px] text-admin-fg-muted">{row.original.userId}</p>
+          <p className="font-mono text-3xs text-admin-fg-muted">{row.original.userId}</p>
         </div>
       ),
     },

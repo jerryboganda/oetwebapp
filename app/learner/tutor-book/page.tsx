@@ -196,7 +196,7 @@ function AudioTab({ audio }: { audio: TutorBookAudioScript[] }) {
         <li key={`${script.chapter}-${i}`} className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted">Chapter {script.chapter}</p>
+              <p className="text-3xs uppercase tracking-wider text-muted">Chapter {script.chapter}</p>
               <h3 className="text-base font-bold">{script.title}</h3>
             </div>
             {script.transcriptUrl && (
@@ -229,7 +229,7 @@ function UpdatesTab({ updates }: { updates: TutorBookUpdate[] }) {
             <time className="text-xs text-muted">{new Date(update.publishedAt).toLocaleDateString()}</time>
           </header>
           <p className="mt-2 whitespace-pre-line text-sm text-navy/90">{update.bodyMarkdown}</p>
-          <p className="mt-2 text-[10px] uppercase tracking-wider text-muted">Audience: {update.audience}</p>
+          <p className="mt-2 text-3xs uppercase tracking-wider text-muted">Audience: {update.audience}</p>
         </li>
       ))}
     </ul>

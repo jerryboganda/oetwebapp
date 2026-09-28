@@ -787,7 +787,7 @@ export default function PrivateSpeakingPage() {
                               : 'border-border bg-surface hover:border-primary/30'
                           }`}>
                           <div className="font-medium text-navy">{slot.startTimeLocal}</div>
-                          <div className="flex items-start gap-1 text-[11px] text-muted mt-0.5">
+                          <div className="flex items-start gap-1 text-2xs text-muted mt-0.5">
                             <Globe className="w-3 h-3 mt-0.5 shrink-0 text-muted/60" aria-hidden />
                             <span>{formatLocalAndUkTime(slot.startTimeUtc)}</span>
                           </div>
@@ -854,7 +854,7 @@ export default function PrivateSpeakingPage() {
                     ))}
                   </div>
                   {bookingFormat === 'exam' && (
-                    <p className="mt-1 text-[11px] text-muted">
+                    <p className="mt-1 text-2xs text-muted">
                       A structured two-card exam. Your tutor plays the patient and marks your result.
                     </p>
                   )}
