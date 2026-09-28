@@ -31,6 +31,10 @@ describe('learner dashboard route policy', () => {
     expect(isExamOrLiveRoute('/listening/paper/p1/')).toBe(true);
     expect(isExamOrLiveRoute('/mocks/player/m1')).toBe(true);
     expect(isExamOrLiveRoute('/mocks/speaking-room/b1')).toBe(true);
+    expect(isExamOrLiveRoute('/writing/paper/session/s1')).toBe(true);
+    expect(isExamOrLiveRoute('/mocks/writing/a1')).toBe(true);
+    expect(isExamOrLiveRoute('/speaking/sessions/s1/live-tutor')).toBe(true);
+    expect(isExamOrLiveRoute('/speaking/sessions/s1')).toBe(false);
     expect(isExamOrLiveRoute('/listening/player/attempt-1')).toBe(true);
     expect(isExamOrLiveRoute('/expert/speaking-room/b1')).toBe(true);
     expect(isExamOrLiveRoute('/expert/speaking/live-room/s1')).toBe(true);
