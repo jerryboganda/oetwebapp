@@ -10,9 +10,8 @@ import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
-import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
-import { useEnabledModules } from '@/hooks/use-enabled-modules';
-import { PLACEMENT_NAV_HREF, usePlacementAccess } from '@/hooks/use-placement-access';
+import { useLearnerNavVisibility } from '@/hooks/use-learner-nav-visibility';
+import { PLACEMENT_NAV_HREF } from '@/hooks/use-placement-access';
 import {
   ClipboardCheck,
   LayoutDashboard,
@@ -351,30 +350,9 @@ export function Sidebar({
   const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
   const email = userSummary?.email ?? user?.email ?? '';
-  const navFeatureKeys = useMemo(
-    () => collectFeatureFlagKeys([...learnNavItems, ...resolvedItems]),
-    [resolvedItems],
-  );
-  const learnerFeatureFlags = useFeatureFlagMap(navFeatureKeys, isLearnerWorkspace);
-  const { isModuleEnabled, modules: enabledModules } = useEnabledModules(isLearnerWorkspace);
-  const enabledModulesKey = enabledModules.join('|');
-  const placementAccess = usePlacementAccess(isLearnerWorkspace);
-  const visibleLearnNavItems = useMemo(
-    () => learnNavItems.filter(
-      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace) && isModuleEnabled(item.moduleKey),
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLearnerWorkspace, learnerFeatureFlags, enabledModulesKey],
-  );
-  const visibleMainItems = useMemo(
-    () => resolvedItems.filter(
-      (item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)
-        && isModuleEnabled(item.moduleKey)
-        && (item.href !== PLACEMENT_NAV_HREF || placementAccess),
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLearnerWorkspace, learnerFeatureFlags, resolvedItems, enabledModulesKey, placementAccess],
-  );
+  const isNavItemVisible = useLearnerNavVisibility([...learnNavItems, ...resolvedItems], isLearnerWorkspace);
+  const visibleLearnNavItems = useMemo(() => learnNavItems.filter(isNavItemVisible), [isNavItemVisible]);
+  const visibleMainItems = useMemo(() => resolvedItems.filter(isNavItemVisible), [resolvedItems, isNavItemVisible]);
 
   const handleSignOut = async () => {
     await signOut();
