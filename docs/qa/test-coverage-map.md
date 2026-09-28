@@ -36,6 +36,15 @@
 | Backend auth stability | Automated strong | Full .NET tests + targeted MFA regression | Yes | More end-to-end API contract checks would help |
 | CI smoke workflow | Automated in repo, unobserved on GitHub | GitHub Actions workflow file exists and is runnable | No | Hosted GitHub execution still requires external observation |
 
+## Requirement-driven tier suite (`tests/e2e-tiers/`)
+- Five Vitest files. `pnpm run test:e2e:tiers` (`vitest.e2e.config.ts`, node environment) runs the four tier 1–4 suites below, plus the multi-exam scoring and challenger stress tests under `tests/unit/`. All five are also matched by the main `vitest.config.ts` include pattern.
+- `tier1-smoke.test.ts`: smoke checks, run only by the main `vitest.config.ts` (not in `vitest.e2e.config.ts`).
+- Tier 1 `tier1-feature-coverage.test.ts`: happy paths for the 13 features numbered in `PROJECT.md` (Feature 1–13: Reading/Listening/Writing/Speaking engines, mock orchestrator, objective and subjective scoring, Statement of Results, AI gateway, storage, multi-exam strategy, candidate hub/entitlements, admin zero-deviation ingestion).
+- Tier 2 `tier2-boundary-corner.test.ts`: empty inputs, score caps, grade and 30/42 benchmark boundaries, country resolution, timer locks, corrupted audio chunks, network disconnects.
+- Tier 3 `tier3-cross-feature-combinations.test.ts`: pairwise interactions (mock lifecycle × timers, credit ledger × session progression, ingestion × candidate gating, AI circuit breaker × score persistence, multi-exam switching, plan change × entitlements).
+- Tier 4 `tier4-real-world-scenarios.test.ts`: full journeys (4-skill mock to Statement of Results, admin ingestion to live exam, purchase and top-up, AI outage, network interruption).
+- Scoring expectations must come from `docs/SCORING.md` / `lib/scoring.ts`, not from constants restated in docs. Run these on GitHub Actions like every other suite (AGENTS.md compute rule).
+
 ## Route/Surface Inventory Notes
 - Total page-route inventory discovered in `app/**/page.tsx`: broad multi-role surface including auth, learner, expert, admin, immersive players, review workspaces, and reports.
 - Current Playwright suite now protects:

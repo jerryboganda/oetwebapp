@@ -38,7 +38,7 @@ Web app itself is unchanged on production (`Build & Deploy` run 34807150495, SHA
 
 - `d494e661b` writing case-note marker fix (unpushed at release time; ships in the next web deploy).
 
-## [Unreleased]
+## [History before R-2026-09-13]
 
 ### Desktop (Tauri 2) production-readiness
 

@@ -36,7 +36,8 @@
   - NVDA on Windows for sign-in, learner immersive flows, expert review completion, admin audit-log drawer/export, and admin user credit modal
   - VoiceOver on macOS or iOS for learner dashboard, learner settings/profile, and one immersive learner flow
 - Execution checklist and evidence template:
-  - `docs/qa/accessibility-report.md`
+  - `docs/qa/accessibility-report.md` (removed in 81506d1e0; recover with
+    `git show 81506d1e0^:docs/qa/accessibility-report.md`)
 - Required evidence:
   - date performed
   - operator

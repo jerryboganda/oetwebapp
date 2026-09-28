@@ -51,6 +51,10 @@ assets independently.
    per-ref. Mobile (≤30 min job) and desktop (≤90 min legs) may run in parallel
    with each other.
 7. Never commit/print secrets (keystore, service-account key, certs, API keys).
+8. Prerequisites: the `PROD_SSH_KEY` repository secret (the release workflows
+   publish to the VPS with it) plus the signing secrets, and a web stack that
+   mounts `/var/opt/oet-learner/releases` into `web`, `web-blue` and
+   `web-green` (`RELEASES_HOST_PATH` in `docker-compose.production.yml`).
 
 ## 2. Pathway A — Android (EVERY active Play track + VPS sideload)
 
@@ -143,6 +147,11 @@ installer is unsigned but still updater-valid).
 - Report: versions shipped per channel, anything intentionally unchanged
   (e.g. production track, TestFlight manual step, macOS dmg absent), and any
   remaining warnings (e.g. review delays, propagation lag).
+- Record the release in `docs/releases/RELEASE-LEDGER.md` and check
+  `docs/releases/RELEASE-PARITY-CHECKLIST.md`.
+- Related: `docs/ROLLBACK.md` (native rollback = re-run the workflow for the
+  last known-good version) and `docs/AUTO_UPDATE_ARCHITECTURE.md` (feeds,
+  retention, `/api/download/{windows,mac,android,ios}` verify URLs).
 
 ## 6. Gotchas (learned the hard way — do not relearn)
 

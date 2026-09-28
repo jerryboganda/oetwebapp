@@ -1,11 +1,11 @@
 # Content Upload & Authoring — Implementation Plan
 
-> **Current status (2026-05-29)**: historical planning artifact plus useful domain analysis. The current source of open cross-project work is the active status index at [`STATUS/REMAINING-WORK.md`](STATUS/REMAINING-WORK.md). Do not treat this document's early planning language as proof that every content-upload slice is still pending.
+> **Current status (2026-05-29)**: historical planning artifact plus useful domain analysis. The current source of open cross-project work is [`PROGRESS.md`](../PROGRESS.md) (the old `STATUS/REMAINING-WORK.md` index was removed in 81506d1e0). Do not treat this document's early planning language as proof that every content-upload slice is still pending.
 
 > **Status**: planning document, ready for implementation. Companion to
 > [`AGENTS.md`](../AGENTS.md), [`SCORING.md`](SCORING.md), [`RULEBOOKS.md`](RULEBOOKS.md),
 > [`AI-USAGE-POLICY.md`](AI-USAGE-POLICY.md), and the focused
-> [`WRITING-AUTHORING-PLAN.md`](WRITING-AUTHORING-PLAN.md). Once approved, work proceeds
+> `WRITING-AUTHORING-PLAN.md` (removed in 889479aba; see git history). Once approved, work proceeds
 > as labelled slices the same way the AI Usage subsystem did.
 
 ---
@@ -108,9 +108,9 @@ Writing_/
 
 - `Scoring System.txt` — already canonicalised in `lib/scoring.ts` /
   `OetScoring`. Not uploaded; reference.
-- `OET_Speaking_Rulebook_v2.pdf`, `OET_Writing_Rulebook_FINAL.pdf` — already
-  loaded by `RulebookLoader`. Not user-uploadable; loaded from
-  `rulebooks/**/rulebook.v*.json`.
+- `OET_Speaking_Rulebook_v2.pdf`, `OET_Writing_Rulebook_FINAL.pdf` (tracked
+  in `docs/rulebooks/`) — source PDFs only. Not user-uploadable; the runtime
+  `RulebookLoader` reads the extracted `rulebooks/**/rulebook.v*.json`.
 - `Create Similar Table Formats for Results to show to Candidates/*.jpg` —
   these are screenshots of OET official result tables, used as **reference
   images for designing the result-card UI**, not learner content. Excluded

@@ -71,5 +71,5 @@ The Mocks module must let admins assemble authentic OET-style mock exams from pu
 - `docs/SCORING.md`
 - `docs/OET-RESULT-CARD-SPEC.md`
 - `docs/READING-AUTHORING-PLAN.md`
-- `docs/LISTENING-MODULE-PLAN.md`
+- `docs/LISTENING.md` (replaces `docs/LISTENING-MODULE-PLAN.md`, removed in 889479aba)
 - `docs/speaking/PRD.md`

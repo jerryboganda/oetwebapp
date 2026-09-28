@@ -16,28 +16,33 @@ Every production deploy must, at minimum, attach:
    tests, production build) — see `.github/workflows`.
 2. Latest SBOM + SCA workflow artifacts for the deploying SHA, with any accepted
    vulnerability risk explicitly owned and time-bounded.
-3. Successful protected `Build Release Images` workflow for the deploying SHA,
-   with `release-images-<sha>/release-images.env` recording immutable `@sha256`
-   refs for `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE`.
-   The artifact is commit-scoped and retained for 90 days.
+3. Successful **Build & Deploy (web + API)** (`.github/workflows/deploy.yml`)
+   run for the deploying SHA: `build-web`, `build-api`, `build-backup`,
+   `build-agent-gateway`, `migrate-production` and `deploy` all green, with the
+   `:<sha>` images in GHCR.
 4. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
-   target host.
+   target host. Only the manual `deploy-prod.sh` path runs it automatically.
 5. `.env.production` validation — no missing keys, no `__placeholder__`
    values. The deploy/pre-flight scripts run
    `scripts/deploy/validate-production-env.sh` without printing secrets.
 6. Production mock/stub scan success from `scripts/deploy/mock-stub-scan.sh`.
 7. Approver acknowledgement (Dr Faisal Maqsood) recorded in the deploy
    commit message or release notes.
-8. Pinned SSH host fingerprint configured as `VPS_SSH_FINGERPRINT` on the
-   protected GitHub `production` environment.
+8. Pinned SSH host fingerprint. **Not enforced today:** `deploy.yml` uses
+   `ssh-keyscan` with `StrictHostKeyChecking=accept-new`, and no workflow reads
+   a `VPS_SSH_FINGERPRINT` secret. Pinning it is an open owner item.
 
 ## Deploy Command (current)
 
-Production deploys are exact-SHA only. First run the protected `Build Release
-Images` workflow for the target SHA. The protected `Deploy Production` workflow
-must then receive the same target SHA plus the immutable image digest refs from
-`release-images.env`; it downloads that artifact and rejects mismatched refs
-before SSH deploy. The VPS command shape is:
+Production deploys come from `.github/workflows/deploy.yml` on every push to
+`main` (or a manual dispatch): images are built on Actions, pushed to GHCR as
+`:<sha>`, migrations are applied by `migrate-production`, and the `deploy` job
+runs `scripts/deploy/auto-deploy-ghcr.sh` on the VPS. See `DEPLOYMENT.md` §3
+and `DEPLOY-MANUAL.md`. (The earlier protected `Build Release Images` /
+`Deploy Production` workflows were removed in e616c3dcd.)
+
+The manual incident path is exact-SHA and digest-pinned. The VPS command shape
+is:
 
 ```bash
 ssh root@185.252.233.186
@@ -51,15 +56,14 @@ bash ./scripts/deploy/deploy-prod.sh
 ```
 
 The active GitHub deploy checkout is `/opt/oetwebapp`. `/root/oetwebsite` is
-stale and must not be used for builds. The deploy gate validates immutable image
-digest refs against the release-image artifact, requires successful CI and
-SBOM/SCA runs for the exact SHA, logs the VPS into GHCR using a temporary Docker
-config for image pulls, runs pre-flight, starts digest-pinned images in the
-inactive blue/green slot, verifies each pulled image is labelled with the
-deploying SHA, switches the stable `web` and `learner-api` router containers
-only after internal slot health passes, then runs post-deploy verification,
-observability smoke, and the Reading/media smoke gate. It never runs
-volume-destructive commands.
+stale and must not be used for builds. `deploy-prod.sh` runs pre-flight, starts
+digest-pinned images in the inactive blue/green slot, verifies each pulled image
+is labelled with the deploying SHA, switches the stable `web` and `learner-api`
+router containers only after internal slot health passes, then runs post-deploy
+verification, observability smoke, and the Reading/media smoke gate. The
+automatic path health-gates the new slot and the public URLs but does not run
+those smoke scripts, so the Post-Deploy Smoke Gate below stays a manual step.
+Neither path runs volume-destructive commands.
 
 ## Post-Deploy Smoke Gate
 
@@ -109,6 +113,11 @@ bash ./scripts/deploy/deploy-prod.sh
 # Verify
 scripts/deploy/post-deploy-verify.sh
 ```
+
+`.deploy/rollback-target.env` and `release-history.tsv` are written only by the
+`deploy-prod.sh` path. After automatic `deploy.yml` releases, the previous
+`:<sha>` image refs are in `.deploy/auto-deploy-history.tsv`; redeploy them with
+the `auto-deploy-ghcr.sh` command in `DEPLOY-MANUAL.md`.
 
 Before rollback or hotfix deploys, run `scripts/deploy/pre-flight.sh` to record
 a database snapshot when the host is stable enough. If Reading media policy is

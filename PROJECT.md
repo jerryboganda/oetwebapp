@@ -1,5 +1,13 @@
 # Project: OET Preparation Platform & Multi-Exam Engine
 
+> Milestone-plan record from 2026-09-03 (all milestones DONE). Keep it: the
+> Feature 1–13 numbering below is what `tests/e2e-tiers/tier1-feature-coverage.test.ts`
+> uses, and the Interface Contracts section is the only prose summary of
+> `IExamSessionDriver`. The "Source" column cites `ORIGINAL_REQUEST.md` and the
+> M-E2E row cites `TEST_READY.md`; both were removed in the 2026-09-28 cleanup
+> (read them with `git show 1a2d0a864:ORIGINAL_REQUEST.md`). Scoring rules
+> restated here are not canonical — use `docs/SCORING.md`.
+
 ## Architecture
 
 The OET Preparation Platform is an enterprise-grade medical English and healthcare communication exam preparation platform built with a high-performance, decoupled architecture:

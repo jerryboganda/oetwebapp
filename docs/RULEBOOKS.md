@@ -11,10 +11,14 @@
 ## 1. Authority
 
 - **Author:** Dr. Ahmed Hesham · The Tutor Book · @DrAhmedHesham
-- **Source files (gitignored, kept local):**
-  - `Project Real Content/Writing_/Writing RuleBook ( Medicine only )/OET_Writing_Rulebook_FINAL.pdf` — 100+ rules, 16 sections (R01.1 – R16.8).
-  - `Project Real Content/Speaking_/Speaking Rulebook ( Medicine Only )/OET_Speaking_Rulebook_v2 (1).pdf` — 55 rules, 7 sections (RULE 01 – RULE 55).
-  - `Project Real Content/Speaking_/Speaking Assessment Criteria ( ... ).pdf` — public OET rubric.
+- **Source files (tracked PDFs):**
+  - `docs/rulebooks/OET_Writing_Rulebook_FINAL.pdf` — 100+ rules, 16 sections (R01.1 – R16.8).
+  - `docs/rulebooks/OET_Speaking_Rulebook_v2.pdf` — 55 rules, 7 sections (RULE 01 – RULE 55).
+  - `docs/rulebooks/OET Listening Rulebook …pdf` and `docs/rulebooks/OET Reading Rulebook …pdf` — same for all professions.
+  - `OET with Dr. Ahmed Hesham ( Medicine Only )/` — the owner's Medicine
+    content folder: identical Speaking/Writing rulebook copies, the
+    "Additional Hint" PDFs, and `Speaking_/Speaking Assessment Criteria ( ... ).pdf`
+    (public OET rubric).
 - **Canonical extraction:** committed JSON under `rulebooks/` — every rule
   with `severity` (`critical` / `major` / `minor` / `info`), `appliesTo`
   (letter type or card type), deterministic detectors via `checkId`, and
@@ -68,7 +72,7 @@ Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 | `SpeakingRuleEngine.cs` | Mirror of `speaking-rules.ts`. |
 | `AiGatewayService.cs` | **The only path to any AI model.** Holds `RulebookPromptBuilder`, the grounded-prompt contract, provider registry, and the refusal logic that blocks ungrounded prompts. |
 
-Tests: `backend/tests/OetLearner.Api.Tests/RulebookEngineTests.cs` — **55 assertions**, all green.
+Tests: `backend/tests/OetLearner.Api.Tests/Rulebook/` (RulebookLoaderTests, WritingRuleEngineTests, SpeakingRuleEngineTests, AiGatewayAndPromptTests, …).
 
 ---
 
