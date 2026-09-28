@@ -447,7 +447,7 @@ function useAnnotationOverlay(annotations: WritingEditorAnnotation[]): ReactNode
     if (!annotations || annotations.length === 0) return null;
     return (
       <ul
-        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-navy/60 text-white text-2xs px-3 py-2 space-y-1 backdrop-blur-sm"
+        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-navy/60 dark:bg-black/60 text-white text-2xs px-3 py-2 space-y-1 backdrop-blur-sm"
         aria-label="Inline annotations"
         aria-live="polite"
         aria-atomic="false"
