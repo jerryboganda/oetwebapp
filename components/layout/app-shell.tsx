@@ -85,7 +85,7 @@ export function AppShell({
   // only (public pages render this shell too), never on exam/live routes.
   const searchRole = workspaceRole ?? requiredRole;
   const searchEnabled = Boolean(authContext?.isAuthenticated)
-    && isLearnerWorkspace
+    && Boolean(searchRole)
     && !distractionFree
     && !isExamOrLiveRoute(pathname);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -201,6 +201,7 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        onOpenSearch={openSearch}
       />
       <Sidebar items={navItems} groups={navGroups} userSummary={userSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
@@ -211,6 +212,7 @@ export function AppShell({
           items={navItems}
           userSummary={userSummary}
           workspaceRole={workspaceRole}
+          onOpenSearch={openSearch}
         />
         {/* Enter-only CSS entrance; never an exit animation, which kept the old
             <main> mounted against the new route and rendered the page twice. */}

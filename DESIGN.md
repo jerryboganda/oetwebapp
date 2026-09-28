@@ -110,6 +110,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | Tabs | Segmented pill with a moving active pill | Arrow/Home/End keys |
 | Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
 | Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
+| Command palette | `GlobalSearch`: a `Modal`-based combobox/listbox, mounted once per AppShell | Ctrl/⌘K or the header trigger; not mounted on `distractionFree` or exam/live routes (`isExamOrLiveRoute`); rows only from the role's real nav plus learner content search |
 | Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 

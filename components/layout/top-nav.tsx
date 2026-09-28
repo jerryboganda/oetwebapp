@@ -318,6 +318,7 @@ export function TopNav({
               </>
             ) : (
               <>
+                {onOpenSearch ? <SearchTrigger variant="icon" onClick={onOpenSearch} /> : null}
                 <TourLauncher workspaceRole={workspaceRole} />
                 <ThemeToggle />
                 <NotificationCenter />
