@@ -249,7 +249,7 @@
   --admin-font-mono:            ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
   /* ---------- Motion ----------------------------------------------- */
-  --admin-dur-fast:             var(--duration-fast);
+  --admin-dur-fast:             var(--duration-instant);
   --admin-dur-base:             var(--duration-normal);
   --admin-dur-slow:             var(--duration-slow);
 

@@ -141,9 +141,11 @@
    mirrors the same values for motion/react. Utilities: ease-standard,
    ease-enter, ease-exit; use duration-[var(--duration-fast)] sparingly. */
 @theme static {
-  --duration-fast: 120ms;
-  --duration-normal: 200ms;
-  --duration-slow: 320ms;
+  --duration-instant: 120ms;
+  --duration-fast: 160ms;
+  --duration-normal: 220ms;
+  --duration-slow: 280ms;
+  --duration-hero: 360ms;
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
