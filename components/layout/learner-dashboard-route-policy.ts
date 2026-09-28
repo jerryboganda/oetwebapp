@@ -1,65 +1,3 @@
-export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
-  'app/(learner)/page.tsx',
-  'app/(learner)/dashboard/page.tsx',
-  'app/(learner)/achievements/page.tsx',
-  'app/(learner)/billing/page.tsx',
-  'app/(learner)/companion/page.tsx',
-  'app/(learner)/conversation/page.tsx',
-  'app/(learner)/goals/page.tsx',
-  'app/(learner)/grammar/page.tsx',
-  'app/(learner)/videos/page.tsx',
-  'app/(learner)/videos/[id]/page.tsx',
-  'app/(learner)/onboarding/page.tsx',
-  'app/(learner)/progress/page.tsx',
-  'app/(learner)/readiness/page.tsx',
-  'app/(learner)/study-plan/page.tsx',
-  'app/(learner)/settings/page.tsx',
-  'app/(learner)/settings/[section]/page.tsx',
-  'app/(learner)/submissions/page.tsx',
-  'app/(learner)/submissions/[id]/page.tsx',
-  'app/(learner)/submissions/compare/page.tsx',
-  'app/(learner)/listening/page.tsx',
-  'app/(learner)/listening/drills/[id]/page.tsx',
-  'app/(learner)/listening/paper/[paperId]/page.tsx',
-  'app/(learner)/listening/results/[id]/page.tsx',
-  'app/(learner)/listening/review/[id]/page.tsx',
-  'app/(learner)/mocks/page.tsx',
-  'app/(learner)/mocks/player/[id]/page.tsx',
-  'app/(learner)/mocks/report/[id]/page.tsx',
-  'app/(learner)/mocks/setup/page.tsx',
-  'app/(learner)/reading/page.tsx',
-  'app/(learner)/reading/paper/[paperId]/page.tsx',
-  'app/(learner)/reading/paper/[paperId]/results/page.tsx',
-  'app/(learner)/speaking/page.tsx',
-  'app/(learner)/speaking/expert-review/[id]/page.tsx',
-  'app/(learner)/speaking/phrasing/[id]/page.tsx',
-  'app/(learner)/speaking/results/[id]/page.tsx',
-  'app/(learner)/speaking/roleplay/[id]/page.tsx',
-  'app/(learner)/speaking/selection/page.tsx',
-  'app/(learner)/speaking/transcript/[id]/page.tsx',
-  'app/(learner)/writing/page.tsx',
-  'app/(learner)/writing/expert-request/page.tsx',
-  'app/(learner)/writing/model/page.tsx',
-  'app/(learner)/writing/result/page.tsx',
-  'app/(learner)/recalls/page.tsx',
-  'app/(learner)/recalls/words/page.tsx',
-  'app/(learner)/recalls/favourites/page.tsx',
-  'app/(learner)/strategies/page.tsx',
-  'app/(learner)/strategies/[id]/page.tsx',
-] as const;
-
-export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
-  'app/(learner)/mocks/player/[id]/page.tsx',
-  'app/(learner)/reading/player/[id]/page.tsx',
-  'app/(learner)/listening/player/[id]/page.tsx',
-  'app/(learner)/writing/feedback/page.tsx',
-  'app/(learner)/speaking/task/[id]/page.tsx',
-] as const;
-
-export const LEARNER_DASHBOARD_REEXPORT_PAGE_PATHS = [
-  'app/(learner)/dashboard/project/page.tsx',
-] as const;
-
 /**
  * Learner paths that exist only to namespace a dynamic child (e.g.
  * `/speaking/roleplay` is just the parent folder of `/speaking/roleplay/[id]`).
@@ -126,19 +64,6 @@ function normalizeLearnerPathname(pathname: string | null | undefined) {
   return normalized || '/';
 }
 
-function appPagePathToRoutePattern(pagePath: string) {
-  const withoutAppPrefix = pagePath
-    .replace(/^app\//, '')
-    .replace(/\/page\.tsx$/, '')
-    .replace(/\([^/]+\)\//g, '');
-
-  if (withoutAppPrefix === '' || withoutAppPrefix === 'page.tsx') {
-    return '/';
-  }
-
-  return `/${withoutAppPrefix}`;
-}
-
 function routeSegments(route: string) {
   return normalizeLearnerPathname(route).split('/').filter(Boolean);
 }
@@ -160,12 +85,19 @@ function matchesRoutePattern(pattern: string, pathname: string) {
   });
 }
 
+/** Player routes that never show learner breadcrumbs, as URL patterns. */
+export const IMMERSIVE_LEARNER_ROUTE_PATTERNS = [
+  '/mocks/player/[id]',
+  '/reading/player/[id]',
+  '/listening/player/[id]',
+  '/writing/feedback',
+  '/speaking/task/[id]',
+] as const;
+
 export function isImmersiveLearnerRoute(pathname: string | null | undefined) {
   const normalized = normalizeLearnerPathname(pathname);
 
-  return EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS.some((pagePath) =>
-    matchesRoutePattern(appPagePathToRoutePattern(pagePath), normalized),
-  );
+  return IMMERSIVE_LEARNER_ROUTE_PATTERNS.some((pattern) => matchesRoutePattern(pattern, normalized));
 }
 
 /**
@@ -195,6 +127,79 @@ export function isExamOrLiveRoute(pathname: string | null | undefined) {
 
   return isImmersiveLearnerRoute(normalized)
     || EXAM_LIVE_ROUTE_PATTERNS.some((pattern) => matchesRoutePattern(pattern, normalized));
+}
+
+/**
+ * How the learner chrome treats a route under `app/(learner)`:
+ * - `workspace`: TopNav, Sidebar, BottomNav and breadcrumbs.
+ * - `focus`: distraction-free header only, titled from the page's own copy.
+ * - `none`: the page renders its own shell, or none at all.
+ * Kept in step with the pages by `__tests__/learner-shell-policy-parity.test.ts`.
+ */
+export type LearnerChromeMode = 'workspace' | 'focus' | 'none';
+
+export interface LearnerChrome {
+  mode: LearnerChromeMode;
+  requireAuth: boolean;
+  title?: string;
+  titleKey?: string;
+  examOrLive: boolean;
+}
+
+/** Pages that render AppShell, LearnerLiveRoomShell or a local shell themselves, or no shell. */
+export const LEARNER_SELF_CHROMED_ROUTES = [
+  '/billing/payment-return',
+  '/listening/lessons',
+  '/listening/lessons/[slug]',
+  '/listening/mocks/[sessionId]',
+  '/listening/mocks/[sessionId]/results',
+  '/listening/player/[id]',
+  '/listening/stats',
+  '/listening/strategies',
+  '/listening/strategies/[slug]',
+  '/marketplace/packages/[id]',
+  '/speaking/exam',
+  '/speaking/exam/[id]',
+  '/speaking/exam/[id]/results',
+  '/speaking/mocks',
+  '/speaking/sessions/[id]',
+  '/speaking/sessions/[id]/live-tutor',
+  '/speaking/sessions/[id]/prep',
+  '/speaking/task/[id]',
+  '/writing/feedback',
+] as const;
+
+/** Distraction-free pages. `title`/`titleKey` is the literal or `t()` key the page passes as `pageTitle`. */
+export const LEARNER_FOCUS_ROUTES: ReadonlyArray<{ route: string; title?: string; titleKey?: string }> = [
+  { route: '/onboarding', title: 'Getting Started' },
+  { route: '/placement-test', title: 'Placement Test' },
+  { route: '/writing/mocks/session/[id]', titleKey: 'writing.mocks.session.pageTitle' },
+  { route: '/writing/paper/session/[id]', titleKey: 'writing.paper.pageTitle' },
+  { route: '/writing/practice/session/[scenarioId]', titleKey: 'writing.practice.session.pageTitle' },
+  { route: '/writing/submissions/[id]/revise', titleKey: 'writing.submissions.revise.pageTitle' },
+];
+
+/** Workspace pages that render without a session (also public in `proxy.ts`). */
+export const LEARNER_PUBLIC_ROUTES = [
+  '/speaking/assessment-criteria',
+  '/speaking/intro-questions',
+] as const;
+
+export function resolveLearnerChrome(pathname: string | null | undefined): LearnerChrome {
+  const normalized = normalizeLearnerPathname(pathname);
+  const matches = (pattern: string) => matchesRoutePattern(pattern, normalized);
+  const examOrLive = isExamOrLiveRoute(normalized);
+
+  if (LEARNER_SELF_CHROMED_ROUTES.some(matches)) {
+    return { mode: 'none', requireAuth: true, examOrLive };
+  }
+
+  const focus = LEARNER_FOCUS_ROUTES.find(({ route }) => matches(route));
+  if (focus) {
+    return { mode: 'focus', requireAuth: true, title: focus.title, titleKey: focus.titleKey, examOrLive };
+  }
+
+  return { mode: 'workspace', requireAuth: !LEARNER_PUBLIC_ROUTES.some(matches), examOrLive };
 }
 
 export function isLearnerWorkspaceRoute(pathname: string | null | undefined) {
