@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
@@ -14,16 +13,13 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 /// <param name="Retryable">Null = derive from status (408/429/5xx), which is exactly what
 /// lib/api/client.ts assumed for the legacy bodies that carried no <c>retryable</c>.</param>
-/// <param name="LegacyErrorAlias">Also emit <c>error</c> = message. Only for endpoints whose
-/// frontend still reads <c>detail.error</c>; remove once that frontend change ships.</param>
 public sealed record ApiErrorResult(
     int StatusCode,
     string Code,
     string Message,
     bool? Retryable = null,
     IReadOnlyList<ApiFieldError>? FieldErrors = null,
-    string? SupportHint = null,
-    bool LegacyErrorAlias = false) : IResult, IStatusCodeHttpResult
+    string? SupportHint = null) : IResult, IStatusCodeHttpResult
 {
     /// <summary>Caught exception behind this error. Logged (never echoed) when it is a 5xx or
     /// was not thrown by this assembly; its text never reaches the response body.</summary>
@@ -61,8 +57,7 @@ public sealed record ApiErrorResult(
             FieldErrors ?? [],
             Retryable ?? StatusCode is 408 or 429 or >= 500,
             SupportHint,
-            correlationId,
-            LegacyErrorAlias ? Message : null)));
+            correlationId)));
     }
 
     private static bool IsOwn(Exception ex)
@@ -74,6 +69,5 @@ public sealed record ApiErrorResult(
         IReadOnlyList<ApiFieldError> FieldErrors,
         bool Retryable,
         string? SupportHint,
-        string? CorrelationId,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Error);
+        string? CorrelationId);
 }

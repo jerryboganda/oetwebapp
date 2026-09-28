@@ -71,14 +71,6 @@ public sealed class ApiErrorResultTests
     }
 
     [Fact]
-    public async Task Legacy_alias_adds_error_only_when_asked()
-    {
-        var (_, body) = await RunAsync(new ApiErrorResult(400, "x", "Readable.", LegacyErrorAlias: true));
-        Assert.Equal("Readable.", body.GetProperty("error").GetString());
-        Assert.Equal("Readable.", body.GetProperty("message").GetString());
-    }
-
-    [Fact]
     public void Exposes_status_code_for_result_inspection()
     {
         IResult result = new ApiErrorResult(409, "x", "m");

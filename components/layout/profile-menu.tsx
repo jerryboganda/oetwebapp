@@ -9,6 +9,7 @@ import { HelpCenterDrawer } from '@/components/onboarding/help-center-drawer';
 import { ChevronDown, HelpCircle, LogOut, Settings } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
@@ -35,6 +36,15 @@ export function ProfileMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The header persists across navigations, so close the menu and help drawer
+  // when the route changes (adjusted during render, no effect).
+  const pathname = usePathname();
+  const [openedAt, setOpenedAt] = useState(pathname);
+  if (openedAt !== pathname) {
+    setOpenedAt(pathname);
+    setOpen(false);
+    setHelpOpen(false);
+  }
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const reducedMotion = prefersReducedMotion(useReducedMotion());

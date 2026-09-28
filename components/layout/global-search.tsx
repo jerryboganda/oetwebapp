@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CornerDownLeft, FileText, Loader2, Search, X } from 'lucide-react';
 import { searchContent } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useLearnerNavVisibility } from '@/hooks/use-learner-nav-visibility';
 import { learnerMainNavItems, type NavItem } from './sidebar';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
@@ -55,6 +56,8 @@ export function GlobalSearch({ className }: { className?: string }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
+  // Only mounted in the learner header; list exactly what the learner sidebar shows.
+  const isNavItemVisible = useLearnerNavVisibility(learnerMainNavItems, true);
 
   // ⌘K / Ctrl+K anywhere opens the palette.
   useEffect(() => {
@@ -122,7 +125,7 @@ export function GlobalSearch({ className }: { className?: string }) {
       // Same full names the desktop sidebar shows (13 Sep 2026 parity addendum:
       // "Course Materials", "Listening Practice", …), so the rename is
       // consistent across navigation surfaces and both wordings are findable.
-      ...learnerMainNavItems.map((item: NavItem) => ({ label: item.sidebarLabel ?? item.label, href: item.href })),
+      ...learnerMainNavItems.filter(isNavItemVisible).map((item: NavItem) => ({ label: item.sidebarLabel ?? item.label, href: item.href })),
       ...EXTRA_DESTINATIONS,
     ];
     const navRows: ResultRow[] = destinations
@@ -139,7 +142,7 @@ export function GlobalSearch({ className }: { className?: string }) {
     }));
 
     return [...navRows, ...contentRows];
-  }, [query, results]);
+  }, [query, results, isNavItemVisible]);
 
   useEffect(() => {
     setActiveIndex((current) => (current >= rows.length ? 0 : current));

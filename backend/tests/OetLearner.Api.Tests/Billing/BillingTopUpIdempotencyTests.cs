@@ -218,7 +218,10 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
     public async Task WalletTopUp_LegacyAmountRemovedFromDbTierSet_IsRejectedWithValidationError()
     {
         var userId = $"topup-custom-tier-{Guid.NewGuid():N}";
-        await ReplaceWalletTiersAsync(new WalletTopUpTierConfig
+        // Own factory (own in-memory DB): replacing the tier table on the shared class
+        // fixture would leak into whichever test of this class runs next.
+        using var factory = new TestWebApplicationFactory();
+        await ReplaceWalletTiersAsync(factory, new WalletTopUpTierConfig
         {
             Id = Guid.NewGuid(),
             Amount = 15,
@@ -233,7 +236,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
             UpdatedAt = DateTimeOffset.UtcNow
         });
 
-        using var client = await CreateClientForUserAsync(userId);
+        using var client = await CreateClientForUserAsync(userId, factory);
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 10,
@@ -285,19 +288,20 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         Assert.Equal("account_frozen", json.RootElement.GetProperty("code").GetString());
     }
 
-    private async Task<HttpClient> CreateClientForUserAsync(string userId)
+    private async Task<HttpClient> CreateClientForUserAsync(string userId, TestWebApplicationFactory? factory = null)
     {
-        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
-        var client = _factory.CreateClient();
+        factory ??= _factory;
+        await factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
     }
 
-    private async Task ReplaceWalletTiersAsync(params WalletTopUpTierConfig[] tiers)
+    private static async Task ReplaceWalletTiersAsync(TestWebApplicationFactory factory, params WalletTopUpTierConfig[] tiers)
     {
-        await using var scope = _factory.Services.CreateAsyncScope();
+        await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         db.WalletTopUpTierConfigs.RemoveRange(await db.WalletTopUpTierConfigs.ToListAsync());
         db.WalletTopUpTierConfigs.AddRange(tiers);
