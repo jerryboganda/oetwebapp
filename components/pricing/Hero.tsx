@@ -31,7 +31,7 @@ export function Hero({
   badges = DEFAULT_BADGES,
 }: PricingHeroProps) {
   return (
-    <section className="relative overflow-hidden bg-navy px-4 pb-20 pt-24 text-white">
+    <section className="relative overflow-hidden bg-oet-navy px-4 pb-20 pt-24 text-white">
       <div className="mx-auto max-w-5xl text-center">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-gold">{eyebrow}</p>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>

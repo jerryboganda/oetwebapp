@@ -61,11 +61,11 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
         onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
         onDrop={(e) => { e.preventDefault(); setDragActive(false); accept(e.dataTransfer.files?.[0]); }}
         className={cn(
-          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition',
+          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
           dragActive
             ? 'border-primary bg-primary/5'
             : shownError
-              ? 'border-red-400 bg-red-50/40'
+              ? 'border-danger/60 bg-danger/5'
               : 'border-border bg-background-light hover:border-primary/60 hover:bg-primary/5',
         )}
       >
@@ -86,9 +86,9 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onChange(null); setLocalError(null); if (inputRef.current) inputRef.current.value = ''; }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-danger hover:bg-danger/10"
             >
-              <X className="h-3.5 w-3.5" /> Remove
+              <X className="h-3.5 w-3.5" aria-hidden="true" /> Remove
             </button>
           </div>
         ) : (
@@ -105,7 +105,7 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
           onChange={(e) => accept(e.target.files?.[0])}
         />
       </div>
-      {shownError ? <p className="mt-1.5 text-xs text-red-600">{shownError}</p> : null}
+      {shownError ? <p className="mt-1.5 text-xs text-danger">{shownError}</p> : null}
     </div>
   );
 }
