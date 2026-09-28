@@ -12,11 +12,14 @@ This is the single design-system spec for every surface in the web app: learner,
 | Motion for motion/react (durations, easings, springs, surface presets) | `lib/motion.ts` (mirrors the CSS `--duration-*` / `--ease-*`) |
 | Motion components | `components/ui/motion-primitives.tsx` (`MotionPage/Section/List/Item/Presence/Collapse/FadeSwitch`) |
 | Shared primitives | `components/ui/*`: Button, Card, Badge, Tabs, Modal/Drawer, InlineAlert/Toast, form-controls, Skeleton, EmptyState/ErrorState, DataTable, StatCard, Stepper, Pagination, FilterBar, BulkActionBar |
-| Dense admin primitives (Radix-based) | `components/admin/ui/*`, with admin page layouts in `components/admin/layout/*` |
+| Dense admin primitives (Radix-based) | `components/admin/ui/*`, with admin page layouts in `components/admin/layout/*`. Admin routes only; ESLint-enforced (`eslint.config.mjs`), which also bans aliasing a kit primitive (e.g. `Button as LegacyButton`) |
+| Global toast | `components/ui/toaster.tsx` (`toast()`, mounted once in `app/providers.tsx`). Inline page messages: `InlineAlert`/`Toast` in `components/ui/alert.tsx` |
 | Learner page compositions | `components/domain/learner-surface.tsx`: LearnerPageHero, LearnerSurfaceSectionHeader, LearnerSurfaceCard |
 | App shell | `components/layout/*`: AppShell, role shells, TopNav, ProfileMenu, Sidebar, BottomNav, GlobalSearch |
 | Chart colours | `lib/domain/chart-palette.ts` |
 | Accessibility preferences (large text, high contrast, reduce motion) | `contexts/accessibility-context.tsx`, with the CSS at the bottom of `app/globals.css` |
+
+**Which kit:** admin pages use the dense `components/admin/ui` primitives, and `components/ui` for what the admin kit lacks: Modal/Drawer, DataTable with mobile cards, FilterBar, Pagination, InlineAlert, PageSkeleton, Tabs. Everything outside admin routes uses `components/ui`.
 
 **Adding a new screen:**
 1. Wrap it in the role shell.

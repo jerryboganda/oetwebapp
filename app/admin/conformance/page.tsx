@@ -22,18 +22,17 @@ import { cn } from '@/lib/utils';
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { PageHeader } from '@/components/admin/ui/page-header';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
-import { StatusBadge } from '@/components/admin/ui/status-badge';
-import type { MetricTone } from '@/components/admin/ui/types';
+import { Badge, type BadgeTone } from '@/components/admin/ui/badge';
 
-const STATUS_META: Record<RuleEnforcementStatus, { label: string; tone: MetricTone }> = {
+const STATUS_META: Record<RuleEnforcementStatus, { label: string; tone: BadgeTone }> = {
   deterministic: { label: 'Deterministic', tone: 'success' },
   'forbidden-pattern': { label: 'Forbidden-pattern', tone: 'info' },
-  'ai-grounded': { label: 'AI-grounded', tone: 'purple' },
+  'ai-grounded': { label: 'AI-grounded', tone: 'primary' },
   'human-review': { label: 'Human review', tone: 'warning' },
   'not-enforced': { label: 'Not enforced', tone: 'danger' },
 };
 
-const SEVERITY_TONE: Record<string, MetricTone> = {
+const SEVERITY_TONE: Record<string, BadgeTone> = {
   critical: 'danger',
   major: 'warning',
   minor: 'default',
@@ -146,11 +145,11 @@ export default function AdminConformancePage() {
                   <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-admin-fg-strong">{row.ruleId}</td>
                   <td className="px-4 py-2 text-admin-fg-muted">{row.section}</td>
                   <td className="px-4 py-2">
-                    <StatusBadge intensity="tinted" tone={SEVERITY_TONE[row.severity] ?? 'default'} label={row.severity} />
+                    <Badge variant={SEVERITY_TONE[row.severity] ?? 'default'} intensity="tinted" size="sm">{row.severity}</Badge>
                   </td>
                   <td className="px-4 py-2 text-admin-fg-strong">{row.title}</td>
                   <td className="px-4 py-2">
-                    <StatusBadge intensity="tinted" tone={STATUS_META[row.status].tone} label={STATUS_META[row.status].label} />
+                    <Badge variant={STATUS_META[row.status].tone} intensity="tinted" size="sm">{STATUS_META[row.status].label}</Badge>
                   </td>
                 </tr>
               ))}
