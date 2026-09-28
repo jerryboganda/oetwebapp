@@ -202,6 +202,13 @@
  * Defined once on :root — never overridden by mode.
  * -------------------------------------------------------------------------- */
 :root {
+  /* ---------- Aliases referenced by admin primitives ----------------- */
+  /* Resolved on <html>, where .dark also lives, so they follow the mode. */
+  --admin-bg-canvas:            var(--admin-bg-page);
+  --admin-bg-inset:             var(--admin-bg-subtle);
+  --admin-border:               var(--admin-border-default);
+  --admin-warning-strong:       var(--admin-warning-hover); /* AA text on light surfaces */
+
   /* ---------- Radii -------------------------------------------------- */
   --admin-radius-sm:            4px;
   --admin-radius-md:            8px;

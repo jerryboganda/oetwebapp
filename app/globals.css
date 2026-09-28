@@ -90,12 +90,6 @@
   --z-popover: 70;
   --z-toast: 80;
   
-  --color-admin-surface:           #ffffff;
-  --color-admin-surface-raised:    #f8fafc;
-  --color-admin-border:            #e2e8f0;
-  --color-admin-text:              #0f172a;
-  --color-admin-text-muted:        #64748b;
-
   /* Brand ramp — static (does not flip in dark mode). `primary` itself is the
      themed role colour; use the ramp for tints, charts and fixed fills
      (e.g. bg-primary-50, text-primary-700). One violet across learner,
@@ -178,6 +172,13 @@
   --color-admin-danger-fg:         var(--admin-danger-fg);
   --color-admin-info:              var(--admin-info);
   --color-admin-info-fg:           var(--admin-info-fg);
+
+  /* Legacy names (were light-only hexes in @theme) — now theme-aware aliases */
+  --color-admin-surface:           var(--admin-bg-surface);
+  --color-admin-surface-raised:    var(--admin-bg-subtle);
+  --color-admin-text:              var(--admin-fg-strong);
+  --color-admin-text-muted:        var(--admin-fg-muted);
+  --color-admin-warning-strong:    var(--admin-warning-strong);
 
   /* Surfaces */
   --color-admin-bg-page:           var(--admin-bg-page);
