@@ -599,7 +599,7 @@ export default function AdminVideoCollectionsPage() {
                       <>
                       {canWrite ? (
                         selectedIds.size > 0 ? (
-                          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-admin border border-admin-primary bg-admin-primary-tint px-3 py-2">
+                          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-admin border border-admin-primary bg-[var(--admin-primary-tint)] px-3 py-2">
                             <span className="text-sm font-semibold text-admin-fg-strong">
                               {selectedIds.size} selected
                             </span>
@@ -772,7 +772,7 @@ export default function AdminVideoCollectionsPage() {
       <Modal open={Boolean(renaming)} onClose={() => setRenaming(null)} title="Rename Bunny collection" size="sm">
         {renaming ? (
           <form className="space-y-4" onSubmit={handleRename}>
-            <p className="rounded-admin border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="rounded-admin border border-[var(--admin-warning-tint-strong)] bg-[var(--admin-warning-tint)] px-3 py-2 text-xs text-admin-fg-strong">
               This only renames the internal Bunny storage folder — it is <strong>not</strong> what
               candidates see. To change the folder name shown on the candidate video library, edit it on
               the{' '}

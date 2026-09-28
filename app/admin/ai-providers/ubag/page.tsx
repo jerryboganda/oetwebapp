@@ -695,7 +695,7 @@ export default function UbagBoardPage() {
     const draft = modelDrafts[feature.code] ?? route?.model ?? groupModels[group.id] ?? group.defaultModel ?? feature.model;
     const isBusy = busy === feature.code;
     return (
-      <tr key={feature.code} className="border-t border-[var(--border)]">
+      <tr key={feature.code} className="border-t border-admin-border">
         <td className="px-3 py-2">
           <div className="font-medium">{feature.label}</div>
           <div className="text-xs text-muted-foreground font-mono">{feature.code}</div>
@@ -925,7 +925,7 @@ export default function UbagBoardPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-muted-foreground">
@@ -949,14 +949,14 @@ export default function UbagBoardPage() {
                 Recognised by the gateway but not classified for UBAG yet. Toggling routes them with the provider default model.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <tbody>
                   {otherCodes.map((code) => {
                     const route = routesByCode.get(code);
                     const onUbag = !!route && route.providerCode === UBAG_PROVIDER_CODE;
                     return (
-                      <tr key={code} className="border-t border-[var(--border)]">
+                      <tr key={code} className="border-t border-admin-border">
                         <td className="px-3 py-2 font-mono text-xs">{code}</td>
                         <td className="px-3 py-2">
                           <Badge variant={onUbag ? 'default' : 'muted'}>{route ? route.providerCode : 'default'}</Badge>

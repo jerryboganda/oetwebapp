@@ -139,7 +139,7 @@ export default function AdminVocabularyAiDraftPage() {
                 aria-label="Profession"
                 value={professionId}
                 onChange={(e) => setProfessionId(e.target.value)}
-                className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+                className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
               >
                 <option value="">General (medicine)</option>
                 <option value="medicine">Medicine</option>
@@ -154,7 +154,7 @@ export default function AdminVocabularyAiDraftPage() {
                 aria-label="Category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)] capitalize"
+                className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)] capitalize"
               >
                 {['medical', 'anatomy', 'symptoms', 'procedures', 'pharmacology', 'conditions', 'clinical_communication', 'diagnostics'].map(c => (
                   <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>

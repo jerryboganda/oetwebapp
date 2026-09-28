@@ -166,7 +166,7 @@ export default function AdminSpeakingDrillEditPage() {
               Delete
             </Button>
             {detail.status === 'archived' ? (
-              <Button variant="outline" size="sm" className="text-red-600" onClick={forceDelete} disabled={saving}>
+              <Button variant="outline" size="sm" className="text-admin-danger" onClick={forceDelete} disabled={saving}>
                 Force delete
               </Button>
             ) : null}

@@ -18,29 +18,27 @@ import {
   type ConformanceKindReport,
   type RuleEnforcementStatus,
 } from '@/lib/rulebook';
+import { cn } from '@/lib/utils';
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { PageHeader } from '@/components/admin/ui/page-header';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { StatusBadge } from '@/components/admin/ui/status-badge';
+import type { MetricTone } from '@/components/admin/ui/types';
 
-const STATUS_META: Record<RuleEnforcementStatus, { label: string; className: string }> = {
-  deterministic: { label: 'Deterministic', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
-  'forbidden-pattern': { label: 'Forbidden-pattern', className: 'bg-teal-50 text-teal-700 ring-teal-600/20' },
-  'ai-grounded': { label: 'AI-grounded', className: 'bg-blue-50 text-blue-700 ring-blue-600/20' },
-  'human-review': { label: 'Human review', className: 'bg-violet-50 text-violet-700 ring-violet-600/20' },
-  'not-enforced': { label: 'Not enforced', className: 'bg-red-50 text-red-700 ring-red-600/20' },
+const STATUS_META: Record<RuleEnforcementStatus, { label: string; tone: MetricTone }> = {
+  deterministic: { label: 'Deterministic', tone: 'success' },
+  'forbidden-pattern': { label: 'Forbidden-pattern', tone: 'info' },
+  'ai-grounded': { label: 'AI-grounded', tone: 'purple' },
+  'human-review': { label: 'Human review', tone: 'warning' },
+  'not-enforced': { label: 'Not enforced', tone: 'danger' },
 };
 
-const SEVERITY_META: Record<string, string> = {
-  critical: 'bg-red-50 text-red-700 ring-red-600/20',
-  major: 'bg-amber-50 text-amber-700 ring-amber-600/20',
-  minor: 'bg-slate-50 text-slate-600 ring-slate-500/20',
-  info: 'bg-slate-50 text-slate-500 ring-slate-400/20',
+const SEVERITY_TONE: Record<string, MetricTone> = {
+  critical: 'danger',
+  major: 'warning',
+  minor: 'default',
+  info: 'default',
 };
-
-function Pill({ label, className }: { label: string; className: string }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${className}`}>
-      {label}
-    </span>
-  );
-}
 
 export default function AdminConformancePage() {
   const report = useMemo<ConformanceKindReport[]>(() => buildConformanceReport(), []);
@@ -60,93 +58,99 @@ export default function AdminConformancePage() {
   }, [report]);
 
   const active = report.find((r) => r.kind === activeKind) ?? report[0];
+  const allEnforced = totals.unenforced === 0;
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-navy">Rulebook Conformance</h1>
-        <p className="mt-1 text-sm text-muted">
-          How every rule in the four OET exam rulebooks is enforced. Read-only — the same classifier the
-          <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-xs">rulebook-conformance</code> CI gate uses.
+    <AdminPageShell>
+      <PageHeader
+        eyebrow="Quality"
+        title="Rulebook Conformance"
+        description="How every rule in the four OET exam rulebooks is enforced. Read-only — the same classifier the rulebook-conformance CI gate uses."
+      />
+
+      <div
+        className={cn(
+          'flex items-start gap-3 rounded-admin-lg border p-4',
+          allEnforced
+            ? 'border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)]'
+            : 'border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)]',
+        )}
+      >
+        {allEnforced ? (
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-admin-success" aria-hidden="true" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-admin-danger" aria-hidden="true" />
+        )}
+        <p className="text-sm text-admin-fg-strong">
+          {allEnforced ? (
+            <>
+              <span className="font-semibold">All {totals.total} rules have an asserted enforcement status.</span>{' '}
+              Zero critical/major rules are silently unenforced across the four OET rulebooks.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">{totals.unenforced} critical/major rule(s) are NOT enforced.</span>{' '}
+              These are surfaced as warnings — they do not block publishing.
+            </>
+          )}
         </p>
-      </header>
-
-      {totals.unenforced === 0 ? (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
-          <p className="text-sm text-emerald-800">
-            <span className="font-semibold">All {totals.total} rules have an asserted enforcement status.</span>{' '}
-            Zero critical/major rules are silently unenforced across the four OET rulebooks.
-          </p>
-        </div>
-      ) : (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
-          <p className="text-sm text-red-800">
-            <span className="font-semibold">{totals.unenforced} critical/major rule(s) are NOT enforced.</span>{' '}
-            These are surfaced as warnings — they do not block publishing.
-          </p>
-        </div>
-      )}
-
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {[
-          { label: 'Total rules', value: totals.total },
-          { label: 'Deterministic', value: totals.deterministic },
-          { label: 'AI-grounded', value: totals.aiGrounded },
-          { label: 'Human review', value: totals.humanReview },
-          { label: 'Not enforced', value: totals.unenforced },
-        ].map((kpi) => (
-          <div key={kpi.label} className="rounded-2xl border border-border bg-surface p-4">
-            <div className="text-2xl font-semibold text-navy">{kpi.value}</div>
-            <div className="mt-1 text-xs font-medium text-muted">{kpi.label}</div>
-          </div>
-        ))}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Rulebook modules">
-        {report.map((r) => (
-          <button
-            key={r.kind}
-            type="button"
-            role="tab"
-            aria-selected={r.kind === active?.kind}
-            onClick={() => setActiveKind(r.kind)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-              r.kind === active?.kind
-                ? 'bg-primary text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {r.label}
-            <span className="ml-1.5 text-xs opacity-75">{r.summary.total}</span>
-          </button>
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <KpiTile size="sm" label="Total rules" value={totals.total} />
+        <KpiTile size="sm" label="Deterministic" value={totals.deterministic} tone="success" />
+        <KpiTile size="sm" label="AI-grounded" value={totals.aiGrounded} tone="primary" />
+        <KpiTile size="sm" label="Human review" value={totals.humanReview} />
+        <KpiTile size="sm" label="Not enforced" value={totals.unenforced} tone={allEnforced ? 'default' : 'danger'} />
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Rulebook modules">
+        {report.map((r) => {
+          const selected = r.kind === active?.kind;
+          return (
+            <button
+              key={r.kind}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setActiveKind(r.kind)}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--admin-bg-page)]',
+                selected
+                  ? 'bg-admin-primary text-admin-primary-fg'
+                  : 'bg-admin-bg-subtle text-admin-fg-muted hover:bg-[var(--admin-state-active)] hover:text-admin-fg-default',
+              )}
+            >
+              {r.label}
+              <span className="ml-1.5 text-xs tabular-nums opacity-75">{r.summary.total}</span>
+            </button>
+          );
+        })}
       </div>
 
       {active ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border bg-slate-50 text-xs uppercase tracking-wide text-muted">
+        <div className="overflow-x-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface shadow-admin-sm">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead className="border-b border-admin-border bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
               <tr>
-                <th className="px-4 py-2 font-semibold">Rule</th>
-                <th className="px-4 py-2 font-semibold">Section</th>
-                <th className="px-4 py-2 font-semibold">Severity</th>
-                <th className="px-4 py-2 font-semibold">Title</th>
-                <th className="px-4 py-2 font-semibold">Enforcement</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Rule</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Section</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Severity</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Title</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Enforcement</th>
               </tr>
             </thead>
             <tbody>
               {active.rows.map((row) => (
-                <tr key={row.ruleId} className="border-b border-border/60 last:border-0">
-                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-navy">{row.ruleId}</td>
-                  <td className="px-4 py-2 text-muted">{row.section}</td>
+                <tr key={row.ruleId} className="border-b border-admin-border last:border-0 hover:bg-[var(--admin-state-hover)]">
+                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-admin-fg-strong">{row.ruleId}</td>
+                  <td className="px-4 py-2 text-admin-fg-muted">{row.section}</td>
                   <td className="px-4 py-2">
-                    <Pill label={row.severity} className={SEVERITY_META[row.severity] ?? SEVERITY_META.info} />
+                    <StatusBadge intensity="tinted" tone={SEVERITY_TONE[row.severity] ?? 'default'} label={row.severity} />
                   </td>
-                  <td className="px-4 py-2 text-navy">{row.title}</td>
+                  <td className="px-4 py-2 text-admin-fg-strong">{row.title}</td>
                   <td className="px-4 py-2">
-                    <Pill label={STATUS_META[row.status].label} className={STATUS_META[row.status].className} />
+                    <StatusBadge intensity="tinted" tone={STATUS_META[row.status].tone} label={STATUS_META[row.status].label} />
                   </td>
                 </tr>
               ))}
@@ -154,6 +158,6 @@ export default function AdminConformancePage() {
           </table>
         </div>
       ) : null}
-    </section>
+    </AdminPageShell>
   );
 }

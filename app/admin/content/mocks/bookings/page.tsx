@@ -346,7 +346,7 @@ export default function AdminMockBookingsCalendarPage() {
                   <tr key={`${row.hour}-${row.minute}`} className="align-top">
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-surface px-2 py-1 text-left text-2xs font-bold text-admin-fg-muted"
+                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-bg-surface px-2 py-1 text-left text-2xs font-bold text-admin-fg-muted"
                     >
                       {row.label}
                     </th>
@@ -370,7 +370,7 @@ export default function AdminMockBookingsCalendarPage() {
                                   className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-2xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-border-focus)] ${
                                     tutorMissing
                                       ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20'
-                                      : 'border-admin-border bg-admin-bg-surface-raised hover:bg-admin-bg-elevated/60'
+                                      : 'border-admin-border bg-admin-bg-subtle hover:bg-admin-bg-elevated/60'
                                   }`}
                                   aria-label={`Open booking ${booking.bookingId || booking.id}`}
                                 >

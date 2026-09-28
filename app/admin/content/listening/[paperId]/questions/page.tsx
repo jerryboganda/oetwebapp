@@ -516,7 +516,7 @@ export default function AdminListeningQuestionsPage() {
                     className={
                       'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ' +
                       (isActive
-                        ? 'border-primary bg-primary text-white'
+                        ? 'border-admin-primary bg-admin-primary text-admin-primary-fg'
                         : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:text-admin-fg-strong')
                     }
                   >

@@ -319,7 +319,7 @@ export default function BulkImportPage() {
                 <CardContent>
                   <div className="space-y-2">
                     {staged.issues.map((issue) => (
-                      <div key={`${issue.issueCode}:${issue.relativePath}`} className="rounded-admin border border-admin-border-subtle p-3 text-sm">
+                      <div key={`${issue.issueCode}:${issue.relativePath}`} className="rounded-admin border border-admin-border p-3 text-sm">
                         <div className="font-medium text-admin-fg-strong">{issue.issueCode}</div>
                         <div className="mt-1 text-admin-fg-muted break-all">{issue.relativePath}</div>
                         <div className="mt-1 text-admin-fg-muted">{issue.message}</div>

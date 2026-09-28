@@ -23,7 +23,7 @@ export default function AiAssistantLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex flex-col gap-4">
-      <nav className="flex items-center gap-1 rounded-xl border border-admin-border bg-admin-surface p-1">
+      <nav className="flex items-center gap-1 rounded-xl border border-admin-border bg-admin-bg-surface p-1">
         {navItems.map((item) => {
           const active = isActive(pathname, item.href, item.exact);
           const Icon = item.icon;
@@ -35,7 +35,7 @@ export default function AiAssistantLayout({ children }: { children: React.ReactN
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 active
                   ? 'bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]'
-                  : 'text-admin-text-muted hover:bg-admin-surface-raised hover:text-admin-text',
+                  : 'text-admin-fg-muted hover:bg-admin-bg-subtle hover:text-admin-fg-strong',
               )}
             >
               <Icon className="h-4 w-4" />

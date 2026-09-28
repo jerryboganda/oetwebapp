@@ -121,7 +121,7 @@ export default function AdminAnalyticsPage() {
         >
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={normaliseSeries(data?.mrr ?? [])}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border-default)" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
@@ -138,12 +138,12 @@ export default function AdminAnalyticsPage() {
         >
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={normaliseSeries(data?.churnRate ?? [])}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border-default)" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="value" name="Churn %" stroke="#dc2626" dot={false} />
+              <Line type="monotone" dataKey="value" name="Churn %" stroke="var(--admin-danger)" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -157,7 +157,7 @@ export default function AdminAnalyticsPage() {
         >
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={normaliseSeries(data?.ltv ?? [])}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--admin-border-default)" />
               <XAxis dataKey="date" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
@@ -166,7 +166,7 @@ export default function AdminAnalyticsPage() {
                 type="monotone"
                 dataKey="value"
                 name={`LTV (${data?.currency ?? 'AUD'})`}
-                stroke="#0f766e"
+                stroke="var(--admin-success-active)"
                 dot={false}
               />
             </LineChart>

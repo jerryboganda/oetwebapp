@@ -2777,13 +2777,13 @@ export default function BillingPage() {
                       <div
                         key={item.label}
                         className={item.tone === 'danger'
-                          ? 'rounded-lg border border-red-200 bg-red-50 px-4 py-3'
-                          : 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'}
+                          ? 'rounded-admin border border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] px-4 py-3'
+                          : 'rounded-admin border border-[var(--admin-warning-tint-strong)] bg-[var(--admin-warning-tint)] px-4 py-3'}
                       >
-                        <p className={item.tone === 'danger' ? 'text-2xl font-bold text-red-700' : 'text-2xl font-bold text-amber-700'}>
+                        <p className={item.tone === 'danger' ? 'text-2xl font-bold tabular-nums text-admin-danger' : 'text-2xl font-bold tabular-nums text-[var(--admin-warning-hover)]'}>
                           {item.value}
                         </p>
-                        <p className={item.tone === 'danger' ? 'mt-1 text-xs font-semibold text-red-800' : 'mt-1 text-xs font-semibold text-amber-800'}>
+                        <p className="mt-1 text-xs font-semibold text-admin-fg-strong">
                           {item.label}
                         </p>
                       </div>
@@ -2795,7 +2795,7 @@ export default function BillingPage() {
                       <div key={check.key} className="rounded-lg border border-border bg-surface px-4 py-3 shadow-sm">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-2">
-                            <AlertTriangle className={check.severity === 'danger' ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-amber-600'} aria-hidden="true" />
+                            <AlertTriangle className={check.severity === 'danger' ? 'h-4 w-4 text-admin-danger' : 'h-4 w-4 text-admin-warning'} aria-hidden="true" />
                             <p className="text-sm font-semibold text-admin-fg-strong">{check.label}</p>
                           </div>
                           <Badge variant={check.severity === 'danger' ? 'danger' : 'warning'}>{check.count}</Badge>
@@ -2861,7 +2861,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
               <Input placeholder="Search by user or plan" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2882,7 +2882,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
               <Input placeholder="Filter by coupon code" value={redemptionSearch} onChange={(event) => setRedemptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2893,7 +2893,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
               <Input placeholder="Search by user or plan description" value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2904,7 +2904,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Payment Transactions" description="Read-only payment activity from checkout and wallet top-up attempts.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
               <Input placeholder="Search learner, quote, product, or gateway ID" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2937,7 +2937,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Provider Lifecycle Signals" description="Read-only provider webhook lifecycle signals correlated against local billing evidence.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
               <Input placeholder="Search event, provider ID, or normalized status" value={providerSignalSearch} onChange={(event) => setProviderSignalSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -2967,27 +2967,25 @@ export default function BillingPage() {
                   <div
                     key={item.label}
                     className={item.tone === 'danger'
-                      ? 'rounded-lg border border-red-200 bg-red-50 px-4 py-3'
+                      ? 'rounded-admin border border-[var(--admin-danger-tint-strong)] bg-[var(--admin-danger-tint)] px-4 py-3'
                       : item.tone === 'warning'
-                        ? 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'
-                        : 'rounded-lg border border-border bg-admin-bg-subtle px-4 py-3'}
+                        ? 'rounded-admin border border-[var(--admin-warning-tint-strong)] bg-[var(--admin-warning-tint)] px-4 py-3'
+                        : 'rounded-admin border border-admin-border bg-admin-bg-subtle px-4 py-3'}
                   >
                     <div className="flex items-center gap-2">
                       {item.icon}
                       <p className={item.tone === 'danger'
-                        ? 'text-2xl font-bold text-red-700'
+                        ? 'text-2xl font-bold tabular-nums text-admin-danger'
                         : item.tone === 'warning'
-                          ? 'text-2xl font-bold text-amber-700'
-                          : 'text-2xl font-bold text-admin-fg-strong'}
+                          ? 'text-2xl font-bold tabular-nums text-[var(--admin-warning-hover)]'
+                          : 'text-2xl font-bold tabular-nums text-admin-fg-strong'}
                       >
                         {item.value.toLocaleString()}
                       </p>
                     </div>
-                    <p className={item.tone === 'danger'
-                      ? 'mt-1 text-xs font-semibold text-red-800'
-                      : item.tone === 'warning'
-                        ? 'mt-1 text-xs font-semibold text-amber-800'
-                        : 'mt-1 text-xs font-semibold text-muted'}
+                    <p className={item.tone === 'danger' || item.tone === 'warning'
+                      ? 'mt-1 text-xs font-semibold text-admin-fg-strong'
+                      : 'mt-1 text-xs font-semibold text-admin-fg-muted'}
                     >
                       {item.label}
                     </p>
@@ -3073,7 +3071,7 @@ export default function BillingPage() {
 
                   return (
                     <div key={version.id} className="relative border-l border-border pl-4">
-                      <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary" aria-hidden="true" />
+                      <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-admin-bg-surface bg-admin-primary" aria-hidden="true" />
                       <div className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
@@ -3298,7 +3296,7 @@ export default function BillingPage() {
                     <div className="space-y-3">
                       {invoiceEvidence.events.map((event) => (
                         <div key={event.id} className="relative border-l border-border pl-4">
-                          <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary" aria-hidden="true" />
+                          <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-admin-bg-surface bg-admin-primary" aria-hidden="true" />
                           <div className="rounded-lg bg-admin-bg-subtle px-3 py-2">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -3441,7 +3439,7 @@ export default function BillingPage() {
                 <Checkbox label="Speaking Practice Card Access" checked={planForm.speakingPracticeAccessEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingPracticeAccessEnabled: event.target.checked }))} />
                 <Checkbox label="TB £32: Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
               </div>
-              <p className="mt-2 text-2xs text-admin-text-secondary">
+              <p className="mt-2 text-2xs text-admin-fg-muted">
                 &ldquo;Human Tutor Speaking&rdquo; (bookable live-tutor sessions) and AI Speaking Credits (self-practice + full mock exam, sold separately as AI Packages) are distinct quotas — see the AI Packages editor for the latter. Speaking Practice Card Access gates ai_self_practice for this plan; disabling it blocks self-practice regardless of any AI credit balance the learner holds. Plans without the Human Tutor Speaking flag cannot book live-tutor sessions at all (server-enforced); AI-credit ownership alone never grants access.
               </p>
             </div>
@@ -3741,7 +3739,7 @@ export default function BillingPage() {
                   onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, planCode: event.target.value }))}
                   options={plans.map((plan) => ({ value: plan.code ?? plan.id, label: `${plan.name} (${plan.code ?? plan.id})` }))}
                 />
-                <p className="text-sm text-admin-text-muted">
+                <p className="text-sm text-admin-fg-muted">
                   Gifted Shared AI Credits on the plan are granted automatically. No extra checkbox.
                 </p>
               </>

@@ -137,7 +137,7 @@ export default function AdminRefundsPage() {
         const refund = row.original;
         const disabled = !canWrite || busyId === refund.id;
         if (refund.status === 'issued') {
-          return <span className="text-xs text-emerald-700">Issued</span>;
+          return <span className="text-xs text-admin-success">Issued</span>;
         }
         return (
           <div className="flex flex-wrap justify-end gap-1.5">

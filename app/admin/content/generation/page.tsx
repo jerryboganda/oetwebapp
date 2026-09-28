@@ -5,6 +5,7 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { fetchContentGenerationJob, fetchContentGenerationJobs, queueContentGeneration } from '@/lib/api';
 
@@ -213,11 +214,12 @@ export default function AdminContentGenerationPage() {
             <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-admin-text dark:text-admin-text mb-1.5">Content Type</label>
+                <label htmlFor="gen-content-type" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Content Type</label>
                 <select
+                  id="gen-content-type"
                   value={form.contentType}
                   onChange={e => setForm(p => ({ ...p, contentType: e.target.value as GenerationRequest['contentType'] }))}
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 >
                   {CONTENT_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
                 </select>
@@ -225,11 +227,12 @@ export default function AdminContentGenerationPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Exam</label>
+                  <label htmlFor="gen-exam" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Exam</label>
                   <select
+                    id="gen-exam"
                     value={form.examTypeCode}
                     onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
+                    className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                   >
                     <option value="oet">OET</option>
                     <option value="ielts">IELTS</option>
@@ -237,11 +240,12 @@ export default function AdminContentGenerationPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Subtest</label>
+                  <label htmlFor="gen-subtest" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Subtest</label>
                   <select
+                    id="gen-subtest"
                     value={form.subtestCode}
                     onChange={e => setForm(p => ({ ...p, subtestCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
+                    className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                   >
                     <option value="writing">Writing</option>
                     <option value="speaking">Speaking</option>
@@ -253,11 +257,12 @@ export default function AdminContentGenerationPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Difficulty</label>
+                <label htmlFor="gen-difficulty" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Difficulty</label>
                 <select
+                  id="gen-difficulty"
                   value={form.difficulty}
                   onChange={e => setForm(p => ({ ...p, difficulty: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
+                  className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 >
                   <option value="beginner">Beginner</option>
                   <option value="intermediate">Intermediate</option>
@@ -266,39 +271,37 @@ export default function AdminContentGenerationPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Topic / Prompt</label>
+                <label htmlFor="gen-topic" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Topic / Prompt</label>
                 <input
+                  id="gen-topic"
                   type="text"
                   value={form.topic}
                   onChange={e => setForm(p => ({ ...p, topic: e.target.value }))}
                   required
                   placeholder="e.g. Passive voice in clinical reports"
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Additional Context</label>
+                <label htmlFor="gen-context" className="block text-sm font-medium text-admin-fg-strong mb-1.5">Additional Context</label>
                 <textarea
+                  id="gen-context"
                   value={form.additionalContext}
                   onChange={e => setForm(p => ({ ...p, additionalContext: e.target.value }))}
                   rows={3}
                   placeholder="Any additional requirements or context..."
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)] resize-none"
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting || !form.topic.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-[color,background-color,transform] duration-200"
-              >
+              <Button type="submit" size="lg" fullWidth disabled={submitting || !form.topic.trim()}>
                 {submitting ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
                 ) : (
                   <><Wand2 className="w-4 h-4" /> Generate Content</>
                 )}
-              </button>
+              </Button>
             </form>
             </CardContent>
           </Card>
@@ -310,14 +313,10 @@ export default function AdminContentGenerationPage() {
                 <h2 className="font-semibold text-navy dark:text-navy">Generation History</h2>
                 <p className="text-xs text-muted">{jobsTotal.toLocaleString()} queued jobs in the live admin catalogue.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => void loadJobs()}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-semibold text-navy transition-colors hover:border-primary/40 hover:text-primary-dark dark:border-border dark:bg-surface dark:text-muted"
-              >
+              <Button type="button" variant="secondary" size="sm" onClick={() => void loadJobs()}>
                 <RefreshCw className={`h-3.5 w-3.5 ${loadingJobs ? 'animate-spin' : ''}`} />
                 Refresh jobs
-              </button>
+              </Button>
             </div>
             {results.length === 0 ? (
               <div className="bg-background-light dark:bg-surface rounded-2xl border border-dashed border-border dark:border-border p-8 text-center text-muted">
@@ -356,6 +355,7 @@ export default function AdminContentGenerationPage() {
                           onClick={() => void inspectJob(result.id)}
                           className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                           title="Refresh job details"
+                          aria-label="Refresh job details"
                         >
                           <FileJson2 className="w-4 h-4" />
                         </button>
@@ -365,6 +365,7 @@ export default function AdminContentGenerationPage() {
                             onClick={() => copyToClipboard(result.previewJson, result.id)}
                             className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                             title="Copy JSON"
+                            aria-label="Copy JSON"
                           >
                             {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                           </button>

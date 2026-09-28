@@ -8,6 +8,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -34,11 +35,12 @@ const EFF_LABEL: Record<string, string> = {
 export default function ExpertEfficiencyPage() {
   const [data, setData] = useState<EfficiencyData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [days, setDays] = useState(30);
 
   const load = (d: number) => {
-    setLoading(true); setDays(d);
-    apiRequest<EfficiencyData>(`/v1/admin/analytics/expert-efficiency?days=${d}`).then(setData).catch(() => {}).finally(() => setLoading(false));
+    setLoading(true); setLoadFailed(false); setDays(d);
+    apiRequest<EfficiencyData>(`/v1/admin/analytics/expert-efficiency?days=${d}`).then(setData).catch(() => setLoadFailed(true)).finally(() => setLoading(false));
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
@@ -143,7 +145,7 @@ export default function ExpertEfficiencyPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card><CardContent><p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p></CardContent></Card>
+            <Card><CardContent>{loadFailed ? <EmptyState variant="error" size="sm" title="Could not load expert efficiency" description="The analytics request failed. Try again." primaryAction={{ label: 'Retry', onClick: () => load(days) }} /> : <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>}</CardContent></Card>
           )}
         </div>
       }

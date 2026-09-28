@@ -162,7 +162,7 @@ export default function EditSpeakingRolePlayCardPage() {
             <>
               <Link
                 href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(card.cardId)}/interlocutor`}
-                className="inline-flex h-8 items-center justify-center rounded-admin border border-admin-warning bg-admin-bg-surface px-3 text-xs font-semibold text-admin-warning hover:bg-admin-state-hover"
+                className="inline-flex h-8 items-center justify-center rounded-admin border border-admin-warning bg-admin-bg-surface px-3 text-xs font-semibold text-admin-warning hover:bg-[var(--admin-state-hover)]"
               >
                 <ShieldAlert className="mr-1 h-3.5 w-3.5" />
                 {card.hasInterlocutorScript

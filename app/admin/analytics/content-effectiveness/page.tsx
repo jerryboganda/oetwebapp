@@ -8,6 +8,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -20,12 +21,13 @@ const apiRequest = apiClient.request;
 export default function ContentEffectivenessPage() {
   const [data, setData] = useState<EffectivenessData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [subtest, setSubtest] = useState('');
 
   const load = (s: string) => {
-    setLoading(true); setSubtest(s);
+    setLoading(true); setLoadFailed(false); setSubtest(s);
     const q = s ? `?subtestCode=${s}&top=50` : '?top=50';
-    apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`).then(setData).catch(() => {}).finally(() => setLoading(false));
+    apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`).then(setData).catch(() => setLoadFailed(true)).finally(() => setLoading(false));
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
@@ -140,7 +142,7 @@ export default function ContentEffectivenessPage() {
               ))}
             </BentoGrid>
           ) : (
-            <Card><CardContent><p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p></CardContent></Card>
+            <Card><CardContent>{loadFailed ? <EmptyState variant="error" size="sm" title="Could not load content effectiveness" description="The analytics request failed. Try again." primaryAction={{ label: 'Retry', onClick: () => load(subtest) }} /> : <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>}</CardContent></Card>
           )}
         </div>
       }
