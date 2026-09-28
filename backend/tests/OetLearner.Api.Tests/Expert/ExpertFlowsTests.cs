@@ -683,7 +683,10 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
     [Fact]
     public async Task ScheduleExceptions_CrudLifecycle()
     {
-        using var client = CreateExpertClient(_factory);
+        // Own factory: asserts an initially empty list, which other tests of this
+        // class (e.g. ScheduleExceptions_DuplicateDateReturns400) leave non-empty.
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
 
         // List exceptions — initially empty
         var listResponse = await client.GetAsync("/v1/expert/schedule/exceptions");
