@@ -20,57 +20,8 @@ import { Input, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
-import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
-
-// ─── API helpers ────────────────────────────────────────────────────────────
-
-const CSRF_SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-function resolveUrl(path: string): string {
-  if (path.startsWith('http')) return path;
-  const base = env.apiBaseUrl ?? '';
-  return base ? `${base.replace(/\/$/, '')}${path}` : path;
-}
-
-function readCsrf(): string | null {
-  if (typeof document === 'undefined') return null;
-  const m = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await ensureFreshAccessToken();
-  const headers = new Headers(init?.headers);
-  headers.set('Accept', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  const method = (init?.method ?? 'GET').toUpperCase();
-  if (!CSRF_SAFE.has(method)) {
-    const csrf = readCsrf();
-    if (csrf) headers.set('x-csrf-token', csrf);
-  }
-  const res = await fetchWithTimeout(resolveUrl(path), {
-    ...init,
-    headers,
-    credentials: init?.credentials ?? 'include',
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      msg = body.message ?? body.title ?? msg;
-    } catch { /* ignore */ }
-    const err = new Error(msg) as Error & { status: number };
-    err.status = res.status;
-    throw err;
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
-}
+import { apiClient } from '@/lib/api';
+import { teacherClassApi } from '@/lib/listening/v2-api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -268,7 +219,7 @@ function ClassCard({ cls }: ClassCardProps) {
     setAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
-      const data = await apiFetch<ClassAnalytics>(
+      const data = await apiClient.get<ClassAnalytics>(
         `/v1/listening/v2/teacher/classes/${encodeURIComponent(cls.id)}/analytics`,
       );
       setAnalytics(data);
@@ -345,7 +296,7 @@ export default function ListeningTeacherClassesPage() {
     setPageState('loading');
     setFetchError(null);
     try {
-      const data = await apiFetch<TeacherClass[]>('/v1/listening/v2/teacher/classes');
+      const data = await teacherClassApi.list();
       setClasses(Array.isArray(data) ? data : []);
       setPageState('ready');
     } catch (e) {
@@ -368,10 +319,7 @@ export default function ListeningTeacherClassesPage() {
   }, [isLoading, isAuthenticated, isTeachingStaff, loadClasses]);
 
   const handleCreateClass = async (name: string, description: string) => {
-    await apiFetch<TeacherClass>('/v1/listening/v2/teacher/classes', {
-      method: 'POST',
-      body: JSON.stringify({ name, description }),
-    });
+    await teacherClassApi.create(name, description);
     await loadClasses();
   };
 

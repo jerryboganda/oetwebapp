@@ -12,9 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
-import { env } from '@/lib/env';
+import { apiClient } from '@/lib/api';
 
 interface CurriculumStage {
   order: number;
@@ -36,15 +34,8 @@ interface CurriculumDto {
   stages: CurriculumStage[];
 }
 
-async function getCurriculum(): Promise<CurriculumDto> {
-  const token = await ensureFreshAccessToken();
-  const headers = new Headers({ Accept: 'application/json' });
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  const base = env.apiBaseUrl || '';
-  const url = `${base.replace(/\/$/, '')}/v1/listening-papers/me/curriculum`;
-  const res = await fetchWithTimeout(url, { headers, credentials: 'include' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as CurriculumDto;
+function getCurriculum(): Promise<CurriculumDto> {
+  return apiClient.get<CurriculumDto>('/v1/listening-papers/me/curriculum');
 }
 
 export default function ListeningCurriculumPage() {
