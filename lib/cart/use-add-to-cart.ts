@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { useAuth } from '@/contexts/auth-context';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { useCartStore, type CartItem } from './cart-store';
 
 /**
