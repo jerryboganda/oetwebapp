@@ -130,7 +130,7 @@ export default function SpeakingTranscriptPage() {
         <LearnerPageHero
           eyebrow="Speaking Evidence"
           icon={Quote}
-          accent="purple"
+          accent="primary"
           title="Review speaking evidence with the real transcript and waveform"
           description="Review your transcript, waveform, and playback together to see exactly where to focus."
           highlights={[

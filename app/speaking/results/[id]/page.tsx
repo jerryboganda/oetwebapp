@@ -575,7 +575,7 @@ export default function SpeakingResultSummary() {
         {result.nextDrill && (
           <MotionSection
             delayIndex={4}
-            className="bg-navy rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
+            className="bg-navy dark:bg-surface dark:border dark:border-border rounded-surface p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
           >
             <div className="flex items-center gap-4">
               <TrendingUp className="w-8 h-8 text-primary shrink-0" aria-hidden />
@@ -585,11 +585,11 @@ export default function SpeakingResultSummary() {
                 <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
               </div>
             </div>
-            <Button className="bg-primary text-white dark:bg-violet-700 px-8 py-4 rounded-2xl font-black whitespace-nowrap" asChild>
-<Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
-                Start Drill <ChevronRight className="w-5 h-5" />
+            <Button size="lg" className="whitespace-nowrap font-bold" asChild>
+              <Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
+                Start Drill <ChevronRight className="w-5 h-5" aria-hidden="true" />
               </Link>
-</Button>
+            </Button>
           </MotionSection>
         )}
       </div>

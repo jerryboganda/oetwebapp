@@ -150,7 +150,7 @@ export default function SpeakingHome() {
         <LearnerPageHero
           eyebrow="Speaking"
           icon={Mic}
-          accent="purple"
+          accent="primary"
           title="Get assessed by AI or book a live tutor"
           description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
           highlights={[
@@ -168,7 +168,7 @@ export default function SpeakingHome() {
             card={{
               kind: 'navigation',
               sourceType: 'frontend_navigation',
-              accent: 'purple',
+              accent: 'primary',
               eyebrow: 'Reference · All professions',
               eyebrowIcon: ClipboardList,
               title: 'Speaking Assessment Criteria',
@@ -187,7 +187,7 @@ export default function SpeakingHome() {
             card={{
               kind: 'navigation',
               sourceType: 'frontend_navigation',
-              accent: 'purple',
+              accent: 'primary',
               eyebrow: 'Reference · All professions',
               eyebrowIcon: MessageCircleQuestion,
               title: 'Speaking Intro Questions',

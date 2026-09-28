@@ -44,7 +44,7 @@ export default function SpeakingIntroQuestionsPage() {
         <LearnerPageHero
           eyebrow="Speaking reference · All professions"
           icon={<MessageCircleQuestion />}
-          accent="purple"
+          accent="primary"
           title="Speaking Intro Questions"
           description="12 common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
           highlights={[
@@ -53,11 +53,11 @@ export default function SpeakingIntroQuestionsPage() {
           ]}
         />
 
-        <Card padding="md" className="border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10">
-          <p className="text-xs font-black uppercase tracking-widest text-purple-900 dark:text-amber-200">
+        <Card padding="md" className="border-warning/30 bg-warning/10">
+          <p className="text-xs font-black uppercase tracking-widest text-navy">
             Candidate rule
           </p>
-          <p className="mt-1.5 text-sm leading-6 text-navy dark:text-white">
+          <p className="mt-1.5 text-sm leading-6 text-navy">
             These are sample answers to personalise, not memorise word-for-word. Adapt the highlighted details to
             your own profession, experience, country, specialty, and career plan.
           </p>
@@ -69,7 +69,7 @@ export default function SpeakingIntroQuestionsPage() {
               <div className="flex items-start gap-3">
                 <span
                   aria-hidden
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-sm font-black text-purple-800 dark:bg-purple-500/20 dark:text-purple-200"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary"
                 >
                   {item.no}
                 </span>
@@ -77,10 +77,10 @@ export default function SpeakingIntroQuestionsPage() {
                   {item.no}. {item.question}
                 </h2>
               </div>
-              <p className="mt-3 text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
+              <p className="mt-3 text-xs font-black uppercase tracking-wider text-primary">
                 Sample answer — personalise the bracketed details:
               </p>
-              <p className="mt-1.5 text-sm leading-7 text-navy/85 dark:text-white/85">
+              <p className="mt-1.5 text-sm leading-7 text-navy/85">
                 {renderWithPlaceholders(item.sampleAnswer)}
               </p>
               {item.note ? (

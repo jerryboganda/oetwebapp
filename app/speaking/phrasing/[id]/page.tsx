@@ -150,7 +150,7 @@ function BetterPhrasingContent() {
               </Card>
 
               {/* Stronger Alternative Card */}
-              <section className="bg-navy rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+              <section className="bg-navy dark:bg-surface dark:border dark:border-border rounded-surface p-8 text-white shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-10" aria-hidden>
                   <Zap className="w-32 h-32" />
                 </div>
