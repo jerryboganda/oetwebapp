@@ -2736,7 +2736,7 @@ if (enableSwagger)
     app.UseSwaggerUI();
     if (app.Environment.IsDevelopment())
     {
-        app.MapOpenApi();
+        app.MapOpenApi().AllowAnonymous(); // dev-only API description
     }
 }
 
