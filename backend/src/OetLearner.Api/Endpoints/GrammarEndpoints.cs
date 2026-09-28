@@ -43,17 +43,9 @@ public static class GrammarEndpoints
             }
         });
 
-        grammar.MapGet("/lessons/{ruleId}", (
-            string ruleId,
-            [FromQuery] string? profession,
-            IGrammarRulebookService svc) =>
-        {
-            var prof = ParseProfession(profession);
-            var lesson = svc.GetLesson(prof, ruleId);
-            return lesson is null
-                ? Results.NotFound(new { error = $"Grammar lesson '{ruleId}' not found for profession {prof}." })
-                : Results.Ok(lesson);
-        });
+        // GET /v1/grammar/lessons/{lessonId} belongs to LearningContentEndpoints
+        // (the shape the learner UI parses). A second rulebook-backed route on the
+        // same template made every lesson request throw AmbiguousMatchException.
 
         return app;
     }

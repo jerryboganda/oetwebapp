@@ -173,18 +173,20 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
 
     // Two endpoints on the same method + route shape (e.g. {id} vs {sessionId})
     // throw AmbiguousMatchException at request time: production 25 Sep 2026,
-    // every GET /v1/speaking/sessions/{id}/transcript returned 500.
+    // every GET /v1/speaking/sessions/{id}/transcript returned 500; the same
+    // class hid GET /v1/grammar/lessons/{id} (Grammar vs LearningContent).
+    // Parameter names are erased but constraints kept, so {id:guid} vs {slug}
+    // (which routing can tell apart) is not reported.
     [Fact]
-    public void SpeakingRoutes_HaveNoAmbiguousDuplicates()
+    public void Routes_HaveNoAmbiguousDuplicates()
     {
         using var client = _factory.CreateClient();
         var duplicates = _factory.Services.GetRequiredService<IEnumerable<EndpointDataSource>>()
             .SelectMany(source => source.Endpoints)
             .OfType<RouteEndpoint>()
-            .Where(endpoint => NormalizeRoutePattern(endpoint.RoutePattern.RawText).StartsWith("/v1/speaking/", StringComparison.Ordinal))
             .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
-                .Select(method => $"{method} {System.Text.RegularExpressions.Regex.Replace(NormalizeRoutePattern(endpoint.RoutePattern.RawText), @"\{[^}]+\}", "{}")}"))
-            .GroupBy(key => key, StringComparer.Ordinal)
+                .Select(method => $"{method} {System.Text.RegularExpressions.Regex.Replace(NormalizeRoutePattern(endpoint.RoutePattern.RawText), @"\{(\*{0,2})[A-Za-z0-9_]+", "{$1")}"))
+            .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToArray();
