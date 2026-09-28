@@ -136,8 +136,8 @@ export function ReadingStructureEditor({ paperId }: Props) {
       setQuestionDraft(null);
       await load();
     } catch (e) {
-      const detail = (e as Error & { detail?: { error?: string } }).detail;
-      setError(detail?.error ?? (e as Error).message);
+      const detail = (e as Error & { detail?: { message?: string; error?: string } }).detail;
+      setError(detail?.message ?? detail?.error ?? (e as Error).message);
     } finally { setSavingDraft(false); }
   };
 
@@ -216,8 +216,8 @@ export function ReadingStructureEditor({ paperId }: Props) {
       setReport(result.report);
       setManifestModal(null);
     } catch (e) {
-      const detail = (e as Error & { detail?: { error?: string } }).detail;
-      setError(detail?.error ?? (e as Error).message);
+      const detail = (e as Error & { detail?: { message?: string; error?: string } }).detail;
+      setError(detail?.message ?? detail?.error ?? (e as Error).message);
     } finally {
       setManifestBusy(false);
     }
