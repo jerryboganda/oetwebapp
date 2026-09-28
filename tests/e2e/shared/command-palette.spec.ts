@@ -30,6 +30,8 @@ function roleForProject(projectName: string): Role | null {
 }
 
 async function openShell(page: Page, request: APIRequestContext, role: Role, route: string) {
+  // The post-login app-download modal is a dialog that would block clicks and the hotkey.
+  await page.addInitScript(() => window.sessionStorage.setItem('oet_app_promo_dismissed', 'true'));
   await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await waitForSessionGuardToClear(page, {
     recover: () => recoverBrowserSession(page, request, role, route),
@@ -57,8 +59,11 @@ function searchTrigger(page: Page) {
 
 async function openFromTrigger(page: Page) {
   const trigger = searchTrigger(page);
-  if ((await trigger.count()) === 0) await page.getByRole('button', { name: /open menu/i }).click();
-  await trigger.click();
+  const menu = page.getByRole('button', { name: /open menu/i });
+  // Wait for the header to render one of them rather than counting once.
+  await expect(trigger.or(menu).first()).toBeVisible({ timeout: 30_000 });
+  if (!(await trigger.first().isVisible())) await menu.click();
+  await trigger.first().click();
 }
 
 test.describe('Command palette @visual', () => {
