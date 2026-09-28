@@ -52,6 +52,13 @@ const ADMIN_KIT_ALLOWED = [
 ];
 
 export default defineConfig([{
+    // Global ignores. This object must contain ONLY `ignores`: ESLint treats the
+    // patterns as global only when `ignores` is the sole key. Sharing this object
+    // with `extends: [...next]` scoped the patterns to this block alone, so any
+    // later `files:` block that also matched (e.g. SHARED_TS_FILES, which covers
+    // components/**\/*.tsx) began re-linting Storybook fixtures. Those blocks do
+    // not extend `next`, so no TypeScript parser was applied and ESLint failed to
+    // parse `import type {` and CSF3 object exports in the stories fixtures.
     ignores: [
         "**/.next/**",
         "**/node_modules/**",
@@ -62,6 +69,7 @@ export default defineConfig([{
         "**/*.stories.ts",
         "**/*.stories.tsx",
     ],
+}, {
     extends: [...next],
 }, {
     // React 19 / React Compiler advisory hook rules. These flag pervasive
