@@ -17,10 +17,10 @@ const PRACTICE_MODES = [
     description: 'Mixed sub-test session with AI-selected tasks that target your weak areas.',
   },
   {
-    href: '/practice/quick-session',
+    href: '/vocabulary/quiz',
     icon: Zap,
-    title: 'Quick Session',
-    description: 'A short focused session you can complete in under 15 minutes.',
+    title: 'Quick Vocabulary Quiz',
+    description: 'A short medical-vocabulary quiz built from your own word bank.',
   },
   {
     href: '/writing',

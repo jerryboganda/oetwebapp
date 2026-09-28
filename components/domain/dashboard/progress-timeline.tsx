@@ -51,7 +51,7 @@ export function ProgressTimeline() {
             <Skeleton
               key={i}
               className="w-full rounded-t"
-              height={20 + Math.random() * 40}
+              height={24 + (i % 4) * 10}
             />
           ))}
         </div>

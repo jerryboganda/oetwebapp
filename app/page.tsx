@@ -279,6 +279,9 @@ export default function Dashboard() {
     ]);
   }, [purchaseSuccess, queryClient, queryUserId, supplementalQueriesEnabled]);
 
+  // Real count only — never default a missing value to 0 (owner rule: no fabricated state).
+  const pendingReviewCount = home?.cards?.pendingExpertReviews?.count;
+
   const dashboardHeroHighlights = [
     {
       icon: Calendar,
@@ -288,7 +291,7 @@ export default function Dashboard() {
     {
       icon: Star,
       label: 'Pending reviews',
-      value: `${home?.cards?.pendingExpertReviews?.count ?? 0} in progress`,
+      value: pendingReviewCount != null ? `${pendingReviewCount} in progress` : '—',
     },
     {
       icon: CheckCircle2,
@@ -339,7 +342,7 @@ export default function Dashboard() {
     description: nextMockRecommendation.rationale,
     metaItems: [
       { icon: Calendar, label: home?.cards?.examDate?.value ?? 'Exam date not set' },
-      { icon: Star, label: `${home?.cards?.pendingExpertReviews?.count ?? 0} pending reviews` },
+      ...(pendingReviewCount != null ? [{ icon: Star, label: `${pendingReviewCount} pending reviews` }] : []),
     ],
     primaryAction: {
       label: 'Open Mock Center',

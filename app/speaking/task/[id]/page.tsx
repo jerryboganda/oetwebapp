@@ -206,15 +206,10 @@ function LiveSpeakingTaskContent() {
   const startNativeVisualizerPulse = useCallback(() => {
     stopNativeVisualizerPulse();
 
-    nativePulseRef.current = window.setInterval(() => {
-      setAudioLevels([
-        12 + Math.random() * 8,
-        18 + Math.random() * 12,
-        24 + Math.random() * 10,
-        18 + Math.random() * 12,
-        12 + Math.random() * 8,
-      ]);
-    }, 160);
+    // The native recorder exposes no live input level, so show a steady
+    // "recording" shape instead of random bars that imitate a real mic meter
+    // (owner rule: no fabricated state).
+    setAudioLevels([14, 20, 26, 20, 14]);
   }, [stopNativeVisualizerPulse]);
 
   const trapDialogFocus = useCallback((event: KeyboardEvent, dialog: HTMLDivElement | null) => {
