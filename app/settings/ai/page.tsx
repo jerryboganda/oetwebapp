@@ -82,8 +82,8 @@ export default function AiSettingsPage() {
       setShowAdd(false);
       await load();
     } catch (e) {
-      const detail = (e as Error & { detail?: { error?: string; errorCode?: string } }).detail;
-      setAddError(detail?.error ?? (e as Error).message);
+      const detail = (e as Error & { detail?: { message?: string; error?: string; errorCode?: string } }).detail;
+      setAddError(detail?.message ?? detail?.error ?? (e as Error).message);
     } finally {
       setSaving(false);
     }
