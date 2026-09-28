@@ -168,7 +168,7 @@ export default function SpeakingExamResultsPage() {
       {failedCards.map((card) => {
         const status = cardStatus[card.sessionId];
         return (
-          <div key={card.sessionId} className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <div key={card.sessionId} className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-navy" role="alert">
             <p className="font-semibold">Card {card.cardNumber === 1 ? 'A' : 'B'}: grading could not be completed</p>
             <p className="mt-1">{status?.failureReason ?? 'Your recording is saved. No credits were used for this failed grade.'}</p>
             {status?.retryable ? (
@@ -202,7 +202,7 @@ export default function SpeakingExamResultsPage() {
   if (error && !results) {
     return (
       <div className="mx-auto max-w-lg px-4 py-12 text-center">
-        <p className="text-sm text-rose-700">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
         <Button className="mt-4" variant="outline" onClick={() => void refresh()}>
           Retry
         </Button>
@@ -305,8 +305,8 @@ export default function SpeakingExamResultsPage() {
                 className={cn(
                   'rounded-full px-2.5 py-0.5 text-xs font-medium',
                   card.status === 'scored'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-amber-100 text-amber-700',
+                    ? 'bg-success/10 text-success'
+                    : 'bg-warning/10 text-warning',
                 )}
               >
                 {card.status === 'scored'
