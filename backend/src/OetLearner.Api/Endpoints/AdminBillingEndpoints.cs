@@ -10,6 +10,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Billing.Gateways;
 using OetLearner.Api.Services.Settings;
 using Microsoft.Extensions.Options;
 
@@ -69,8 +70,58 @@ public static class AdminBillingEndpoints
         billing.MapGet("/payment-gateways", ListPaymentGateways);
         billing.MapPatch("/payment-gateways/{name}", UpdatePaymentGateway).WithAdminWrite("AdminBillingCatalogWrite");
         billing.MapPost("/payment-gateways/{name}/ping", PingPaymentGateway).WithAdminWrite("AdminBillingCatalogWrite");
+        // apply=false (default) is a read-only audit; apply=true PATCHes GBP plans only.
+        billing.MapPost("/payment-gateways/whop/adaptive-pricing", DisableWhopAdaptivePricing).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
+    }
+
+    private static async Task<IResult> DisableWhopAdaptivePricing(
+        IRuntimeSettingsProvider runtimeSettings,
+        IHttpClientFactory httpFactory,
+        LearnerDbContext db,
+        CancellationToken ct,
+        bool apply = false)
+    {
+        var whop = (await runtimeSettings.GetAsync(ct)).Whop;
+        if (string.IsNullOrWhiteSpace(whop.ApiKey))
+        {
+            return Results.Ok(new { ok = false, reason = "not_configured" });
+        }
+
+        // Plans our checkout minted: the plan id is stored as providerIntentId on each Whop transaction.
+        var metadata = await db.PaymentTransactions.AsNoTracking()
+            .Where(t => t.Gateway == PaymentGatewayNames.Whop)
+            .Select(t => t.MetadataJson)
+            .ToListAsync(ct);
+        var websitePlanIds = metadata
+            .Select(json => JsonSupport.Deserialize<Dictionary<string, object?>>(json, [])
+                .TryGetValue("providerIntentId", out var id) ? id?.ToString() : null)
+            .Where(id => id is not null && id.StartsWith("plan_", StringComparison.Ordinal))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var client = httpFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(60);
+        var accountId = whop.CompanyId;
+        if (string.IsNullOrWhiteSpace(accountId) && websitePlanIds.Count > 0)
+        {
+            // CompanyId isn't configured: read the owning account off one of our own plans.
+            using var req = new HttpRequestMessage(HttpMethod.Get, CombineUrl(whop.ApiBaseUrl, $"plans/{Uri.EscapeDataString(websitePlanIds.First())}"));
+            req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + whop.ApiKey.Trim());
+            using var resp = await client.SendAsync(req, ct);
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            accountId = doc.RootElement.TryGetProperty("account", out var account) && account.ValueKind == JsonValueKind.Object
+                && account.TryGetProperty("id", out var accId) ? accId.GetString() : null;
+        }
+        if (string.IsNullOrWhiteSpace(accountId))
+        {
+            return Results.Ok(new { ok = false, reason = "company_id_unknown" });
+        }
+
+        var result = await WhopPlanAdaptivePricing.RunAsync(
+            client, whop.ApiBaseUrl, whop.ApiKey, accountId, websitePlanIds, apply, ct);
+        return Results.Ok(new { ok = result.Failures.Count == 0, websitePlanIdsKnown = websitePlanIds.Count, result });
     }
 
     private static async Task<IResult> ListPaymentGateways(IPaymentGatewayCatalog catalog, CancellationToken ct)

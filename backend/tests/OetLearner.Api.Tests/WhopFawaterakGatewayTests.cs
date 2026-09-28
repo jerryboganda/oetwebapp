@@ -633,6 +633,51 @@ public class WhopFawaterakGatewayTests
         public Task<int> RefreshRatesAsync(CancellationToken ct) => Task.FromResult(0);
     }
 
+    [Fact]
+    public async Task WhopAdaptivePricing_PatchesOnlyGbpPlansAndOnlyTheFlag()
+    {
+        var patched = new List<(string Path, string Body)>();
+        var gbpAdaptive = true;
+        var handler = new RouteHandler(async request =>
+        {
+            var path = request.RequestUri!.PathAndQuery;
+            if (request.Method == HttpMethod.Patch)
+            {
+                var body = await request.Content!.ReadAsStringAsync();
+                patched.Add((path, body));
+                gbpAdaptive = false;
+                return "{}";
+            }
+
+            // Two pages: follow page_info.end_cursor.
+            return path.Contains("after=c1")
+                ? """{"data":[{"id":"plan_usd","currency":"usd","initial_price":10,"adaptive_pricing_enabled":true}],"page_info":{"has_next_page":false}}"""
+                : $$"""{"data":[{"id":"plan_gbp","currency":"gbp","initial_price":100,"adaptive_pricing_enabled":{{(gbpAdaptive ? "true" : "false")}},"product":{"id":"prod_1"}},{"id":"plan_off","currency":"gbp","initial_price":50,"adaptive_pricing_enabled":false}],"page_info":{"has_next_page":true,"end_cursor":"c1"}}""";
+        });
+
+        var result = await WhopPlanAdaptivePricing.RunAsync(
+            new HttpClient(handler), "https://api.whop.com/api/v1", "apik_test", "biz_1",
+            new HashSet<string> { "plan_gbp" }, apply: true, default);
+
+        Assert.Equal(3, result.TotalPlans);
+        var patch = Assert.Single(patched);
+        Assert.Equal("/api/v1/plans/plan_gbp", patch.Path);
+        Assert.Equal("""{"adaptive_pricing_enabled":false}""", patch.Body);
+        Assert.Equal("plan_usd", Assert.Single(result.SkippedNonGbp).Id);
+        var after = Assert.Single(result.AffectedAfter);
+        Assert.Equal((false, 100m, "gbp", true), (after.AdaptivePricingEnabled, after.InitialPrice, after.Currency, after.UsedByWebsiteCheckout));
+        Assert.Empty(result.Failures);
+    }
+
+    private sealed class RouteHandler(Func<HttpRequestMessage, Task<string>> respond) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(await respond(request), System.Text.Encoding.UTF8, "application/json"),
+            };
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         public string Response { get; set; } = "{}";
