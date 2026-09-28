@@ -5,7 +5,7 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
 // Overlays render through a body portal: the app shell's scroll containers
@@ -171,6 +171,87 @@ function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestore
   }
 }
 
+const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Shared open/close lifecycle for Modal and Drawer: Escape closes, Tab is
+ * trapped inside `containerRef`, body scroll is locked (refcounted), the first
+ * focusable element is focused on open, and focus is restored to the opener
+ * once the exit animation completes. Returns the AnimatePresence
+ * `onExitComplete` handler.
+ */
+function useOverlayLifecycle(
+  open: boolean,
+  onClose: () => void,
+  containerRef: RefObject<HTMLDivElement | null>,
+  restoreFocusOnClose = true,
+) {
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
+  const wasOpenRef = useRef(false);
+  const shouldRestoreFocusRef = useRef(false);
+
+  // Hold the latest onClose in a ref so the open/close effect below depends only
+  // on `open`. Without this, parents that pass an inline `onClose={() => ...}`
+  // create a new function reference on every render — every keystroke in a
+  // child input would re-run the effect and steal focus back to the close button.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseRef.current();
+      if (event.key !== 'Tab' || !containerRef.current) return;
+      const focusable = containerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    const releaseScrollLock = lockBodyScroll();
+    requestAnimationFrame(() => {
+      containerRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+    });
+    return () => {
+      document.removeEventListener('keydown', handler);
+      releaseScrollLock();
+    };
+  }, [open, containerRef]);
+
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      shouldRestoreFocusRef.current = true;
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
+  return useCallback(() => {
+    if (!shouldRestoreFocusRef.current) {
+      return;
+    }
+
+    shouldRestoreFocusRef.current = false;
+    if (!restoreFocusOnClose) {
+      return;
+    }
+    queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
+  }, [restoreFocusOnClose]);
+}
+
 function getOverlayBackdropMotion(reducedMotion: boolean) {
   return reducedMotion
     ? { initial: false, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.12 } }
@@ -202,83 +283,11 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
   const portalTarget = useBodyPortalTarget();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
-  const wasOpenRef = useRef(false);
-  const shouldRestoreFocusRef = useRef(false);
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const panelMotion = getSurfaceMotion('overlay', reducedMotion);
   const backdropMotion = getOverlayBackdropMotion(reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
-
-  const trapFocus = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey) {
-        if (document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    },
-    [],
-  );
-
-  // Hold the latest onClose in a ref so the open/close effect below depends only
-  // on `open`. Without this, parents that pass an inline `onClose={() => ...}`
-  // create a new function reference on every render — every keystroke in a
-  // child input would re-run the effect and steal focus back to the close button.
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
-      trapFocus(event);
-    };
-    document.addEventListener('keydown', handler);
-    const releaseScrollLock = lockBodyScroll();
-    requestAnimationFrame(() => {
-      const first = dialogRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      first?.focus();
-    });
-    return () => {
-      document.removeEventListener('keydown', handler);
-      releaseScrollLock();
-    };
-  }, [open, trapFocus]);
-
-  useEffect(() => {
-    if (!open && wasOpenRef.current) {
-      shouldRestoreFocusRef.current = true;
-    }
-    wasOpenRef.current = open;
-  }, [open]);
-
-  const handleExitComplete = useCallback(() => {
-    if (!shouldRestoreFocusRef.current) {
-      return;
-    }
-
-    shouldRestoreFocusRef.current = false;
-    queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
-  }, []);
+  const handleExitComplete = useOverlayLifecycle(open, onClose, dialogRef);
 
   if (!portalTarget) return null;
 
@@ -347,10 +356,6 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
   const portalTarget = useBodyPortalTarget();
   const drawerTitleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
-  const wasOpenRef = useRef(false);
-  const shouldRestoreFocusRef = useRef(false);
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const backdropMotion = getOverlayBackdropMotion(reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
@@ -372,73 +377,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
     [reducedMotion, side],
   );
 
-  const trapFocus = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key !== 'Tab' || !drawerRef.current) return;
-      const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey) {
-        if (document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    },
-    [],
-  );
-
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
-      trapFocus(event);
-    };
-    document.addEventListener('keydown', handler);
-    const releaseScrollLock = lockBodyScroll();
-    requestAnimationFrame(() => {
-      const first = drawerRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      first?.focus();
-    });
-    return () => {
-      document.removeEventListener('keydown', handler);
-      releaseScrollLock();
-    };
-  }, [open, trapFocus]);
-
-  useEffect(() => {
-    if (!open && wasOpenRef.current) {
-      shouldRestoreFocusRef.current = true;
-    }
-    wasOpenRef.current = open;
-  }, [open]);
-
-  const handleExitComplete = useCallback(() => {
-    if (!shouldRestoreFocusRef.current) {
-      return;
-    }
-
-    shouldRestoreFocusRef.current = false;
-    if (!restoreFocusOnClose) {
-      return;
-    }
-    queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
-  }, [restoreFocusOnClose]);
+  const handleExitComplete = useOverlayLifecycle(open, onClose, drawerRef, restoreFocusOnClose);
 
   if (!portalTarget) return null;
 
