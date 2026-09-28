@@ -1013,6 +1013,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionServi
 // now resolved via IRuntimeSettingsProvider so admins can rotate it from the
 // admin panel without an app restart.
 builder.Services.AddHttpClient("SpeakingWhisperClient");
+// Writing AI subscription sidecars (internal HTTP facades over the Claude/Codex
+// CLIs). Short timeout — the selector treats an unreachable sidecar as a
+// failover signal, so this client must fail fast, not hang.
+builder.Services.AddHttpClient("WritingAiSidecar", client => { client.Timeout = TimeSpan.FromSeconds(10); });
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
@@ -2238,6 +2242,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingCalibrationRel
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingModelAnswerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEvaluationPipeline,
     OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
+// Writing AI subscription routing (owner directive 2026-09-29): quota gauge +
+// Claude-5x→Codex selector behind the six writing feature codes.
+builder.Services.AddSingleton<OetLearner.Api.Services.Writing.IWritingSubscriptionQuotaService,
+    OetLearner.Api.Services.Writing.WritingSubscriptionQuotaService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector,
+    OetLearner.Api.Services.Writing.WritingSubscriptionSelector>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
     OetLearner.Api.Services.Writing.WritingSubmissionService>();
 // Result-visibility config + learner-facing gated feedback (spec §15.2/§15.3, WS-B4 Section D/E).

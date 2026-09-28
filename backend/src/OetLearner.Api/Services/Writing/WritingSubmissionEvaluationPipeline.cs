@@ -103,6 +103,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingEventBus events,
     TimeProvider clock,
     IRuntimeSettingsProvider settingsProvider,
+    IWritingSubscriptionSelector subscriptionSelector,
     ILogger<WritingSubmissionEvaluationPipeline> logger,
     IWritingAssessmentPreflightService? assessmentPreflight = null,
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
@@ -1247,32 +1248,39 @@ public sealed class WritingSubmissionEvaluationPipeline(
         AiGatewayResult result;
         try
         {
-            result = await aiGateway.CompleteAsync(new AiGatewayRequest
+            // Owner directive 2026-09-29 — decide the subscription provider
+            // (Claude 5x primary / Codex fallback) BEFORE the call, then pin it so
+            // the feature route cannot silently re-route. Failover retries once on
+            // Codex inside this SAME operation, so the learner's credit is debited
+            // exactly once and no duplicate grade is persisted.
+            var decision = await subscriptionSelector.DecideAsync(ct);
+            result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct);
+        }
+        catch (Exception primaryEx) when (IsSubscriptionQuotaSignal(primaryEx))
+        {
+            // Claude reported quota/rate exhaustion (or its sidecar is down): record
+            // the signal so auto mode fails over for the rest of the window, then
+            // retry once on Codex. Only quota/availability signals fail over — a
+            // genuine provider error surfaces to the learner as before.
+            logger.LogWarning(primaryEx,
+                "Writing rubric primary provider reported quota/availability exhaustion for submission {SubmissionId}; failing over to Codex.",
+                submission.Id);
+            await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
+            try
             {
-                Prompt = prompt,
-                UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
-                Temperature = 0.2,
-                // The grounded reply contract (findings + six criteria +
-                // scores + advisory) dwarfs the provider default (1024
-                // tokens): with a 230-rule grounded prompt a finding-rich
-                // letter fills even 6000 output tokens and truncates mid-JSON
-                // (observed live: outTokens=6000, braces 13/11). Size generously
-                // so output exhaustion can never fail a valid grading.
-                MaxTokens = 16000,
-                // Retries after a resource-slot conflict step this version so
-                // the control plane treats the resume as a new slot rather
-                // than a divergent payload on an occupied one.
-                ResourceVersion = resourceVersion,
-                FeatureCode = AiFeatureCodes.WritingGrade,
-                PromptTemplateId = "writing.score.v1",
-                UserId = submission.UserId,
-                AssessmentContext = submission.Mode == "mock"
-                    ? AiAssessmentContext.Mock
-                    : AiAssessmentContext.Practice,
-                CreditReservationId = creditReservationId,
-                ResourceId = submission.Id.ToString("N"),
-                ResourceType = "writing_submission",
-            }, ct);
+                var fallback = new WritingSubscriptionDecision(
+                    WritingSubscriptionProviders.Codex,
+                    WritingSubscriptionProviders.CodexModel,
+                    "auto_quota_failover",
+                    null,
+                    IsFallback: true);
+                result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, fallback, ct);
+            }
+            catch (Exception fallbackEx)
+            {
+                logger.LogWarning(fallbackEx, "Writing rubric fallback provider also failed for submission {SubmissionId}", submission.Id);
+                throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
+            }
         }
         catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
         {
@@ -1355,6 +1363,77 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
 
         return rubric;
+    }
+
+    /// <summary>Executes one rubric call against the chosen subscription provider,
+    /// pinning Provider+Model so the feature route cannot re-route mid-failover.
+    /// Extracted so the failover retry reuses the exact same request shape.</summary>
+    private Task<AiGatewayResult> CallRubricProviderAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot,
+        string? creditReservationId,
+        int? resourceVersion,
+        AiGroundedPrompt prompt,
+        WritingSubscriptionDecision decision,
+        CancellationToken ct)
+        => aiGateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = prompt,
+            UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
+            Provider = decision.ProviderCode,
+            Model = decision.Model,
+            Temperature = 0.2,
+            // The grounded reply contract (findings + six criteria +
+            // scores + advisory) dwarfs the provider default (1024
+            // tokens): with a 230-rule grounded prompt a finding-rich
+            // letter fills even 6000 output tokens and truncates mid-JSON
+            // (observed live: outTokens=6000, braces 13/11). Size generously
+            // so output exhaustion can never fail a valid grading.
+            MaxTokens = 16000,
+            // Retries after a resource-slot conflict step this version so
+            // the control plane treats the resume as a new slot rather
+            // than a divergent payload on an occupied one.
+            ResourceVersion = resourceVersion,
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            PromptTemplateId = "writing.score.v1",
+            UserId = submission.UserId,
+            AssessmentContext = submission.Mode == "mock"
+                ? AiAssessmentContext.Mock
+                : AiAssessmentContext.Practice,
+            CreditReservationId = creditReservationId,
+            ResourceId = submission.Id.ToString("N"),
+            ResourceType = "writing_submission",
+        }, ct);
+
+    /// <summary>True when an exception from the primary subscription provider means
+    /// "the subscription is exhausted / the sidecar is unreachable" — the only
+    /// failures that justify a failover to the fallback. Quota text is normalised
+    /// to a 429 quota_exceeded by the sidecar; a sidecar outage surfaces as an
+    /// HttpRequestException/socket error. Everything else (parse failure, policy
+    /// refusal, budget) must NOT fail over.
+    ///
+    /// ponytail: heuristic substring match on provider error text — the sidecar
+    /// already normalises to 429/quota_exceeded, so this is a belt-and-braces net
+    /// for provider-layer messages. If false positives ever route a non-quota
+    /// error to Codex, tighten to a typed provider exception carrying the 429.
+    /// </summary>
+    private static bool IsSubscriptionQuotaSignal(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is HttpRequestException or System.Net.Sockets.SocketException or TaskCanceledException or TimeoutException)
+                return true;
+            var msg = e.Message;
+            if (string.IsNullOrEmpty(msg)) continue;
+            if (msg.Contains("quota_exceeded", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("rate_limit", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("429", StringComparison.Ordinal)
+                || msg.Contains("usage limit", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("too many requests", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     private static string BuildRubricInput(

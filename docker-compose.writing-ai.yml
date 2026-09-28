@@ -1,0 +1,112 @@
+# Writing AI sidecars (owner directive 2026-09-29).
+#
+# Two hardened wrappers that expose the already-authenticated Claude Code and
+# Codex subscription CLIs as tiny internal HTTP facades, so the .NET AI
+# provider registry can route the six writing features through the DEDICATED
+# Claude Max 5x subscription (primary) and the Codex subscription (fallback)
+# without any API keys.
+#
+# Own compose project (never part of `oetwebsite`), so main Build & Deploy runs
+# never recreate it. Deploy with:
+#   docker compose --env-file /opt/oetwebapp/.deploy/writing-ai.env \
+#     -f /opt/oetwebapp/docker-compose.writing-ai.yml up -d --no-build --wait
+#
+# NEVER `docker compose down -v` this project: the volumes hold the engine
+# sign-ins. The Claude sidecar SHARES the agent-console's oet_agent_home volume
+# (the dedicated 5x login lives there; sharing the single credential copy avoids
+# OAuth refresh-token rotation conflicts between two copies). Codex gets its own
+# volume because its requirements policy differs from the agent console's.
+
+name: oet-writing-ai
+
+x-sidecar-hardening: &sidecar-hardening
+  pull_policy: missing
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  mem_limit: 2g
+  memswap_limit: 2g
+  cpus: 1.0
+  pids_limit: 256
+  oom_score_adj: 700
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  writing-claude:
+    <<: *sidecar-hardening
+    image: ${WRITING_CLAUDE_IMAGE:?Set WRITING_CLAUDE_IMAGE in writing-ai.env}
+    container_name: oet-writing-claude
+    hostname: oet-writing-claude
+    environment:
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CLAUDE_CONFIG_DIR: /home/agent/.claude
+      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_MODEL:-claude-opus-5-5}
+      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_EFFORT:-high}
+      WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_WEEKLY_TOKEN_CAP:-0}
+      # Reach the vendor through the shared egress allowlist proxy.
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-codex,localhost,127.0.0.1
+    volumes:
+      # Shared with oet-agent-console: the dedicated Max 5x credential home.
+      - oet_agent_home:/home/agent
+      # Writable scratch for the CLI (session/tmp dirs); content is never persisted.
+      - writing_claude_tmp:/tmp
+    networks:
+      - oet_writing_net
+      # Reuse the agent-console egress network so outbound traffic goes through
+      # the existing allowlist CONNECT proxy (api.anthropic.com et al.).
+      - oet_agent_net
+
+  writing-codex:
+    <<: *sidecar-hardening
+    image: ${WRITING_CODEX_IMAGE:?Set WRITING_CODEX_IMAGE in writing-ai.env}
+    container_name: oet-writing-codex
+    hostname: oet-writing-codex
+    environment:
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CODEX_HOME: /home/agent/.codex
+      WRITING_CODEX_MODEL: ${WRITING_CODEX_MODEL:-gpt-6-sol}
+      WRITING_CODEX_EFFORT: ${WRITING_CODEX_EFFORT:-high}
+      WRITING_CODEX_WEEKLY_TOKEN_CAP: ${WRITING_CODEX_WEEKLY_TOKEN_CAP:-0}
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-codex,localhost,127.0.0.1
+    volumes:
+      # Dedicated Codex credential home (NOT shared with the agent console —
+      # see header). One-time device-code login on first deploy.
+      - oet_writing_codex_home:/home/agent
+      - writing_codex_tmp:/tmp
+    networks:
+      - oet_writing_net
+      - oet_agent_net
+
+networks:
+  oet_writing_net:
+    driver: bridge
+    internal: false
+  # External: created by docker-compose.agent-console.yml. Lets both sidecars
+  # reach the shared egress proxy (oet-agent-egress) instead of opening a new
+  # internet route.
+  oet_agent_net:
+    external: true
+
+volumes:
+  # External so it is the SAME volume the agent-console writes to.
+  oet_agent_home:
+    external: true
+  oet_writing_codex_home:
+    name: oet_writing_codex_home
+  writing_claude_tmp:
+  writing_codex_tmp:

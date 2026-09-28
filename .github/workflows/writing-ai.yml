@@ -1,0 +1,72 @@
+# Build & push the Writing AI sidecar images (Claude + Codex) to GHCR.
+#
+# The VPS never builds (AGENTS.md compute policy): images are built here and
+# pulled by docker-compose.writing-ai.yml with pull_policy: missing. Both
+# sidecars layer a tiny facade onto the SAME base image as the owner
+# agent-console (which already ships the verified `claude` / `codex` CLIs).
+
+name: Writing AI sidecars
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'writing-ai-sidecars/**'
+      - 'docker-compose.writing-ai.yml'
+      - '.github/workflows/writing-ai.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: writing-ai-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CLAUDE_IMAGE: ghcr.io/${{ github.repository }}-writing-claude:${{ github.sha }}
+  CODEX_IMAGE: ghcr.io/${{ github.repository }}-writing-codex:${{ github.sha }}
+  # Base image carrying the verified claude + codex CLIs. Pin to a known-good
+  # agent-console tag; bump deliberately.
+  AGENT_CONSOLE_IMAGE: ghcr.io/${{ github.repository }}-agent-console:latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push Claude sidecar
+        uses: docker/build-push-action@v6
+        with:
+          context: ./writing-ai-sidecars
+          file: ./writing-ai-sidecars/claude/Dockerfile
+          push: true
+          provenance: false
+          build-args: |
+            AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
+          tags: |
+            ${{ env.CLAUDE_IMAGE }}
+            ghcr.io/${{ github.repository }}-writing-claude:latest
+          cache-from: type=gha,scope=writing-claude
+          cache-to: type=gha,mode=max,scope=writing-claude
+      - name: Build & push Codex sidecar
+        uses: docker/build-push-action@v6
+        with:
+          context: ./writing-ai-sidecars
+          file: ./writing-ai-sidecars/codex/Dockerfile
+          push: true
+          provenance: false
+          build-args: |
+            AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
+          tags: |
+            ${{ env.CODEX_IMAGE }}
+            ghcr.io/${{ github.repository }}-writing-codex:latest
+          cache-from: type=gha,scope=writing-codex
+          cache-to: type=gha,mode=max,scope=writing-codex
