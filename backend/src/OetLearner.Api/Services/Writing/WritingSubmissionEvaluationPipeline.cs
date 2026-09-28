@@ -104,8 +104,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingEventBus events,
     TimeProvider clock,
     IRuntimeSettingsProvider settingsProvider,
-    IWritingSubscriptionSelector subscriptionSelector,
     ILogger<WritingSubmissionEvaluationPipeline> logger,
+    IWritingSubscriptionSelector? subscriptionSelector = null,
     IWritingAssessmentPreflightService? assessmentPreflight = null,
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
     WritingCalibrationReleaseService? calibrationReleaseService = null,
@@ -1359,19 +1359,26 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // the feature route cannot silently re-route. Failover retries once on
             // Codex inside this SAME operation, so the learner's credit is debited
             // exactly once and no duplicate grade is persisted.
-            var decision = await subscriptionSelector.DecideAsync(ct);
+            var decision = subscriptionSelector is not null
+                ? await subscriptionSelector.DecideAsync(ct)
+                // Tests construct the pipeline without the selector — keep the
+                // historical behaviour (feature-route default, no provider pin).
+                : new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
             result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
         }
-        catch (Exception primaryEx) when (IsSubscriptionQuotaSignal(primaryEx))
+        catch (Exception primaryEx) when (subscriptionSelector is not null && IsSubscriptionQuotaSignal(primaryEx))
         {
             // Claude reported quota/rate exhaustion (or its sidecar is down): record
             // the signal so auto mode fails over for the rest of the window, then
             // retry once on Codex. Only quota/availability signals fail over — a
-            // genuine provider error surfaces to the learner as before.
+            // genuine provider error surfaces to the learner as before. When no
+            // selector is wired (tests), there is no fallback provider to try, so
+            // the generic catch below handles it instead.
             logger.LogWarning(primaryEx,
                 "Writing rubric primary provider reported quota/availability exhaustion for submission {SubmissionId}; failing over to Codex.",
                 submission.Id);
-            await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
+            if (subscriptionSelector is not null)
+                await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
             try
             {
                 var fallback = new WritingSubscriptionDecision(
