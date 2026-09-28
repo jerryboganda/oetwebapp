@@ -40,7 +40,7 @@ const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[var(--admin-z-tooltip)] overflow-hidden',
+        'z-[var(--z-popover)] overflow-hidden',
         'rounded-[var(--admin-radius-md)] border border-[var(--admin-border-default)]',
         // Inverted surface — dark in light mode, light in dark mode.
         'bg-[var(--admin-fg-strong)] text-[var(--admin-bg-surface)]',
