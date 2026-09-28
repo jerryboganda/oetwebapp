@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fixtures/diagnostics';
+import { recoverBrowserSession } from './fixtures/auth-bootstrap';
 
 // Phase 12 — smoke for the pre-warm-up timer page introduced in Phase 1
 // of the Speaking module plan. Verifies that:
@@ -13,7 +14,7 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fi
 // has the controls the spec requires.
 
 test.describe('Speaking pre-warm-up timer @learner @speaking', () => {
-  test('warm-up page renders timer + skip + continue controls', async ({ page }, testInfo) => {
+  test('warm-up page renders timer + skip + continue controls', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
@@ -43,7 +44,9 @@ test.describe('Speaking pre-warm-up timer @learner @speaking', () => {
     });
 
     try {
-      await page.goto(`/speaking/sessions/${sessionId}/warmup`, { waitUntil: 'domcontentloaded' });
+      await recoverBrowserSession(page, request, 'learner', `/speaking/sessions/${sessionId}/warmup`, {
+        freshSession: true,
+      });
 
       // Skip is always available
       const skip = page.getByRole('button', { name: /skip/i }).first();

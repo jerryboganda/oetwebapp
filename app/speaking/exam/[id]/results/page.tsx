@@ -36,6 +36,7 @@ import {
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
+import { SpeakingSimulationV11FeedbackCard } from '@/components/domain/speaking/SpeakingSimulationV11FeedbackCard';
 
 const POLL_INTERVAL_MS = 4_000;
 /** ~10 minutes of polling, then "Check again" (the result persists server-side). */
@@ -223,6 +224,7 @@ export default function SpeakingExamResultsPage() {
           tutorOverridesBySessionId={v11TutorOverrides}
           title="Full Speaking mock report"
         />
+        <SpeakingSimulationV11FeedbackCard sessionId={firstCardSessionId} />
         <div className="mt-6 flex justify-center">
           <Button asChild variant="outline">
             <Link href="/speaking">Back to Speaking</Link>
@@ -247,6 +249,7 @@ export default function SpeakingExamResultsPage() {
           tutorOverride={v11TutorOverrides[firstV11SessionId]}
           title="Speaking card report"
         />
+        <SpeakingSimulationV11FeedbackCard sessionId={firstV11SessionId} />
         <div className="mt-6 flex justify-center">
           <Button asChild variant="outline">
             <Link href="/speaking">Back to Speaking</Link>

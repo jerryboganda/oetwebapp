@@ -73,6 +73,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend:
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oet_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ConnectionStrings__OetLearner: Host=localhost;Database=oet_test;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-oet-stack
+        with:
+          with-postgres: "true"
+      - name: Restore + build
+        run: dotnet build backend/OetLearner.sln --configuration Release --nologo
+      - name: Speaking-tagged tests
+        run: dotnet test backend/OetLearner.sln --configuration Release --no-build --filter "FullyQualifiedName~Speaking" --logger "trx;LogFileName=speaking.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaking-test-results
+          path: '**/TestResults/*.trx'
+
+  frontend:
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: ./.github/actions/setup-oet-stack
+      - name: Lint
+        run: pnpm run lint
+      - name: Live v1.1 feedback regression
+        run: pnpm exec vitest run components/domain/speaking/SpeakingSimulationV11FeedbackCard.test.tsx
+      - name: Vitest
+        run: pnpm test -- --reporter=verbose
+      - name: Type-check
+        run: pnpm exec tsc --noEmit --pretty false
+      - name: Build
+        run: pnpm run build
+
   migrations-check:
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:

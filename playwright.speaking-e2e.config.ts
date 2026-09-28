@@ -11,7 +11,11 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL?.trim() || 'http://localhost:300
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: /tests\/e2e\/speaking-.*\.spec\.ts/,
-  fullyParallel: true,
+  // The seeded learner account is protected by SingleActiveSession and
+  // single-use refresh-token rotation. Keep this focused slice serial so a
+  // fresh per-test browser session cannot revoke a concurrently running test.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
   reporter: [
@@ -39,9 +43,22 @@ export default defineConfig({
       name: 'speaking-learner',
       dependencies: ['setup'],
       testMatch: /tests\/e2e\/speaking-.*\.spec\.ts/,
+      testIgnore: /tests\/e2e\/speaking-p0-verify\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: authStatePathsByProject['chromium-learner'],
+      },
+    },
+    {
+      // Keep the real-provider smoke out of the fully parallel shared learner
+      // session. It performs its own sign-in and therefore must run only after
+      // the deterministic learner project has finished, otherwise the backend's
+      // single-active-session policy can revoke that project's session family.
+      name: 'speaking-provider',
+      dependencies: ['speaking-learner'],
+      testMatch: /tests\/e2e\/speaking-p0-verify\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
       },
     },
   ],

@@ -10,14 +10,15 @@ namespace OetLearner.Api.Endpoints;
 
 /// <summary>
 /// Admin governance surface for the released Speaking simulation v1.1
-/// contract. Creating a release or approval never makes it live; an explicit
-/// approval action is required, and the learner assessor remains fail-closed
-/// until every owner gate is satisfied.
+/// contract. Candidate visibility defaults on; governance approvals configure
+/// operational controls, while an approved candidate_release_block acts as the
+/// explicit candidate-facing kill switch.
 /// </summary>
 public static class SpeakingSimulationV11GovernanceEndpoints
 {
     private static readonly HashSet<string> FlagKeys = new(StringComparer.Ordinal)
     {
+        "candidate_release_block",
         "calibration_approval",
         "retention_approval",
         "graph_approval",
