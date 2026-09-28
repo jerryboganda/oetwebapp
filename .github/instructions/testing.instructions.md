@@ -28,21 +28,29 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
 
 - Cover service logic, scoring, rulebook resolution, authorization, and error paths.
 - Keep tests isolated; do not depend on shared mutable external state.
+- One test project: `backend/tests/OetLearner.Api.Tests`. Put a new test in the folder of the
+  domain under test (`Speaking/`, `Writing/`, `Billing/`, `Services/`, ...) with namespace
+  `OetLearner.Api.Tests.<Folder>`. Do not add new test files at the project root.
+- Reuse `Infrastructure/` before writing a private fake: `TestWebApplicationFactory` (and
+  `FirstPartyAuthTestWebApplicationFactory`, `BunnyMockedWebApplicationFactory`),
+  `NotificationTestDoubles`, `[PostgreSqlFact]` + `PostgreSqlTestDatabase` (needs
+  `OET_TEST_POSTGRES_CONNECTION`, set in `qa-smoke.yml`). Put a double shared by several classes in
+  `Infrastructure/`; never declare top-level helper types inside a `*Tests.cs` file.
+- Gate live-provider tests with a `Skip` attribute, never an early `return` that reports a pass.
+  No permanent `Skip`: delete the test or fix it.
+- When moving or renaming a test class, update the CI filters that name it:
+  `writing-rev8-ci.yml` `DOTNET_FILTER`, `ai-control-plane-tests.yml` `paths` and `--filter`,
+  `rulebook-conformance.yml` `--filter`, `deploy.yml` `syntax-gate` filter, and the pinned
+  classes in `qa-smoke.yml` (`PlacementEndpointsTests`, `AuthFlowsTests`).
 
 ## When to add tests
 
 - Add or update focused tests for behavior changes and bug fixes. Reproduce a bug with a failing
   test before fixing where practical.
 
-## Running tests (host)
+## Running tests (GitHub Actions only)
 
-All validation runs directly on the Windows host — see `validation.instructions.md` for the full
-command ladder. Common commands:
-
-```powershell
-pnpm exec tsc --noEmit
-pnpm run lint
-pnpm test
-pnpm run backend:test
-pnpm run test:e2e:smoke
-```
+Tests never run on the local machine — see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED
+COMPUTE ENVIRONMENT". Push the branch or `gh workflow run qa-smoke.yml --ref <branch>`; that runs
+tsc, lint, vitest, build, the sharded `dotnet test` and the Playwright smoke. See
+`validation.instructions.md` for which job runs which check.

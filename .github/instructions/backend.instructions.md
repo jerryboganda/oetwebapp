@@ -44,4 +44,4 @@ immutable DTOs, nullable annotations, and cancellation tokens on async operation
 - Runtime secrets: read through `IRuntimeSettingsProvider.GetAsync()` with env fallback. Do not read
   mutable secrets directly from `IOptions<T>` in services. See `docs/ADMIN-RUNTIME-SETTINGS.md`.
 
-Validation: `pnpm run backend:build` / `pnpm run backend:test` on the host — see `validation.instructions.md`.
+Validation: `dotnet build` / `dotnet test` run on GitHub Actions only (`qa-smoke.yml` `backend-tests`) — see `validation.instructions.md`.

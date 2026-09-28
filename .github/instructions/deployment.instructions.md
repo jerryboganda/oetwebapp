@@ -1,13 +1,13 @@
 ---
 name: "Deployment And Packaging"
-description: "Use when editing Docker, CI/CD, release workflows, deployment docs, production/staging configuration, storage persistence, Electron packaging, or Capacitor build surfaces."
-applyTo: "Dockerfile*,docker-compose*.yml,.github/workflows/*.yml,scripts/deploy/**,scripts/ship/**,DEPLOYMENT.md,DEPLOY-MANUAL.md,electron/**,capacitor.config.ts,android/**,ios/**"
+description: "Use when editing Docker, CI/CD, release workflows, deployment docs, production/staging configuration, storage persistence, Tauri desktop packaging, or Capacitor build surfaces."
+applyTo: "Dockerfile*,docker-compose*.yml,.github/workflows/*.yml,scripts/deploy/**,scripts/ship/**,DEPLOYMENT.md,DEPLOY-MANUAL.md,capacitor.config.ts,android/**,ios/**"
 ---
 
 # Deployment And Packaging
 
 Covers production/staging deployment, container images, CI/CD, and desktop/mobile packaging.
-Local validation is NOT done here — it runs on the host via pnpm (see `validation.instructions.md`).
+Validation is not done here or on the VPS — it runs only on GitHub Actions (see `validation.instructions.md`).
 
 ## Storage persistence (mission critical)
 
@@ -27,7 +27,7 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 ## Desktop / mobile
 
-- Electron packaging uses `electron-builder.config.cjs` and the desktop compose/Playwright configs.
+- Desktop is Tauri 2 (`src-tauri/`): gated by `tauri-ci.yml`, released by `tauri-desktop-release.yml`.
 - Capacitor (`capacitor.config.ts`, `android/`, `ios/`) wraps the web build; keep platform configs in sync.
 - Android is `com.oetwithdrhesham.app`; iOS is `com.oetprep.learner`. These are
   independently owned (Android was renamed, iOS deliberately was not) — never let an

@@ -1,42 +1,43 @@
 ---
-name: "Local Validation On Host"
-description: "Use when running builds, tests, installs, lint, type-checks, Playwright, dotnet, or scripts to validate changes in the OET repo. Defines where validation runs and the command ladder."
+name: "CI Validation Ladder"
+description: "Use when validating changes in the OET repo: builds, tests, installs, lint, type-checks, Playwright, dotnet, or scripts. Defines where validation runs (GitHub Actions only) and which workflow runs each check."
 applyTo: "package.json,pnpm-lock.yaml,Dockerfile,docker-compose*.yml,backend/**,app/**,components/**,contexts/**,hooks/**,lib/**,tests/**,playwright*.config.ts,vitest.config.ts,scripts/**"
 ---
 
-# Local Validation On Host
+# CI Validation Ladder
 
-All local validation (installs, type-check, lint, unit tests, builds, Playwright, dotnet) runs
-**directly on the Windows host** using PowerShell or `cmd`. Do not require Docker Desktop for
-validation, and never run validation on the production VPS.
+Compute runs only on GitHub Actions — see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED
+COMPUTE ENVIRONMENT". Do not run builds, tests, lint, type-checks, Playwright, dotnet or Docker on
+the local machine or the production VPS.
 
-Host toolchain is installed and verified: Node 22.x, pnpm 10.33.0, .NET 10.x.
-
-## Command ladder (run the smallest credible subset first)
+## Local (the only allowed commands)
 
 ```powershell
-pnpm run ship:gate          # REQUIRED before every main push (seconds)
-pnpm run ship:watch         # REQUIRED after every main push (Build & Deploy only)
-pnpm exec tsc --noEmit      # type-check frontend
-pnpm run lint               # eslint
-pnpm test                   # vitest unit tests
-pnpm run build              # next build (heaviest frontend check)
-pnpm run backend:build      # dotnet build
-pnpm run backend:test       # dotnet test
-pnpm run check:encoding     # encoding guard
-pnpm run test:e2e:smoke     # Playwright smoke (when UI flows change)
+pnpm run ship:gate          # REQUIRED before every main push (seconds, static checks only)
+pnpm run ship:watch         # REQUIRED after every main push (watches Build & Deploy only)
 ```
 
-Ship-it default is `ship:gate` only. Do not run the rest of this ladder unless the change needs it or the user asked. Never treat "pushed" as done.
+## CI (push the branch or `gh workflow run qa-smoke.yml --ref <branch>`)
 
-If a script misbehaves under PowerShell quoting, fall back to `cmd /c "pnpm run <script>"`.
+| Check | Workflow / job |
+| --- | --- |
+| `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `qa-smoke.yml` / `frontend-unit` |
+| `dotnet test` (6 shards, Postgres/pgvector) | `qa-smoke.yml` / `backend-tests` |
+| Playwright smoke (one job per project) | `qa-smoke.yml` / `e2e-smoke` |
+| Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
+| Pending EF model changes, gitleaks | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
+| Web + API images, migrations, blue/green deploy | `deploy.yml` (push to `main` only) |
+| Android / iOS builds | `mobile-ci.yml` |
+| Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
+
+Ship-it default is `ship:gate` only. Never treat "pushed" as done.
 
 ## Scope & safety
 
-- Choose validation by risk: docs-only changes need no build; behavior changes need the matching
-  type-check/test/build; broad refactors warrant the fuller ladder.
-- Report exactly what ran, what did not run, and any remaining risk.
+- Choose validation by risk: docs-only changes need no CI run; behavior changes need the matching
+  CI job to be green; broad refactors warrant the full `qa-smoke.yml` run.
+- Never claim a check passed without a GitHub Actions run behind it. Report the workflow, run, job
+  and step, what did not run, and any remaining risk.
 - The VPS is deploy-only. Storage persistence, protected volumes, and production container rules are a
-  deployment/runtime invariant — see `deployment.instructions.md` — not a local validation concern.
-- Take local, reversible actions freely. Get approval before destructive, networked, production, or
-  credential-adjacent commands.
+  deployment/runtime invariant — see `deployment.instructions.md`.
+- Get approval before destructive, networked, production, or credential-adjacent commands.

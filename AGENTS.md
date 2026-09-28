@@ -238,20 +238,17 @@ For `app/admin/**`, `components/domain/admin/**`, or `components/admin/**`, load
 
 ## Validation Ladder
 
-Run the smallest relevant host command, then expand if risk demands it:
+These are the checks **CI runs** — never run them locally (see the GitHub Actions compute rule above).
+The only local pre-push check is `pnpm run ship:gate`. To get them for a branch, push it or
+`gh workflow run qa-smoke.yml --ref <branch>`:
 
-```powershell
-pnpm exec tsc --noEmit
-pnpm run lint
-pnpm test
-pnpm run build
-pnpm run backend:build
-pnpm run backend:test
-pnpm run check:encoding
-pnpm run test:e2e:smoke
-```
+| Check | `qa-smoke.yml` job |
+| --- | --- |
+| `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `frontend-unit` |
+| `dotnet test` (sharded, Postgres/pgvector) | `backend-tests` |
+| Playwright smoke (one job per project) | `e2e-smoke` |
 
-Report exactly what ran, what did not run, and any remaining risk.
+Report exactly which workflow run, job and step passed, what did not run, and any remaining risk.
 
 ## Map Of AI-Direction Files
 
@@ -267,7 +264,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/security-ai.instructions.md` — canonical security, AI grounding, scoring,
   rulebooks, secrets, prompt defense.
 - `.github/instructions/testing.instructions.md` — Vitest/RTL/Playwright/xUnit conventions.
-- `.github/instructions/validation.instructions.md` — host validation command ladder.
+- `.github/instructions/validation.instructions.md` — CI validation ladder (which workflow runs which check).
 - `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
 - `docs/play-store-automation.md` — Google Play Console release/listing/tester/review
@@ -280,4 +277,3 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   never invent a `TO VERIFY` value.
 - `agent-console/etc/MANUAL.md` — operating manual appended to every Owner Agent Console session;
   load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
-- `.tools/autoskills/AGENTS.md` — scoped to `.tools/autoskills/` only (pnpm supply-chain hardening).

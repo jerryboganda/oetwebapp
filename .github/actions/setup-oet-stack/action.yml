@@ -13,7 +13,7 @@ inputs:
   node-version:
     description: Node.js version
     required: false
-    default: "20"
+    default: "22"
   with-postgres:
     description: Set to "true" to spin up a local Postgres container.
     required: false
@@ -29,8 +29,6 @@ runs:
 
     - name: Setup pnpm
       uses: pnpm/action-setup@v4
-      with:
-        version: 10.33.0
 
     - name: Setup Node
       uses: actions/setup-node@v4

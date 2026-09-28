@@ -9,8 +9,10 @@ name: Build & Deploy (web + API)
 # Why not build on the VPS: it is a shared host with 60+ co-tenant containers;
 # an in-place `next build` OOM-cascades and can take the whole box down.
 #
-# Uses pre-existing repo secrets: VPS_HOST, VPS_USER, VPS_PORT, VPS_SSH_KEY,
-# VPS_APP_DIR. No build minutes are billed (public repo).
+# SSH uses secrets.PROD_SSH_KEY. migrate-production and deploy hardcode the
+# prod box (root@185.252.233.186:22, /opt/oetwebapp); only the "Prune stale
+# OET images" step still reads secrets VPS_HOST / VPS_USER / VPS_PORT.
+# No build minutes are billed (public repo).
 
 on:
   push:

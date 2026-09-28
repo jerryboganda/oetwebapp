@@ -45,13 +45,12 @@
 
 ## Test plan
 
-- [ ] `pnpm run backend:test -- --filter "FullyQualifiedName~Speaking"`
-- [ ] `pnpm test`
-- [ ] `pnpm run lint`
-- [ ] `pnpm exec tsc --noEmit`
-- [ ] Local smoke: `./scripts/speaking-smoke.sh`
-- [ ] Playwright (if E2E-relevant): `pnpm exec playwright test tests/e2e/speaking-*.spec.ts`
-- [ ] Axe (if UI-touching): `pnpm exec playwright test tests/a11y`
+<!-- Compute runs on GitHub Actions only (AGENTS.md). Link each run. -->
+
+- [ ] `qa-smoke.yml` green: `backend-tests` (incl. Speaking classes) and `frontend-unit` (vitest, lint, tsc, build)
+- [ ] `speaking-ci.yml` `migrations-check` green
+- [ ] Playwright (if E2E-relevant): `speaking-e2e.yml` dispatched
+- [ ] Axe (if UI-touching): `speaking-a11y.yml` dispatched
 
 ## Screenshots / recordings
 

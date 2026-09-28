@@ -1,12 +1,14 @@
 ---
 name: "Local Development Against Production DB"
 description: "Instructions for setting up and running the local web app, desktop app (Tauri), and mobile view against the live production database with fast hot-reloading."
-applyTo: ".env.development.local,scripts/start-local-prod.ps1,app/**,components/**,backend/**"
+applyTo: ".env.development.local,scripts/start-local-prod.ps1"
 ---
 
 # Local Development Stack with Direct Production DB Access
 
-This instruction guide defines the mandatory procedure for launching local development environments (Web, Desktop, and Mobile) connected directly to the live production database.
+> **Owner-only human workflow. Agents must not run this** — agents follow the `AGENTS.md` rule that compute runs only on GitHub Actions.
+
+This guide describes how the owner launches local development environments (Web, Desktop, and Mobile) connected directly to the live production database.
 
 ---
 

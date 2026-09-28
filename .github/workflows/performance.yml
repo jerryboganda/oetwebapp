@@ -36,7 +36,6 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
-  PNPM_VERSION: '10.33.0'
   PERF_MODE: ${{ inputs.mode || ((vars.PERF_TARGET_URL != '' && vars.PERF_API_URL != '') && 'external' || 'ephemeral') }}
   PERF_TARGET_URL: ${{ inputs.target_url || vars.PERF_TARGET_URL }}
   PERF_API_URL: ${{ inputs.api_url || vars.PERF_API_URL }}
@@ -51,8 +50,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
@@ -61,6 +58,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Test browser report summarizer
+        run: node --test scripts/perf/summarize-browser-reports.test.mjs
 
       - name: Resolve isolated performance targets
         if: env.PERF_MODE == 'ephemeral'

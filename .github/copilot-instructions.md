@@ -27,14 +27,14 @@ Before product catalogue, checkout, entitlement, dashboard, add-on, Tutor Book, 
 - Prefer focused tests for behavior changes and bug fixes.
 - Make minimal edits that fit existing boundaries.
 - Review the diff for OET contracts, security, tests, and regressions.
-- Verify with the lightest meaningful host command before reporting done.
+- Verify with the lightest meaningful GitHub Actions run before reporting done (`pnpm run ship:gate` is the only local check).
 - Before handoff, update `.github/agent-state.local.md` with current goal, changed files, validation, blockers, and next concrete step.
 
 Ask only when a missing decision blocks correctness or safety.
 
 ## Routing
 
-- Bugs/failing commands: reproduce or inspect the failure, identify root cause, fix incrementally, rerun focused validation.
+- Bugs/failing commands: inspect the failure (CI logs/artifacts), identify root cause, fix incrementally, rerun the focused CI job.
 - Frontend: follow Next.js App Router, React 19, TypeScript, Tailwind, direct imports, `motion/react`, and `apiClient` rules.
 - Backend: follow ASP.NET Core Minimal API, EF Core, PostgreSQL, DI services, DTO contracts, cancellation tokens, and server-side authorization.
 - Security/auth/AI/uploads/scoring/rulebooks/runtime settings/deployment: load the matching domain docs before editing.
@@ -50,15 +50,10 @@ After every `main` push: run `pnpm run ship:gate` before push, then `pnpm run sh
 
 ## Execution Locality
 
-Local validation runs directly on the Windows host via PowerShell or `cmd` (Node 22.x, pnpm 10.33.0,
-.NET 10.x installed):
-
-- Frontend: `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run build`.
-- Backend: `pnpm run backend:build`, `pnpm run backend:test`.
-- If PowerShell quoting breaks a script, use `cmd /c "pnpm run <script>"`.
-
-Do not run validation on the production VPS. Docker compose files are for deployment/packaging, not a
-required local validation path. See `.github/instructions/validation.instructions.md`.
+Compute runs only on GitHub Actions (see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE
+ENVIRONMENT"). The only local pre-push check is `pnpm run ship:gate`. For tsc/lint/vitest/build and
+`dotnet test`, push the branch or dispatch `.github/workflows/qa-smoke.yml`. Never build, test or debug
+on the production VPS. See `.github/instructions/validation.instructions.md`.
 
 ## Prompt Defense
 

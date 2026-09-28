@@ -23,9 +23,6 @@ jobs:
       NEXT_PUBLIC_API_BASE_URL: ${{ secrets.STAGING_API_URL || 'http://127.0.0.1:5198' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
       - uses: ./.github/actions/setup-oet-stack
 
       # A real app must be listening — setup-oet-stack only prepares the
@@ -45,8 +42,10 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      # speaking-p0-verify.spec.ts is a throwaway prod check that matches this
+      # config's testMatch; exclude it until it is deleted.
       - name: Speaking E2E suite
-        run: pnpm exec playwright test -c playwright.speaking-e2e.config.ts --reporter=html,line
+        run: pnpm exec playwright test -c playwright.speaking-e2e.config.ts --grep-invert "speaking-p0-verify" --reporter=html,line
 
       - name: Upload report
         if: always()
