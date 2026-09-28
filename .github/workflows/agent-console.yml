@@ -66,14 +66,9 @@ jobs:
           set -euo pipefail
           deps="$RUNNER_TEMP/deps-$(printf '%s' '${{ matrix.package }}' | tr '/' '-')"
           mkdir -p "$deps"
-          cp package.json .npmrc "$deps/"
-          if [ -f package-lock.json ]; then cp package-lock.json "$deps/"; fi
+          cp package.json package-lock.json .npmrc "$deps/"
           cd "$deps"
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+          npm ci --no-audit --no-fund
           cd - >/dev/null
           rm -rf node_modules
           ln -s "$deps/node_modules" node_modules

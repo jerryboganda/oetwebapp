@@ -22,7 +22,7 @@ agent-console/
   CONTRACT.md                 interface contract (sidecar ↔ API ↔ UI ↔ proxies)
   README.md                   this file
   Dockerfile                  node:22-bookworm-slim (digest-pinned); users agent (10002); pinned CLIs
-  package.json                exact-pinned direct deps; no lockfile committed yet (Dockerfile + CI fall back to npm install)
+  package.json, package-lock.json   exact-pinned direct deps + committed lockfile (Dockerfile + CI use npm ci)
   tsconfig.json, vitest.config.ts
   src/
     server.ts                 Fastify control server :8410 (token + owner-account checks, routes of CONTRACT §3) + runtime wiring
@@ -113,8 +113,8 @@ The loop is: edit → push a branch → GitHub Actions → read logs → fix →
   active turns — the console's **Apply update** drains first, then
   dispatches with it).
 - **Test job** (one matrix leg each for the sidecar, `egress/` and
-  `dockerproxy/`): install (`npm ci` when a lockfile exists, else
-  `npm install`), type-check, the unit tests in `tests/`, and
+  `dockerproxy/`): install (`npm ci` from the committed lockfile),
+  type-check, the unit tests in `tests/`, and
   `codex execpolicy check` on `etc/oet.rules` (sidecar leg only).
   `npm audit signatures` runs in the sidecar `Dockerfile` build stage.
 - **Build job:** three images →
