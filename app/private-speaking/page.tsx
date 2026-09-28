@@ -9,6 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import {
   fetchPrivateSpeakingConfig,
   fetchPrivateSpeakingTutors,
@@ -641,18 +642,12 @@ export default function PrivateSpeakingPage() {
               Live tutor sessions are available only with an eligible course or package, or the Speaking Crash Course.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Link
-                href="/catalog"
-                className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
-              >
-                View eligible courses
-              </Link>
-              <Link
-                href="/marketplace"
-                className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/5"
-              >
-                Go to course catalogue
-              </Link>
+              <Button asChild size="sm" className="w-fit">
+                <Link href="/catalog">View eligible courses</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="w-fit">
+                <Link href="/marketplace">Go to course catalogue</Link>
+              </Button>
             </div>
           </div>
         ) : (
@@ -673,12 +668,11 @@ export default function PrivateSpeakingPage() {
             <p className="text-xs text-warning">
               You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
             </p>
-            <Link
-              href="/catalog"
-              className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              <ShoppingBag className="h-3.5 w-3.5" aria-hidden /> Buy speaking sessions
-            </Link>
+            <Button asChild size="sm" className="w-fit shrink-0">
+              <Link href="/catalog">
+                <ShoppingBag className="h-3.5 w-3.5" aria-hidden /> Buy speaking sessions
+              </Link>
+            </Button>
           </div>
         )}
         </>
@@ -697,11 +691,11 @@ export default function PrivateSpeakingPage() {
           server also blocks direct booking attempts). Past bookings stay visible. */}
       <div className="flex gap-2 mb-6">
         {canBrowse && (
-        <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
+        <button type="button" aria-pressed={viewMode === 'browse'} onClick={() => setViewMode('browse')} className={`min-h-11 px-4 py-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           Browse Slots
         </button>
         )}
-        <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
+        <button type="button" aria-pressed={viewMode === 'bookings'} onClick={() => setViewMode('bookings')} className={`min-h-11 px-4 py-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           My Bookings {bookings.length > 0 && <span className="ml-1 bg-white/20 px-1.5 rounded-full text-xs">{bookings.length}</span>}
         </button>
       </div>
@@ -861,6 +855,7 @@ export default function PrivateSpeakingPage() {
                 </div>
               )}
               <textarea
+                aria-label="Notes for the tutor (optional)"
                 placeholder="Notes for the tutor (optional)"
                 value={bookingNotes}
                 onChange={e => setBookingNotes(e.target.value)}
@@ -869,10 +864,9 @@ export default function PrivateSpeakingPage() {
               />
               {rescheduleTarget ? (
                 <>
-                  <button onClick={() => setRescheduleConfirmOpen(true)} disabled={bookingInProgress}
-                    className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
+                  <Button fullWidth onClick={() => setRescheduleConfirmOpen(true)} disabled={bookingInProgress}>
                     {bookingInProgress ? 'Processing...' : 'Confirm Reschedule'}
-                  </button>
+                  </Button>
                   <p className="text-xs text-muted/60 text-center mt-2">
                     Your original booking will close and this slot will replace it.
                   </p>
@@ -901,10 +895,9 @@ export default function PrivateSpeakingPage() {
                 </div>
               ) : (
                 <>
-                  <button onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}
-                    className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
+                  <Button fullWidth onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}>
                     {bookingInProgress ? 'Processing...' : 'Use Session Credit & Book'}
-                  </button>
+                  </Button>
                   {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
                     <button onClick={handleBookWithPaypal} disabled={bookingInProgress}
                       className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-emerald-300 disabled:opacity-50 transition-colors">
@@ -987,14 +980,12 @@ export default function PrivateSpeakingPage() {
             </p>
           )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => setRescheduleConfirmOpen(false)} disabled={bookingInProgress}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={() => setRescheduleConfirmOpen(false)} disabled={bookingInProgress}>
               Back
-            </button>
-            <button type="button" onClick={handleReschedule} disabled={bookingInProgress}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50">
+            </Button>
+            <Button type="button" onClick={handleReschedule} disabled={bookingInProgress}>
               {bookingInProgress ? 'Processing...' : 'Confirm reschedule'}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
