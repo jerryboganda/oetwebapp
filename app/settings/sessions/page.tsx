@@ -17,6 +17,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-error';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
@@ -27,7 +28,6 @@ import {
   type ActiveSession,
   type TrustedDeviceSelf,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
 
 function maskIpAddress(ip: string | null): string {
   if (!ip) return 'Unknown';
@@ -177,12 +177,23 @@ export default function SessionsPage() {
           ]}
         />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {error ? (
+          <InlineAlert
+            variant="error"
+            action={(
+              <Button type="button" variant="outline" size="sm" onClick={() => void loadSessions()}>
+                Retry
+              </Button>
+            )}
+          >
+            {error}
+          </InlineAlert>
+        ) : null}
 
         {trustedDevice ? (
           <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 sm:p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-emerald-500/10 border-emerald-500/20">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-success/10 border-success/20">
+              <ShieldCheck className="w-5 h-5 text-success" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -190,7 +201,7 @@ export default function SessionsPage() {
                   Trusted device: {trustedDevice.deviceName || platformLabel(trustedDevice.platform) || 'Unknown device'}
                 </h3>
                 {trustedDevice.isCurrentDevice ? (
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-2xs font-semibold text-emerald-700">
+                  <span className="inline-flex items-center rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-2xs font-semibold text-success">
                     This device
                   </span>
                 ) : null}
@@ -218,9 +229,9 @@ export default function SessionsPage() {
               disabled={revokingAll}
             >
               {revokingAll ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               ) : (
-                <Trash2 className="w-4 h-4 mr-2" />
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
               )}
               {confirmAll ? 'Confirm: Revoke All Other Sessions' : 'Revoke All Other Sessions'}
             </Button>
@@ -242,7 +253,11 @@ export default function SessionsPage() {
               ))}
             </div>
           ) : sessions.length === 0 ? (
-            <div className="p-8 text-center text-muted">No active sessions found.</div>
+            <EmptyState
+              className="rounded-none border-0 shadow-none"
+              icon={<MonitorSmartphone className="h-7 w-7" />}
+              title="No active sessions found."
+            />
           ) : (
             <div className="divide-y divide-border">
               {sessions.map((session) => {
@@ -308,13 +323,16 @@ export default function SessionsPage() {
           )}
         </div>
 
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => router.push('/settings')}
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy transition-colors"
+          className="text-muted hover:text-navy"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           Back to Settings
-        </button>
+        </Button>
       </div>
     </LearnerDashboardShell>
   );

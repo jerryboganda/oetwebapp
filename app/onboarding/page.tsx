@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Stepper } from '@/components/ui/stepper';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { completeOnboarding, fetchOnboardingState, startOnboarding } from '@/lib/api';
@@ -117,7 +118,12 @@ export default function OnboardingPage() {
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
-        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted">Loading onboarding...</div>
+        <div className="flex flex-1 items-center justify-center p-4 md:p-8" role="status" aria-label="Loading onboarding">
+          <div className="w-full max-w-2xl space-y-5 sm:space-y-8">
+            <Skeleton className="h-12 w-full rounded-2xl" />
+            <Skeleton className="h-72 w-full rounded-2xl" />
+          </div>
+        </div>
       </LearnerDashboardShell>
     );
   }
@@ -139,11 +145,11 @@ export default function OnboardingPage() {
           <MotionFadeSwitch
             activeKey={step.id}
             direction={direction as 1 | -1}
-            className="bg-surface rounded-2xl p-6 md:p-10 shadow-clinical"
+            className="bg-surface rounded-2xl border border-border p-6 md:p-10 shadow-clinical"
           >
               {/* Icon */}
               <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-                <Icon className="w-7 h-7 text-primary" />
+                <Icon className="w-7 h-7 text-primary" aria-hidden="true" />
               </div>
 
               {/* Content */}
@@ -153,7 +159,7 @@ export default function OnboardingPage() {
               <ul className="space-y-3">
                 {step.details.map((detail, i) => (
                   <li key={i} className="flex gap-3 items-start">
-                    <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" aria-hidden="true" />
                     <span className="text-sm text-navy/80">{detail}</span>
                   </li>
                 ))}
@@ -168,7 +174,7 @@ export default function OnboardingPage() {
               disabled={currentStep === 0}
               className={currentStep === 0 ? 'invisible' : ''}
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Back
             </Button>
 
@@ -178,7 +184,7 @@ export default function OnboardingPage() {
 
             <Button variant="primary" onClick={goNext}>
               {isLast ? 'Set Your Goals' : 'Continue'}
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Button>
           </div>
         </div>

@@ -104,7 +104,7 @@ export function HelpCenterDrawer({ open, onClose, workspaceRole }: HelpCenterDra
               <Link
                 href="/feedback-guide"
                 onClick={onClose}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-sm font-semibold text-navy transition-colors hover:border-primary/40 hover:bg-primary/5"
+                className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-sm font-semibold text-navy transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <BookOpen className="h-4 w-4 text-primary" aria-hidden="true" />
                 Feedback &amp; criteria guide
@@ -113,7 +113,7 @@ export function HelpCenterDrawer({ open, onClose, workspaceRole }: HelpCenterDra
             <a
               href={buildSupportMailto(user?.email ?? undefined)}
               onClick={onClose}
-              className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-sm font-semibold text-navy transition-colors hover:border-primary/40 hover:bg-primary/5"
+              className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-sm font-semibold text-navy transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <MessageSquareText className="h-4 w-4 text-primary" aria-hidden="true" />
               Contact support

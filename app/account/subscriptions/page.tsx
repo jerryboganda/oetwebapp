@@ -11,6 +11,8 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { SubscriptionCard } from '@/components/billing/SubscriptionCard';
 
 /**
@@ -54,7 +56,7 @@ export default function AccountSubscriptionsPage() {
             href="/account"
             className="inline-flex items-center gap-1 text-xs text-muted hover:text-navy"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Account
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Account
           </Link>
           <h1 className="mt-2 text-3xl font-bold text-navy">Your subscriptions</h1>
           <p className="mt-1 text-sm text-muted">
@@ -67,17 +69,26 @@ export default function AccountSubscriptionsPage() {
       </header>
 
       {error ? (
-        <InlineAlert variant="error" title="Could not load subscriptions">
+        <InlineAlert
+          variant="error"
+          title="Could not load subscriptions"
+          action={(
+            <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          )}
+        >
           {error}
         </InlineAlert>
       ) : null}
 
       {loading ? (
-        <p className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
-          Loading subscriptions...
-        </p>
+        <div className="space-y-4">
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
       ) : subscriptions.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-10 text-center">
+        <Card padding="lg" className="border-dashed py-10 text-center">
           <Layers className="mx-auto h-8 w-8 text-muted" aria-hidden="true" />
           <p className="mt-3 text-sm text-muted">
             You do not have any active subscriptions right now.
@@ -85,7 +96,7 @@ export default function AccountSubscriptionsPage() {
           <Button asChild className="mt-4">
             <Link href="/catalog">Pick a plan</Link>
           </Button>
-        </div>
+        </Card>
       ) : (
         <div className="space-y-4">
           {subscriptions.map((subscription) => (

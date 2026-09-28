@@ -107,7 +107,7 @@ export default function BillingProfilePage() {
           </div>
         ) : (
           <>
-            <div className="rounded-lg bg-muted/40 p-4 text-sm">
+            <div className="rounded-lg border border-border bg-background-light p-4 text-sm">
               <p className="font-medium">Detected</p>
               <p className="text-muted">
                 {profile.detectedCountry || '-'} · {profile.detectedRegion} · {profile.detectedCurrency}{' '}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { PlatformGlyph } from '@/components/marketing/store-badges';
@@ -87,7 +88,7 @@ export default function AndroidInstallPage() {
           Back to OET Prep
         </Link>
 
-        <section className="mt-8 rounded-3xl bg-navy px-8 py-10 text-center text-white shadow-clinical">
+        <section className="mt-8 rounded-3xl bg-oet-navy px-5 py-10 text-center text-white shadow-clinical sm:px-8">
           <h1 className="text-2xl font-bold">Install the Android update</h1>
           {isPlayCopy ? (
             <>
@@ -97,14 +98,15 @@ export default function AndroidInstallPage() {
                 downloaded file cannot install over a Play copy (Android rejects it with
                 &ldquo;App not installed&rdquo;).
               </p>
-              <button
+              <Button
                 type="button"
+                size="lg"
                 onClick={() => void openPlayListing()}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
+                className="mt-6 text-sm font-bold"
               >
                 <PlatformGlyph platform="android" className="h-5 w-5" />
                 Update in Google Play
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -113,13 +115,12 @@ export default function AndroidInstallPage() {
                 This app is installed directly (not through Google Play), so the update has to be
                 installed manually — it only takes a minute.
               </p>
-              <a
-                href={ANDROID_DOWNLOAD_URL}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white hover:bg-primary-dark"
-              >
-                <PlatformGlyph platform="android" className="h-5 w-5" />
-                Download the update
-              </a>
+              <Button asChild size="lg" className="mt-6 text-sm font-bold">
+                <a href={ANDROID_DOWNLOAD_URL}>
+                  <PlatformGlyph platform="android" className="h-5 w-5" />
+                  Download the update
+                </a>
+              </Button>
               <p className="mx-auto mt-4 max-w-md text-xs leading-5 text-white/60">
                 Installed the app from Google Play instead?{' '}
                 <button

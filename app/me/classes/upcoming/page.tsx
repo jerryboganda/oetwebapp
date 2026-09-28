@@ -89,22 +89,28 @@ export default function MyUpcomingClassesPage() {
         {error ? (
           <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
             <span>{error}</span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
-              Dismiss
-            </Button>
+            <span className="flex shrink-0 gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+                Retry
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
+                Dismiss
+              </Button>
+            </span>
           </InlineAlert>
         ) : null}
 
         <div className="flex gap-3 border-b border-border pb-1 text-sm">
           <Link
             href="/me/classes/upcoming"
-            className="border-b-2 border-primary pb-2 font-semibold text-primary"
+            aria-current="page"
+            className="border-b-2 border-primary pb-2 font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Upcoming
           </Link>
           <Link
             href="/me/classes/past"
-            className="pb-2 text-muted hover:text-navy"
+            className="border-b-2 border-transparent pb-2 text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Past
           </Link>
@@ -118,7 +124,7 @@ export default function MyUpcomingClassesPage() {
           </div>
         ) : classes.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" />
+            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" aria-hidden="true" />
             <p className="text-sm font-medium text-navy">No upcoming classes</p>
             <p className="mt-1 text-sm text-muted">
               Browse the class catalog to enroll.
@@ -152,15 +158,15 @@ export default function MyUpcomingClassesPage() {
                       <h2 className="text-lg font-semibold text-navy">{item.title}</h2>
                       <div className="flex flex-wrap gap-4 text-sm text-muted">
                         <span className="flex items-center gap-1.5">
-                          <CalendarDays className="h-4 w-4" />
+                          <CalendarDays className="h-4 w-4" aria-hidden="true" />
                           {formatDate(session.scheduledStartAt)}
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-4 w-4" aria-hidden="true" />
                           Ends {formatDate(session.scheduledEndAt)}
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <Users className="h-4 w-4" />
+                          <Users className="h-4 w-4" aria-hidden="true" />
                           {seatsLabel(session)}
                         </span>
                       </div>
@@ -172,7 +178,7 @@ export default function MyUpcomingClassesPage() {
                           href={`/classes/${item.slug}/sessions/${session.id}/join`}
                           className={buttonClassName({ variant: 'primary', size: 'sm' })}
                         >
-                          <PlayCircle className="h-4 w-4" />
+                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
                           Join class
                         </Link>
                       ) : (
@@ -180,7 +186,7 @@ export default function MyUpcomingClassesPage() {
                           href={`/classes/${item.slug}/sessions/${session.id}/join`}
                           className={buttonClassName({ variant: 'secondary', size: 'sm' })}
                         >
-                          <PlayCircle className="h-4 w-4" />
+                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
                           Open join page
                         </Link>
                       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/empty-error';
 
 export default function ReferralError({
   error,
@@ -15,15 +15,13 @@ export default function ReferralError({
   }, [error]);
 
   return (
-    <div className="flex min-h-[calc(var(--app-viewport-height,100dvh)-9rem)] flex-col items-center justify-center gap-4 p-6 text-center">
-      <div className="rounded-full bg-danger/10 p-4">
-        <svg className="h-8 w-8 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-        </svg>
-      </div>
-      <h2 className="text-lg font-semibold text-navy">Something went wrong</h2>
-      <p className="max-w-md text-sm text-muted">An unexpected error occurred in Referral. Please try again.</p>
-      <Button variant="primary" onClick={reset}>Try Again</Button>
+    <div className="flex min-h-[calc(var(--app-viewport-height,100dvh)-9rem)] items-center justify-center p-6">
+      <ErrorState
+        className="w-full max-w-md"
+        title="Something went wrong"
+        message="An unexpected error occurred in Referral. Please try again."
+        onRetry={reset}
+      />
     </div>
   );
 }

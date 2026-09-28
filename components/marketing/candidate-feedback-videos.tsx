@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Play, Star, Sparkles, CheckCircle2, UserCheck, X } from 'lucide-react';
 import { Card } from '@/components/ui';
+import { Button } from '@/components/ui/button';
 
 export interface CandidateFeedbackVideo {
   id: string;
@@ -171,7 +172,7 @@ export function CandidateFeedbackVideos({ className }: { className?: string }) {
               className="group flex flex-col overflow-hidden border border-border bg-background-light/40 transition hover:border-primary/40 hover:shadow-md"
             >
               {/* Video preview thumbnail with play button overlay */}
-              <div className="relative aspect-video w-full overflow-hidden bg-navy">
+              <div className="relative aspect-video w-full overflow-hidden bg-oet-navy">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={video.thumbnailUrl}
@@ -232,13 +233,15 @@ export function CandidateFeedbackVideos({ className }: { className?: string }) {
                   </div>
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setActiveVideo(video)}
-                  className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-navy transition-colors hover:bg-primary hover:text-white"
+                  className="mt-4 bg-surface font-semibold"
                 >
-                  <Play className="h-3 w-3 fill-current" /> Watch Feedback Video
-                </button>
+                  <Play className="h-3 w-3 fill-current" aria-hidden="true" /> Watch Feedback Video
+                </Button>
               </div>
             </Card>
           ))}

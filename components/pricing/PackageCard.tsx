@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
@@ -88,12 +89,11 @@ export function PackageCard({ plan, detailsHref }: PackageCardProps) {
         </ul>
       )}
       <div className="mt-auto pt-5">
-        <Link
-          href={href}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background-light px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-surface"
-        >
-          View details <ArrowRight className="h-4 w-4" />
-        </Link>
+        <Button asChild variant="outline" fullWidth className="bg-background-light">
+          <Link href={href}>
+            View details <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Button>
       </div>
     </article>
   );

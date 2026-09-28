@@ -89,9 +89,9 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="rounded-full p-2 text-muted hover:bg-background-light"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </header>
 

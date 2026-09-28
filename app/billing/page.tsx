@@ -273,12 +273,9 @@ export default function BillingPage() {
             <span className="font-medium text-navy">Paid by bank transfer or wallet?</span>{' '}
             Upload your payment proof — access is granted after admin approval (within 12 hours).
           </p>
-          <Link
-            href="/billing/manual-payment"
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/90"
-          >
-            Upload payment proof
-          </Link>
+          <Button asChild size="sm" className="shrink-0 font-semibold">
+            <Link href="/billing/manual-payment">Upload payment proof</Link>
+          </Button>
         </div>
 
         {/* Status banners — only render when relevant */}
