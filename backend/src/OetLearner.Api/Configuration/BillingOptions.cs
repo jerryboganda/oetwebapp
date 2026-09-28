@@ -2,6 +2,8 @@ namespace OetLearner.Api.Configuration;
 
 public sealed class BillingOptions
 {
+    public const string SectionName = "Billing";
+
     public string? CheckoutBaseUrl { get; set; }
     public bool AllowSandboxFallbacks { get; set; } = false;
 

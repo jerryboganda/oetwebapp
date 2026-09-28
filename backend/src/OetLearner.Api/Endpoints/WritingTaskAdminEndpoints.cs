@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
@@ -337,10 +338,10 @@ public static class WritingTaskAdminEndpoints
 
         var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
         var allowed = requiresSystemAdmin
-            ? AdminPermissionEvaluator.HasAny(perms, "system_admin")
+            ? AdminPermissionEvaluator.HasAny(perms, AdminPermissions.SystemAdmin)
             : requiresPublish
-                ? AdminPermissionEvaluator.HasAny(perms, "content:publish", "system_admin")
-                : AdminPermissionEvaluator.HasAny(perms, "content:write", "system_admin");
+                ? AdminPermissionEvaluator.HasAny(perms, AdminPermissions.ContentPublish, AdminPermissions.SystemAdmin)
+                : AdminPermissionEvaluator.HasAny(perms, AdminPermissions.ContentWrite, AdminPermissions.SystemAdmin);
         if (!allowed)
         {
             return Results.StatusCode(StatusCodes.Status403Forbidden);

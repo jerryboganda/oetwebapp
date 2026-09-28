@@ -2,6 +2,8 @@ namespace OetLearner.Api.Configuration;
 
 public sealed class StorageOptions
 {
+    public const string SectionName = "Storage";
+
     public string LocalRootPath { get; set; } = "App_Data/storage";
     public long MaxUploadBytes { get; set; } = 25L * 1024 * 1024;
 

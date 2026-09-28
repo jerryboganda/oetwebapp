@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
@@ -60,8 +61,8 @@ public static class SpeakingCalibrationEndpoints
             SpeakingTutorCalibrationService svc, CancellationToken ct)
             => Results.Ok(await svc.ListCommentsForAttemptAsync(
                 http.AuthenticatedUserId(),
-                isExpert: http.User.IsInRole("expert"),
-                isAdmin: http.User.IsInRole("admin"),
+                isExpert: http.User.IsInRole(ApplicationUserRoles.Expert),
+                isAdmin: http.User.IsInRole(ApplicationUserRoles.Admin),
                 attemptId, ct)))
             .RequireAuthorization()
             .WithTags("Speaking calibration")

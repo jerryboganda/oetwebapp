@@ -104,7 +104,7 @@ public sealed class ContentEntitlementService(
     public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal)
     {
         if (principal is null) return false;
-        return principal.IsInRole("admin") || principal.IsInRole("Admin");
+        return principal.IsInRole(ApplicationUserRoles.Admin) || principal.IsInRole("Admin");
     }
 
     public async Task<ContentEntitlementResult> AllowAccessAsync(

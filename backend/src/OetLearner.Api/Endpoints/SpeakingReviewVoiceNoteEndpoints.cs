@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
@@ -65,7 +66,7 @@ public static class SpeakingReviewVoiceNoteEndpoints
                 CancellationToken ct) =>
             {
                 var expertId = http.ExpertId();
-                var isAdmin = http.User.IsInRole("admin") || http.User.IsInRole("Admin");
+                var isAdmin = http.User.IsInRole(ApplicationUserRoles.Admin) || http.User.IsInRole("Admin");
                 await service.DeleteAsync(voiceNoteId, expertId, ct, isAdmin);
                 return Results.NoContent();
             })

@@ -905,82 +905,82 @@ public static class AdminEndpoints
 
         // ── B3: Enterprise / Sponsor Channel ────────────
 
-        admin.MapGet("/sponsors", async (IConfiguration config, AdminService service, CancellationToken ct,
+        admin.MapGet("/sponsors", async (IOptionsMonitor<FeatureFlagOptions> features, AdminService service, CancellationToken ct,
             string? status, int? page, int? pageSize) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.GetSponsorsAsync(status, page ?? 1, pageSize ?? 20, ct));
         })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/sponsors", async (IConfiguration config, HttpContext http,
+        admin.MapPost("/sponsors", async (IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             SponsorCreateRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.CreateSponsorAsync(http.AdminId(), http.AdminName(), request, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapPatch("/sponsors/{sponsorId}", async (string sponsorId, IConfiguration config, HttpContext http,
+        admin.MapPatch("/sponsors/{sponsorId}", async (string sponsorId, IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             SponsorUpdateRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.UpdateSponsorAsync(http.AdminId(), http.AdminName(), sponsorId, request, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/sponsors/{sponsorId}/learners", async (string sponsorId, IConfiguration config, AdminService service, CancellationToken ct,
+        admin.MapGet("/sponsors/{sponsorId}/learners", async (string sponsorId, IOptionsMonitor<FeatureFlagOptions> features, AdminService service, CancellationToken ct,
             int? page, int? pageSize) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.GetSponsorLearnersAsync(sponsorId, page ?? 1, pageSize ?? 20, ct));
         })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/sponsors/{sponsorId}/learners", async (string sponsorId, IConfiguration config, HttpContext http,
+        admin.MapPost("/sponsors/{sponsorId}/learners", async (string sponsorId, IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             CohortMemberAddRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.LinkSponsorLearnerAsync(http.AdminId(), http.AdminName(), sponsorId, request.LearnerId, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/cohorts", async (IConfiguration config, AdminService service, CancellationToken ct,
+        admin.MapGet("/cohorts", async (IOptionsMonitor<FeatureFlagOptions> features, AdminService service, CancellationToken ct,
             string? sponsorId, string? status, int? page, int? pageSize) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.GetCohortsAsync(sponsorId, status, page ?? 1, pageSize ?? 20, ct));
         })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/cohorts", async (IConfiguration config, HttpContext http,
+        admin.MapPost("/cohorts", async (IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             CohortCreateRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.CreateCohortAsync(http.AdminId(), http.AdminName(), request, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapPatch("/cohorts/{cohortId}", async (string cohortId, IConfiguration config, HttpContext http,
+        admin.MapPatch("/cohorts/{cohortId}", async (string cohortId, IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             CohortUpdateRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.UpdateCohortAsync(http.AdminId(), http.AdminName(), cohortId, request, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
 
-        admin.MapGet("/cohorts/{cohortId}/members", async (string cohortId, IConfiguration config, AdminService service, CancellationToken ct,
+        admin.MapGet("/cohorts/{cohortId}/members", async (string cohortId, IOptionsMonitor<FeatureFlagOptions> features, AdminService service, CancellationToken ct,
             int? page, int? pageSize) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.GetCohortMembersAsync(cohortId, page ?? 1, pageSize ?? 20, ct));
         })
             .WithAdminRead("AdminUsersRead");
 
-        admin.MapPost("/cohorts/{cohortId}/members", async (string cohortId, IConfiguration config, HttpContext http,
+        admin.MapPost("/cohorts/{cohortId}/members", async (string cohortId, IOptionsMonitor<FeatureFlagOptions> features, HttpContext http,
             CohortMemberAddRequest request, AdminService service, CancellationToken ct) =>
         {
-            if (!SponsorPortalEnabled(config)) return SponsorPortalDisabled();
+            if (!SponsorPortalEnabled(features)) return SponsorPortalDisabled();
             return Results.Ok(await service.AddCohortMemberAsync(http.AdminId(), http.AdminName(), cohortId, request.LearnerId, ct));
         })
             .WithAdminWrite("AdminUsersWrite");
@@ -2308,8 +2308,8 @@ public static class AdminEndpoints
     private static string AdminName(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 
-    private static bool SponsorPortalEnabled(IConfiguration configuration)
-        => configuration.GetValue<bool>("Features:SponsorPortalEnabled");
+    private static bool SponsorPortalEnabled(IOptionsMonitor<FeatureFlagOptions> features)
+        => features.CurrentValue.SponsorPortalEnabled;
 
     private static IResult SponsorPortalDisabled()
         => Results.NotFound(new
