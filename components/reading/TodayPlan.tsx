@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import type { DailyPlanDto, DailyPlanItemDto } from '@/lib/reading-pathway-api';
 
 const ITEM_TYPE_ICONS: Record<string, string> = {
@@ -27,7 +28,7 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
   const completed = plan.completedCount;
 
   return (
-    <div className="rounded-xl border border-border bg-surface">
+    <div className="rounded-2xl border border-border bg-surface shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
         <div>
@@ -62,13 +63,14 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
                   </div>
                 </div>
                 {!isDone ? (
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => onStartItem(item)}
-                    className="flex-shrink-0 rounded-lg border border-info/30 bg-info/10 px-3 py-1.5 text-xs font-semibold text-info hover:bg-info/20 transition-colors"
+                    className="flex-shrink-0"
                   >
                     Start
-                  </button>
+                  </Button>
                 ) : (
                   <span className="flex-shrink-0 text-xs text-muted capitalize">{item.status}</span>
                 )}
