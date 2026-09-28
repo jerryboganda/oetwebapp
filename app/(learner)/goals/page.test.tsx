@@ -42,10 +42,6 @@ describe('Goals setup page', () => {
     mockUpdateUserProfile.mockResolvedValue({});
   });
 
-  it('renders the goals form', () => {
-    renderWithRouter(<GoalsPage />, { router: { push: mockPush } });
-  });
-
   it('displays exam family selector', () => {
     renderWithRouter(<GoalsPage />, { router: { push: mockPush } });
     expect(screen.getByText('OET')).toBeInTheDocument();
