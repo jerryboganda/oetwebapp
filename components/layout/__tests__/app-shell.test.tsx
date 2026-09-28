@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 const authProviderSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-provider">{children}</div>);
 const authGuardSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-guard">{children}</div>);
 const topNavSpy = vi.fn(({ children }: { children?: React.ReactNode }) => <div data-testid="top-nav">{children}</div>);
-type PaletteProps = { open: boolean; onOpenChange: (open: boolean) => void; workspaceRole: string };
+type PaletteProps = { open: boolean; onOpenChange: (open: boolean) => void; workspaceRole: string; sections: unknown };
 const globalSearchSpy = vi.fn(({ open, onOpenChange }: PaletteProps) => (
   <button type="button" data-testid="global-search" data-open={String(open)} onClick={() => onOpenChange(true)} />
 ));
@@ -137,6 +137,27 @@ describe('AppShell', () => {
     });
 
     it.each([
+      ['admin', '/admin'],
+      ['expert', '/expert'],
+    ] as const)('mounts once for a signed-in %s and hands both headers its opener', (role, path) => {
+      renderShellAt(path, { requiredRole: role, workspaceRole: role }, SIGNED_IN);
+
+      expect(screen.getAllByTestId('global-search')).toHaveLength(1);
+      expect(lastTopNavSearch(2)).toEqual([expect.any(Function), expect.any(Function)]);
+    });
+
+    const queue = { href: '/expert/queue', label: 'Queue', icon: <span /> };
+    it.each<[string, Omit<AppShellProps, 'children'>, string]>([
+      ['navGroups', { navGroups: [{ label: 'Workspace', items: [queue] }], mobileMenuSections: [{ label: 'Review', items: [queue] }], navItems: [queue] }, 'Workspace'],
+      ['mobileMenuSections', { mobileMenuSections: [{ label: 'Review', items: [queue] }], navItems: [queue] }, 'Review'],
+      ['navItems', { navItems: [queue] }, 'Go to'],
+    ])('hands the palette the shell nav from %s', (_source, nav, label) => {
+      renderShellAt('/expert', { requiredRole: 'expert', workspaceRole: 'expert', ...nav }, SIGNED_IN);
+
+      expect(globalSearchSpy.mock.lastCall?.[0].sections).toEqual([{ label, items: [queue] }]);
+    });
+
+    it.each([
       ['signed out', '/reading', learner, null],
       ['distraction-free', '/reading', { ...learner, distractionFree: true }, SIGNED_IN],
       ['on an exam paper', '/reading/paper/p1', learner, SIGNED_IN],
@@ -145,6 +166,13 @@ describe('AppShell', () => {
 
       expect(screen.queryByTestId('global-search')).not.toBeInTheDocument();
       expect(lastTopNavSearch(1)).toEqual([undefined]);
+    });
+
+    it('is not mounted in a staff live room', () => {
+      renderShellAt('/expert/speaking/live-room/s1', { requiredRole: 'expert', workspaceRole: 'expert' }, SIGNED_IN);
+
+      expect(screen.queryByTestId('global-search')).not.toBeInTheDocument();
+      expect(lastTopNavSearch(2)).toEqual([undefined, undefined]);
     });
 
     it('closes when the route changes under the mounted shell', () => {

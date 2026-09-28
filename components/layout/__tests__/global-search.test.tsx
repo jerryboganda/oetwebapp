@@ -217,6 +217,20 @@ describe('GlobalSearch command palette', () => {
     expect(optionHrefs()).toEqual(['/admin/users']);
   });
 
+  it('adds the expert settings page, merged into a same-named nav section', () => {
+    renderPalette({
+      role: 'expert',
+      sections: [
+        { label: 'Teach', items: [{ href: '/tutor/classes', label: 'Classes', icon: <span /> }] },
+        { label: 'Account', items: [{ href: '/tutor/profile', label: 'Profile', icon: <span /> }] },
+      ],
+    });
+    pressHotkey();
+
+    expect(screen.getAllByRole('group', { name: 'Account' })).toHaveLength(1);
+    expect(optionHrefs()).toEqual(['/tutor/classes', '/tutor/profile', '/expert/settings']);
+  });
+
   it('uses design-token text sizes only', () => {
     renderPalette();
     pressHotkey();

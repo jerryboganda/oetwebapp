@@ -32,8 +32,8 @@ vi.mock('@/lib/mobile/haptics', () => ({
 // fetching / heavier subtrees that are irrelevant to the header box model
 // under test — stub them so this test stays focused and fast.
 vi.mock('@/components/layout/global-search', () => ({
-  SearchTrigger: ({ onClick, className }: { onClick: () => void; className?: string }) => (
-    <button type="button" data-testid="search-trigger" className={className} onClick={onClick}>
+  SearchTrigger: ({ variant = 'bar', onClick, className }: { variant?: string; onClick: () => void; className?: string }) => (
+    <button type="button" data-testid="search-trigger" data-variant={variant} className={className} onClick={onClick}>
       Search anything
     </button>
   ),
@@ -167,5 +167,25 @@ describe('TopNav search triggers', () => {
     fireEvent.click(menuTrigger);
     expect(onOpenSearch).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('navigation', { name: /mobile menu/i })).not.toBeInTheDocument();
+  });
+
+  it('adds the icon trigger to the staff header only when given onOpenSearch', () => {
+    const onOpenSearch = vi.fn();
+    const at = (opener?: () => void) => (
+      <NextRouterProvider pathname="/admin">
+        <TopNav onOpenSearch={opener} userSummary={{ displayName: 'Admin', email: 'a@example.com' }} />
+      </NextRouterProvider>
+    );
+    const { rerender } = render(at());
+    expect(screen.queryByTestId('search-trigger')).not.toBeInTheDocument();
+
+    rerender(at(onOpenSearch));
+    expect(screen.getByTestId('search-trigger')).toHaveAttribute('data-variant', 'icon');
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    // Staff headers always have room for the icon, so the menu adds no second entry.
+    expect(screen.getAllByTestId('search-trigger')).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId('search-trigger'));
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
   });
 });

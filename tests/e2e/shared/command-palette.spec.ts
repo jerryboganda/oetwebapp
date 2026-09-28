@@ -12,16 +12,20 @@ import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
  * active and never asserts a nav label.
  */
 
-type Role = 'learner';
+type Role = 'learner' | 'expert' | 'admin';
 
 // `/subscriptions` adds a page action (cart) to the learner header: the
 // tightest header row at 360px.
 const JOURNEYS: Record<Role, { start: string; headerRoutes: string[] }> = {
   learner: { start: '/dashboard', headerRoutes: ['/dashboard', '/subscriptions'] },
+  expert: { start: '/expert', headerRoutes: ['/expert'] },
+  admin: { start: '/admin', headerRoutes: ['/admin'] },
 };
 
 function roleForProject(projectName: string): Role | null {
   if (projectName === 'chromium-learner') return 'learner';
+  if (projectName === 'chromium-expert') return 'expert';
+  if (projectName === 'chromium-admin') return 'admin';
   return null;
 }
 
@@ -39,7 +43,8 @@ async function openShell(page: Page, request: APIRequestContext, role: Role, rou
 /** Right edge of the rightmost visible control in the visible top nav. */
 function headerRightEdge(page: Page) {
   return page.evaluate(() => {
-    const header = Array.from(document.querySelectorAll('header')).find((el) => el.getClientRects().length > 0);
+    // The shell's top nav, not a page's own <header> inside <main>.
+    const header = Array.from(document.querySelectorAll('header')).find((el) => !el.closest('main') && el.getClientRects().length > 0);
     const controls = Array.from(header?.querySelectorAll('a, button') ?? []).filter((el) => el.getClientRects().length > 0);
     return Math.max(0, ...controls.map((el) => el.getBoundingClientRect().right));
   });
@@ -47,7 +52,7 @@ function headerRightEdge(page: Page) {
 
 /** In the header, or (learner, below md) at the top of the menu drawer. */
 function searchTrigger(page: Page) {
-  return page.locator('header, #mobile-menu').getByRole('button', { name: /^search/i });
+  return page.getByRole('banner').or(page.locator('#mobile-menu')).getByRole('button', { name: /^search/i });
 }
 
 async function openFromTrigger(page: Page) {
