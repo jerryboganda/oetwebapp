@@ -177,7 +177,6 @@ public static class ReadingAuthoringAdminEndpoints
             }
         });
 
-        // LegacyErrorAlias: components/domain/ReadingStructureEditor.tsx:220 reads detail.error; remove after the frontend reads detail.message
         group.MapPost("/manifest", async (
             string paperId,
             ReadingStructureManifestImportDto dto,
@@ -197,11 +196,11 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return new ApiErrorResult(400, "reading_manifest_invalid", ApiErrorResult.SafeMessage(ex, "The Reading manifest could not be imported."), LegacyErrorAlias: true) { Exception = ex };
+                return new ApiErrorResult(400, "reading_manifest_invalid", ApiErrorResult.SafeMessage(ex, "The Reading manifest could not be imported.")) { Exception = ex };
             }
             catch (DbUpdateException ex)
             {
-                return new ApiErrorResult(409, "reading_manifest_import_failed", "Reading structure import could not be applied because existing learner data depends on this structure.", LegacyErrorAlias: true) { Exception = ex };
+                return new ApiErrorResult(409, "reading_manifest_import_failed", "Reading structure import could not be applied because existing learner data depends on this structure.") { Exception = ex };
             }
         });
 
@@ -257,7 +256,6 @@ public static class ReadingAuthoringAdminEndpoints
             return removed ? Results.NoContent() : Results.NotFound();
         });
 
-        // LegacyErrorAlias: components/domain/ReadingStructureEditor.tsx:140 reads detail.error; remove after the frontend reads detail.message
         group.MapPost("/questions", async (
             string paperId, ReadingQuestionUpsertDto dto,
             IReadingStructureService svc, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
@@ -265,7 +263,7 @@ public static class ReadingAuthoringAdminEndpoints
             var partMatchesRoute = await db.ReadingParts.AsNoTracking()
                 .AnyAsync(p => p.Id == dto.ReadingPartId && p.PaperId == paperId, ct);
             if (!partMatchesRoute)
-                return new ApiErrorResult(400, "reading_part_paper_mismatch", "Reading part does not belong to this paper.", LegacyErrorAlias: true);
+                return new ApiErrorResult(400, "reading_part_paper_mismatch", "Reading part does not belong to this paper.");
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -282,7 +280,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return new ApiErrorResult(400, "reading_question_rejected", ApiErrorResult.SafeMessage(ex, "The Reading question could not be saved."), LegacyErrorAlias: true) { Exception = ex };
+                return new ApiErrorResult(400, "reading_question_rejected", ApiErrorResult.SafeMessage(ex, "The Reading question could not be saved.")) { Exception = ex };
             }
         });
 

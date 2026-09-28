@@ -42,12 +42,10 @@ public static class AiMeEndpoints
                 dto.ModelAllowlistCsv, skipValidation: false, ct);
             if (!result.Success)
             {
-                // LegacyErrorAlias: app/settings/ai/page.tsx:86 reads detail.error; remove after the frontend reads detail.message
                 return new ApiErrorResult(
                     400,
                     result.ErrorCode ?? "ai_credential_save_failed",
-                    result.ErrorMessage ?? "The API key could not be saved.",
-                    LegacyErrorAlias: true);
+                    result.ErrorMessage ?? "The API key could not be saved.");
             }
             return Results.Ok(new
             {
