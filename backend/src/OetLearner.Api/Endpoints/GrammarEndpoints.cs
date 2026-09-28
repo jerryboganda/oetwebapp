@@ -39,7 +39,7 @@ public static class GrammarEndpoints
             }
             catch (KeyNotFoundException ex)
             {
-                return Results.NotFound(new { error = ex.Message });
+                return new ApiErrorResult(404, "grammar_topic_not_found", ApiErrorResult.SafeMessage(ex, "Grammar topic not found.")) { Exception = ex };
             }
         });
 

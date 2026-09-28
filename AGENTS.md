@@ -194,7 +194,7 @@ Live VPS names (created 2026-06-03, project `oetwebsite`):
 
 - Media path inside API containers is always `/var/opt/oet-learner/storage`.
 - Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-learner/storage`.
-- Production/VPS compose pins those volumes `external: true` with the exact live names. Do not change `name: oetwebsite`.
+- Production compose pins those volumes `external: true` with the exact live names. Do not change `name: oetwebsite`.
 - Media/user file I/O must go through `IFileStorage` or `S3CompatibleFileStorage`.
 - Never use raw `File.*`, `Path.*`, or `Directory.*` for media/user data.
 - Never run `docker compose down -v`, `docker volume rm`, `volume prune`, or recreate postgres/storage volumes.

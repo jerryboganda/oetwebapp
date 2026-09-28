@@ -103,7 +103,7 @@ public static class WritingTaskModelAnswerAdminEndpoints
     {
         var answer = await service.GetAsync(id);
         return answer is null
-            ? Results.NotFound(new { error = "No model answer has been generated for this task yet." })
+            ? new ApiErrorResult(404, "writing_model_answer_not_found", "No model answer has been generated for this task yet.")
             : Results.Ok(answer);
     }
 
@@ -174,7 +174,7 @@ public static class WritingTaskModelAnswerAdminEndpoints
         var adminId = GetUserId(user) ?? "system";
         var answer = await service.ApproveAsync(id, adminId, ct);
         return answer is null
-            ? Results.NotFound(new { error = "No model answer has been generated for this task yet." })
+            ? new ApiErrorResult(404, "writing_model_answer_not_found", "No model answer has been generated for this task yet.")
             : Results.Ok(answer);
     }
 
@@ -187,7 +187,7 @@ public static class WritingTaskModelAnswerAdminEndpoints
         var adminId = GetUserId(user) ?? "system";
         var answer = await service.RejectAsync(id, adminId, ct);
         return answer is null
-            ? Results.NotFound(new { error = "No model answer has been generated for this task yet." })
+            ? new ApiErrorResult(404, "writing_model_answer_not_found", "No model answer has been generated for this task yet.")
             : Results.Ok(answer);
     }
 

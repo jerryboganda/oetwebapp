@@ -79,7 +79,7 @@ public static class CompanionAccessAdminEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.PlanCode))
             {
-                return Results.BadRequest(new { error = "plan_code_required" });
+                return new ApiErrorResult(400, "plan_code_required", "Plan code is required.");
             }
 
             var planCode = request.PlanCode.Trim();
@@ -88,7 +88,7 @@ public static class CompanionAccessAdminEndpoints
                 .AnyAsync(p => p.Code.ToLower() == planCode.ToLower(), ct);
             if (!planExists)
             {
-                return Results.NotFound(new { error = "unknown_plan", planCode });
+                return Results.NotFound(new { code = "unknown_plan", message = $"Plan {planCode} does not exist.", planCode });
             }
 
             var adminId = AdminId(http);
@@ -130,7 +130,7 @@ public static class CompanionAccessAdminEndpoints
                     && o.ModuleKey == ModuleKeys.AiCompanion, ct);
             if (existing is null)
             {
-                return Results.NotFound(new { error = "no_override", planCode });
+                return Results.NotFound(new { code = "no_override", message = $"No AI Companion override exists for plan {planCode}.", planCode });
             }
 
             db.PlanModuleOverrides.Remove(existing);

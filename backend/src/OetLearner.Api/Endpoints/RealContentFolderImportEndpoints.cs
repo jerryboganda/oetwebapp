@@ -38,10 +38,10 @@ public static class RealContentFolderImportEndpoints
             CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "file required" });
-            if (file.Length > MaxZipBytes) return Results.BadRequest(new { error = $"file too large (max {MaxZipBytes} bytes)" });
+            if (file is null || file.Length == 0) return new ApiErrorResult(400, "upload_file_required", "file required");
+            if (file.Length > MaxZipBytes) return new ApiErrorResult(400, "upload_file_too_large", $"file too large (max {MaxZipBytes} bytes)");
             var ext = (Path.GetExtension(file.FileName)?.TrimStart('.') ?? "").ToLowerInvariant();
-            if (ext != "zip") return Results.BadRequest(new { error = "only .zip accepted (zip up your Project Real Content folder first)" });
+            if (ext != "zip") return new ApiErrorResult(400, "upload_file_type_invalid", "only .zip accepted (zip up your Project Real Content folder first)");
 
             await using var stream = file.OpenReadStream();
             var validation = await validator.ValidateAsync(stream, ext, ct);
@@ -49,22 +49,14 @@ public static class RealContentFolderImportEndpoints
                 || !string.Equals(validation.DetectedMime, "application/zip", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(validation.DetectedExtension, "zip", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new
-                {
-                    code = "invalid_file_content",
-                    message = validation.Reason ?? "The uploaded file content does not match a ZIP archive.",
-                });
+                return new ApiErrorResult(400, "invalid_file_content", validation.Reason ?? "The uploaded file content does not match a ZIP archive.");
             }
 
             if (stream.CanSeek) stream.Position = 0;
             var scanResult = await scanner.ScanAsync(stream, Path.GetFileName(file.FileName), ct);
             if (!scanResult.clean)
             {
-                return Results.BadRequest(new
-                {
-                    code = "file_failed_security_scan",
-                    message = scanResult.reason ?? "The uploaded ZIP failed security scanning.",
-                });
+                return new ApiErrorResult(400, "file_failed_security_scan", scanResult.reason ?? "The uploaded ZIP failed security scanning.");
             }
 
             if (stream.CanSeek) stream.Position = 0;
@@ -114,11 +106,11 @@ public static class RealContentFolderImportEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             if (!_sessions.TryGetValue(sessionId, out var staged))
-                return Results.NotFound(new { error = "session not found or expired" });
+                return new ApiErrorResult(404, "import_session_not_found", "session not found or expired");
 
             if (body?.ApprovedSourcePaths is null || body.ApprovedSourcePaths.Count == 0)
             {
-                return Results.BadRequest(new { error = "At least one reviewed proposal source path must be approved explicitly." });
+                return new ApiErrorResult(400, "import_approval_required", "At least one reviewed proposal source path must be approved explicitly.");
             }
 
             var approvedSet = new HashSet<string>(body.ApprovedSourcePaths, StringComparer.OrdinalIgnoreCase);
@@ -127,7 +119,7 @@ public static class RealContentFolderImportEndpoints
             {
                 var known = staged.Proposals.Select(p => p.SourcePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var unknown = approvedSet.Where(path => !known.Contains(path)).ToArray();
-                return Results.BadRequest(new { error = "Unknown approved source paths.", unknown });
+                return Results.BadRequest(new { code = "import_source_paths_unknown", message = "Unknown approved source paths.", unknown });
             }
 
             // Wire staged storage keys onto asset entries (needed by the

@@ -107,7 +107,7 @@ public static class SpeakingTranscriptionEndpoints
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return Results.BadRequest(new { errorCode = "session_id_required", message = "sessionId is required." });
+            return new ApiErrorResult(400, "session_id_required", "sessionId is required.");
         }
 
         var session = await db.SpeakingSessions
@@ -115,7 +115,7 @@ public static class SpeakingTranscriptionEndpoints
             .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (session is null)
         {
-            return Results.NotFound(new { errorCode = "session_not_found", message = $"Speaking session '{sessionId}' does not exist." });
+            return new ApiErrorResult(404, "session_not_found", $"Speaking session '{sessionId}' does not exist.");
         }
 
         var recordingId = request?.RecordingMediaAssetId;
@@ -130,11 +130,7 @@ public static class SpeakingTranscriptionEndpoints
                 .FirstOrDefaultAsync(ct);
             if (latestRecording is null)
             {
-                return Results.BadRequest(new
-                {
-                    errorCode = "no_recording",
-                    message = $"Speaking session '{sessionId}' has no recordings; nothing to transcribe.",
-                });
+                return new ApiErrorResult(400, "no_recording", $"Speaking session '{sessionId}' has no recordings; nothing to transcribe.");
             }
             recordingId = latestRecording.MediaAssetId;
         }
@@ -145,11 +141,11 @@ public static class SpeakingTranscriptionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return Results.BadRequest(new { errorCode = "enqueue_failed", message = ex.Message });
+            return new ApiErrorResult(400, "enqueue_failed", ApiErrorResult.SafeMessage(ex, "The transcription could not be queued.")) { Exception = ex };
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_argument", message = ex.Message });
+            return new ApiErrorResult(400, "invalid_argument", ApiErrorResult.SafeMessage(ex, "The transcription request is invalid.")) { Exception = ex };
         }
 
         var status = await pipeline.GetStatusAsync(sessionId, ct);
@@ -168,7 +164,7 @@ public static class SpeakingTranscriptionEndpoints
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return Results.BadRequest(new { errorCode = "session_id_required", message = "sessionId is required." });
+            return new ApiErrorResult(400, "session_id_required", "sessionId is required.");
         }
 
         var userId = http.UserId();
@@ -178,11 +174,7 @@ public static class SpeakingTranscriptionEndpoints
             .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (session is null)
         {
-            return Results.NotFound(new
-            {
-                errorCode = "session_not_found",
-                message = $"Speaking session '{sessionId}' does not exist.",
-            });
+            return new ApiErrorResult(404, "session_not_found", $"Speaking session '{sessionId}' does not exist.");
         }
         if (!string.Equals(session.UserId, userId, StringComparison.Ordinal))
         {

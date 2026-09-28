@@ -113,17 +113,23 @@ public static class VoiceDesignAdminEndpoints
             HttpContext httpContext,
             CancellationToken ct) =>
         {
-            if (file.Length <= 0) return Results.BadRequest(new { code = "empty_dictionary_file" });
-            if (file.Length > 1024 * 1024) return Results.BadRequest(new { code = "dictionary_file_too_large" });
+            if (file.Length <= 0) return new ApiErrorResult(400, "empty_dictionary_file", "Dictionary file is empty.");
+            if (file.Length > 1024 * 1024) return new ApiErrorResult(400, "dictionary_file_too_large", "Dictionary file must be 1 MB or smaller.");
             if (!string.Equals(Path.GetExtension(file.FileName), ".pls", StringComparison.OrdinalIgnoreCase))
-                return Results.BadRequest(new { code = "dictionary_file_must_be_pls" });
+                return new ApiErrorResult(400, "dictionary_file_must_be_pls", "Dictionary file must be a .pls file.");
 
             var plsValidation = await ValidatePlsAsync(file, ct);
-            if (plsValidation is not null) return Results.BadRequest(new { code = plsValidation });
+            if (plsValidation is not null)
+                return new ApiErrorResult(400, plsValidation, plsValidation switch
+                {
+                    "dictionary_file_invalid_pls_root" => "Dictionary file must have a <lexicon> root element.",
+                    "dictionary_file_too_many_entries" => "Dictionary file has too many entries.",
+                    _ => "Dictionary file is not valid PLS XML.",
+                });
 
             var options = await optionsProvider.GetAsync(ct);
             if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
-                return Results.Problem("ElevenLabs API key is not configured.", statusCode: StatusCodes.Status409Conflict);
+                return new ApiErrorResult(StatusCodes.Status409Conflict, "elevenlabs_not_configured", "ElevenLabs API key is not configured.");
 
             using var form = new MultipartFormDataContent();
             await using var stream = file.OpenReadStream();
@@ -143,10 +149,10 @@ public static class VoiceDesignAdminEndpoints
             if (!response.IsSuccessStatusCode)
                 // Surface the actual ElevenLabs error so the admin can act on it
                 // (previously this returned a generic "failed" with no detail).
-                return Results.Problem(
-                    detail: $"ElevenLabs dictionary upload failed ({(int)response.StatusCode}): {Truncate(responseText, 1000)}",
-                    statusCode: StatusCodes.Status502BadGateway,
-                    title: "elevenlabs_dictionary_upload_failed");
+                return new ApiErrorResult(
+                    StatusCodes.Status502BadGateway,
+                    "elevenlabs_dictionary_upload_failed",
+                    $"ElevenLabs dictionary upload failed ({(int)response.StatusCode}): {Truncate(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester.RedactSecrets(responseText, options.ElevenLabsApiKey), 1000)}");
 
             var dictionaryId = TryReadString(responseText, "id")
                 ?? TryReadString(responseText, "pronunciation_dictionary_id");
@@ -154,10 +160,10 @@ public static class VoiceDesignAdminEndpoints
                 ?? TryReadNestedString(responseText, "version", "id")
                 ?? TryReadNestedString(responseText, "latest_version", "id");
             if (string.IsNullOrWhiteSpace(dictionaryId))
-                return Results.Problem(
-                    detail: $"ElevenLabs dictionary upload response did not include an id: {Truncate(responseText, 1000)}",
-                    statusCode: StatusCodes.Status502BadGateway,
-                    title: "elevenlabs_dictionary_upload_no_id");
+                return new ApiErrorResult(
+                    StatusCodes.Status502BadGateway,
+                    "elevenlabs_dictionary_upload_no_id",
+                    $"ElevenLabs dictionary upload response did not include an id: {Truncate(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester.RedactSecrets(responseText, options.ElevenLabsApiKey), 1000)}");
 
             var row = await db.ConversationSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
             if (row is null)
@@ -196,7 +202,7 @@ public static class VoiceDesignAdminEndpoints
         {
             var options = await optionsProvider.GetAsync(ct);
             if (string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
-                return Results.Problem("ElevenLabs API key is not configured.", statusCode: StatusCodes.Status409Conflict);
+                return new ApiErrorResult(StatusCodes.Status409Conflict, "elevenlabs_not_configured", "ElevenLabs API key is not configured.");
 
             var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
             var baseUrl = ElevenLabsApiEndpoint.NormalizeBaseUrl(options.ElevenLabsTtsBaseUrl);
@@ -205,9 +211,10 @@ public static class VoiceDesignAdminEndpoints
             using var response = await client.SendAsync(request, ct);
             var responseText = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
-                return Results.Problem(
-                    $"ElevenLabs voices request failed ({(int)response.StatusCode}): {Truncate(responseText, 1000)}",
-                    statusCode: StatusCodes.Status502BadGateway);
+                return new ApiErrorResult(
+                    StatusCodes.Status502BadGateway,
+                    "elevenlabs_voices_request_failed",
+                    $"ElevenLabs voices request failed ({(int)response.StatusCode}): {Truncate(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester.RedactSecrets(responseText, options.ElevenLabsApiKey), 1000)}");
 
             var voices = ParseElevenLabsVoices(responseText);
             return Results.Ok(new { voices });
@@ -221,7 +228,7 @@ public static class VoiceDesignAdminEndpoints
         {
             var provider = await selector.TrySelectAsync("elevenlabs", ct);
             if (provider is null)
-                return Results.Problem("ElevenLabs TTS provider not configured or unavailable.");
+                return new ApiErrorResult(StatusCodes.Status500InternalServerError, "elevenlabs_tts_unavailable", "ElevenLabs TTS provider not configured or unavailable.");
 
             var ttsReq = new ConversationTtsRequest(
                 Text: request.Text ?? "Good morning. I'm going to check your vitals today.",

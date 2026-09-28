@@ -54,7 +54,7 @@ public static class ListeningExpertEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(attemptId))
-                return Results.BadRequest("attemptId is required.");
+                return new ApiErrorResult(400, "attempt_id_required", "attemptId is required.");
 
             var expertId = http.ListeningExpertId();
             try
@@ -77,7 +77,7 @@ public static class ListeningExpertEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(attemptId))
-                return Results.BadRequest("attemptId is required.");
+                return new ApiErrorResult(400, "attempt_id_required", "attemptId is required.");
 
             var expertId = http.ListeningExpertId();
             var feedback = await service.GetFeedbackAsync(expertId, attemptId, ct);
@@ -95,16 +95,16 @@ public static class ListeningExpertEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(attemptId))
-                return Results.BadRequest("attemptId is required.");
+                return new ApiErrorResult(400, "attempt_id_required", "attemptId is required.");
 
             if (string.IsNullOrWhiteSpace(request.OverallFeedback))
-                return Results.BadRequest("overallFeedback is required.");
+                return new ApiErrorResult(400, "overall_feedback_required", "overallFeedback is required.");
 
             // H17: a raw-score override requires a non-empty reason. Reject at
             // the edge so the audit story stays consistent with the service
             // which also throws on this condition.
             if (request.RawScoreOverride.HasValue && string.IsNullOrWhiteSpace(request.ScoreOverrideReason))
-                return Results.BadRequest("scoreOverrideReason is required when rawScoreOverride is set.");
+                return new ApiErrorResult(400, "listening_override_reason_required", "scoreOverrideReason is required when rawScoreOverride is set.");
 
             var expertId = http.ListeningExpertId();
             try
@@ -118,7 +118,9 @@ public static class ListeningExpertEndpoints
             }
             catch (InvalidOperationException ex) when (ex.Message.StartsWith("listening_override_", System.StringComparison.Ordinal))
             {
-                return Results.BadRequest(ex.Message);
+                // Service messages are "<code>: <prose>" (ListeningExpertService.SubmitFeedbackAsync).
+                var parts = ex.Message.Split(':', 2, StringSplitOptions.TrimEntries);
+                return new ApiErrorResult(400, parts[0], parts.Length > 1 ? parts[1] : "The Listening score override was rejected.");
             }
         })
         .RequireRateLimiting("PerUserWrite");

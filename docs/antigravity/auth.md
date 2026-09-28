@@ -33,7 +33,7 @@ adapter modes shipped by the gateway.
   operates multiple AI Pro accounts and explicitly accepted the risk.
 - Gates:
   - `AGENTGATEWAY_LOCAL_OAUTH_ALLOWED=true` required (default false);
-  - hard-disabled in `docker-compose.production.yml` and `vps.yml`;
+  - hard-disabled in `docker-compose.production.yml`;
   - enabled only in desktop/dev compose via the owner's own `.env`;
   - never placed in front of multi-user learner traffic.
 

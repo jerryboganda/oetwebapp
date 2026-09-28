@@ -306,13 +306,13 @@ public static class ReadingLearnerEndpoints
             if (normalizedScope == "asset")
             {
                 if (string.IsNullOrWhiteSpace(assetId))
-                    return Results.BadRequest(new { code = "reading_annotation_asset_required", error = "assetId is required when scope=asset." });
+                    return new ApiErrorResult(400, "reading_annotation_asset_required", "assetId is required when scope=asset.");
                 if (!await IsReadingPdfAssetForPaperAsync(db, paperId, assetId, ct))
-                    return Results.BadRequest(new { code = "reading_annotation_asset_invalid", error = "Asset does not belong to this Reading paper." });
+                    return new ApiErrorResult(400, "reading_annotation_asset_invalid", "Asset does not belong to this Reading paper.");
             }
             else if (normalizedScope != "paper")
             {
-                return Results.BadRequest(new { code = "reading_annotation_scope_invalid", error = "scope must be asset or paper." });
+                return new ApiErrorResult(400, "reading_annotation_scope_invalid", "scope must be asset or paper.");
             }
 
             var query = db.ReadingPaperAnnotations.Where(a => a.UserId == userId && a.PaperId == paperId);
@@ -359,11 +359,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -382,11 +382,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_break_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_break_rejected", ApiErrorResult.SafeMessage(ex, "The break could not be resumed.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -411,11 +411,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_part_a_lock_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_part_a_lock_rejected", ApiErrorResult.SafeMessage(ex, "Part A could not be locked.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -434,11 +434,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_answer_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_answer_rejected", ApiErrorResult.SafeMessage(ex, "The answer could not be saved.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
         // P0-B6 2026-05 hardening: autosave was the only write endpoint in
@@ -468,11 +468,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_annotations_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_annotations_rejected", ApiErrorResult.SafeMessage(ex, "The annotations could not be saved.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -534,11 +534,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_submit_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_submit_rejected", ApiErrorResult.SafeMessage(ex, "The attempt could not be submitted.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -646,14 +646,9 @@ public static class ReadingLearnerEndpoints
                     marksUnaffected = true,
                 });
             }
-            catch (ReadingGroundedExplanationUnavailableException ex)
+            catch (ReadingGroundedExplanationUnavailableException)
             {
-                return Results.Conflict(new
-                {
-                    code = "grounded_ai_unavailable",
-                    error = ex.Message,
-                    message = "A grounded explanation is unavailable until effective author-approved evidence exists.",
-                });
+                return new ApiErrorResult(409, "grounded_ai_unavailable", "A grounded explanation is unavailable until effective author-approved evidence exists.");
             }
             catch (KeyNotFoundException)
             {
@@ -661,12 +656,7 @@ public static class ReadingLearnerEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new
-                {
-                    code = "grounded_ai_not_ready",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return new ApiErrorResult(400, "grounded_ai_not_ready", ApiErrorResult.SafeMessage(ex, "A grounded explanation is not available for this question yet.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUser");
 
@@ -705,12 +695,7 @@ public static class ReadingLearnerEndpoints
                 .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct);
             if (attempt is null) return Results.NotFound();
             if (attempt.Status != ReadingAttemptStatus.Submitted)
-                return Results.BadRequest(new
-                {
-                    code = "reading_review_unavailable",
-                    error = "Review is available after the attempt is submitted.",
-                    message = "Review is available after the attempt is submitted.",
-                });
+                return new ApiErrorResult(400, "reading_review_unavailable", "Review is available after the attempt is submitted.");
 
             var paper = await db.ContentPapers.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == attempt.PaperId, ct);
@@ -1012,11 +997,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1041,12 +1026,7 @@ public static class ReadingLearnerEndpoints
             if (!Enum.TryParse<ReadingPartCode>(partCode, ignoreCase: true, out var parsedPart)
                 || parsedPart is not (ReadingPartCode.A or ReadingPartCode.B or ReadingPartCode.C))
             {
-                return Results.BadRequest(new
-                {
-                    code = "part_code_invalid",
-                    error = "partCode must be A, B, or C.",
-                    message = "partCode must be A, B, or C.",
-                });
+                return new ApiErrorResult(400, "part_code_invalid", "partCode must be A, B, or C.");
             }
 
             var globalPolicy = await policyService.GetGlobalAsync(ct);
@@ -1065,12 +1045,7 @@ public static class ReadingLearnerEndpoints
                 .Select(q => q.Id)
                 .ToListAsync(ct);
             if (questionIds.Count == 0)
-                return Results.BadRequest(new
-                {
-                    code = "part_practice_no_questions",
-                    error = $"No Part {parsedPart} questions are authored for this paper.",
-                    message = $"No Part {parsedPart} questions are authored for this paper.",
-                });
+                return new ApiErrorResult(400, "part_practice_no_questions", $"No Part {parsedPart} questions are authored for this paper.");
 
             var isUntimed = untimed ?? false;
             var minutes = parsedPart switch
@@ -1112,11 +1087,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1308,22 +1283,12 @@ public static class ReadingLearnerEndpoints
 
             var template = ReadingDrillCatalogue.Find(drillCode);
             if (template is null)
-                return Results.BadRequest(new
-                {
-                    code = "drill_unknown",
-                    error = $"Unknown drill code '{drillCode}'.",
-                    message = $"Unknown drill code '{drillCode}'.",
-                });
+                return new ApiErrorResult(400, "drill_unknown", $"Unknown drill code '{drillCode}'.");
 
             var sample = await ReadingPracticeSampler.SampleAsync(
                 db, paperId, template.PartCode, template.SkillTag, template.QuestionCount, ct);
             if (sample.Count == 0)
-                return Results.BadRequest(new
-                {
-                    code = "drill_no_questions",
-                    error = "No matching questions are authored for this drill on this paper.",
-                    message = "No matching questions are authored for this drill on this paper.",
-                });
+                return new ApiErrorResult(400, "drill_no_questions", "No matching questions are authored for this drill on this paper.");
 
             var scope = new
             {
@@ -1356,11 +1321,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1373,23 +1338,13 @@ public static class ReadingLearnerEndpoints
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             if (dto.Minutes is not (5 or 10 or 15))
-                return Results.BadRequest(new
-                {
-                    code = "minitest_minutes_invalid",
-                    error = "Mini-test minutes must be 5, 10, or 15.",
-                    message = "Mini-test minutes must be 5, 10, or 15.",
-                });
+                return new ApiErrorResult(400, "minitest_minutes_invalid", "Mini-test minutes must be 5, 10, or 15.");
 
             // Heuristic: ~1 question per 50s of available time (matches OET pace).
             var targetCount = dto.Minutes switch { 5 => 6, 10 => 12, _ => 18 };
             var sample = await ReadingPracticeSampler.SampleMixedAsync(db, paperId, targetCount, ct);
             if (sample.Count == 0)
-                return Results.BadRequest(new
-                {
-                    code = "minitest_no_questions",
-                    error = "This paper has no authored questions to sample.",
-                    message = "This paper has no authored questions to sample.",
-                });
+                return new ApiErrorResult(400, "minitest_no_questions", "This paper has no authored questions to sample.");
 
             var scope = new
             {
@@ -1418,11 +1373,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1450,12 +1405,7 @@ public static class ReadingLearnerEndpoints
                 .Select(e => new { e.ReadingQuestionId, e.PaperId })
                 .ToListAsync(ct);
             if (entries.Count == 0)
-                return Results.BadRequest(new
-                {
-                    code = "error_bank_empty",
-                    error = "No open Error Bank entries to retest.",
-                    message = "No open Error Bank entries to retest.",
-                });
+                return new ApiErrorResult(400, "error_bank_empty", "No open Error Bank entries to retest.");
 
             // Group by paper so the attempt's PaperId is well defined. The
             // first paper with the most missed questions wins.
@@ -1496,11 +1446,11 @@ public static class ReadingLearnerEndpoints
             }
             catch (ReadingAttemptException ex)
             {
-                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, ex.Code, ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+                return new ApiErrorResult(400, "reading_attempt_rejected", ApiErrorResult.SafeMessage(ex, "The Reading attempt request was rejected.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1627,21 +1577,21 @@ public static class ReadingLearnerEndpoints
             return Results.NotFound();
 
         if (!Enum.TryParse<ReadingPaperAnnotationKind>(dto.Kind, ignoreCase: true, out _))
-            return Results.BadRequest(new { code = "reading_annotation_kind_invalid", error = "Annotation kind must be Text, Rectangle, or Freehand." });
+            return new ApiErrorResult(400, "reading_annotation_kind_invalid", "Annotation kind must be Text, Rectangle, or Freehand.");
         if (dto.PageNumber < 1 || dto.PageNumber > 10_000)
-            return Results.BadRequest(new { code = "reading_annotation_page_invalid", error = "Page number is outside the accepted range." });
+            return new ApiErrorResult(400, "reading_annotation_page_invalid", "Page number is outside the accepted range.");
         if (string.IsNullOrWhiteSpace(dto.ContentPaperAssetId)
             || !await IsReadingPdfAssetForPaperAsync(db, paperId, dto.ContentPaperAssetId, ct))
-            return Results.BadRequest(new { code = "reading_annotation_asset_invalid", error = "Asset does not belong to this Reading paper." });
+            return new ApiErrorResult(400, "reading_annotation_asset_invalid", "Asset does not belong to this Reading paper.");
 
         if (dto.GeometryJson.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
-            return Results.BadRequest(new { code = "reading_annotation_geometry_invalid", error = "Annotation geometry is required." });
+            return new ApiErrorResult(400, "reading_annotation_geometry_invalid", "Annotation geometry is required.");
 
         var raw = dto.GeometryJson.GetRawText();
         if (raw.Length > 8192)
-            return Results.BadRequest(new { code = "reading_annotation_payload_too_large", error = "Annotation geometry is too large." });
+            return new ApiErrorResult(400, "reading_annotation_payload_too_large", "Annotation geometry is too large.");
         if (!GeometryCoordinatesAreNormalised(dto.GeometryJson))
-            return Results.BadRequest(new { code = "reading_annotation_geometry_invalid", error = "Annotation coordinates must be normalized between 0 and 1." });
+            return new ApiErrorResult(400, "reading_annotation_geometry_invalid", "Annotation coordinates must be normalized between 0 and 1.");
         return null;
     }
 

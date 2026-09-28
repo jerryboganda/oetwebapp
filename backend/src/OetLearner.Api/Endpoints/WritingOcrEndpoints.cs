@@ -21,7 +21,7 @@ public static class WritingOcrEndpoints
         {
             if (!req.HasFormContentType)
             {
-                return Results.BadRequest(new { error = "multipart/form-data required" });
+                return new ApiErrorResult(400, "writing_ocr_multipart_required", "multipart/form-data required");
             }
 
             var form = await req.ReadFormAsync(ct);
@@ -31,13 +31,13 @@ public static class WritingOcrEndpoints
 
             if (files.Count == 0)
             {
-                return Results.BadRequest(new { error = "no images provided" });
+                return new ApiErrorResult(400, "writing_ocr_images_required", "no images provided");
             }
 
             var submissionIdRaw = form["submissionId"].ToString();
             if (!string.IsNullOrWhiteSpace(submissionIdRaw) && !Guid.TryParse(submissionIdRaw, out _))
             {
-                return Results.BadRequest(new { error = "invalid submissionId" });
+                return new ApiErrorResult(400, "writing_ocr_submission_id_invalid", "invalid submissionId");
             }
             Guid? submissionId = Guid.TryParse(submissionIdRaw, out var sid) ? sid : null;
 

@@ -105,11 +105,7 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (request is null || string.IsNullOrWhiteSpace(request.SpeakingSessionId))
         {
-            return Results.BadRequest(new
-            {
-                errorCode = "speaking_session_id_required",
-                message = "speakingSessionId is required.",
-            });
+            return new ApiErrorResult(400, "speaking_session_id_required", "speakingSessionId is required.");
         }
 
         var userId = http.LiveRoomUserId();
@@ -125,25 +121,19 @@ public static class SpeakingLiveRoomEndpoints
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "session_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "session_not_found", ApiErrorResult.SafeMessage(ex, "Speaking session not found.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomForbiddenException ex)
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = ex.Message },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", ApiErrorResult.SafeMessage(ex, "You do not have access to this live room.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomInvalidStateException ex)
         {
-            return Results.Json(
-                new { errorCode = "invalid_state", message = ex.Message },
-                statusCode: StatusCodes.Status409Conflict);
+            return new ApiErrorResult(409, "invalid_state", ApiErrorResult.SafeMessage(ex, "The live room cannot perform this action in its current state.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -156,12 +146,12 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         if (request is null || string.IsNullOrWhiteSpace(request.Role))
         {
-            return Results.BadRequest(new { errorCode = "role_required", message = "role is required." });
+            return new ApiErrorResult(400, "role_required", "role is required.");
         }
 
         var userId = http.LiveRoomUserId();
@@ -171,8 +161,7 @@ public static class SpeakingLiveRoomEndpoints
             // Observer tokens are admin-only. Respond 404 (not 403) so the live
             // room and its observer capability are not revealed to non-admin
             // callers — including the room's own owner/participant.
-            return Results.NotFound(
-                new { errorCode = "live_room_not_found", message = "Live room not found." });
+            return new ApiErrorResult(404, "live_room_not_found", "Live room not found.");
         }
 
         try
@@ -189,23 +178,19 @@ public static class SpeakingLiveRoomEndpoints
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "live_room_not_found", ApiErrorResult.SafeMessage(ex, "Live room not found.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomForbiddenException ex)
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = ex.Message },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", ApiErrorResult.SafeMessage(ex, "You do not have access to this live room.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomInvalidStateException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
+            return new ApiErrorResult(400, "invalid_state", ApiErrorResult.SafeMessage(ex, "The live room cannot perform this action in its current state.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -218,7 +203,7 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         try
@@ -226,30 +211,26 @@ public static class SpeakingLiveRoomEndpoints
             var access = await LoadRoomWithSessionAsync(id, db, ct);
             if (access is null)
             {
-                return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+                return new ApiErrorResult(404, "live_room_not_found", $"Live room '{id}' was not found.");
             }
             if (!IsRoomParticipantOrAdmin(http.User, access.Session))
             {
-                return Results.Json(
-                    new { errorCode = "forbidden", message = "Only a room participant may start room recording." },
-                    statusCode: StatusCodes.Status403Forbidden);
+                return new ApiErrorResult(403, "forbidden", "Only a room participant may start room recording.");
             }
             var result = await service.StartRecordingAsync(id, ct);
             return Results.Ok(new SpeakingLiveRoomRecordingPayload(result.EgressId, result.OutputUrl));
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "live_room_not_found", ApiErrorResult.SafeMessage(ex, "Live room not found.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomInvalidStateException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
+            return new ApiErrorResult(400, "invalid_state", ApiErrorResult.SafeMessage(ex, "The live room cannot perform this action in its current state.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -262,7 +243,7 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         try
@@ -270,26 +251,22 @@ public static class SpeakingLiveRoomEndpoints
             var access = await LoadRoomWithSessionAsync(id, db, ct);
             if (access is null)
             {
-                return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+                return new ApiErrorResult(404, "live_room_not_found", $"Live room '{id}' was not found.");
             }
             if (!IsAssignedTutor(http.User, access.Session))
             {
-                return Results.Json(
-                    new { errorCode = "forbidden", message = "Only the assigned tutor may stop room recording." },
-                    statusCode: StatusCodes.Status403Forbidden);
+                return new ApiErrorResult(403, "forbidden", "Only the assigned tutor may stop room recording.");
             }
             var stopped = await service.StopRecordingAsync(id, ct);
             return Results.Ok(new SpeakingLiveRoomStopRecordingPayload(stopped));
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "live_room_not_found", ApiErrorResult.SafeMessage(ex, "Live room not found.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -301,7 +278,7 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         var userId = http.LiveRoomUserId();
@@ -313,19 +290,15 @@ public static class SpeakingLiveRoomEndpoints
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "live_room_not_found", ApiErrorResult.SafeMessage(ex, "Live room not found.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomForbiddenException ex)
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = ex.Message },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", ApiErrorResult.SafeMessage(ex, "You do not have access to this live room.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -343,20 +316,18 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         var access = await LoadRoomWithSessionAsync(id, db, ct);
         if (access is null)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+            return new ApiErrorResult(404, "live_room_not_found", $"Live room '{id}' was not found.");
         }
 
         if (!IsRoomParticipantOrAdmin(http.User, access.Session))
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = "User is not a participant of this live room." },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", "User is not a participant of this live room.");
         }
 
         return Results.Ok(ToDetailPayload(access.Room, access.Card, liveKitOptions.Value.WssUrl));
@@ -372,7 +343,7 @@ public static class SpeakingLiveRoomEndpoints
     {
         if (string.IsNullOrWhiteSpace(id))
         {
-            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+            return new ApiErrorResult(400, "live_room_id_required", "live room id is required.");
         }
 
         var userId = http.LiveRoomUserId();
@@ -385,7 +356,7 @@ public static class SpeakingLiveRoomEndpoints
             .FirstOrDefaultAsync(r => r.Id == id, ct);
         if (room is null)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+            return new ApiErrorResult(404, "live_room_not_found", $"Live room '{id}' was not found.");
         }
 
         var session = await db.SpeakingSessions
@@ -393,7 +364,7 @@ public static class SpeakingLiveRoomEndpoints
             .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct);
         if (session is null)
         {
-            return Results.NotFound(new { errorCode = "session_not_found", message = "Speaking session not found." });
+            return new ApiErrorResult(404, "session_not_found", "Speaking session not found.");
         }
 
         string role;
@@ -412,9 +383,7 @@ public static class SpeakingLiveRoomEndpoints
         }
         else
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = "User is not a participant of this live room." },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", "User is not a participant of this live room.");
         }
 
         try
@@ -434,23 +403,19 @@ public static class SpeakingLiveRoomEndpoints
         }
         catch (SpeakingLiveRoomNotFoundException ex)
         {
-            return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
+            return new ApiErrorResult(404, "live_room_not_found", ApiErrorResult.SafeMessage(ex, "Live room not found.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomForbiddenException ex)
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = ex.Message },
-                statusCode: StatusCodes.Status403Forbidden);
+            return new ApiErrorResult(403, "forbidden", ApiErrorResult.SafeMessage(ex, "You do not have access to this live room.")) { Exception = ex };
         }
         catch (SpeakingLiveRoomInvalidStateException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
+            return new ApiErrorResult(400, "invalid_state", ApiErrorResult.SafeMessage(ex, "The live room cannot perform this action in its current state.")) { Exception = ex };
         }
         catch (LiveKitProviderUnavailableException ex)
         {
-            return Results.Json(
-                new { errorCode = "live_provider_unavailable", message = ex.Message },
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+            return new ApiErrorResult(503, "live_provider_unavailable", ApiErrorResult.SafeMessage(ex, "The live tutor provider is not configured.")) { Exception = ex };
         }
     }
 
@@ -505,7 +470,7 @@ public static class SpeakingLiveRoomEndpoints
 
         if (string.IsNullOrWhiteSpace(payload))
         {
-            return Results.BadRequest(new { errorCode = "empty_payload", message = "Webhook payload is empty." });
+            return new ApiErrorResult(400, "empty_payload", "Webhook payload is empty.");
         }
 
         string eventType;
@@ -523,12 +488,12 @@ public static class SpeakingLiveRoomEndpoints
 
             if (string.IsNullOrWhiteSpace(eventType))
             {
-                return Results.BadRequest(new { errorCode = "event_required", message = "event field is required." });
+                return new ApiErrorResult(400, "event_required", "event field is required.");
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return Results.BadRequest(new { errorCode = "invalid_json", message = "Webhook payload is not valid JSON." });
+            return new ApiErrorResult(400, "invalid_json", "Webhook payload is not valid JSON.") { Exception = ex };
         }
 
         // Idempotency dedupe — providers retry on 5xx + transient

@@ -27,11 +27,11 @@ public static class AffiliatePortalEndpoints
         return app;
     }
 
-    private static async Task<Results<NoContent, BadRequest<string>>> TrackAttribution(HttpContext http, AffiliateTrackRequest request, IAffiliateService affiliateService, CancellationToken ct)
+    private static async Task<Results<NoContent, ApiErrorResult>> TrackAttribution(HttpContext http, AffiliateTrackRequest request, IAffiliateService affiliateService, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.AffiliateCode))
         {
-            return TypedResults.BadRequest("affiliateCode is required.");
+            return new ApiErrorResult(400, "affiliate_code_required", "affiliateCode is required.");
         }
         await affiliateService.AttributeUserAsync(http.UserId(), request.AffiliateCode, ct);
         return TypedResults.NoContent();

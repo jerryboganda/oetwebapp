@@ -17,7 +17,7 @@ right pair for the scenario:
 | --- | --- |
 | `Dockerfile` | Web-only multi-stage image (Next.js `output: 'standalone'`, `runner` target). Built and pushed to GHCR by `deploy.yml` `build-web`; also used by the local, desktop, staging and emergency source-build stacks. It does not build the API. |
 | `backend/Dockerfile.runtime` | Production API image. `deploy.yml` `build-api` runs `dotnet publish` on the Actions host and packages `backend/publish` with this file. |
-| `backend/Dockerfile` | API image built from source (SDK build stage). Used by the local, dev, backend, desktop, staging, vps and emergency source-build compose files. |
+| `backend/Dockerfile` | API image built from source (SDK build stage). Used by the local, dev, backend, desktop, staging and emergency source-build compose files. |
 | `backend/Dockerfile.dev` | `dotnet watch` API image for `docker-compose.hotreload.yml`. |
 | `scripts/backup/Dockerfile` | `db-backup` sidecar image, built by `deploy.yml` `build-backup`. |
 | `agent-gateway/Dockerfile` | Agent gateway image, built by `deploy.yml` `build-agent-gateway`. |
@@ -27,7 +27,6 @@ right pair for the scenario:
 | `docker-compose.production.yml` | The production stack (project `oetwebsite`): stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, AI worker, agent gateway and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`, and the only compose file `deploy.yml` ships to the VPS. |
 | `docker-compose.production.hostports.yml` | Override — exposes ports on the host (no reverse proxy). Use for bare-metal / single-host installs without NPM. |
 | `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. Needs explicit owner approval on the VPS (see §3). |
-| `docker-compose.vps.yml` | Legacy single-host source-build stack. No deploy path uses it. It reuses the production project name and container names, so never run it against the live VPS project. |
 | `docker-compose.agent-console.yml` | Owner Agent Console, its own compose project (`oet-agent-console`). Deployed only by `.github/workflows/agent-console.yml`. |
 | `docker-compose.staging.yml` | Full staging stack with pg_stat_statements. Use with `--env-file .env.staging`. |
 | `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |

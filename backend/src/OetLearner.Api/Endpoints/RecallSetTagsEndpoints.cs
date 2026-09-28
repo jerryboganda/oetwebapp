@@ -48,15 +48,15 @@ public static class RecallSetTagsEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             if (string.IsNullOrWhiteSpace(dto.Code) || dto.Code.Length > 64)
-                return Results.BadRequest(new { error = "code required (max 64 chars, lowercase a-z 0-9 -)" });
+                return new ApiErrorResult(400, "recall_set_tag_code_invalid", "code required (max 64 chars, lowercase a-z 0-9 -)");
             var code = dto.Code.Trim().ToLowerInvariant();
             if (!IsValidCode(code))
-                return Results.BadRequest(new { error = "code must contain only lowercase letters, digits and hyphens" });
+                return new ApiErrorResult(400, "recall_set_tag_code_invalid", "code must contain only lowercase letters, digits and hyphens");
             if (string.IsNullOrWhiteSpace(dto.DisplayName) || dto.DisplayName.Length > 200)
-                return Results.BadRequest(new { error = "displayName required (max 200 chars)" });
+                return new ApiErrorResult(400, "recall_set_tag_display_name_invalid", "displayName required (max 200 chars)");
 
             var exists = await db.RecallSetTags.AnyAsync(x => x.Code == code, ct);
-            if (exists) return Results.Conflict(new { error = $"recall set tag '{code}' already exists" });
+            if (exists) return new ApiErrorResult(409, "recall_set_tag_exists", $"recall set tag '{code}' already exists");
 
             var now = DateTimeOffset.UtcNow;
             var row = new RecallSetTag

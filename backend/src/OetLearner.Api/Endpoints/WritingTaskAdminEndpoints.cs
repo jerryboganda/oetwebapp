@@ -103,7 +103,7 @@ public static class WritingTaskAdminEndpoints
     {
         var task = await service.GetAsync(id);
         return task is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(task);
     }
 
@@ -114,7 +114,7 @@ public static class WritingTaskAdminEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            return Results.BadRequest(new { error = "Title is required" });
+            return new ApiErrorResult(400, "writing_task_title_required", "Title is required");
         }
 
         var task = await service.CreateAsync(request, user);
@@ -129,12 +129,12 @@ public static class WritingTaskAdminEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            return Results.BadRequest(new { error = "Title is required" });
+            return new ApiErrorResult(400, "writing_task_title_required", "Title is required");
         }
 
         var task = await service.UpdateAsync(id, request, user);
         return task is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(task);
     }
 
@@ -142,7 +142,7 @@ public static class WritingTaskAdminEndpoints
     {
         var result = await service.ValidateAsync(id);
         return result is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(result);
     }
 
@@ -151,14 +151,15 @@ public static class WritingTaskAdminEndpoints
         var (task, validation) = await service.PublishAsync(id);
         if (task is null && validation is null)
         {
-            return Results.NotFound(new { error = "Writing task not found" });
+            return TaskNotFound();
         }
 
         if (task is null)
         {
             return Results.BadRequest(new
             {
-                error = "Writing task is not publish-ready",
+                code = "writing_task_not_publish_ready",
+                message = "Writing task is not publish-ready",
                 issues = validation!.Issues,
             });
         }
@@ -170,7 +171,7 @@ public static class WritingTaskAdminEndpoints
     {
         var task = await service.ArchiveAsync(id);
         return task is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(task);
     }
 
@@ -181,7 +182,7 @@ public static class WritingTaskAdminEndpoints
     {
         var task = await service.CloneAsync(id, user);
         return task is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(task);
     }
 
@@ -198,7 +199,7 @@ public static class WritingTaskAdminEndpoints
     {
         var export = await service.ExportAsync(id);
         return export is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(export);
     }
 
@@ -289,7 +290,7 @@ public static class WritingTaskAdminEndpoints
     {
         var result = await service.ExtractFromStimulusPdfAsync(id, ct);
         return result is null
-            ? Results.NotFound(new { error = "Writing task or its stimulus PDF was not found." })
+            ? new ApiErrorResult(404, "writing_task_stimulus_pdf_not_found", "Writing task or its stimulus PDF was not found.")
             : Results.Ok(result);
     }
 
@@ -300,7 +301,7 @@ public static class WritingTaskAdminEndpoints
     {
         if (request.Sentences is null || request.Sentences.Count == 0)
         {
-            return Results.BadRequest(new { error = "At least one case-note sentence is required." });
+            return new ApiErrorResult(400, "writing_case_notes_required", "At least one case-note sentence is required.");
         }
 
         var dtos = request.Sentences
@@ -313,7 +314,7 @@ public static class WritingTaskAdminEndpoints
 
         var saved = await service.ReplaceAsync(id, dtos);
         return saved is null
-            ? Results.NotFound(new { error = "Writing task not found" })
+            ? TaskNotFound()
             : Results.Ok(new { scenarioId = id, sentences = saved });
     }
 
@@ -333,7 +334,7 @@ public static class WritingTaskAdminEndpoints
         var requiresWrite = action is "archive";
         if (!requiresSystemAdmin && !requiresPublish && !requiresWrite)
         {
-            return Results.BadRequest(new { error = $"Unknown bulk action '{request.Action}'." });
+            return new ApiErrorResult(400, "writing_task_bulk_action_unknown", $"Unknown bulk action '{request.Action}'.");
         }
 
         var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
@@ -354,9 +355,12 @@ public static class WritingTaskAdminEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return new ApiErrorResult(400, "writing_task_bulk_invalid", ApiErrorResult.SafeMessage(ex, "The bulk action request is invalid.")) { Exception = ex };
         }
     }
+
+    private static ApiErrorResult TaskNotFound()
+        => new(404, "writing_task_not_found", "Writing task not found");
 }
 
 /// <summary>

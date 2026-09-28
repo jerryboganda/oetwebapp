@@ -188,14 +188,14 @@ public static class AiAnalyticsEndpoints
         return TypedResults.Ok(await q.OrderByDescending(e => e.CreatedAt).ToListAsync(ct));
     }
 
-    private static async Task<Results<Ok<PricingExperiment>, BadRequest<string>>> UpsertExperiment(HttpContext http, PricingExperimentUpsertRequest request, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<PricingExperiment>, ApiErrorResult>> UpsertExperiment(HttpContext http, PricingExperimentUpsertRequest request, LearnerDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name)
             || string.IsNullOrWhiteSpace(request.TargetType) || string.IsNullOrWhiteSpace(request.TargetId))
         {
-            return TypedResults.BadRequest("code, name, targetType, targetId are required.");
+            return new ApiErrorResult(400, "pricing_experiment_fields_required", "code, name, targetType, targetId are required.");
         }
-        if (request.RolloutPercent is < 0 or > 100) return TypedResults.BadRequest("rolloutPercent must be 0-100.");
+        if (request.RolloutPercent is < 0 or > 100) return new ApiErrorResult(400, "pricing_experiment_rollout_invalid", "rolloutPercent must be 0-100.");
 
         var now = DateTimeOffset.UtcNow;
         var existing = await db.PricingExperiments.FirstOrDefaultAsync(e => e.Code == request.Code, ct);

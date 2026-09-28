@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.511.8" />
     <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
     <!-- OAuth2 token minting (GoogleCredential/ServiceAccountCredential) for FCM's
          HTTP v1 send API — Google retired the legacy static server-key API in 2024,
@@ -26,7 +26,7 @@
          (which bundles Firestore/Auth/RTDB clients this app doesn't use and manages
          its own global FirebaseApp registry that doesn't fit the hot-reloadable
          runtime-settings model used here). -->
-    <PackageReference Include="Google.Apis.Auth" Version="1.*" />
+    <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
@@ -73,7 +73,7 @@
     <!-- Stripe.net — official Stripe SDK. Used by StripeService for Checkout Sessions,
          Billing Portal, Subscriptions, Coupons and Webhook signature verification.
          Inactive until Billing:Stripe:SecretKey is configured at runtime. -->
-    <PackageReference Include="Stripe.net" Version="47.*" />
+    <PackageReference Include="Stripe.net" Version="47.4.0" />
     <!-- UglyToad.PdfPig — pure-managed PDF text extraction (no native deps).
          Used by PdfPigPdfTextExtractor / AutoPdfTextExtractor to feed
          IContentTextExtractionService and the AI Listening extraction
@@ -93,7 +93,7 @@
          server rejects MAIL FROM with "5.7.0 Please authenticate first".
          MailKit implements SASL LOGIN/PLAIN in managed code. Microsoft
          officially recommends MailKit in place of SmtpClient. License: MIT. -->
-    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="MailKit" Version="4.18.1" />
     <!-- Tesseract — managed wrapper around libtesseract (native). Used by
          WritingOcrService to OCR uploaded handwritten letters as the
          first-pass provider before falling back to Google Cloud Vision.

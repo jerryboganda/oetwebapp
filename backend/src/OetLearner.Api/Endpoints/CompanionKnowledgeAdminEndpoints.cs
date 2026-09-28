@@ -172,7 +172,7 @@ public static class CompanionKnowledgeAdminEndpoints
             {
                 if (!Enum.TryParse<ExamProfession>(raw, ignoreCase: true, out var parsed))
                 {
-                    return Results.BadRequest(new { error = "unknown_profession", value = raw });
+                    return Results.BadRequest(new { code = "unknown_profession", message = $"{raw} is not a known profession.", value = raw });
                 }
                 professions.Add(parsed);
             }
@@ -216,7 +216,7 @@ public static class CompanionKnowledgeAdminEndpoints
 
             if (!result.Ok && result.Reason == "not_found")
             {
-                return Results.NotFound(new { error = "unknown_source", sourceKey });
+                return Results.NotFound(new { code = "unknown_source", message = $"Knowledge source {sourceKey} does not exist.", sourceKey });
             }
 
             await AuditAsync(db, principal, "CompanionKnowledgeApprove", "CompanionSource", sourceKey,
@@ -240,7 +240,7 @@ public static class CompanionKnowledgeAdminEndpoints
         {
             var result = await governance.RetireAsync(sourceKey, request?.Version, ActorId(principal), ct);
 
-            if (!result.Ok) return Results.NotFound(new { error = "unknown_source", sourceKey });
+            if (!result.Ok) return Results.NotFound(new { code = "unknown_source", message = $"Knowledge source {sourceKey} does not exist.", sourceKey });
 
             await AuditAsync(db, principal, "CompanionKnowledgeRetire", "CompanionSource", sourceKey,
                 $"version={request?.Version ?? "all"};affected={result.SourcesAffected}", ct);
@@ -264,7 +264,7 @@ public static class CompanionKnowledgeAdminEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.ReleaseVersion))
             {
-                return Results.BadRequest(new { error = "release_version_required" });
+                return new ApiErrorResult(400, "release_version_required", "Release version is required.");
             }
 
             var release = await governance.PublishReleaseAsync(
@@ -289,7 +289,7 @@ public static class CompanionKnowledgeAdminEndpoints
             {
                 // Having nothing to roll back TO is not a failure — it is the
                 // first release. Saying so is more useful than a 500.
-                return Results.BadRequest(new { error = "no_rollback_target" });
+                return new ApiErrorResult(400, "no_rollback_target", "There is no earlier release to roll back to.");
             }
 
             await AuditAsync(db, principal, "CompanionKnowledgeRollback", "CompanionKnowledgeRelease",

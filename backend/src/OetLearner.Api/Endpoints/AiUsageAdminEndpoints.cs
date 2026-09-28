@@ -223,7 +223,7 @@ public static class AiUsageAdminEndpoints
         {
             if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
             {
-                return Results.BadRequest(new { error = "Code and Name are required." });
+                return new ApiErrorResult(400, "ai_admin_code_name_required", "Code and Name are required.");
             }
             var now = DateTimeOffset.UtcNow;
             var plan = new AiQuotaPlan
@@ -424,18 +424,18 @@ public static class AiUsageAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
-                return Results.BadRequest(new { error = "Code and Name are required." });
+                return new ApiErrorResult(400, "ai_admin_code_name_required", "Code and Name are required.");
             if (string.IsNullOrWhiteSpace(dto.BaseUrl))
-                return Results.BadRequest(new { error = "BaseUrl is required." });
+                return new ApiErrorResult(400, "ai_provider_base_url_required", "BaseUrl is required.");
             var baseUrl = dto.BaseUrl.Trim();
             var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
             if (unsafeBaseUrlReason is not null)
-                return Results.BadRequest(new { error = unsafeBaseUrlReason });
+                return new ApiErrorResult(400, "ai_provider_base_url_unsafe", unsafeBaseUrlReason);
             if (string.IsNullOrWhiteSpace(dto.ApiKey) || dto.ApiKey.Length < 16)
-                return Results.BadRequest(new { error = "ApiKey is required and must be at least 16 chars." });
+                return new ApiErrorResult(400, "ai_api_key_too_short", "ApiKey is required and must be at least 16 chars.");
             if (RequiresDefaultModel(dto.IsActive, dto.Category, dto.Dialect)
                 && string.IsNullOrWhiteSpace(dto.DefaultModel))
-                return Results.BadRequest(new { error = "DefaultModel is required for active text-chat providers." });
+                return new ApiErrorResult(400, "ai_provider_default_model_required", "DefaultModel is required for active text-chat providers.");
 
             var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
             var now = DateTimeOffset.UtcNow;
@@ -489,11 +489,11 @@ public static class AiUsageAdminEndpoints
                 var baseUrl = dto.BaseUrl.Trim();
                 var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
                 if (unsafeBaseUrlReason is not null)
-                    return Results.BadRequest(new { error = unsafeBaseUrlReason });
+                    return new ApiErrorResult(400, "ai_provider_base_url_unsafe", unsafeBaseUrlReason);
                 row.BaseUrl = baseUrl;
             }
             if (!string.IsNullOrWhiteSpace(dto.ApiKey) && dto.ApiKey.Length < 16)
-                return Results.BadRequest(new { error = "ApiKey must be at least 16 chars." });
+                return new ApiErrorResult(400, "ai_api_key_too_short", "ApiKey must be at least 16 chars.");
             if (!string.IsNullOrWhiteSpace(dto.ApiKey))
             {
                 var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
@@ -515,7 +515,7 @@ public static class AiUsageAdminEndpoints
             row.IsActive = dto.IsActive;
             if (RequiresDefaultModel(row.IsActive, row.Category, row.Dialect)
                 && string.IsNullOrWhiteSpace(row.DefaultModel))
-                return Results.BadRequest(new { error = "DefaultModel is required for active text-chat providers." });
+                return new ApiErrorResult(400, "ai_provider_default_model_required", "DefaultModel is required for active text-chat providers.");
             row.UpdatedAt = DateTimeOffset.UtcNow;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiProviderUpdated", row.Id, row.Code, ct);
@@ -590,9 +590,9 @@ public static class AiUsageAdminEndpoints
                 .FirstOrDefaultAsync(p => p.Code == code, ct);
             if (providerRow is null) return Results.NotFound();
             if (string.IsNullOrWhiteSpace(providerRow.BaseUrl))
-                return Results.BadRequest(new { error = "Provider has no BaseUrl configured." });
+                return new ApiErrorResult(400, "ai_provider_base_url_missing", "Provider has no BaseUrl configured.");
             if (string.IsNullOrWhiteSpace(providerRow.EncryptedApiKey))
-                return Results.BadRequest(new { error = "Provider has no API key configured." });
+                return new ApiErrorResult(400, "ai_provider_api_key_missing", "Provider has no API key configured.");
 
             string apiKey;
             try
@@ -600,12 +600,12 @@ public static class AiUsageAdminEndpoints
                 var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
                 apiKey = protector.Unprotect(providerRow.EncryptedApiKey);
             }
-            catch
+            catch (Exception ex)
             {
-                return Results.Problem(
-                    title: "Failed to decrypt provider API key",
-                    detail: "The platform API key could not be decrypted. Re-enter the key and save.",
-                    statusCode: StatusCodes.Status500InternalServerError);
+                return new ApiErrorResult(
+                    StatusCodes.Status500InternalServerError,
+                    "ai_provider_key_decrypt_failed",
+                    "The platform API key could not be decrypted. Re-enter the key and save.") { Exception = ex };
             }
 
             var client = httpFactory.CreateClient("ai-provider-discovery");
@@ -621,10 +621,11 @@ public static class AiUsageAdminEndpoints
                 if (!resp.IsSuccessStatusCode)
                 {
                     var redactedBody = AiProviderConnectionTester.RedactSecrets(body, apiKey) ?? string.Empty;
-                    return Results.Problem(
-                        title: $"Provider /models call failed ({(int)resp.StatusCode})",
-                        detail: redactedBody.Length > 500 ? redactedBody[..500] : redactedBody,
-                        statusCode: StatusCodes.Status502BadGateway);
+                    // Admin-only diagnostics: the upstream body is already redacted.
+                    return new ApiErrorResult(
+                        StatusCodes.Status502BadGateway,
+                        "ai_provider_models_failed",
+                        $"Provider /models call failed ({(int)resp.StatusCode}): {(redactedBody.Length > 500 ? redactedBody[..500] : redactedBody)}");
                 }
                 var models = new List<string>();
                 try
@@ -651,18 +652,19 @@ public static class AiUsageAdminEndpoints
                 models.Sort(StringComparer.OrdinalIgnoreCase);
                 return Results.Ok(new { models });
             }
-            catch (TaskCanceledException)
+            catch (TaskCanceledException ex)
             {
-                return Results.Problem(
-                    title: "Provider /models call timed out",
-                    statusCode: StatusCodes.Status504GatewayTimeout);
+                return new ApiErrorResult(
+                    StatusCodes.Status504GatewayTimeout,
+                    "ai_provider_models_timeout",
+                    "Provider /models call timed out.") { Exception = ex };
             }
             catch (HttpRequestException ex)
             {
-                return Results.Problem(
-                    title: "Provider /models call failed",
-                    detail: AiProviderConnectionTester.RedactSecrets(ex.Message, apiKey),
-                    statusCode: StatusCodes.Status502BadGateway);
+                return new ApiErrorResult(
+                    StatusCodes.Status502BadGateway,
+                    "ai_provider_models_failed",
+                    "Provider /models call failed.") { Exception = ex };
             }
         }).RequireRateLimiting("PerUserWrite");
 
@@ -682,9 +684,9 @@ public static class AiUsageAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(code))
-                return Results.BadRequest(new { error = "Provider code is required." });
+                return new ApiErrorResult(400, "ai_provider_code_required", "Provider code is required.");
             if (request is null || string.IsNullOrWhiteSpace(request.Model))
-                return Results.BadRequest(new { error = "model is required." });
+                return new ApiErrorResult(400, "ai_provider_model_required", "model is required.");
 
             var providerRow = await db.AiProviders.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Code == code, ct);
@@ -747,11 +749,11 @@ public static class AiUsageAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.Label))
-                return Results.BadRequest(new { error = "Label is required." });
+                return new ApiErrorResult(400, "ai_provider_account_label_required", "Label is required.");
             if (string.IsNullOrWhiteSpace(dto.ApiKey) || dto.ApiKey.Length < 16)
-                return Results.BadRequest(new { error = "ApiKey is required and must be at least 16 chars." });
+                return new ApiErrorResult(400, "ai_api_key_too_short", "ApiKey is required and must be at least 16 chars.");
             if (dto.MonthlyRequestCap is < 1)
-                return Results.BadRequest(new { error = "MonthlyRequestCap must be null or >= 1." });
+                return new ApiErrorResult(400, "ai_provider_account_cap_invalid", "MonthlyRequestCap must be null or >= 1.");
 
             var providerExists = await db.AiProviders.AsNoTracking()
                 .AnyAsync(p => p.Id == providerId, ct);
@@ -803,13 +805,13 @@ public static class AiUsageAdminEndpoints
             if (!string.IsNullOrWhiteSpace(dto.ApiKey))
             {
                 if (dto.ApiKey.Length < 16)
-                    return Results.BadRequest(new { error = "ApiKey must be at least 16 chars." });
+                    return new ApiErrorResult(400, "ai_api_key_too_short", "ApiKey must be at least 16 chars.");
                 var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
                 row.EncryptedApiKey = protector.Protect(dto.ApiKey);
                 row.ApiKeyHint = $"…{dto.ApiKey[^4..]}";
             }
             if (dto.MonthlyRequestCap is < 1)
-                return Results.BadRequest(new { error = "MonthlyRequestCap must be null or >= 1." });
+                return new ApiErrorResult(400, "ai_provider_account_cap_invalid", "MonthlyRequestCap must be null or >= 1.");
             row.MonthlyRequestCap = dto.MonthlyRequestCap;
             row.Priority = dto.Priority;
             row.IsActive = dto.IsActive;
@@ -953,15 +955,15 @@ public static class AiUsageAdminEndpoints
         {
             var featureCode = AiFeatureRouteResolver.CanonicalFeatureCode(dto.FeatureCode);
             if (featureCode is null || !resolver.IsKnownFeatureCode(featureCode))
-                return Results.BadRequest(new { error = "Unknown feature code." });
+                return new ApiErrorResult(400, "ai_feature_code_unknown", "Unknown feature code.");
             if (string.IsNullOrWhiteSpace(dto.ProviderCode))
-                return Results.BadRequest(new { error = "ProviderCode is required." });
+                return new ApiErrorResult(400, "ai_provider_code_required", "ProviderCode is required.");
             var providerCode = dto.ProviderCode.Trim().ToLowerInvariant();
 
             var providerExists = await db.AiProviders.AsNoTracking()
                 .AnyAsync(p => p.Code == providerCode && p.IsActive, ct);
             if (!providerExists)
-                return Results.BadRequest(new { error = $"Provider '{providerCode}' is not registered or not active." });
+                return new ApiErrorResult(400, "ai_provider_inactive", $"Provider '{providerCode}' is not registered or not active.");
 
             var now = DateTimeOffset.UtcNow;
             var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
@@ -978,7 +980,7 @@ public static class AiUsageAdminEndpoints
             }
             catch (AiProviderRouteRefusedException ex)
             {
-                return Results.Conflict(new { error = ex.Message });
+                return new ApiErrorResult(409, "ai_route_switch_refused", ApiErrorResult.SafeMessage(ex, "The route switch was refused.")) { Exception = ex };
             }
 
             var auditEvent = row is null ? "AiFeatureRouteCreated" : "AiFeatureRouteUpdated";
@@ -1040,13 +1042,13 @@ public static class AiUsageAdminEndpoints
             var copilotActive = await db.AiProviders.AsNoTracking()
                 .AnyAsync(p => p.Code == copilot && p.IsActive, ct);
             if (!copilotActive)
-                return Results.BadRequest(new { error = "Copilot provider is not registered or not active." });
+                return new ApiErrorResult(400, "ai_provider_inactive", "Copilot provider is not registered or not active.");
             if (!approval.IsClaudeRoute(copilot, null))
             {
-                return Results.Conflict(new
-                {
-                    error = "Bulk Copilot routing is blocked until each target has a recorded passing benchmark run. Switch per feature with a BenchmarkRunId.",
-                });
+                return new ApiErrorResult(
+                    409,
+                    "ai_bulk_copilot_blocked",
+                    "Bulk Copilot routing is blocked until each target has a recorded passing benchmark run. Switch per feature with a BenchmarkRunId.");
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -1110,7 +1112,7 @@ public static class AiUsageAdminEndpoints
             LearnerDbContext db,
             CancellationToken ct) =>
         {
-            if (dto.Tokens <= 0) return Results.BadRequest(new { error = "Tokens must be positive." });
+            if (dto.Tokens <= 0) return new ApiErrorResult(400, "ai_credit_tokens_invalid", "Tokens must be positive.");
             var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var source = dto.Source switch
             {

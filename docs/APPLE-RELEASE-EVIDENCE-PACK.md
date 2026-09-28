@@ -25,7 +25,7 @@ complete (handover §7 acceptance rule).
 | iOS signing/TestFlight workflow | ✅ (dormant) | `mobile-release.yml` uses ASC API-key cloud signing (`-allowProvisioningUpdates -authenticationKey*`) + `altool --upload-app`; fails closed when secrets absent |
 | Raw-IPA removal from candidate path | ✅ | `publish_vps_ipa` dispatch input, default `false`, labelled internal-only |
 | App Store metadata (en-US) | ✅ (ready, unsubmitted) | `fastlane/metadata/ios/en-US/*` (name/subtitle/keywords/promo all within limits), review notes template, `APP-STORE-LISTING-NOTES.md` (privacy answers, age rating 4+, export compliance) |
-| Privacy manifest | ✅ (pre-existing) | `ios/App/App/PrivacyInfo.xcprivacy` (email/deviceID/audioData, UserDefaults CA92.1, no tracking) |
+| Privacy manifest | **PENDING CI** — the file existed but was not in the App target, so no build before 28 Sep 2026 shipped it | `ios/App/App/PrivacyInfo.xcprivacy` (email/deviceID/audioData, UserDefaults CA92.1, no tracking), now in the App target's Copy Bundle Resources (`project.pbxproj`); `mobile-ci.yml` iOS Build Check fails unless the built `App.app` contains it and it lints |
 | No-in-app-purchase model | ✅ | `IosPurchaseGate` + route layouts on /cart, /pricing, /catalog, /ai-packages, /checkout/review; unit tests; `docs/IOS-PURCHASE-COMPLIANCE.md` |
 | Account deletion reachable in-app | ✅ (web flow; iOS device run PENDING) | `app/(auth)/account-deletion` + backend soft-delete migration; documented for review |
 | Apple-compatibility guards | ✅ | `apple-compatibility.yml`, `tauri-ci.yml`, `mobile-ci.yml` green on main after billing-wall fix |

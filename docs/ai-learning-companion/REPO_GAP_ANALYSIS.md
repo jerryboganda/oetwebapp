@@ -2,6 +2,9 @@
 
 > Audited 2026-09-06 against `oetwebapp` on branch `writing/final-production-release`.
 > Method: direct inspection of domain entities, services, endpoints, routes, migrations and seed data.
+> Evidence refresh 2026-09-28: PR #269 deleted the `ListeningPathwayAnalyticsService`, `NotificationRuleEngine` and
+> `SoketiPushDispatcher` classes; they are removed from the F-069, F-114, F-115 and F-118 evidence cells (statuses unchanged;
+> F-115 is flagged for owner review below).
 > Every one of the 184 source features appears exactly once. No feature is omitted, including those
 > deliberately deferred or blocked on an external decision.
 
@@ -165,7 +168,7 @@ The source places Speaking voice role-play at Stage 3 behind a feasibility gate.
 | F-066 | Speaking difficult-patient modes | `PARTIAL` | `Services/Speaking/SpeakingSimulationV11PersonaService.cs`, `ConversationTemplate` scenarios, interlocutor scripts. | Difficulty personalities are not a documented, selectable matrix. | Stage 2 | Low |
 | F-067 | Speaking pronunciation/fluency analysis | `EXISTS` | `PronunciationService`, `Services/Pronunciation/**`, Azure phoneme + Gemini native-audio scoring, `rulebooks/pronunciation/**` for 10 professions. | Scope must stay within the validated pronunciation feature set (TV-011). | Shipped | Low |
 | F-068 | Reading Part A/B/C coach | `PARTIAL` | `Services/Reading/ReadingExplanationService.cs` (`reading.explanation.v1`, `reading.passage_qna.v1`), reading pathway analytics, `_exam-mode` rulebooks. | No per-part A/B/C coaching thread and no distractor-susceptibility analysis. | Stage 2 | Medium |
-| F-069 | Listening Part A/B/C coach | `PARTIAL` | Listening explanations, `ListeningPathwayAnalyticsService`, `ListeningPathwayGenerator`, dictation surface. | No spelling/accent/prediction-failure taxonomy feeding Error DNA. | Stage 2 | Medium |
+| F-069 | Listening Part A/B/C coach | `PARTIAL` | Listening explanations, `ListeningPathwayGenerator`, dictation surface. | No spelling/accent/prediction-failure taxonomy feeding Error DNA. | Stage 2 | Medium |
 | F-070 | Confidence-vs-accuracy analysis | `PARTIAL` | `LearnerGoal.ConfidenceLevel`; `ConfidenceBadge` UI primitive. | No per-question confidence capture compared against accuracy. | Stage 2 | Low |
 | F-071 | Why did my score change? | `MISSING` | `LearnerActionsService.GetProgressTrendAsync` and `app/progress` show the trend. | No evidence-based causal explanation of a score change. | Stage 2 | Medium |
 
@@ -230,15 +233,21 @@ The source places Speaking voice role-play at Stage 3 behind a feasibility gate.
 | ID | Requirement | Status | Repository evidence | Gap / work required | Stage | Risk |
 |---|---|---|---|---|---|---|
 | F-113 | Exam countdown | `PARTIAL` | Exam date plus dashboard surfaces. | No countdown-driven plan adaptation. | Stage 3 | Low |
-| F-114 | Inactivity risk nudges | `PARTIAL` | `EngagementService`, `NotificationRuleEngine`, `NotificationPolicyOverride`. | No inactivity-risk model. | Stage 3 | Low |
-| F-115 | Weak-subtest reminder | `PARTIAL` | `NotificationRuleEngine` plus readiness blockers can identify a weak subtest. | Not wired into a reminder rule. | Stage 3 | Low |
+| F-114 | Inactivity risk nudges | `PARTIAL` | `EngagementService`, `NotificationPolicyOverride`. | No inactivity-risk model. | Stage 3 | Low |
+| F-115 | Weak-subtest reminder | `PARTIAL` | Readiness blockers can identify a weak subtest. | Not wired into a reminder rule. | Stage 3 | Low |
 | F-116 | New relevant content alert | `PARTIAL` | `NotificationCampaign` + `NotificationCampaignRecipient` with entitlement filtering. | Not driven by relevance to the individual learner. | Stage 3 | Low |
 | F-117 | Calendar integration | `PARTIAL` | `app/study-plan/calendar`, `PrivateSpeakingCalendarService`, `ZoomMeetingService`. | No external calendar awareness of shifts or leave. | Stage 3 | Low |
-| F-118 | Push/email/app progress summaries | `PARTIAL` | `MobilePushDispatcher`, `WebPushDispatcher`, `SoketiPushDispatcher`, `BrevoEmailSender`, `NotificationConsent`. | No progress-summary content. | Stage 3 | Low |
+| F-118 | Push/email/app progress summaries | `PARTIAL` | `MobilePushDispatcher`, `WebPushDispatcher`, `BrevoEmailSender`, `NotificationConsent`. | No progress-summary content. | Stage 3 | Low |
 | F-119 | Quiet hours | `EXISTS` | Quiet hours on `NotificationPreference`, honoured by `NotificationScheduling`. | None. | Shipped | Low |
 | F-120 | Streaks/milestones | `PARTIAL` | `LearnerUser.CurrentStreak`/`LongestStreak`/`WeeklyActivityJson`; `useStreak`; `app/achievements`, `app/leaderboard`. | No milestone recognition tied to demonstrated learning value. | Stage 3 | Low |
 | F-121 | Adaptive gamification | `DEFERRED_BY_SOURCE` | Streaks and leaderboard exist. | Source defers gamification without demonstrated learning or conversion value. | Deferred | Low |
 | F-122 | Referral/review prompt at positive moments | `PARTIAL` | `ReferralService`, `app/referral`, `app/reviews`. | Not gated to genuine positive moments; source forbids prompting during frustration. | Stage 3 | Medium |
+
+> **Owner review (2026-09-28) - F-115.** PR #269 deleted the unused `NotificationRuleEngine` class. The
+> `NotificationRule` entity remains (still in `Services/NotificationRuleEngine.cs`), and admins can still create and
+> edit rules through `NotificationRuleEndpoints` (`/v1/admin/notification-rules`), but nothing evaluates them. The
+> `PARTIAL` rating now rests on readiness blockers alone. The rating is left unchanged pending owner confirmation or re-rating (same note in `traceability/features.*`
+> and `FEATURE_TRACEABILITY_MATRIX.md`).
 
 ### Admin/tutor (F-123 ... F-134)
 

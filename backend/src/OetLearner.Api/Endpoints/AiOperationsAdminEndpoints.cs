@@ -161,7 +161,7 @@ public static class AiOperationsAdminEndpoints
             || string.IsNullOrWhiteSpace(request.Reason)
             || request.AmountUsd <= 0m)
         {
-            return Results.BadRequest(new { error = "scope, amountUsd, and reason are required." });
+            return new ApiErrorResult(400, "ai_budget_override_invalid", "scope, amountUsd, and reason are required.");
         }
 
         var actorAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -186,7 +186,7 @@ public static class AiOperationsAdminEndpoints
         }
         catch (ArgumentException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return new ApiErrorResult(400, "ai_budget_override_invalid", ApiErrorResult.SafeMessage(ex, "The budget override is invalid.")) { Exception = ex };
         }
     }
 
@@ -220,13 +220,13 @@ public static class AiOperationsAdminEndpoints
     {
         if (string.IsNullOrWhiteSpace(key))
         {
-            return Results.BadRequest(new { error = "key is required." });
+            return new ApiErrorResult(400, "ai_circuit_key_required", "key is required.");
         }
 
         var normalizedKind = (kind ?? string.Empty).Trim().ToLowerInvariant();
         if (normalizedKind is not (AiCircuitBreakerStore.KindProvider or AiCircuitBreakerStore.KindCredential))
         {
-            return Results.BadRequest(new { error = "kind must be provider or credential." });
+            return new ApiErrorResult(400, "ai_circuit_kind_invalid", "kind must be provider or credential.");
         }
 
         await circuits.ResetAsync(normalizedKind, key, ct);

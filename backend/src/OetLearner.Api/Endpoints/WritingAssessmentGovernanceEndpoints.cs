@@ -47,14 +47,14 @@ public static class WritingAssessmentGovernanceEndpoints
             if (string.IsNullOrWhiteSpace(profession)
                 || string.IsNullOrWhiteSpace(letterType)
                 || string.IsNullOrWhiteSpace(versionKey))
-                return Results.BadRequest(new { error = "pack_identity_required" });
+                return new ApiErrorResult(400, "pack_identity_required", "Profession, letter type and version key are required.");
             if (!IsJsonObject(request.RulesJson))
-                return Results.BadRequest(new { error = "pack_rules_invalid_json" });
+                return new ApiErrorResult(400, "pack_rules_invalid_json", "Pack rules must be a JSON object.");
             if (await db.WritingAssessmentPackVersions.AnyAsync(x =>
                     x.Profession == profession
                     && x.LetterType == letterType
                     && x.VersionKey == versionKey, ct))
-                return Results.Conflict(new { error = "pack_version_exists" });
+                return new ApiErrorResult(409, "pack_version_exists", "This pack version already exists.");
 
             var now = DateTimeOffset.UtcNow;
             var pack = new WritingAssessmentPackVersion
@@ -86,10 +86,10 @@ public static class WritingAssessmentGovernanceEndpoints
             var pack = await db.WritingAssessmentPackVersions.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (pack is null) return Results.NotFound();
             if (!IsJsonObject(pack.RulesJson))
-                return Results.BadRequest(new { error = "pack_rules_invalid_json" });
+                return new ApiErrorResult(400, "pack_rules_invalid_json", "Pack rules must be a JSON object.");
             if (string.IsNullOrWhiteSpace(pack.ApprovalEvidenceJson)
                 || !IsJsonObject(pack.ApprovalEvidenceJson))
-                return Results.BadRequest(new { error = "pack_owner_approval_evidence_required" });
+                return new ApiErrorResult(400, "pack_owner_approval_evidence_required", "Owner approval evidence (a JSON object) is required before the pack can be approved.");
             if (pack.Status == WritingAssessmentReleaseStatus.Approved && pack.CandidateFacing)
                 return Results.Ok(ProjectPack(pack));
 
@@ -129,7 +129,7 @@ public static class WritingAssessmentGovernanceEndpoints
             var modelVersion = request.ModelVersion?.Trim() ?? string.Empty;
             var calibrationSetVersion = request.CalibrationSetVersion?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(modelVersion) || string.IsNullOrWhiteSpace(calibrationSetVersion))
-                return Results.BadRequest(new { error = "release_gate_identity_required" });
+                return new ApiErrorResult(400, "release_gate_identity_required", "Model version and calibration set version are required.");
             if (request.OwnerApprovedTolerance is <= 0
                 || request.MeanAbsoluteError is < 0
                 || request.ContentConcisenessCorrelation is < -1 or > 1
@@ -137,10 +137,10 @@ public static class WritingAssessmentGovernanceEndpoints
                 || request.InventedClaimRate is < 0 or > 1
                 || request.QualifiedReviewerCount < 0
                 || request.HumanRatingsPerBenchmark < 0)
-                return Results.BadRequest(new { error = "release_gate_metrics_invalid" });
+                return new ApiErrorResult(400, "release_gate_metrics_invalid", "One or more release gate metrics are out of range.");
             if (await db.WritingAssessmentReleaseGates.AnyAsync(x =>
                     x.ModelVersion == modelVersion && x.CalibrationSetVersion == calibrationSetVersion, ct))
-                return Results.Conflict(new { error = "release_gate_version_exists" });
+                return new ApiErrorResult(409, "release_gate_version_exists", "A release gate for this model and calibration set already exists.");
 
             var now = DateTimeOffset.UtcNow;
             var gate = new WritingAssessmentReleaseGate
@@ -178,9 +178,9 @@ public static class WritingAssessmentGovernanceEndpoints
             if (gate is null) return Results.NotFound();
             if (string.IsNullOrWhiteSpace(gate.ApprovalEvidenceJson)
                 || !IsJsonObject(gate.ApprovalEvidenceJson))
-                return Results.BadRequest(new { error = "release_gate_owner_approval_evidence_required" });
+                return new ApiErrorResult(400, "release_gate_owner_approval_evidence_required", "Owner approval evidence (a JSON object) is required before the release gate can be approved.");
             if (!WritingCalibrationReleaseService.IsCandidateReleaseAllowed(gate))
-                return Results.Conflict(new { error = "release_gate_calibration_requirements_not_met" });
+                return new ApiErrorResult(409, "release_gate_calibration_requirements_not_met", "The calibration requirements for candidate release are not met.");
 
             gate.Status = WritingAssessmentReleaseStatus.Approved;
             gate.CandidateNumericScoreEnabled = true;
