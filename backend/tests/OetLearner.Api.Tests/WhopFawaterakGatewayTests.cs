@@ -652,7 +652,8 @@ public class WhopFawaterakGatewayTests
             // Two pages: follow page_info.end_cursor.
             return path.Contains("after=c1")
                 ? """{"data":[{"id":"plan_usd","currency":"usd","initial_price":10,"adaptive_pricing_enabled":true}],"page_info":{"has_next_page":false}}"""
-                : $$"""{"data":[{"id":"plan_gbp","currency":"gbp","initial_price":100,"adaptive_pricing_enabled":{{(gbpAdaptive ? "true" : "false")}},"product":{"id":"prod_1"}},{"id":"plan_off","currency":"gbp","initial_price":50,"adaptive_pricing_enabled":false}],"page_info":{"has_next_page":true,"end_cursor":"c1"}}""";
+                : """{"data":[{"id":"plan_gbp","currency":"gbp","initial_price":100,"adaptive_pricing_enabled":ADAPTIVE,"product":{"id":"prod_1"}},{"id":"plan_off","currency":"gbp","initial_price":50,"adaptive_pricing_enabled":false}],"page_info":{"has_next_page":true,"end_cursor":"c1"}}"""
+                    .Replace("ADAPTIVE", gbpAdaptive ? "true" : "false");
         });
 
         var result = await WhopPlanAdaptivePricing.RunAsync(
