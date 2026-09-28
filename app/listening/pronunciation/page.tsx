@@ -14,6 +14,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
   addPronunciationCard,
@@ -155,29 +159,19 @@ export default function PronunciationHubPage() {
     <LearnerDashboardShell pageTitle="Pronunciation Library">
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
-        <div className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
-            SM-2 Spaced Repetition
-          </p>
-          <h1 className="flex items-center gap-3 text-2xl font-bold text-navy">
-            <Headphones className="h-6 w-6 text-primary-500" aria-hidden />
-            Pronunciation Library
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Train your ear on healthcare vocabulary. Listen, repeat, and let SM-2 schedule the next
-            review for maximum retention.
-          </p>
-        </div>
+        <LearnerPageHero
+          eyebrow="SM-2 Spaced Repetition"
+          icon={Headphones}
+          title="Pronunciation Library"
+          description="Train your ear on healthcare vocabulary. Listen, repeat, and let SM-2 schedule the next review for maximum retention."
+        />
 
         {/* Stats strip */}
         <section>
           {loading ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
-                />
+                <Skeleton key={i} className="h-24 rounded-xl" />
               ))}
             </div>
           ) : (
@@ -200,48 +194,45 @@ export default function PronunciationHubPage() {
 
         {/* Quick actions */}
         <section className="flex flex-wrap gap-3">
-          <Link
-            href="/listening/pronunciation/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden />
-            Review Today&apos;s Cards
-            {stats?.dueToday ? (
-              <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">{stats.dueToday}</span>
-            ) : null}
-          </Link>
-          <Link
-            href="/listening"
-            className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-surface px-5 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300 dark:hover:bg-primary-950/30"
-          >
-            <BookOpen className="h-4 w-4" aria-hidden />
-            Back to Listening Hub
-          </Link>
+          <Button asChild size="lg">
+            <Link href="/listening/pronunciation/review">
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              Review Today&apos;s Cards
+              {stats?.dueToday ? (
+                <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">{stats.dueToday}</span>
+              ) : null}
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="bg-surface">
+            <Link href="/listening">
+              <BookOpen className="h-4 w-4" aria-hidden />
+              Back to Listening Hub
+            </Link>
+          </Button>
         </section>
 
         {/* Add a word */}
-        <section className="rounded-2xl border border-border bg-surface px-6 py-6">
-          <h2 className="mb-3 text-base font-semibold text-navy">Add a Word</h2>
+        <section className="rounded-2xl border border-border bg-surface px-4 py-5 shadow-sm sm:px-6 sm:py-6">
+          <h2 id="pronunciation-add-word-title" className="mb-3 text-base font-semibold text-navy">Add a Word</h2>
           <div className="flex gap-3">
             <input
               ref={inputRef}
               type="text"
+              aria-labelledby="pronunciation-add-word-title"
               value={newWord}
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleAdd();
               }}
               placeholder="e.g. dyspnoea"
-              className="flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             />
-            <button
-              type="button"
+            <Button
               disabled={adding || !newWord.trim()}
               onClick={() => void handleAdd()}
-              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
             >
               {adding ? 'Adding…' : 'Add'}
-            </button>
+            </Button>
           </div>
           <p className="mt-2 text-xs text-muted">
             New cards are due immediately so you can practise them right after adding.
@@ -260,29 +251,16 @@ export default function PronunciationHubPage() {
           {loading ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="h-32 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
-                />
+                <Skeleton key={i} className="h-32 rounded-xl" />
               ))}
             </div>
           ) : cards.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-background-light/60 px-8 py-12 text-center">
-              <Headphones className="mx-auto h-10 w-10 text-primary-400" aria-hidden />
-              <p className="mt-3 text-lg font-semibold text-navy">
-                No pronunciation cards yet
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                Add a word above to start training your ear on healthcare vocabulary.
-              </p>
-              <button
-                type="button"
-                onClick={() => inputRef.current?.focus()}
-                className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
-              >
-                Add Your First Word
-              </button>
-            </div>
+            <EmptyState
+              icon={<Headphones className="h-8 w-8 text-primary-400" />}
+              title="No pronunciation cards yet"
+              description="Add a word above to start training your ear on healthcare vocabulary."
+              action={{ label: 'Add Your First Word', onClick: () => inputRef.current?.focus() }}
+            />
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {cards.map((card) => {
@@ -313,7 +291,7 @@ export default function PronunciationHubPage() {
                           type="button"
                           disabled={!audioUrl}
                           onClick={() => handlePlay(audioUrl)}
-                          className="rounded-lg border border-primary-200 bg-primary-50 p-1.5 text-primary-600 transition hover:bg-primary-100 disabled:opacity-40 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-400"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-primary-200 bg-primary-50 text-primary-600 transition hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-400"
                           aria-label={`Play pronunciation of ${card.word}`}
                         >
                           <Volume2 className="h-4 w-4" aria-hidden />
@@ -321,7 +299,7 @@ export default function PronunciationHubPage() {
                         <button
                           type="button"
                           onClick={() => void handleRemove(card)}
-                          className="rounded-lg border border-border bg-surface p-1.5 text-muted opacity-0 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:border-rose-800/60 dark:hover:bg-rose-950/30"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-surface text-muted transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 dark:hover:border-rose-800/60 dark:hover:bg-rose-950/30"
                           aria-label={`Remove ${card.word} from deck`}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden />

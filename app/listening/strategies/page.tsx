@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import { ErrorState } from '@/components/ui/empty-error';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { queryKeys } from '@/lib/query/hooks';
 
 interface Strategy {
@@ -56,11 +57,13 @@ export default function ListeningStrategiesPage() {
         {CATEGORIES.map((c) => (
           <button
             key={c.value}
+            type="button"
+            aria-pressed={category === c.value}
             onClick={() => setCategory(c.value)}
             className={
               category === c.value
-                ? 'rounded-full bg-primary px-3 py-1 text-xs text-white dark:bg-primary-700 transition-colors'
-                : 'rounded-full border border-border px-3 py-1 text-xs text-navy transition-colors hover:bg-background-light'
+                ? 'min-h-9 rounded-full border border-primary bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:bg-primary-700'
+                : 'min-h-9 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-navy transition-colors hover:border-border-hover hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
             }
           >
             {c.label}
@@ -69,16 +72,20 @@ export default function ListeningStrategiesPage() {
       </div>
 
       {isPending ? (
-        <p className="text-muted">Loading strategies…</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          {Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}
+        </div>
       ) : isError ? (
         <ErrorState
           message="We couldn't load the strategy library."
           onRetry={() => void refetch()}
         />
       ) : strategies.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
-          No strategies published for this category yet.
-        </div>
+        <EmptyState
+          title="No strategies published for this category yet."
+          description="Try another category, or browse the full library."
+          action={category ? { label: 'Show all strategies', onClick: () => setCategory('') } : undefined}
+        />
       ) : (
         <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {strategies.map((s) => (
@@ -91,9 +98,9 @@ export default function ListeningStrategiesPage() {
               <p className="mt-1 text-xs text-muted">~{s.estimatedReadMinutes} min read</p>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {s.markedAsRead && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">Read</span>
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">Read</span>
                 )}
-                {s.favorited && <span>⭐</span>}
+                {s.favorited && <span role="img" aria-label="Favorited">⭐</span>}
               </div>
               <Link
                 href={`/listening/strategies/${s.slug}`}

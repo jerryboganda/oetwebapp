@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
   getDictationStats,
@@ -206,19 +209,12 @@ export default function DictationDrillPage() {
   return (
     <LearnerDashboardShell pageTitle="Dictation Drills">
       <main className="space-y-5 sm:space-y-8">
-        <section className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
-            Phase 4 · Listening pathway
-          </p>
-          <h1 className="text-2xl font-bold text-navy">
-            Dictation Drills
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Train your ear and your spelling at the same time. Dictation uses the
-            same strict marking contract as Listening: only the canonical answer
-            or an explicitly authorised variant receives credit.
-          </p>
-        </section>
+        <LearnerPageHero
+          eyebrow="Phase 4 · Listening pathway"
+          icon={Headphones}
+          title="Dictation Drills"
+          description="Train your ear and your spelling at the same time. Dictation uses the same strict marking contract as Listening: only the canonical answer or an explicitly authorised variant receives credit."
+        />
 
         <StatsStrip stats={stats} loading={statsLoading} />
 
@@ -298,10 +294,7 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
     return (
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
-          />
+          <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
     );
@@ -336,14 +329,10 @@ function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: b
         We&apos;ll play 8 short healthcare clips. Type what you hear: single terms,
         short phrases, full sentences. Mix of due reviews and fresh drills.
       </p>
-      <button
-        type="button"
-        onClick={onStart}
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-      >
+      <Button onClick={onStart} size="lg" className="mt-6">
         <Play className="h-4 w-4" aria-hidden />
         Start a dictation set
-      </button>
+      </Button>
       <p className="mt-3 text-xs text-muted">
         Takes about 8&ndash;10 minutes.
       </p>
@@ -423,7 +412,7 @@ function DrillPanel({
               className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-md transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
               aria-label={audioPlaying ? 'Pause clip' : 'Play clip'}
             >
-              {audioPlaying ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7 ml-0.5" />}
+              {audioPlaying ? <Pause className="h-7 w-7" aria-hidden /> : <Play className="h-7 w-7 ml-0.5" aria-hidden />}
             </button>
             <p className="text-xs text-muted">
               {drill.durationSeconds}s clip · Tap to {audioPlaying ? 'pause' : 'replay'} as
@@ -479,23 +468,17 @@ function DrillPanel({
       {/* Action bar */}
       <div className="flex items-center justify-end gap-3">
         {phase === 'attempting' ? (
-          <button
-            type="button"
+          <Button
             onClick={onSubmit}
-            disabled={submitting || answer.trim().length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={answer.trim().length === 0}
+            loading={submitting}
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {submitting ? 'Checking…' : 'Submit'}
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={onNext}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-          >
+          <Button onClick={onNext}>
             {index + 1 === total ? 'Finish set' : 'Next drill'}
-          </button>
+          </Button>
         )}
       </div>
     </section>
@@ -645,27 +628,16 @@ function CompletePanel({
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-3">
-        <button
-          type="button"
-          onClick={onAgain}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-        >
+        <Button onClick={onAgain}>
           <RefreshCw className="h-4 w-4" aria-hidden />
           Continue practicing
-        </button>
-        <button
-          type="button"
-          onClick={onRestart}
-          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-        >
+        </Button>
+        <Button variant="outline" onClick={onRestart} className="bg-surface">
           Back to start
-        </button>
-        <Link
-          href="/listening"
-          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-        >
-          Listening hub
-        </Link>
+        </Button>
+        <Button asChild variant="outline" className="bg-surface">
+          <Link href="/listening">Listening hub</Link>
+        </Button>
       </div>
     </section>
   );

@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LearnerDashboardShell } from '@/components/layout';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
   getDueForReview,
@@ -168,10 +170,10 @@ export default function PronunciationReviewPage() {
   if (loading) {
     return (
       <LearnerDashboardShell pageTitle="Pronunciation Review">
-        <main className="mx-auto max-w-xl">
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
-          </div>
+        <main className="mx-auto max-w-xl space-y-6">
+          <Skeleton className="h-7 w-48 rounded-lg" />
+          <Skeleton className="h-2 w-full rounded-full" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
         </main>
       </LearnerDashboardShell>
     );
@@ -200,12 +202,9 @@ export default function PronunciationReviewPage() {
             <p className="mt-1 text-sm text-muted">
               Come back tomorrow. SM-2 has scheduled your next session.
             </p>
-            <Link
-              href="/listening/pronunciation"
-              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
-            >
-              Back to Library
-            </Link>
+            <Button asChild className="mt-5">
+              <Link href="/listening/pronunciation">Back to Library</Link>
+            </Button>
           </div>
         </main>
       </LearnerDashboardShell>
@@ -224,20 +223,11 @@ export default function PronunciationReviewPage() {
               You reviewed {completed} {completed === 1 ? 'card' : 'cards'}. SM-2 has scheduled the next
               round for each one.
             </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
-              >
-                Back to Library
-              </button>
-              <Link
-                href="/listening"
-                className="inline-flex rounded-xl border border-primary-200 bg-surface px-5 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300"
-              >
-                Listening Hub
-              </Link>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Button onClick={handleFinish}>Back to Library</Button>
+              <Button asChild variant="outline" className="bg-surface">
+                <Link href="/listening">Listening Hub</Link>
+              </Button>
             </div>
           </div>
         </main>
@@ -327,13 +317,9 @@ export default function PronunciationReviewPage() {
 
         {/* Actions */}
         {!revealed ? (
-          <button
-            type="button"
-            onClick={() => setRevealed(true)}
-            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-          >
+          <Button fullWidth size="lg" onClick={() => setRevealed(true)}>
             Reveal Word
-          </button>
+          </Button>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {QUALITY_BUTTONS.map(({ label, emoji, quality, description, className }) => (

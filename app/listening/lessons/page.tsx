@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { ErrorState } from '@/components/ui/empty-error';
+import { CardSkeleton } from '@/components/ui/skeleton';
 import { queryKeys } from '@/lib/query/hooks';
 
 interface LessonItem {
@@ -47,14 +48,16 @@ export default function ListeningLessonsPage() {
       </header>
 
       {isPending ? (
-        <p className="text-muted">Loading lessons…</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-busy="true">
+          {Array.from({ length: 8 }, (_, i) => <CardSkeleton key={i} />)}
+        </div>
       ) : isError ? (
         <ErrorState
           message="We couldn't load the foundation lessons."
           onRetry={() => void refetch()}
         />
       ) : lessons.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
+        <div className="rounded-2xl border border-dashed border-border bg-background-light p-6 text-muted">
           <p>Foundation lessons are being seeded by the content team.</p>
           <p className="mt-2 text-sm">
             Enable the <code className="rounded bg-background-light px-1">Seed:ListeningContent</code> flag

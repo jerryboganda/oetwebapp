@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { Button } from '@/components/ui/button';
+import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { apiClient } from '@/lib/api';
 
 interface LessonDetail {
@@ -60,8 +62,10 @@ export default function ListeningLessonPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-muted">Loading lesson…</p>
+      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+        <p className="sr-only">Loading lesson…</p>
+        <Skeleton className="h-9 w-2/3 rounded-lg" />
+        <CardSkeleton />
       </main>
     );
   }
@@ -70,9 +74,9 @@ export default function ListeningLessonPage() {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
         <h1 className="text-2xl font-bold text-navy">Lesson not found</h1>
-        <Link href="/listening/lessons" className="rounded-md bg-primary px-4 py-2 text-white dark:bg-primary-700 text-sm inline-block">
-          Back to lesson list
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/listening/lessons">Back to lesson list</Link>
+        </Button>
       </main>
     );
   }

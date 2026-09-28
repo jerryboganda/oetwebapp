@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { Button } from '@/components/ui/button';
+import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { apiClient } from '@/lib/api';
 
 interface StrategyDetail {
@@ -65,8 +67,10 @@ export default function ListeningStrategyDetailPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-muted">Loading strategy…</p>
+      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+        <p className="sr-only">Loading strategy…</p>
+        <Skeleton className="h-9 w-2/3 rounded-lg" />
+        <CardSkeleton />
       </main>
     );
   }
@@ -75,9 +79,9 @@ export default function ListeningStrategyDetailPage() {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
         <h1 className="text-2xl font-bold text-navy">Strategy not found</h1>
-        <Link href="/listening/strategies" className="rounded-md bg-primary px-4 py-2 text-white text-sm inline-block transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600">
-          Back to library
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/listening/strategies">Back to library</Link>
+        </Button>
       </main>
     );
   }
@@ -97,20 +101,22 @@ export default function ListeningStrategyDetailPage() {
         className="rounded-2xl border border-border bg-surface p-6 shadow-sm text-navy"
       />
 
-      <div className="flex gap-3 text-sm">
-        <button
+      <div className="flex flex-wrap gap-3">
+        <Button
+          size="sm"
           onClick={markRead}
           disabled={strategy.progress?.markedAsRead}
-          className="rounded-md bg-primary px-4 py-2 text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-60"
         >
           {strategy.progress?.markedAsRead ? '✓ Marked as read' : 'Mark as read'}
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-pressed={strategy.progress?.favorited ?? false}
           onClick={toggleFavorite}
-          className="rounded-md border border-border px-4 py-2 text-navy transition-colors hover:bg-background-light"
         >
           {strategy.progress?.favorited ? '⭐ Favorited' : '☆ Favorite'}
-        </button>
+        </Button>
       </div>
 
       <Link href="/listening/strategies" className="text-sm text-primary underline transition-colors hover:text-primary-dark">

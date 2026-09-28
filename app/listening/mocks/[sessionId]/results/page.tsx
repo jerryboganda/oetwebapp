@@ -10,6 +10,8 @@ import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { Button } from '@/components/ui/button';
+import { PageSkeleton } from '@/components/ui/skeleton';
 
 interface MockResult {
   sessionId: string;
@@ -92,8 +94,9 @@ export default function ListeningMockResultsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-muted">Loading your mock results…</p>
+      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+        <p className="sr-only">Loading your mock results…</p>
+        <PageSkeleton />
       </main>
     );
   }
@@ -105,21 +108,21 @@ export default function ListeningMockResultsPage() {
         <p className="text-muted">
           This mock session is being graded. Refresh in a moment, or come back from the dashboard.
         </p>
-        <Link href="/listening" className="rounded-md bg-primary px-4 py-2 text-white text-sm inline-block transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-          Back to dashboard
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/listening">Back to dashboard</Link>
+        </Button>
       </main>
     );
   }
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
-      <p className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted dark:bg-slate-900/50">
+      <p className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted">
         AI Practice Score — not an official OET result.
       </p>
       <p
         data-testid="listening-marking-strictness-disclosure"
-        className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted dark:bg-slate-900/50"
+        className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted"
       >
         This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
       </p>
@@ -145,7 +148,7 @@ export default function ListeningMockResultsPage() {
         title="Mock result"
         subtitle={hasConversion ? `Scaled OET Listening · Grade ${result.gradeLabel}` : 'Raw Listening practice result'}
         gaugeValue={hasConversion ? (scaledScore / 500) * 100 : 0}
-        gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{hasConversion ? result.gradeLabel : '—'}</span>}
+        gaugeCenter={<span className="text-2xl font-black text-navy">{hasConversion ? result.gradeLabel : '—'}</span>}
         gaugeLabel={hasConversion ? `${scaledScore}/500` : 'Owner table unavailable'}
         gaugeColor={
           !hasConversion ? 'var(--color-info)' : result.gradeLabel === 'A' || result.gradeLabel === 'B'
@@ -235,14 +238,20 @@ export default function ListeningMockResultsPage() {
         <section className="rounded-2xl border border-primary/30 bg-primary/10 p-5" aria-labelledby="listening-mock-next-step-title">
           <h2 id="listening-mock-next-step-title" className="text-base font-black text-primary">{result.nextStep.title}</h2>
           <p className="mt-1 text-sm text-primary/80">{result.nextStep.description}</p>
-          <Link href={result.nextStep.route} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark">
-            Open targeted practice <span aria-hidden>→</span>
-          </Link>
-          {result.studyPlanRoute ? (
-            <Link href={result.studyPlanRoute} className="mt-4 ml-3 inline-flex items-center gap-2 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10">
-              Edit this plan <span aria-hidden>→</span>
-            </Link>
-          ) : null}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button asChild size="sm">
+              <Link href={result.nextStep.route}>
+                Open targeted practice <span aria-hidden>→</span>
+              </Link>
+            </Button>
+            {result.studyPlanRoute ? (
+              <Button asChild size="sm" variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                <Link href={result.studyPlanRoute}>
+                  Edit this plan <span aria-hidden>→</span>
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </section>
       ) : null}
       <section className="space-y-4" aria-labelledby="listening-mock-item-review-title">
@@ -273,15 +282,12 @@ export default function ListeningMockResultsPage() {
         );
       })()}
       <nav className="flex flex-wrap gap-3 text-sm">
-        <Link href="/listening" className="rounded-md bg-primary px-4 py-2 text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-          Back to dashboard
-        </Link>
-        <Link
-          href="/listening/stats"
-          className="rounded-md border border-border px-4 py-2 text-navy transition-colors hover:bg-background-light"
-        >
-          See full analytics
-        </Link>
+        <Button asChild size="sm">
+          <Link href="/listening">Back to dashboard</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/listening/stats">See full analytics</Link>
+        </Button>
       </nav>
     </main>
   );
