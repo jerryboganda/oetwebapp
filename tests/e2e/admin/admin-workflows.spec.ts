@@ -47,4 +47,38 @@ test.describe('Admin workflows @admin @smoke', () => {
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
+
+  test('admin Select inside a Dialog renders above the dialog and is clickable', async ({ page }, testInfo) => {
+    if (testInfo.project.name !== 'chromium-admin') {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+
+    await page.goto('/admin/billing/scholarships');
+    const grantButton = page.getByRole('button', { name: /^grant scholarship$/i });
+    const permissionDenied = page.getByRole('heading', { name: /admin permission required/i });
+    await expect(grantButton.or(permissionDenied)).toBeVisible({ timeout: 30000 });
+    test.skip(await permissionDenied.isVisible(), 'Seeded admin lacks the billing permission for /admin/billing/scholarships.');
+
+    await grantButton.click();
+    const dialog = page.getByRole('dialog', { name: /grant scholarship/i });
+    await expect(dialog).toBeVisible();
+
+    const reason = dialog.getByRole('combobox', { name: /^reason$/i });
+    const current = ((await reason.textContent()) ?? '').trim();
+    await reason.click();
+    // First option that differs from the current value, so the value check proves the click landed.
+    const options = page.getByRole('listbox').getByRole('option');
+    const option = (current ? options.filter({ hasNotText: current }) : options).first();
+    const optionText = ((await option.textContent()) ?? '').trim();
+    await option.click();
+
+    await expect(reason).toHaveText(optionText);
+    await expect(dialog).toBeVisible();
+
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
 });

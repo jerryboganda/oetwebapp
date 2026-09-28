@@ -40,7 +40,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-[var(--admin-z-overlay)] bg-navy/50 backdrop-blur-sm',
+      'fixed inset-0 z-[var(--z-modal)] bg-navy/50 backdrop-blur-sm',
       'data-[state=open]:animate-in data-[state=open]:fade-in-0',
       'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
       'data-[state=open]:duration-200 data-[state=closed]:duration-150',
@@ -54,7 +54,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const dialogContentVariants = cva(
   [
-    'fixed left-[50%] top-[50%] z-[var(--admin-z-modal)] grid w-full',
+    'fixed left-[50%] top-[50%] z-[var(--z-modal)] grid w-full',
     'translate-x-[-50%] translate-y-[-50%] gap-4 p-6',
     // Edge-to-edge safe fit: never taller than the visible viewport minus the
     // status bar / gesture nav insets, and scroll internally when it would be.

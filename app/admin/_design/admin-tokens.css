@@ -269,16 +269,6 @@
   --admin-sidebar-collapsed-width: 72px;
   --admin-header-height:           64px;
   --admin-content-max-width:       1440px;
-
-  /* ---------- Z-index scale ---------------------------------------- */
-  --admin-z-dropdown:           1000;
-  --admin-z-sticky:             1020;
-  --admin-z-fixed:              1030;
-  --admin-z-overlay:            1040;
-  --admin-z-modal:              1050;
-  --admin-z-popover:            1060;
-  --admin-z-tooltip:            1070;
-  --admin-z-toast:              1080;
 }
 
 /* --------------------------------------------------------------------------
