@@ -94,9 +94,9 @@ const HUB_CARDS: HubCard[] = [
 
 const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
   partA: {
-    ring: 'border-violet-200 hover:border-violet-300',
-    badge: 'bg-violet-100 text-violet-800',
-    icon: 'bg-violet-100 text-violet-700',
+    ring: 'border-primary-200 hover:border-primary-300',
+    badge: 'bg-primary-100 text-primary-800',
+    icon: 'bg-primary-100 text-primary-700',
     chip: 'Part A',
   },
   partB: {
@@ -330,7 +330,7 @@ export default function ListeningHome() {
 
         <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
           <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
               Choose how to practice
             </p>
             <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
@@ -380,7 +380,7 @@ export default function ListeningHome() {
                       <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                     </div>
                     <PlayCircle
-                      className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
+                      className="h-4 w-4 self-center text-primary-400 opacity-0 transition-opacity group-hover:opacity-100"
                       aria-hidden
                     />
                   </Link>
@@ -395,7 +395,7 @@ export default function ListeningHome() {
         <section aria-labelledby="listening-papers-heading">
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
                 <Target className="h-3.5 w-3.5" aria-hidden />
                 Paper library
               </p>
@@ -428,7 +428,7 @@ export default function ListeningHome() {
         {recentResults.length > 0 ? (
           <section aria-labelledby="listening-results-heading">
             <div className="mb-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
                 <TrendingUp className="h-3.5 w-3.5" aria-hidden />
                 Review
               </p>
@@ -540,8 +540,8 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
       : 'Practice';
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-violet-300">
-      <span className="inline-flex w-fit rounded-full bg-violet-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-violet-700">
+    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 transition-colors hover:border-primary-300">
+      <span className="inline-flex w-fit rounded-full bg-primary-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-primary-700">
         {scopeLabel}
       </span>
       <span className="mt-2 font-semibold text-navy">{result.paperTitle}</span>
@@ -551,7 +551,7 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
       <div className="mt-auto flex items-center gap-2 pt-3">
         <Link
           href={result.route}
-          className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-violet-200 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+          className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-50"
         >
           <Eye className="h-3.5 w-3.5" aria-hidden />
           Review

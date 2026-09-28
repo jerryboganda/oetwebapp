@@ -38,7 +38,7 @@ import {
 
 const STAT_ACCENTS: Record<string, string> = {
   violet:
-    'bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/50 dark:text-violet-300',
+    'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
   emerald:
     'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/50 dark:text-emerald-300',
   amber:
@@ -155,12 +155,12 @@ export default function PronunciationHubPage() {
     <LearnerDashboardShell pageTitle="Pronunciation Library">
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
-        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 dark:border-violet-900/50 dark:bg-violet-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
+        <div className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
             SM-2 Spaced Repetition
           </p>
           <h1 className="flex items-center gap-3 text-2xl font-bold text-navy">
-            <Headphones className="h-6 w-6 text-violet-500" aria-hidden />
+            <Headphones className="h-6 w-6 text-primary-500" aria-hidden />
             Pronunciation Library
           </h1>
           <p className="mt-1 text-sm text-muted">
@@ -202,7 +202,7 @@ export default function PronunciationHubPage() {
         <section className="flex flex-wrap gap-3">
           <Link
             href="/listening/pronunciation/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
           >
             <RefreshCw className="h-4 w-4" aria-hidden />
             Review Today&apos;s Cards
@@ -212,7 +212,7 @@ export default function PronunciationHubPage() {
           </Link>
           <Link
             href="/listening"
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-surface px-5 py-3 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300 dark:hover:bg-violet-950/30"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-surface px-5 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300 dark:hover:bg-primary-950/30"
           >
             <BookOpen className="h-4 w-4" aria-hidden />
             Back to Listening Hub
@@ -238,7 +238,7 @@ export default function PronunciationHubPage() {
               type="button"
               disabled={adding || !newWord.trim()}
               onClick={() => void handleAdd()}
-              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
             >
               {adding ? 'Adding…' : 'Add'}
             </button>
@@ -268,7 +268,7 @@ export default function PronunciationHubPage() {
             </div>
           ) : cards.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-background-light/60 px-8 py-12 text-center">
-              <Headphones className="mx-auto h-10 w-10 text-violet-400" aria-hidden />
+              <Headphones className="mx-auto h-10 w-10 text-primary-400" aria-hidden />
               <p className="mt-3 text-lg font-semibold text-navy">
                 No pronunciation cards yet
               </p>
@@ -278,7 +278,7 @@ export default function PronunciationHubPage() {
               <button
                 type="button"
                 onClick={() => inputRef.current?.focus()}
-                className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+                className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
               >
                 Add Your First Word
               </button>
@@ -291,7 +291,7 @@ export default function PronunciationHubPage() {
                 return (
                   <article
                     key={card.id}
-                    className="group rounded-xl border border-border bg-surface px-4 py-4 transition-colors hover:border-violet-300 hover:shadow-sm dark:hover:border-violet-700"
+                    className="group rounded-xl border border-border bg-surface px-4 py-4 transition-colors hover:border-primary-300 hover:shadow-sm dark:hover:border-primary-700"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -299,7 +299,7 @@ export default function PronunciationHubPage() {
                           {card.word}
                         </h3>
                         {card.pronunciationIpa ? (
-                          <p className="mt-0.5 truncate font-mono text-xs text-violet-600 dark:text-violet-400">
+                          <p className="mt-0.5 truncate font-mono text-xs text-primary-600 dark:text-primary-400">
                             {card.pronunciationIpa}
                           </p>
                         ) : (
@@ -313,7 +313,7 @@ export default function PronunciationHubPage() {
                           type="button"
                           disabled={!audioUrl}
                           onClick={() => handlePlay(audioUrl)}
-                          className="rounded-lg border border-violet-200 bg-violet-50 p-1.5 text-violet-600 transition hover:bg-violet-100 disabled:opacity-40 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400"
+                          className="rounded-lg border border-primary-200 bg-primary-50 p-1.5 text-primary-600 transition hover:bg-primary-100 disabled:opacity-40 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-400"
                           aria-label={`Play pronunciation of ${card.word}`}
                         >
                           <Volume2 className="h-4 w-4" aria-hidden />
@@ -339,7 +339,7 @@ export default function PronunciationHubPage() {
                     <div className="mt-3">
                       <div className="mb-1 flex items-center justify-between text-xs">
                         <span className="font-medium text-muted">Mastery</span>
-                        <span className="font-semibold text-violet-600 dark:text-violet-400">{mastery}%</span>
+                        <span className="font-semibold text-primary-600 dark:text-primary-400">{mastery}%</span>
                       </div>
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
                         <div

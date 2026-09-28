@@ -49,7 +49,7 @@ export default function VocabStatsPage() {
       <main className="space-y-6 sm:space-y-10">
         <div className="flex items-center justify-between">
           <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
+            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
               Spaced Repetition
             </p>
             <h1 className="text-2xl font-bold text-navy">
@@ -58,7 +58,7 @@ export default function VocabStatsPage() {
           </div>
           <Link
             href="/reading/vocab"
-            className="text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
           >
             ← Back
           </Link>
@@ -66,7 +66,7 @@ export default function VocabStatsPage() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
           </div>
         ) : (
           <>
@@ -120,7 +120,7 @@ export default function VocabStatsPage() {
               <StatCard
                 label="Total Words"
                 value={stats?.total ?? 0}
-                colorClass="text-violet-700 dark:text-violet-300"
+                colorClass="text-primary-700 dark:text-primary-300"
               />
               <StatCard
                 label="Average Retention"

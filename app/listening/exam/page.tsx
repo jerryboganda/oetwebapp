@@ -183,7 +183,7 @@ export default function ListeningFullExamPage() {
               const starting = startingPaperId === paper.id;
               const partial = isPartialListeningExam(paper);
               return (
-                <article className="flex h-full flex-col rounded-2xl border border-violet-100 bg-surface p-5 shadow-sm dark:border-violet-900/40">
+                <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
                   <h3 className="text-base font-bold text-navy">{paper.title}</h3>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                     <span className="inline-flex items-center gap-1">

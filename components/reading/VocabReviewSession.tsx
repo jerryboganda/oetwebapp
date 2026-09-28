@@ -102,7 +102,7 @@ export default function VocabReviewSession({ items, onComplete }: VocabReviewSes
           <button
             type="button"
             onClick={() => setIsFlipped(true)}
-            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
           >
             Reveal
           </button>

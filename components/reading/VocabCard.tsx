@@ -33,7 +33,7 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
       >
         {/* Front face */}
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-violet-100 bg-surface px-8 py-10 shadow-md dark:border-violet-900/40"
+          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-primary-100 bg-surface px-8 py-10 shadow-md dark:border-primary-900/40"
           style={{ backfaceVisibility: 'hidden' }}
         >
           <p className="mb-3 text-4xl font-bold tracking-tight text-navy">
@@ -44,14 +44,14 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
               /{item.pronunciationIpa}/
             </p>
           ) : null}
-          <p className="mt-auto pt-6 text-xs font-medium uppercase tracking-widest text-violet-400">
+          <p className="mt-auto pt-6 text-xs font-medium uppercase tracking-widest text-primary-400">
             Tap to reveal
           </p>
         </div>
 
         {/* Back face */}
         <div
-          className="absolute inset-0 flex flex-col gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 shadow-md dark:border-violet-800/50 dark:bg-violet-950/40"
+          className="absolute inset-0 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 shadow-md dark:border-primary-800/50 dark:bg-primary-950/40"
           style={{
             backfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',
@@ -90,7 +90,7 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
 
           {/* Healthcare context badge */}
           {item.healthcareContext ? (
-            <span className="inline-flex w-fit items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/60 dark:text-violet-300">
+            <span className="inline-flex w-fit items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/60 dark:text-primary-300">
               {item.healthcareContext}
             </span>
           ) : null}

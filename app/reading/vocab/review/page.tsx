@@ -47,7 +47,7 @@ export default function VocabReviewPage() {
           </h1>
           <Link
             href="/reading/vocab"
-            className="text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
           >
             ← Back to Vocab
           </Link>
@@ -55,7 +55,7 @@ export default function VocabReviewPage() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-success/30 bg-success/10 px-8 py-12 text-center">
@@ -68,7 +68,7 @@ export default function VocabReviewPage() {
             </p>
             <Link
               href="/reading/vocab"
-              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
             >
               Back to Vocab Hub
             </Link>

@@ -178,7 +178,7 @@ export default function MockResultsPage() {
                   className={[
                     'flex-shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-colors',
                     activeTab === tab.id
-                      ? 'bg-primary text-white dark:bg-violet-700'
+                      ? 'bg-primary text-white dark:bg-primary-700'
                       : 'text-muted hover:text-navy hover:bg-background-light dark:hover:bg-background-dark',
                   ].join(' ')}
                 >
@@ -280,7 +280,7 @@ export default function MockResultsPage() {
                       <p className="text-sm text-muted">{result.nextStep.description}</p>
                       <Link
                         href={result.nextStep.route}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 transition-[color,background-color,transform] duration-200"
                       >
                         {result.nextStep.title}
                         <ArrowRight className="h-4 w-4" aria-hidden />

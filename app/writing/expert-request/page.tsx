@@ -179,7 +179,7 @@ function WritingExpertReviewContent() {
                 const isDisabled = !isSelected && selectedFocus.length >= 3;
                 return (
                   <button key={area.id} type="button" disabled={isDisabled} onClick={() => toggleFocus(area.id)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isSelected ? 'bg-primary border-primary text-white dark:bg-violet-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
+                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isSelected ? 'bg-primary border-primary text-white dark:bg-primary-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
                     {area.label}
                   </button>
                 );

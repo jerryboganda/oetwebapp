@@ -77,7 +77,7 @@ function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary dark:bg-violet-900/30 dark:text-violet-400">
+          <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary dark:bg-primary-900/30 dark:text-primary-400">
             {skill.code}
           </span>
           <h3 className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{skill.name}</h3>

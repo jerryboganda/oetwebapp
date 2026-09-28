@@ -111,7 +111,7 @@ export default function QuestionDiscussionPage() {
                       {comment.userDisplayName}
                     </span>
                     {comment.isExpert ? (
-                      <span className="inline-block rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                      <span className="inline-block rounded-full bg-primary-100 dark:bg-primary-900/30 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
                         Expert
                       </span>
                     ) : null}
@@ -151,7 +151,7 @@ export default function QuestionDiscussionPage() {
               <button
                 type="submit"
                 disabled={posting || !body.trim()}
-                className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,transform] duration-200"
+                className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,transform] duration-200"
               >
                 {posting ? 'Posting…' : 'Post'}
               </button>

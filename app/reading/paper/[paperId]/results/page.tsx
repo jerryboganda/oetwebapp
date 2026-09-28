@@ -653,10 +653,10 @@ function GroundedReadingExplanation({
   if (unanswered) return null;
 
   return (
-    <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-400/30 dark:bg-indigo-950/20" data-testid="reading-grounded-ai">
+    <div className="mt-4 rounded-xl border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-400/30 dark:bg-primary-950/20" data-testid="reading-grounded-ai">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-indigo-700 dark:text-indigo-300">Grounded AI explanation</p>
+          <p className="text-2xs font-black uppercase tracking-[0.14em] text-primary-700 dark:text-primary-300">Grounded AI explanation</p>
           <p className="mt-1 text-xs text-muted">Advisory only; it cannot change your marks.</p>
         </div>
         {!result ? (

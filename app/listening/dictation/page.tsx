@@ -206,8 +206,8 @@ export default function DictationDrillPage() {
   return (
     <LearnerDashboardShell pageTitle="Dictation Drills">
       <main className="space-y-5 sm:space-y-8">
-        <section className="rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 dark:border-violet-900/50 dark:bg-violet-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
+        <section className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
             Phase 4 · Listening pathway
           </p>
           <h1 className="text-2xl font-bold text-navy">
@@ -290,7 +290,7 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
     amber:
       'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-300',
     violet:
-      'bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/50 dark:text-violet-300',
+      'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
     blue: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800/50 dark:text-blue-300',
   };
 
@@ -328,7 +328,7 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
 function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: boolean }) {
   return (
     <section className="rounded-2xl border border-border bg-surface px-8 py-10 text-center">
-      <Headphones className="mx-auto h-12 w-12 text-violet-500" aria-hidden />
+      <Headphones className="mx-auto h-12 w-12 text-primary-500" aria-hidden />
       <h2 className="mt-4 text-xl font-bold text-navy">
         {hasHistory ? 'Ready for another set?' : 'Start your first dictation set'}
       </h2>
@@ -339,7 +339,7 @@ function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: b
       <button
         type="button"
         onClick={onStart}
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
       >
         <Play className="h-4 w-4" aria-hidden />
         Start a dictation set
@@ -414,13 +414,13 @@ function DrillPanel({
       </div>
 
       {/* Audio player */}
-      <div className="flex flex-col items-center gap-4 rounded-xl border border-violet-100 bg-violet-50 px-6 py-8 dark:border-violet-900/50 dark:bg-violet-950/30">
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-primary-100 bg-primary-50 px-6 py-8 dark:border-primary-900/50 dark:bg-primary-950/30">
         {drill.audioAssetUrl ? (
           <>
             <button
               type="button"
               onClick={onAudioPlay}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-md transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-md transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
               aria-label={audioPlaying ? 'Pause clip' : 'Play clip'}
             >
               {audioPlaying ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7 ml-0.5" />}
@@ -483,7 +483,7 @@ function DrillPanel({
             type="button"
             onClick={onSubmit}
             disabled={submitting || answer.trim().length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {submitting ? 'Checking…' : 'Submit'}
@@ -492,7 +492,7 @@ function DrillPanel({
           <button
             type="button"
             onClick={onNext}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
           >
             {index + 1 === total ? 'Finish set' : 'Next drill'}
           </button>
@@ -632,7 +632,7 @@ function CompletePanel({
     <section
       className={`space-y-6 rounded-2xl border px-8 py-10 text-center ${tone}`}
     >
-      <Trophy className="mx-auto h-12 w-12 text-violet-500" aria-hidden />
+      <Trophy className="mx-auto h-12 w-12 text-primary-500" aria-hidden />
       <div>
         <h2 className="text-2xl font-bold text-navy">
           Set complete!
@@ -648,7 +648,7 @@ function CompletePanel({
         <button
           type="button"
           onClick={onAgain}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
         >
           <RefreshCw className="h-4 w-4" aria-hidden />
           Continue practicing

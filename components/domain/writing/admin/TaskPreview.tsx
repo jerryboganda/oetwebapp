@@ -45,9 +45,9 @@ export function TaskPreview({ form }: TaskPreviewProps) {
               role="tab"
               aria-selected={active}
               onClick={() => setTab(t.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-violet-200 motion-reduce:transition-none ${
+              className={`rounded-md px-3 py-1.5 text-sm font-medium outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary-200 motion-reduce:transition-none ${
                 active
-                  ? 'bg-white text-violet-700 shadow-sm'
+                  ? 'bg-white text-primary-700 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -117,7 +117,7 @@ function TaskBlock({ form }: TaskPreviewProps) {
 
 function Tag({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+    <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
       {children}
     </span>
   );

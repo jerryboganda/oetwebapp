@@ -166,7 +166,7 @@ export default function ListeningPartPracticePage() {
               renderPaper={(paper) => {
                 const itemCount = countForPart(paper, part);
                 return (
-                  <article className="flex h-full flex-col rounded-2xl border border-violet-100 bg-surface p-5 shadow-sm dark:border-violet-900/40">
+                  <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
                     <h3 className="text-base font-bold text-navy">
                       {paper.title} · Part {part}
                     </h3>

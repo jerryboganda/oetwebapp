@@ -104,7 +104,7 @@ export default function StrategiesPage() {
               className={cn(
                 'rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
                 activeCategory === cat
-                  ? 'border-primary bg-primary text-white dark:border-violet-600 dark:bg-violet-700'
+                  ? 'border-primary bg-primary text-white dark:border-primary-600 dark:bg-primary-700'
                   : 'border-border bg-surface text-muted hover:border-primary/40 hover:bg-primary/5',
               )}
             >

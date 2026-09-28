@@ -171,7 +171,7 @@ export default function PhraseSuggestionsPage() {
             <button
               onClick={() => setFilter(null)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                ${!filter ? 'bg-primary text-white dark:bg-violet-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
+                ${!filter ? 'bg-primary text-white dark:bg-primary-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
             >
               All ({suggestions.length})
             </button>

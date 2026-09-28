@@ -76,7 +76,7 @@ export default function VocabHubPage() {
   ] as const;
 
   const accentMap: Record<string, string> = {
-    violet:  'bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/50 dark:text-violet-300',
+    violet:  'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
     emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/50 dark:text-emerald-300',
     amber:   'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-300',
     blue:    'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800/50 dark:text-blue-300',
@@ -86,8 +86,8 @@ export default function VocabHubPage() {
     <LearnerDashboardShell pageTitle="Vocabulary">
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
-        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-8 py-7 dark:border-violet-900/50 dark:bg-violet-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
+        <div className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
             SM-2 Spaced Repetition
           </p>
           <h1 className="text-2xl font-bold text-navy">
@@ -133,7 +133,7 @@ export default function VocabHubPage() {
         <section className="flex flex-wrap gap-3">
           <Link
             href="/reading/vocab/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
           >
             <RefreshCw className="h-4 w-4" aria-hidden />
             Review Today&apos;s Cards
@@ -145,7 +145,7 @@ export default function VocabHubPage() {
           </Link>
           <Link
             href="/reading/vocab/lists"
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-surface px-5 py-3 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300 dark:hover:bg-violet-950/30"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-surface px-5 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300 dark:hover:bg-primary-950/30"
           >
             <BookOpen className="h-4 w-4" aria-hidden />
             Browse Lists
@@ -178,7 +178,7 @@ export default function VocabHubPage() {
               type="button"
               disabled={addingWord || !newWord.trim()}
               onClick={() => void handleAddWord()}
-              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
             >
               {addingWord ? 'Adding…' : 'Add'}
             </button>
@@ -194,7 +194,7 @@ export default function VocabHubPage() {
               </h2>
               <Link
                 href="/reading/vocab/review"
-                className="text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+                className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
               >
                 Review All →
               </Link>
@@ -203,7 +203,7 @@ export default function VocabHubPage() {
               {dueItems.slice(0, 5).map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 dark:border-violet-900/40 dark:bg-violet-950/20"
+                  className="rounded-xl border border-primary-100 bg-primary-50/60 px-4 py-3 dark:border-primary-900/40 dark:bg-primary-950/20"
                 >
                   <p className="font-semibold text-navy">{item.word}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted">

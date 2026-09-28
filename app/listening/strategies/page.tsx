@@ -59,7 +59,7 @@ export default function ListeningStrategiesPage() {
             onClick={() => setCategory(c.value)}
             className={
               category === c.value
-                ? 'rounded-full bg-primary px-3 py-1 text-xs text-white dark:bg-violet-700 transition-colors'
+                ? 'rounded-full bg-primary px-3 py-1 text-xs text-white dark:bg-primary-700 transition-colors'
                 : 'rounded-full border border-border px-3 py-1 text-xs text-navy transition-colors hover:bg-background-light'
             }
           >

@@ -109,7 +109,7 @@ export default function VocabListsPage() {
       <main className="space-y-5 sm:space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
+            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
               Curated Collections
             </p>
             <h1 className="text-2xl font-bold text-navy">
@@ -118,7 +118,7 @@ export default function VocabListsPage() {
           </div>
           <Link
             href="/reading/vocab"
-            className="text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
           >
             ← Back to Vocab
           </Link>
@@ -163,7 +163,7 @@ export default function VocabListsPage() {
                       type="button"
                       disabled={subscribing[list.slug]}
                       onClick={() => void handleSubscribe(list.slug)}
-                      className="shrink-0 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
+                      className="shrink-0 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
                     >
                       {subscribing[list.slug] ? 'Subscribing…' : 'Subscribe'}
                     </button>
@@ -181,7 +181,7 @@ export default function VocabListsPage() {
                     {list.previewWords.slice(0, 5).map((word) => (
                       <span
                         key={word}
-                        className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:border-violet-800/50 dark:bg-violet-950/30 dark:text-violet-300"
+                        className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:border-primary-800/50 dark:bg-primary-950/30 dark:text-primary-300"
                       >
                         {word}
                       </span>

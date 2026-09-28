@@ -170,7 +170,7 @@ export default function PronunciationReviewPage() {
       <LearnerDashboardShell pageTitle="Pronunciation Review">
         <main className="mx-auto max-w-xl">
           <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
           </div>
         </main>
       </LearnerDashboardShell>
@@ -186,7 +186,7 @@ export default function PronunciationReviewPage() {
             <h1 className="text-xl font-bold text-navy">Review Session</h1>
             <Link
               href="/listening/pronunciation"
-              className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back
@@ -202,7 +202,7 @@ export default function PronunciationReviewPage() {
             </p>
             <Link
               href="/listening/pronunciation"
-              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
             >
               Back to Library
             </Link>
@@ -228,13 +228,13 @@ export default function PronunciationReviewPage() {
               <button
                 type="button"
                 onClick={handleFinish}
-                className="inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+                className="inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
               >
                 Back to Library
               </button>
               <Link
                 href="/listening"
-                className="inline-flex rounded-xl border border-violet-200 bg-surface px-5 py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300"
+                className="inline-flex rounded-xl border border-primary-200 bg-surface px-5 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300"
               >
                 Listening Hub
               </Link>
@@ -254,7 +254,7 @@ export default function PronunciationReviewPage() {
           <h1 className="text-xl font-bold text-navy">Pronunciation Review</h1>
           <Link
             href="/listening/pronunciation"
-            className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back
@@ -285,7 +285,7 @@ export default function PronunciationReviewPage() {
               type="button"
               disabled={!audioUrl}
               onClick={handlePlay}
-              className="group flex h-20 w-20 items-center justify-center rounded-full border-2 border-violet-200 bg-violet-50 text-violet-600 transition hoverable:scale-105 hover:border-violet-400 hover:bg-violet-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400 dark:hover:border-violet-700"
+              className="group flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary-200 bg-primary-50 text-primary-600 transition hoverable:scale-105 hover:border-primary-400 hover:bg-primary-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-900/50 dark:bg-primary-950/40 dark:text-primary-400 dark:hover:border-primary-700"
               aria-label={`Play pronunciation of ${currentCard.word}`}
             >
               <Volume2 className="h-9 w-9" aria-hidden />
@@ -302,7 +302,7 @@ export default function PronunciationReviewPage() {
                   {currentCard.word}
                 </h2>
                 {currentCard.pronunciationIpa ? (
-                  <p className="mt-1 font-mono text-base text-violet-600 dark:text-violet-400">
+                  <p className="mt-1 font-mono text-base text-primary-600 dark:text-primary-400">
                     {currentCard.pronunciationIpa}
                   </p>
                 ) : null}
@@ -330,7 +330,7 @@ export default function PronunciationReviewPage() {
           <button
             type="button"
             onClick={() => setRevealed(true)}
-            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
+            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
           >
             Reveal Word
           </button>
