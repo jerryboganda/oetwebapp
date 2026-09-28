@@ -53,6 +53,13 @@ export default function ListeningAnalyticsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const weakestPart = (data?.partBreakdown ?? [])
+    .filter((part) => part.accuracyPercent != null && part.max > 0)
+    .reduce<ListeningStudentAnalytics['partBreakdown'][number] | null>(
+      (lowest, part) => (lowest == null || (part.accuracyPercent ?? 0) < (lowest.accuracyPercent ?? 0) ? part : lowest),
+      null,
+    );
+
   return (
     <LearnerDashboardShell>
       <div className="space-y-5 sm:space-y-8">
@@ -114,14 +121,17 @@ export default function ListeningAnalyticsPage() {
                   hint={data.weaknesses[0] ? `${data.weaknesses[0].count} recent` : 'More data needed'}
                   tone="danger"
                 />
-                <StatCard
-                  icon={<Target />}
-                  label="Time Mgmt"
-                  value="Great"
-                  hint="Top 10% pacing"
-                  tone="success"
-                  trend={{ direction: 'up', value: '1.2m', label: 'faster' }}
-                />
+                {/* Real data only: weakest part from the API's per-part accuracy
+                    (replaces a hardcoded "Top 10% pacing" card — no timing data exists). */}
+                {weakestPart ? (
+                  <StatCard
+                    icon={<Target />}
+                    label="Weakest part"
+                    value={`Part ${weakestPart.partCode}`}
+                    hint={`${pct(weakestPart.accuracyPercent)} accuracy`}
+                    tone="warning"
+                  />
+                ) : null}
               </div>
             </MotionItem>
 
