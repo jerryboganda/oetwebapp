@@ -68,7 +68,7 @@ export default function ListeningMockSessionPage() {
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-4 py-12 text-center">
-      <Loader2 className="h-6 w-6 animate-spin text-primary motion-reduce:animate-none dark:text-violet-400" aria-hidden />
+      <Loader2 className="h-6 w-6 animate-spin text-primary motion-reduce:animate-none dark:text-primary-400" aria-hidden />
       <p className="mt-4 text-sm text-muted" role="status" aria-live="polite">
         Opening your strict Listening mock…
       </p>

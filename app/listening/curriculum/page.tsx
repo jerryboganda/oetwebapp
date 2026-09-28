@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Lock, Play } from 'lucide-react';
+import { CheckCircle2, Lock, Map as MapIcon, Play } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +73,7 @@ export default function ListeningCurriculumPage() {
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening · Skills Catalog"
+          icon={MapIcon}
           title="The 12-stage Listening skills catalog"
           description="What each Listening skill trains and which drill to open next. For your live progression status, open the Pathway dashboard instead."
         />
@@ -87,7 +88,7 @@ export default function ListeningCurriculumPage() {
 
         {loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
           </div>
         )}
 
@@ -121,13 +122,13 @@ export default function ListeningCurriculumPage() {
 
 function StageCard({ stage }: { stage: CurriculumStage }) {
   const stateBadge = stage.completed
-    ? <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1 inline" /> Done</Badge>
+    ? <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1 inline" aria-hidden /> Done</Badge>
     : stage.locked
-      ? <Badge variant="muted"><Lock className="w-3 h-3 mr-1 inline" /> Locked</Badge>
-      : <Badge variant="info"><Play className="w-3 h-3 mr-1 inline" /> Available</Badge>;
+      ? <Badge variant="muted"><Lock className="w-3 h-3 mr-1 inline" aria-hidden /> Locked</Badge>
+      : <Badge variant="info"><Play className="w-3 h-3 mr-1 inline" aria-hidden /> Available</Badge>;
 
   const body = (
-    <div className="rounded-2xl border border-border bg-surface p-5 h-full flex flex-col gap-2">
+    <div className={'flex h-full flex-col gap-2 rounded-2xl border border-border bg-surface p-5 shadow-sm' + (stage.locked ? '' : ' transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical')}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wide text-muted">
           Stage {stage.order} · {stage.partHint}
@@ -147,5 +148,5 @@ function StageCard({ stage }: { stage: CurriculumStage }) {
 
   if (stage.locked) return body;
   const route = stage.nextActionRoute || '/listening';
-  return <Link href={route} className="block">{body}</Link>;
+  return <Link href={route} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{body}</Link>;
 }

@@ -161,7 +161,7 @@ export function PaperModeUploader({
             <label
               htmlFor={inputId}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg bg-primary text-white dark:bg-violet-700 px-4 py-2 text-sm font-bold cursor-pointer',
+                'inline-flex items-center gap-1.5 rounded-lg bg-primary text-white dark:bg-primary-700 px-4 py-2 text-sm font-bold cursor-pointer',
                 'hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 uploading && 'opacity-60 pointer-events-none',
               )}

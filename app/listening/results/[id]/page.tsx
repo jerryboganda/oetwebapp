@@ -149,12 +149,12 @@ function ListeningResultsContent() {
     return (
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-danger" />
+          <AlertCircle className="h-12 w-12 text-danger" aria-hidden />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
           <Button variant="ghost" asChild>
-<Link href="/listening">Back to Listening</Link>
-</Button>
+            <Link href="/listening">Back to Listening</Link>
+          </Button>
         </div>
       </LearnerDashboardShell>
     );
@@ -332,7 +332,7 @@ function ListeningResultsContent() {
                   <button
                     onClick={() => toggleItem(item.questionId)}
                     aria-expanded={isExpanded}
-                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light sm:p-6"
+                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:p-6"
                   >
                     <div className="mt-0.5 shrink-0">
                       {item.isInvalid ? (
@@ -439,8 +439,8 @@ export default function ListeningResults() {
   return (
     <Suspense fallback={
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-1 items-center justify-center" role="status" aria-label="Loading results">
+          <Loader2 className="h-8 w-8 animate-spin text-primary motion-reduce:animate-none" aria-hidden />
         </div>
       </LearnerDashboardShell>
     }>

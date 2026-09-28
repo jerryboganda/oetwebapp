@@ -529,9 +529,9 @@ export default function ListeningReviewPage() {
                         type="button"
                         onClick={() => loadSection(section)}
                         aria-pressed={section === activeSection}
-                        className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                        className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                           section === activeSection
-                            ? 'bg-primary text-white'
+                            ? 'bg-primary text-white dark:bg-primary-700'
                             : 'bg-background-light text-navy hover:bg-surface'
                         }`}
                       >
@@ -636,7 +636,7 @@ export default function ListeningReviewPage() {
                               onClick={() => playEvidence(extract.audioStartMs ?? 0, extract.audioEndMs, extract.partCode)}
                               className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-2 py-1 text-xs font-semibold text-info transition hover:bg-info/20"
                             >
-                              <Volume2 className="h-3.5 w-3.5" /> Play
+                              <Volume2 className="h-3.5 w-3.5" aria-hidden /> Play
                             </button>
                           ) : null}
                           <p className="text-xs font-black uppercase tracking-widest text-muted">{extract.kind}</p>

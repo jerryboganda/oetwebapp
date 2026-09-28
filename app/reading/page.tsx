@@ -17,6 +17,8 @@ import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import {
@@ -80,27 +82,27 @@ const HUB_CARDS: HubCard[] = [
 
 const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
   partA: {
-    ring: 'border-blue-200 hover:border-blue-300',
-    badge: 'bg-blue-100 text-blue-800',
-    icon: 'text-blue-600',
+    ring: 'border-blue-200 hover:border-blue-300 dark:border-blue-900/60 dark:hover:border-blue-700',
+    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
+    icon: 'text-blue-600 dark:text-blue-400',
     chip: 'Part A',
   },
   partB: {
-    ring: 'border-sky-200 hover:border-sky-300',
-    badge: 'bg-sky-100 text-sky-800',
-    icon: 'text-sky-600',
+    ring: 'border-sky-200 hover:border-sky-300 dark:border-sky-900/60 dark:hover:border-sky-700',
+    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
+    icon: 'text-sky-600 dark:text-sky-400',
     chip: 'Part B',
   },
   partC: {
-    ring: 'border-emerald-200 hover:border-emerald-300',
-    badge: 'bg-emerald-100 text-emerald-800',
-    icon: 'text-emerald-600',
+    ring: 'border-emerald-200 hover:border-emerald-300 dark:border-emerald-900/60 dark:hover:border-emerald-700',
+    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+    icon: 'text-emerald-600 dark:text-emerald-400',
     chip: 'Part C',
   },
   exam: {
-    ring: 'border-amber-200 hover:border-amber-300',
-    badge: 'bg-amber-100 text-amber-900',
-    icon: 'text-amber-600',
+    ring: 'border-amber-200 hover:border-amber-300 dark:border-amber-900/60 dark:hover:border-amber-700',
+    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300',
+    icon: 'text-amber-600 dark:text-amber-400',
     chip: 'Full exam',
   },
 };
@@ -214,81 +216,84 @@ export default function ReadingHome() {
         {error ? (
           <div className="flex flex-wrap items-center gap-3">
             <InlineAlert variant="error">{error}</InlineAlert>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setRetryCount((count) => count + 1)}
-              className="rounded-full border border-danger/30 bg-surface px-3 py-1 text-xs font-medium text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
+              className="border-danger/30 bg-surface text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
             >
               Try again
-            </button>
+            </Button>
           </div>
         ) : null}
 
         {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
-          <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Choose how to practice
-            </p>
-            <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
-              Practice by Part, or attempt the full exam
-            </h2>
-          </div>
-
-          <CreditUsageInfoCard module="reading" className="mb-4" />
-
-          {freeSampleHref ? (
-            <FreeSampleCard
-              testId="reading-free-mock-card"
-              icon={BookOpen}
-              title="Free Reading Mock"
-              description="Try one complete OET Reading mock for free."
-              href={freeSampleHref}
-              onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
-              className="mb-4"
-            />
-          ) : null}
-
-          {loading ? (
-            <LearnerSkeleton variant="card-grid" />
-          ) : (
-            <ul
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-              data-testid="reading-hub-cards"
-            >
-              {HUB_CARDS.map((card) => {
-                const accent = ACCENT_STYLES[card.accent];
-                return (
-                  <li key={card.href}>
-                    <Link
-                      href={card.href}
-                      data-testid={`reading-hub-card-${card.accent}`}
-                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 transition-shadow hover:shadow-md ${accent.ring}`}
-                    >
-                      <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-navy">
-                            {card.title}
-                          </h3>
-                          <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
-                            {accent.chip}
-                          </span>
+        <MotionSection delayIndex={0}>
+          <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                Choose how to practice
+              </p>
+              <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
+                Practice by Part, or attempt the full exam
+              </h2>
+            </div>
+  
+            <CreditUsageInfoCard module="reading" className="mb-4" />
+  
+            {freeSampleHref ? (
+              <FreeSampleCard
+                testId="reading-free-mock-card"
+                icon={BookOpen}
+                title="Free Reading Mock"
+                description="Try one complete OET Reading mock for free."
+                href={freeSampleHref}
+                onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
+                className="mb-4"
+              />
+            ) : null}
+  
+            {loading ? (
+              <LearnerSkeleton variant="card-grid" />
+            ) : (
+              <ul
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+                data-testid="reading-hub-cards"
+              >
+                {HUB_CARDS.map((card) => {
+                  const accent = ACCENT_STYLES[card.accent];
+                  return (
+                    <li key={card.href}>
+                      <Link
+                        href={card.href}
+                        data-testid={`reading-hub-card-${card.accent}`}
+                        className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
+                      >
+                        <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h3 className="text-sm font-bold text-navy">
+                              {card.title}
+                            </h3>
+                            <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
+                              {accent.chip}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                         </div>
-                        <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
-                      </div>
-                      <PlayCircle
-                        className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-hidden
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                        <PlayCircle
+                          className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                          aria-hidden
+                        />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </MotionSection>
 
         {!loading && home ? (
           <ReadingSecondaryDashboard
@@ -323,7 +328,7 @@ function ReadingSecondaryDashboard({
         {assignments.length > 0 ? (
           <ul className="mt-4 space-y-3">
             {assignments.slice(0, 3).map((assignment) => (
-              <li key={assignment.id} className="rounded-xl border border-border/70 bg-white p-3 text-sm dark:bg-surface">
+              <li key={assignment.id} className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
                 <p className="font-semibold text-navy">{assignment.kind.replace(/_/g, ' ')}</p>
                 <p className="mt-1 text-xs text-muted">
                   Due {formatOptionalDate(assignment.dueAt)} · {assignment.status}
@@ -350,7 +355,7 @@ function ReadingSecondaryDashboard({
           <ul className="mt-4 space-y-3">
             {papers.slice(0, 3).map((paper) => (
               <li key={paper.id}>
-                <Link href={paper.route} className="block rounded-xl border border-border/70 bg-white p-3 text-sm transition-colors hover:border-primary/40 dark:bg-surface">
+                <Link href={paper.route} className="block rounded-xl border border-border/70 bg-background-light p-3 text-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                   <span className="font-semibold text-navy">{paper.title}</span>
                   <span className="mt-1 block text-xs text-muted">
                     {paper.partACount}+{paper.partBCount}+{paper.partCCount} items · {paper.estimatedDurationMinutes} min
@@ -377,8 +382,8 @@ function ReadingSecondaryDashboard({
           <ul className="mt-4 space-y-3">
             {recentResults.map((result) => (
               <li key={result.attemptId}>
-                <article className="rounded-xl border border-border/70 bg-white p-3 text-sm dark:bg-surface">
-                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-blue-700">
+                <article className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
+                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
                     {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
                   </span>
                   <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>
@@ -391,20 +396,18 @@ function ReadingSecondaryDashboard({
                         : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
                   </p>
                   <div className="mt-3 flex items-center gap-2">
-                    <Link
-                      href={result.route}
-                      className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/5"
-                    >
-                      <Eye className="h-3.5 w-3.5" aria-hidden />
-                      Review
-                    </Link>
-                    <Link
-                      href={result.practiceRoute}
-                      className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-info px-2.5 py-1 text-xs font-semibold text-white hover:bg-info/90"
-                    >
-                      <PlayCircle className="h-3.5 w-3.5" aria-hidden />
-                      Practice
-                    </Link>
+                    <Button asChild size="sm" variant="outline" className="flex-1 bg-surface">
+                      <Link href={result.route}>
+                        <Eye className="h-3.5 w-3.5" aria-hidden />
+                        Review
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm" className="flex-1">
+                      <Link href={result.practiceRoute}>
+                        <PlayCircle className="h-3.5 w-3.5" aria-hidden />
+                        Practice
+                      </Link>
+                    </Button>
                   </div>
                 </article>
               </li>
@@ -472,13 +475,12 @@ function ResumeBanner({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {
         {resumable.paperTitle}: {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
         before the timer window closes.
       </p>
-      <Link
-        href={resumable.route}
-        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-      >
-        <ListChecks className="h-4 w-4" aria-hidden />
-        Resume attempt
-      </Link>
+      <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+        <Link href={resumable.route}>
+          <ListChecks className="h-4 w-4" aria-hidden />
+          Resume attempt
+        </Link>
+      </Button>
     </div>
   );
 }

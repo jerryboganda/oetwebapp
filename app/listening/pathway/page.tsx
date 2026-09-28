@@ -9,7 +9,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listeningV2Api, type ListeningPathwayStageView } from '@/lib/listening/v2-api';
 
@@ -26,24 +28,24 @@ function statusStyle(status: ListeningPathwayStageView['status']): {
   switch (status) {
     case 'Completed':
       return {
-        badge: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200',
-        border: 'border-emerald-200',
-        bg: 'bg-emerald-50/40',
-        text: 'text-emerald-900',
+        badge: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-800/60',
+        border: 'border-success/30',
+        bg: 'bg-success/5',
+        text: 'text-emerald-900 dark:text-emerald-200',
       };
     case 'InProgress':
       return {
-        badge: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200',
-        border: 'border-amber-200',
-        bg: 'bg-amber-50/40',
-        text: 'text-amber-900',
+        badge: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800/60',
+        border: 'border-warning/30',
+        bg: 'bg-warning/5',
+        text: 'text-amber-900 dark:text-amber-200',
       };
     case 'Unlocked':
       return {
-        badge: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200',
-        border: 'border-sky-200',
-        bg: 'bg-sky-50/50',
-        text: 'text-sky-900',
+        badge: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-800/60',
+        border: 'border-info/30',
+        bg: 'bg-info/5',
+        text: 'text-sky-900 dark:text-sky-200',
       };
     default:
       return {
@@ -84,7 +86,7 @@ function StageCard({ stage, index }: { stage: ListeningPathwayStageView; index: 
           {stage.scaledScore === null ? 'No score yet' : `${stage.scaledScore}/500`}
         </span>
         {stage.completedAt ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 font-bold text-emerald-800 dark:text-emerald-300">
             <Trophy className="h-3 w-3" aria-hidden />
             Complete
           </span>
@@ -94,13 +96,12 @@ function StageCard({ stage, index }: { stage: ListeningPathwayStageView; index: 
       </div>
 
       {stage.actionHref ? (
-        <Link
-          href={stage.actionHref}
-          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-        >
-          Continue
-          <ChevronRight className="h-3 w-3" aria-hidden />
-        </Link>
+        <Button asChild size="sm" variant="outline" className="self-start bg-surface">
+          <Link href={stage.actionHref}>
+            Continue
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </Button>
       ) : null}
     </article>
   );
@@ -140,15 +141,15 @@ export default function ListeningPathwayPage() {
   return (
     <LearnerDashboardShell pageTitle="Listening Pathway">
       <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Your listening roadmap</h1>
-          <p className="mt-1 text-sm text-muted">
-            A personalised 12-week schedule of focus skills, accent practice, and mock tests.
-          </p>
-        </div>
+        <LearnerPageHero
+          eyebrow="Listening pathway"
+          icon={CalendarDays}
+          title="Your listening roadmap"
+          description="A personalised 12-week schedule of focus skills, accent practice, and mock tests."
+        />
 
         {pathway && (
-          <div className="flex flex-wrap gap-6 rounded-2xl border border-border bg-surface p-5 text-sm">
+          <div className="flex flex-wrap gap-6 rounded-2xl border border-border bg-surface p-5 text-sm shadow-sm">
             <div>
               <span className="block text-xs uppercase tracking-wide text-muted">
                 Total stages
@@ -194,19 +195,18 @@ export default function ListeningPathwayPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
+          <div className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-10 text-center shadow-sm">
             <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted" aria-hidden />
             <p className="font-semibold text-navy">No pathway generated yet</p>
             <p className="mt-1 text-sm text-muted">
               Your personalised 12-week plan is being prepared. Start practising in the meantime.
             </p>
-            <Link
-              href="/listening"
-              className="mt-4 inline-flex items-center gap-1 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              Start practising
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Link>
+            <Button asChild size="sm" className="mt-4">
+              <Link href="/listening">
+                Start practising
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </Button>
           </div>
         )}
       </div>

@@ -23,7 +23,7 @@ export function IconButton({
   return (
     <button
       type="button"
-      className={`rounded p-1 text-sm leading-none outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-violet-200 disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none ${TONE_CLASSES[tone]} ${className}`}
+      className={`rounded p-1 text-sm leading-none outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-primary-200 disabled:cursor-not-allowed disabled:opacity-30 motion-reduce:transition-none ${TONE_CLASSES[tone]} ${className}`}
       {...props}
     />
   );

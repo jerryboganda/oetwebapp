@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from '@/components/charts/dynamic-recharts';
 import { LearnerDashboardShell } from '@/components/layout';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
 
@@ -49,7 +50,7 @@ export default function VocabStatsPage() {
       <main className="space-y-6 sm:space-y-10">
         <div className="flex items-center justify-between">
           <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
+            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
               Spaced Repetition
             </p>
             <h1 className="text-2xl font-bold text-navy">
@@ -58,20 +59,25 @@ export default function VocabStatsPage() {
           </div>
           <Link
             href="/reading/vocab"
-            className="text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
+            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
           >
             ← Back
           </Link>
         </div>
 
         {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+          <div className="space-y-4">
+            <Skeleton className="h-72 w-full rounded-2xl" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
           </div>
         ) : (
           <>
             {/* Donut chart */}
-            <section className="rounded-2xl border border-border bg-surface px-6 py-6">
+            <section className="rounded-2xl border border-border bg-surface px-4 py-5 shadow-sm sm:px-6 sm:py-6">
               <h2 className="mb-4 text-base font-semibold text-navy">
                 Word Breakdown
               </h2>
@@ -120,7 +126,7 @@ export default function VocabStatsPage() {
               <StatCard
                 label="Total Words"
                 value={stats?.total ?? 0}
-                colorClass="text-violet-700 dark:text-violet-300"
+                colorClass="text-primary-700 dark:text-primary-300"
               />
               <StatCard
                 label="Average Retention"

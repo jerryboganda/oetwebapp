@@ -151,7 +151,7 @@ function PassagePanel({
     { tool: 'highlight', label: 'Highlight', icon: Highlighter, active: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
     { tool: 'underline', label: 'Underline', icon: Minus, active: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
     { tool: 'strike', label: 'Strikethrough', icon: Strikethrough, active: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' },
-    { tool: 'note', label: 'Note', icon: StickyNote, active: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+    { tool: 'note', label: 'Note', icon: StickyNote, active: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' },
   ];
 
   return (
@@ -307,7 +307,7 @@ function QuestionCard({
                   : isWrong
                     ? 'border-rose-400 bg-rose-50 text-rose-800 dark:border-rose-600 dark:bg-rose-900/20 dark:text-rose-300'
                     : isSelected
-                      ? 'border-primary bg-primary/5 text-primary dark:border-violet-500 dark:bg-violet-900/20 dark:text-violet-300'
+                      ? 'border-primary bg-primary/5 text-primary dark:border-primary-500 dark:bg-primary-900/20 dark:text-primary-300'
                       : 'border-border bg-surface hover:border-primary/40 hover:bg-primary/5',
               )}
             >

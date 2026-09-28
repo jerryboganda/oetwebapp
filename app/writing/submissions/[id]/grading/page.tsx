@@ -172,9 +172,9 @@ export default function WritingSubmissionGradingPage() {
                 const active = idx === currentStepIdx;
                 const done = idx < currentStepIdx;
                 const tone = done
-                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60'
                   : active
-                    ? 'bg-amber-100 text-amber-700 border-amber-300 motion-safe:animate-pulse'
+                    ? 'bg-amber-100 text-amber-700 border-amber-300 motion-safe:animate-pulse dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60'
                     : 'bg-background-light text-muted border-border';
                 return (
                   <li key={step.code as StepCode} className={`flex items-center gap-3 rounded-lg border p-3 ${tone}`}>

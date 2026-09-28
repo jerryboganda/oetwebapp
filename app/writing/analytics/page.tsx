@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { ChevronLeft, TrendingDown, AlertTriangle, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MotionSection } from '@/components/ui/motion-primitives';
@@ -115,18 +116,14 @@ export default function WritingAnalyticsPage() {
             : []}
           aside={
             <div className="flex flex-col gap-3">
-              <Link
-                href="/writing"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light"
-              >
-                <ChevronLeft className="h-4 w-4" /> Back to Writing
-              </Link>
-              <Link
-                href="/writing/drills"
-                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-              >
-                Practise drills
-              </Link>
+              <Button asChild variant="outline" className="bg-surface">
+                <Link href="/writing">
+                  <ChevronLeft className="h-4 w-4" aria-hidden /> Back to Writing
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/writing/drills">Practise drills</Link>
+              </Button>
             </div>
           }
         />
@@ -147,12 +144,9 @@ export default function WritingAnalyticsPage() {
             <p className="mt-2 text-sm text-muted">
               Complete some drills or get expert feedback and your weakness map will appear here.
             </p>
-            <Link
-              href="/writing/drills"
-              className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-            >
-              Start drills
-            </Link>
+            <Button asChild className="mt-4">
+              <Link href="/writing/drills">Start drills</Link>
+            </Button>
           </Card>
         ) : (
           <>
@@ -309,16 +303,17 @@ export default function WritingAnalyticsPage() {
                     description="Your most common weakness has a matching drill. Targeting it now usually moves the needle faster than general practice."
                     className="mb-4"
                   />
-                  <Link
-                    href={topTagDrillLink.route}
-                    onClick={() => analytics.track('writing_analytics_recommendation_clicked', {
-                      tag: topTagDrillLink.tag,
-                      route: topTagDrillLink.route,
-                    })}
-                    className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-                  >
-                    Open drill
-                  </Link>
+                  <Button asChild>
+                    <Link
+                      href={topTagDrillLink.route}
+                      onClick={() => analytics.track('writing_analytics_recommendation_clicked', {
+                        tag: topTagDrillLink.tag,
+                        route: topTagDrillLink.route,
+                      })}
+                    >
+                      Open drill
+                    </Link>
+                  </Button>
                 </Card>
               </MotionSection>
             )}

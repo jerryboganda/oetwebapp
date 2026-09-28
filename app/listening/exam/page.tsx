@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Headphones, ListChecks, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
 import {
@@ -183,7 +184,7 @@ export default function ListeningFullExamPage() {
               const starting = startingPaperId === paper.id;
               const partial = isPartialListeningExam(paper);
               return (
-                <article className="flex h-full flex-col rounded-2xl border border-violet-100 bg-surface p-5 shadow-sm dark:border-violet-900/40">
+                <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
                   <h3 className="text-base font-bold text-navy">{paper.title}</h3>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                     <span className="inline-flex items-center gap-1">
@@ -195,13 +196,13 @@ export default function ListeningFullExamPage() {
                       {paper.estimatedDurationMinutes || 45} min
                     </span>
                     {!allowed ? (
-                      <span className="inline-flex items-center gap-1 text-amber-800">
+                      <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300">
                         <Lock className="h-3 w-3" aria-hidden />
                         Subscription required
                       </span>
                     ) : null}
                     {partial ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                         Partial · Q37–42 unavailable
                       </span>
                     ) : null}
@@ -217,11 +218,10 @@ export default function ListeningFullExamPage() {
                     </p>
                   ) : null}
                   <div className="mt-auto pt-4">
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
                       onClick={() => handleStart(paper)}
                       disabled={starting}
-                      className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
                     >
                       {starting
                         ? 'Starting...'
@@ -230,7 +230,7 @@ export default function ListeningFullExamPage() {
                           : allowed
                             ? 'Start full exam'
                             : 'View access'}
-                    </button>
+                    </Button>
                   </div>
                 </article>
               );

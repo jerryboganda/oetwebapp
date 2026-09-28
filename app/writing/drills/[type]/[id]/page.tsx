@@ -74,8 +74,8 @@ export default async function WritingDrillPlayerPage({
       </header>
 
       <main className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-4">
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="p-4 text-xs text-amber-900">
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20">
+          <CardContent className="p-4 text-xs text-amber-900 dark:text-amber-200">
             <strong>Practice mode.</strong> This drill is graded automatically against an authored
             answer key. It is not a substitute for teacher correction or the AI Writing Coach.
           </CardContent>

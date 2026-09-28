@@ -109,8 +109,9 @@ export default function WritingLessonPage() {
                     <button
                       key={score}
                       type="button"
+                      aria-pressed={selectedScore === score}
                       onClick={() => setSelectedScore(score)}
-                      className={`rounded-lg border px-3 py-2 text-sm font-bold ${selectedScore === score ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy'}`}
+                      className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${selectedScore === score ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy'}`}
                     >
                       {t('writing.lessons.detail.quiz.optionLabel', { score })}
                     </button>

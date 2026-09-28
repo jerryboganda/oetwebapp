@@ -16,6 +16,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { getListeningStudentAnalytics, type ListeningStudentAnalytics } from '@/lib/listening-authoring-api';
 import { StatCard } from '@/components/ui/stat-card';
+import { Card } from '@/components/ui/card';
 
 function pct(value: number | null | undefined) {
   if (value == null) return '-';
@@ -125,7 +126,7 @@ export default function ListeningAnalyticsPage() {
             </MotionItem>
 
             <MotionItem>
-              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <Card padding="lg">
                 <h2 className="text-lg font-semibold text-navy">Accuracy by part</h2>
                 <div className="mt-4 space-y-3">
                   {data.partBreakdown.map((part) => (
@@ -139,30 +140,30 @@ export default function ListeningAnalyticsPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </Card>
             </MotionItem>
 
             {data.weaknesses.length > 0 ? (
               <MotionItem>
-                <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                <Card padding="lg">
                   <h2 className="text-lg font-semibold text-navy">Top weaknesses</h2>
                   <ul className="mt-4 space-y-2">
                     {data.weaknesses.map((w) => (
                       <li key={w.errorType} className="flex items-center justify-between rounded-lg border border-border bg-background-light p-3">
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
+                          <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
                           <span className="text-sm font-medium text-navy">{w.label}</span>
                         </div>
                         <Badge variant="muted">{w.count}</Badge>
                       </li>
                     ))}
                   </ul>
-                </div>
+                </Card>
               </MotionItem>
             ) : null}
 
             <MotionItem>
-              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <Card padding="lg">
                 <h2 className="text-lg font-semibold text-navy">Your action plan</h2>
                 <ol className="mt-4 space-y-3">
                   {data.actionPlan.map((item, i) => (
@@ -182,7 +183,7 @@ export default function ListeningAnalyticsPage() {
                     </li>
                   ))}
                 </ol>
-              </div>
+              </Card>
             </MotionItem>
           </div>
         ) : null}
