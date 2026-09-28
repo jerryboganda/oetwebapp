@@ -45,7 +45,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { NotificationPreferencesPanel } from '@/components/layout/notification-preferences-panel';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClassName } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { LearnerPageHero } from '@/components/domain';
@@ -688,14 +688,14 @@ function ProfessionLockNotice() {
   )}`;
 
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200 bg-amber-100">
-          <Lock className="h-5 w-5 text-amber-700" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-warning/30 bg-warning/15">
+          <Lock className="h-5 w-5 text-warning" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-3">
-          <p className="text-sm font-black uppercase tracking-widest text-amber-800">Profession locked</p>
-          <p className="max-w-2xl text-sm font-medium leading-relaxed text-amber-900/80">
+          <p className="text-sm font-black uppercase tracking-widest text-navy">Profession locked</p>
+          <p className="max-w-2xl text-sm font-medium leading-relaxed text-navy/80">
             Your videos and materials are tied to the profession you registered with, so changing it now would
             re-point every package on your account. That is why it locks after your first purchase — our team can
             move you across and re-point your access for you.
@@ -704,9 +704,9 @@ function ProfessionLockNotice() {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:brightness-95"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
-            <MessageCircle className="h-4 w-4" />
+            <MessageCircle className="h-4 w-4" aria-hidden="true" />
             Request a change on WhatsApp
           </a>
         </div>
@@ -735,7 +735,7 @@ function SettingsSectionHelperCard({
   const palette = accentStyles[accent];
 
   return (
-    <section className={cn('overflow-hidden rounded-[2rem] border shadow-sm bg-surface relative', palette.helperSurface)}>
+    <section className={cn('overflow-hidden rounded-surface border shadow-sm bg-surface relative', palette.helperSurface)}>
       <div className="p-6 sm:p-8 relative z-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-5">
@@ -797,7 +797,7 @@ function SettingsSectionForm({
 
   if (data.section === 'profile') {
     return (
-      <div className="rounded-[2.5rem] border border-border bg-surface shadow-sm relative overflow-hidden">
+      <div className="rounded-surface border border-border bg-surface shadow-sm relative overflow-hidden">
         <div className="relative z-10 flex flex-col">
           {config.fields.map((field, i) => {
             const value = fieldValue(data.values, field);
@@ -874,11 +874,11 @@ function SettingsSectionForm({
                 </div>
                 {emailChanged ? (
                   <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                      <label htmlFor="email-current-password" className="block text-sm font-bold text-amber-900">
+                    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5">
+                      <label htmlFor="email-current-password" className="block text-sm font-bold text-navy">
                         Confirm your current password
                       </label>
-                      <p className="mt-1 text-xs font-medium text-amber-800/80">
+                      <p className="mt-1 text-xs font-medium text-muted">
                         For your security, changing your email requires your current password.
                       </p>
                       <input
@@ -916,7 +916,7 @@ function SettingsSectionForm({
         const fieldInvalid = isNativeFieldInvalid(field, value, invalid);
 
         return (
-          <div key={field.key} className={cn('rounded-[2rem] bg-surface p-6 sm:p-8 shadow-sm border transition-[box-shadow,border-color,transform] duration-300 hover:shadow-clinical hover:border-border-hover hoverable:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border' : 'border-border')}>
+          <div key={field.key} className={cn('rounded-surface bg-surface p-6 sm:p-8 shadow-sm border transition-[box-shadow,border-color,transform] duration-300 hover:shadow-clinical hover:border-border-hover hoverable:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border' : 'border-border')}>
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
               <div className="flex min-w-0 flex-1 items-start gap-5">
                 <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 ease-out group-hoverable:scale-110', palette.softBadge)}>
@@ -1062,7 +1062,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
   };
 
   return (
-    <div className="rounded-[2.5rem] border border-border bg-surface shadow-sm relative overflow-hidden">
+    <div className="rounded-surface border border-border bg-surface shadow-sm relative overflow-hidden">
       <div className="relative z-10 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6">
         <div className="flex min-w-0 flex-1 items-center gap-5">
           <UserAvatar avatarUrl={user?.avatarUrl} displayName={user?.displayName} className="h-16 w-16 text-base" />
@@ -1082,7 +1082,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
         <div className="flex shrink-0 items-center gap-3">
           <label
             className={cn(
-              'inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-primary-dark',
+              buttonClassName({ className: 'cursor-pointer rounded-full font-bold focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2' }),
               busy && 'pointer-events-none opacity-60',
             )}
           >
@@ -1118,7 +1118,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
 
 function PrivacyControlsCard() {
   return (
-    <div className="rounded-[2rem] border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
+    <div className="rounded-surface border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
       <div className="flex items-start gap-5 relative z-10">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50">
           <ShieldCheck className="h-6 w-6 text-rose-700" />
@@ -1133,20 +1133,18 @@ function PrivacyControlsCard() {
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/speaking/recordings"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-primary-dark"
-            >
-              <Database className="h-4 w-4" />
-              Manage my recordings
-            </Link>
-            <Link
-              href="/settings/danger-zone"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-5 py-2.5 text-sm font-black text-danger shadow-sm transition hover:bg-danger/20"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete my account &amp; data
-            </Link>
+            <Button asChild className="rounded-full font-bold">
+              <Link href="/speaking/recordings">
+                <Database className="h-4 w-4" aria-hidden="true" />
+                Manage my recordings
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-full border-danger/30 bg-danger/10 font-bold text-danger hover:border-danger/40 hover:bg-danger/20">
+              <Link href="/settings/danger-zone">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Delete my account &amp; data
+              </Link>
+            </Button>
           </div>
         </div>
       </div>
@@ -1239,20 +1237,18 @@ function DangerZoneDeleteSection() {
             </div>
           ) : null}
 
-          <button
+          <Button
             type="button"
-            disabled={!password.trim() || deleting}
+            variant="destructive"
+            size="lg"
+            loading={deleting}
+            disabled={!password.trim()}
             onClick={handleDelete}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2',
-              password.trim() && !deleting
-                ? 'bg-danger hover:bg-danger/90 cursor-pointer'
-                : 'bg-danger/40 cursor-not-allowed',
-            )}
+            className="font-bold"
           >
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {deleting ? null : <Trash2 className="h-4 w-4" aria-hidden="true" />}
             {deleting ? 'Deleting account...' : 'Delete my account'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1500,7 +1496,7 @@ export default function LearnerSettingsSectionPage() {
                 invalid={Boolean(actionError)}
               />
 
-              <div className="rounded-[2rem] border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">
+              <div className="rounded-surface border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">

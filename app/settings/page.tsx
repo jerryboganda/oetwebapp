@@ -188,7 +188,7 @@ export default function Settings() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         <div className="space-y-7 sm:space-y-12 pb-16 relative z-10 px-4 sm:px-0">
           
-          <div className="bg-surface p-6 sm:p-10 rounded-[2rem] border border-border shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-200 overflow-hidden relative">
+          <div className="bg-surface p-6 sm:p-10 rounded-surface border border-border shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-200 overflow-hidden relative">
             <LearnerPageHero
               eyebrow="Control Center"
               icon={SettingsIcon}
@@ -233,11 +233,17 @@ export default function Settings() {
                         role={item.type === 'link' ? 'button' : 'group'}
                         tabIndex={item.type === 'link' ? 0 : undefined}
                         onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
-                        className={`group relative flex items-center justify-between overflow-hidden rounded-[2rem] p-5 sm:p-8 border transition-[box-shadow,border-color,transform] duration-300 ${isDanger ? 'bg-danger/5 hover:bg-danger/10 border-danger/15 cursor-pointer' : 'bg-surface border-border hover:border-border-hover shadow-sm hover:shadow-clinical hoverable:-translate-y-1 cursor-pointer'} ${item.type === 'toggle' ? 'cursor-default hoverable:-translate-y-0 hover:shadow-sm' : ''} ${item.type === 'link' && isFrozen ? 'cursor-not-allowed opacity-60' : ''}`}
+                        onKeyDown={item.type === 'link' ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleOpen(item.id);
+                          }
+                        } : undefined}
+                        className={`group relative flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 items-center justify-between overflow-hidden rounded-surface p-5 sm:p-8 border transition-[box-shadow,border-color,transform] duration-300 ${isDanger ? 'bg-danger/5 hover:bg-danger/10 border-danger/15 cursor-pointer' : 'bg-surface border-border hover:border-border-hover shadow-sm hover:shadow-clinical hoverable:-translate-y-1 cursor-pointer'} ${item.type === 'toggle' ? 'cursor-default hoverable:-translate-y-0 hover:shadow-sm' : ''} ${item.type === 'link' && isFrozen ? 'cursor-not-allowed opacity-60' : ''}`}
                       >
                         <div className="flex items-start gap-6 relative z-10 w-full pr-4">
                           <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center transition-colors duration-300 ${isDanger ? 'bg-danger/10 text-danger' : 'bg-lavender text-primary group-hover:bg-primary/15'}`}>
-                            <Icon className="w-7 h-7" />
+                            <Icon className="w-7 h-7" aria-hidden="true" />
                           </div>
                           <div className="min-w-0">
                             <h3 className={`text-xl font-black tracking-tight ${isDanger ? 'text-danger' : 'text-navy group-hover:text-primary transition-colors'}`}>{item.title}</h3>
@@ -248,10 +254,11 @@ export default function Settings() {
                         <div className="shrink-0 relative z-10 flex">
                           {item.type === 'link' ? (
                             <div className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-colors duration-300 ${isDanger ? 'bg-danger/10 text-danger group-hover:bg-danger/20' : 'bg-background-light text-muted group-hover:bg-primary/10 group-hover:text-primary border border-border'}`}>
-                              <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hoverable:translate-x-1" />
+                              <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hoverable:translate-x-1" aria-hidden="true" />
                             </div>
                           ) : (
                             <button
+                              type="button"
                               onClick={() => handleToggle(item.id)}
                               disabled={savingId === item.id || isFrozen}
                               className={`relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 focus-visible:ring-offset-2 overflow-hidden shadow-inner border border-border ${toggles[item.id] ? 'bg-primary' : 'bg-navy/10 hover:bg-navy/15'}`}
