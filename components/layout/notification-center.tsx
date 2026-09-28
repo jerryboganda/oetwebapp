@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
@@ -655,6 +656,10 @@ export function NotificationCenter({ triggerClassName }: { triggerClassName?: st
   const notificationState = useOptionalNotificationState();
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Close both surfaces on route change (the header persists across navigations).
+  const pathname = usePathname();
+  const [openedAt, setOpenedAt] = useState(pathname);
+  if (openedAt !== pathname) { setOpenedAt(pathname); setDesktopOpen(false); setMobileOpen(false); }
 
   if (!notificationState) return null;
 
