@@ -66,6 +66,9 @@ services:
       # Reuse the agent-console egress network so outbound traffic goes through
       # the existing allowlist CONNECT proxy (api.anthropic.com et al.).
       - oet_agent_net
+      # API-facing control network: oet-api resolves the sidecar hostnames
+      # (oet-writing-claude / oet-writing-codex) here.
+      - oet_agent_ctl
 
   writing-codex:
     <<: *sidecar-hardening
@@ -91,6 +94,7 @@ services:
     networks:
       - oet_writing_net
       - oet_agent_net
+      - oet_agent_ctl
 
 networks:
   oet_writing_net:
@@ -101,11 +105,19 @@ networks:
   # internet route.
   oet_agent_net:
     external: true
+  # External: the internal-only API <-> agent-stack bridge (also hosts
+  # oet-api + oet-agent-console). This is how the API reaches the sidecars.
+  oet_agent_ctl:
+    external: true
+    name: oet_agent_ctl
 
 volumes:
-  # External so it is the SAME volume the agent-console writes to.
+  # External so it is the SAME volume the agent-console writes to. The
+  # console's compose project owns it, so the real volume name is
+  # project-prefixed: oet-agent-console_oet_agent_home.
   oet_agent_home:
     external: true
+    name: oet-agent-console_oet_agent_home
   oet_writing_codex_home:
     name: oet_writing_codex_home
   writing_claude_tmp:
