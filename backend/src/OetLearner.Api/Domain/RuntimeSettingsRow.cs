@@ -369,6 +369,17 @@ public class RuntimeSettingsRow
     public int? WritingMaxDailyPlanRegenerationsPerDay { get; set; }
     public int? WritingGradeIdempotencyTtlHours { get; set; }
 
+    // ── Writing AI subscription provider (owner directive 2026-09-29) ──────
+    // Controls which subscription-backed provider serves Writing AI calls.
+    // Mode: "auto" (Claude 5x primary, Codex fallback) | "claude" | "codex".
+    // Warn/Failover are weekly-utilisation percentages for the Claude 5x
+    // allowance; the quota-exhaustion marker is set by the selector when the
+    // Claude sidecar reports a rate-limit, and cleared after the weekly reset.
+    [MaxLength(16)] public string? WritingAiProviderMode { get; set; }
+    public double? WritingAiWarnPct { get; set; }
+    public double? WritingAiFailoverPct { get; set; }
+    public DateTimeOffset? WritingAiClaudeQuotaExceededUntil { get; set; }
+
     // ── Platform (public host URLs — Wave 2) ───────────────────────
     [MaxLength(1024)] public string? PublicApiBaseUrl { get; set; }
     [MaxLength(1024)] public string? PublicWebBaseUrl { get; set; }

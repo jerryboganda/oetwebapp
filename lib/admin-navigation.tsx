@@ -306,6 +306,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.AiConfig],
       },
       {
+        href: '/admin/writing-ai',
+        label: 'Writing AI Provider',
+        icon: <Cpu className={iconClassName} />,
+        matchPrefix: '/admin/writing-ai',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
         href: '/admin/voice-design',
         label: 'Voice Design',
         icon: <Sparkles className={iconClassName} />,
@@ -585,6 +592,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },
   { prefix: '/admin/ai-usage', title: 'AI/API Usage & Billing' },
+  { prefix: '/admin/writing-ai', title: 'Writing AI Provider' },
   { prefix: '/admin/ai-analytics', title: 'AI Analytics' },
   { prefix: '/admin/voice-design', title: 'Voice Design' },
   { prefix: '/admin/notifications/templates', title: 'Notification Templates' },

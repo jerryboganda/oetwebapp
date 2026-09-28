@@ -312,6 +312,50 @@ export function fetchAiUsageSummary(periodMonthKey?: string, groupBy: 'feature' 
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — Writing AI subscription provider (owner directive 2026-09-29)
+// ═════════════════════════════════════════════════════════════════════════
+
+export type WritingAiProviderMode = 'auto' | 'claude' | 'codex';
+
+export interface WritingAiProviderStatus {
+  mode: WritingAiProviderMode;
+  warnPct: number;
+  failoverPct: number;
+  quota: {
+    utilizationPct: number | null;
+    resetsAt: string | null;
+    source: 'reported' | 'estimated' | 'unknown';
+    weeklyTokensUsed: number;
+    weeklyTokenCap: number;
+    sampledAt: string;
+  };
+  quotaExceededUntil: string | null;
+  failoverActive: boolean;
+  currentPrimary: { provider: string; model: string };
+  gradedToday: number;
+  gradedWeek: number;
+  fallbackCountWeek: number;
+  claude: { callsWeek: number; tokensWeek: number };
+  codex: { callsWeek: number; tokensWeek: number; recordedCostWeekUsd: number };
+}
+
+export function fetchWritingAiProvider() {
+  return aiApi<WritingAiProviderStatus>('/v1/admin/ai/writing-provider');
+}
+
+export function updateWritingAiProvider(payload: {
+  mode?: WritingAiProviderMode;
+  warnPct?: number;
+  failoverPct?: number;
+  clearQuotaMarker?: boolean;
+}) {
+  return aiApi<{ ok: boolean }>('/v1/admin/ai/writing-provider', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchAiUsageTrend(fromMonth?: string, toMonth?: string) {
   const qs = new URLSearchParams();
   if (fromMonth) qs.append('fromMonth', fromMonth);

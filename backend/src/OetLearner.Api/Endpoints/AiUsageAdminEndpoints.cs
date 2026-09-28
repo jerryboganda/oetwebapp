@@ -210,6 +210,140 @@ public static class AiUsageAdminEndpoints
             });
         });
 
+        // ═══ Writing AI subscription provider (owner directive 2026-09-29) ════
+        // Read model for the /admin/writing-ai page: mode, thresholds, quota
+        // snapshot, current primary, and per-provider counters for the six
+        // writing feature codes.
+        group.MapGet("/writing-provider", async (
+            LearnerDbContext db,
+            OetLearner.Api.Services.Writing.IWritingSubscriptionQuotaService quota,
+            OetLearner.Api.Services.Settings.IRuntimeSettingsProvider settings,
+            TimeProvider clock,
+            CancellationToken ct) =>
+        {
+            var row = await settings.GetRawAsync(ct);
+            var snapshot = await quota.GetSnapshotAsync(ct);
+            var now = clock.GetUtcNow();
+            var todayKey = now.ToString("yyyy-MM-dd");
+            var weekAgo = now.AddDays(-7);
+
+            var claude = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Claude;
+            var codex = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex;
+
+            var usage = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.ProviderId == claude || r.ProviderId == codex)
+                .Where(r => r.CreatedAt >= weekAgo)
+                .GroupBy(r => r.ProviderId)
+                .Select(g => new
+                {
+                    provider = g.Key,
+                    callsWeek = g.Count(),
+                    successesWeek = g.Count(x => x.Outcome == AiCallOutcome.Success),
+                    tokensWeek = g.Sum(x => (long)x.PromptTokens + x.CompletionTokens),
+                    costWeek = g.Sum(x => x.CostEstimateUsd),
+                })
+                .ToListAsync(ct);
+
+            var gradedToday = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.FeatureCode == AiFeatureCodes.WritingGrade
+                            && r.PeriodDayKey == todayKey
+                            && r.Outcome == AiCallOutcome.Success)
+                .CountAsync(ct);
+            var gradedWeek = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.FeatureCode == AiFeatureCodes.WritingGrade
+                            && r.CreatedAt >= weekAgo
+                            && r.Outcome == AiCallOutcome.Success)
+                .CountAsync(ct);
+            var fallbackCountWeek = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.ProviderId == codex && r.CreatedAt >= weekAgo)
+                .CountAsync(ct);
+
+            var claudeRow = usage.FirstOrDefault(u => u.provider == claude);
+            var codexRow = usage.FirstOrDefault(u => u.provider == codex);
+
+            var mode = string.IsNullOrWhiteSpace(row.WritingAiProviderMode)
+                ? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ModeAuto
+                : row.WritingAiProviderMode;
+            var failoverPct = row.WritingAiFailoverPct
+                ?? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.DefaultFailoverPct;
+            var warnPct = row.WritingAiWarnPct
+                ?? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.DefaultWarnPct;
+            var util = snapshot.UtilizationPct;
+            var failoverActive = row.WritingAiClaudeQuotaExceededUntil is { } u && u > now
+                || (util is double uv && uv >= failoverPct);
+
+            return Results.Ok(new
+            {
+                mode,
+                warnPct,
+                failoverPct,
+                quota = new
+                {
+                    utilizationPct = util,
+                    resetsAt = snapshot.ResetsAt,
+                    source = snapshot.Source,
+                    weeklyTokensUsed = snapshot.WeeklyTokensUsed,
+                    weeklyTokenCap = snapshot.WeeklyTokenCap,
+                    sampledAt = snapshot.SampledAt,
+                },
+                quotaExceededUntil = row.WritingAiClaudeQuotaExceededUntil,
+                failoverActive,
+                currentPrimary = new
+                {
+                    provider = failoverActive ? codex : claude,
+                    model = failoverActive
+                        ? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.CodexModel
+                        : OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ClaudeModel,
+                },
+                gradedToday,
+                gradedWeek,
+                fallbackCountWeek,
+                claude = new { callsWeek = claudeRow?.callsWeek ?? 0, tokensWeek = claudeRow?.tokensWeek ?? 0L },
+                codex = new
+                {
+                    callsWeek = codexRow?.callsWeek ?? 0,
+                    tokensWeek = codexRow?.tokensWeek ?? 0L,
+                    // Subscription cost is $0 marginal; report the recorded (0.00)
+                    // spend and let the UI compute an API-equivalent estimate.
+                    recordedCostWeekUsd = codexRow?.costWeek ?? 0m,
+                },
+            });
+        });
+
+        // Update mode + thresholds. Partial: null leaves a field unchanged.
+        group.MapPut("/writing-provider", async Task<IResult> (
+            WritingAiProviderUpdateRequest request,
+            LearnerDbContext db,
+            OetLearner.Api.Services.Settings.IRuntimeSettingsProvider settings,
+            TimeProvider clock,
+            CancellationToken ct) =>
+        {
+            if (request.Mode is not null)
+            {
+                var m = request.Mode.Trim().ToLowerInvariant();
+                if (m is not ("auto" or "claude" or "codex"))
+                    return Results.BadRequest(new { error = "invalid_mode", message = "mode must be auto | claude | codex." });
+            }
+            if (request.WarnPct is double w && (w <= 0 || w > 100))
+                return Results.BadRequest(new { error = "invalid_warn_pct", message = "warnPct must be in (0,100]." });
+            if (request.FailoverPct is double f && (f <= 0 || f > 100))
+                return Results.BadRequest(new { error = "invalid_failover_pct", message = "failoverPct must be in (0,100]." });
+
+            var row = await db.RuntimeSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
+            if (row is null)
+            {
+                row = new Domain.RuntimeSettingsRow { Id = "default", UpdatedAt = clock.GetUtcNow() };
+                db.RuntimeSettings.Add(row);
+            }
+            if (request.Mode is not null) row.WritingAiProviderMode = request.Mode.Trim().ToLowerInvariant();
+            if (request.WarnPct is double warn) row.WritingAiWarnPct = warn;
+            if (request.FailoverPct is double fo) row.WritingAiFailoverPct = fo;
+            if (request.ClearQuotaMarker == true) row.WritingAiClaudeQuotaExceededUntil = null;
+            await db.SaveChangesAsync(ct);
+            settings.Invalidate();
+            return Results.Ok(new { ok = true });
+        });
+
         // ═══ Quota plans ═══════════════════════════════════════════════════
         group.MapGet("/plans", async (LearnerDbContext db, CancellationToken ct) =>
         {
@@ -1350,3 +1484,12 @@ public sealed record AiFeatureRouteUpsertDto(
     string? Model,
     bool IsActive,
     string? BenchmarkRunId = null);
+
+/// <summary>Partial update for the Writing AI subscription provider control.
+/// Null fields are left unchanged; <see cref="ClearQuotaMarker"/> resets the
+/// Claude quota-exhaustion marker (e.g. after the allowance resets early).</summary>
+public sealed record WritingAiProviderUpdateRequest(
+    string? Mode,
+    double? WarnPct,
+    double? FailoverPct,
+    bool? ClearQuotaMarker = null);
