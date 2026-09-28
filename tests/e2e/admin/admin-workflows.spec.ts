@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 test.describe('Admin workflows @admin @smoke', () => {
   test('admin can create a new content draft and reach the seeded editor flow', async ({ page }, testInfo) => {
@@ -48,14 +50,19 @@ test.describe('Admin workflows @admin @smoke', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('admin Select inside a Dialog renders above the dialog and is clickable', async ({ page }, testInfo) => {
+  test('admin Select inside a Dialog renders above the dialog and is clickable', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-admin') {
       test.skip();
     }
 
+    // Single-active-session: the cached admin state may already be revoked by
+    // another shard, so mint a fresh session first (as visual-qa.spec.ts does).
+    const route = '/admin/billing/scholarships';
+    await recoverBrowserSession(page, request, 'admin', route);
     const diagnostics = observePage(page);
 
-    await page.goto('/admin/billing/scholarships');
+    await page.goto(route);
+    await waitForSessionGuardToClear(page, { recover: () => recoverBrowserSession(page, request, 'admin', route) });
     const grantButton = page.getByRole('button', { name: /^grant scholarship$/i });
     const permissionDenied = page.getByRole('heading', { name: /admin permission required/i });
     await expect(grantButton.or(permissionDenied)).toBeVisible({ timeout: 30000 });
