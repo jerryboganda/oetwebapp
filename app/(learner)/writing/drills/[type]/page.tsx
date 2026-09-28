@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { LearnerDashboardShell } from '@/components/layout';
 import { listDrills } from '@/lib/writing-drills/loader';
 import { DrillTypeSchema, type DrillType } from '@/lib/writing-drills/types';
 
@@ -44,7 +43,7 @@ export default async function WritingDrillsTypeListPage({
   const drills = listDrills({ type });
 
   return (
-    <LearnerDashboardShell pageTitle={`Writing: ${TYPE_TITLES[type]}`}>
+    <>
       <header className="bg-navy dark:bg-surface text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
         <Link
           href="/writing/drills"
@@ -104,6 +103,6 @@ export default async function WritingDrillsTypeListPage({
           </ul>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

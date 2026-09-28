@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionPage, MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -123,23 +122,23 @@ export default function GrammarLessonPage() {
   // ── loading ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-6">
           <Skeleton className="h-40 rounded-2xl" />
           <Skeleton className="h-64 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!lesson) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4">
           <BackLink />
           <InlineAlert variant="warning">Lesson not found.</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -165,7 +164,7 @@ export default function GrammarLessonPage() {
 
   // ── render ─────────────────────────────────────────────────────────
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
 
         {/* Back breadcrumb */}
@@ -352,7 +351,7 @@ export default function GrammarLessonPage() {
 
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

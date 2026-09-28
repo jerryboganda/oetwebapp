@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, RotateCcw, Tag, Target, Volume2, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -352,7 +351,7 @@ export default function ListeningReviewPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Listening Review" subtitle={review?.paper.title ?? 'Transcript-backed evidence for listening mistakes and distractors.'} backHref="/listening">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
           <ArrowLeft className="h-4 w-4" />
@@ -823,6 +822,6 @@ export default function ListeningReviewPage() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

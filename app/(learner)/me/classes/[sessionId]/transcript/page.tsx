@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, FileText, Search } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -68,7 +67,7 @@ export default function ClassTranscriptPage() {
   }, [query, text]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <Link
           href={sessionId ? `/me/classes/recordings/${sessionId}` : '/me/classes/past'}
@@ -132,6 +131,6 @@ export default function ClassTranscriptPage() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

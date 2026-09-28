@@ -13,7 +13,6 @@ import {
   Volume2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
@@ -169,20 +168,20 @@ export default function PronunciationReviewPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Pronunciation Review">
+      <>
         <main className="mx-auto max-w-xl space-y-6">
           <Skeleton className="h-7 w-48 rounded-lg" />
           <Skeleton className="h-2 w-full rounded-full" />
           <Skeleton className="h-64 w-full rounded-2xl" />
         </main>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   // Empty queue → "nothing to review" screen.
   if (total === 0) {
     return (
-      <LearnerDashboardShell pageTitle="Pronunciation Review">
+      <>
         <main className="mx-auto max-w-xl space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-navy">Review Session</h1>
@@ -207,14 +206,14 @@ export default function PronunciationReviewPage() {
             </Button>
           </div>
         </main>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   // Session complete → confirmation screen.
   if (!currentCard) {
     return (
-      <LearnerDashboardShell pageTitle="Pronunciation Review">
+      <>
         <main className="mx-auto max-w-xl space-y-6">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <Trophy className="mx-auto h-12 w-12 text-emerald-500" aria-hidden />
@@ -231,14 +230,14 @@ export default function PronunciationReviewPage() {
             </div>
           </div>
         </main>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   // ── Flashcard view ─────────────────────────────────────────────────────────
 
   return (
-    <LearnerDashboardShell pageTitle="Pronunciation Review">
+    <>
       <main className="mx-auto max-w-xl space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-navy">Pronunciation Review</h1>
@@ -353,6 +352,6 @@ export default function PronunciationReviewPage() {
           </span>
         </div>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

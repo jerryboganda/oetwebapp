@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useState, type ElementType } from 're
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, Info, Landmark, Mail, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
@@ -331,7 +330,7 @@ function ManualPaymentContent() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={<Receipt className="h-6 w-6" />}
         eyebrow="OET with Dr. Ahmed Hesham"
@@ -502,7 +501,7 @@ function ManualPaymentContent() {
           </div>
         </div>
       </Modal>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

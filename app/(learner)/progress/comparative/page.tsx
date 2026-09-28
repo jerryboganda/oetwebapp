@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Target, BarChart3 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -50,7 +49,7 @@ export default function ComparativeAnalyticsPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero title="Comparative Analytics" description="See how your performance compares to the cohort. Percentile rankings and score gap analysis." />
 
       <MotionSection className="space-y-6 max-w-5xl mx-auto">
@@ -107,6 +106,6 @@ export default function ComparativeAnalyticsPage() {
           </>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

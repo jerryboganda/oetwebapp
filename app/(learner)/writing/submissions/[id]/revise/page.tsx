@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { RefreshCw } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
@@ -84,7 +83,7 @@ export default function WritingReviseSubmissionPage() {
   }, [canSubmit, content, original, submissionId, wordCount, router, t]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.submissions.revise.pageTitle')} distractionFree>
+    <>
       <div className="space-y-4 pb-32" aria-busy={!original}>
         <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="flex items-center gap-3">
@@ -135,6 +134,6 @@ export default function WritingReviseSubmissionPage() {
           helperText={helperText}
         />
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

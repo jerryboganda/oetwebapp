@@ -17,7 +17,6 @@ import {
   Layers,
   Mic,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -274,16 +273,16 @@ export default function NewMockBookingPage() {
 
   if (!speakingAccess) {
     return (
-      <LearnerDashboardShell pageTitle="Book a Mock" backHref="/mocks">
+      <>
         <InlineAlert variant={speakingAccessError ? 'error' : 'info'}>
           {speakingAccessError ?? 'Checking whether tutor booking is available...'}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Book a Mock" subtitle="Pick a slot for your live Speaking or final-readiness mock" backHref="/mocks/bookings">
+    <>
       <div className="space-y-5 sm:space-y-8 pb-24">
         <LearnerPageHero
           eyebrow="Mock Booking"
@@ -518,6 +517,6 @@ export default function NewMockBookingPage() {
           onClose={() => setToast(null)}
         />
       ) : null}
-    </LearnerDashboardShell>
+    </>
   );
 }

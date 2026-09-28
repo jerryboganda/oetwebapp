@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Heart } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge, RecallTierBadge } from '@/components/ui/badge';
@@ -60,7 +59,7 @@ export default function RecallsFavouritesPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Recalls / Favourites"
@@ -136,6 +135,6 @@ export default function RecallsFavouritesPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

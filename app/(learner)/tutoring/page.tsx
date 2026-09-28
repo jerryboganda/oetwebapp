@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { GraduationCap, Calendar, Star } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -57,7 +56,7 @@ export default function TutoringPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Tutoring Sessions"
         description="Book 1-on-1 sessions with OET expert tutors"
@@ -124,6 +123,6 @@ export default function TutoringPage() {
           ))}
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

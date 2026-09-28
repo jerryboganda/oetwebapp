@@ -5,7 +5,6 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
@@ -177,7 +176,7 @@ function VocabQuizContent() {
   const isMcqFormat = !isTextFormat;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6 flex items-center gap-3">
         <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -365,7 +364,7 @@ function VocabQuizContent() {
           description="Try another format or add more words to your vocabulary list first."
         />
       ) : null}
-    </LearnerDashboardShell>
+    </>
   );
 }
 

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { TrendingUp, AlertCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,7 +44,7 @@ export default function WritingMyMistakesPage() {
   const totalCount = useMemo(() => rows.reduce((sum, r) => sum + r.stat.occurrenceCount, 0), [rows]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.mistakes.mine.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.mistakes.mine.eyebrow')}
@@ -109,6 +108,6 @@ export default function WritingMyMistakesPage() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

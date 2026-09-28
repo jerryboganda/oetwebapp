@@ -1,12 +1,11 @@
 import Link from 'next/link';
 import { ArrowLeft, Headphones } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function PronunciationDiscriminationPage() {
   return (
-    <LearnerDashboardShell>
+    <>
       <Link href="/pronunciation" className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-navy">
         <ArrowLeft className="h-4 w-4" /> Back to pronunciation
       </Link>
@@ -26,6 +25,6 @@ export default function PronunciationDiscriminationPage() {
 </Button>
         </div>
       </Card>
-    </LearnerDashboardShell>
+    </>
   );
 }

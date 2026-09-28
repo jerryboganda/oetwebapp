@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { PenTool, Compass, BookOpen, Target, Award, ArrowRight, Sparkles } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
@@ -43,7 +42,7 @@ export default function WritingWelcomePage() {
   }, [router]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.welcome.title')}>
+    <>
       <div className="space-y-5 sm:space-y-8" aria-busy={checking}>
         <LearnerPageHero
           eyebrow={t('writing.welcome.eyebrow')}
@@ -108,6 +107,6 @@ export default function WritingWelcomePage() {
           </Button>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

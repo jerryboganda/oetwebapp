@@ -16,7 +16,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Scale, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -130,7 +129,7 @@ export default function WritingAppealPage() {
   const wasAdjusted = finalRaw != null && finalRaw !== appeal?.originalRawTotal;
 
   return (
-    <LearnerDashboardShell pageTitle="Appeal your score">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Submission"
@@ -301,6 +300,6 @@ export default function WritingAppealPage() {
           </Card>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -66,7 +65,7 @@ export default function SpeakingDrillPlayerPage() {
   }, [drillId]);
 
   return (
-    <LearnerDashboardShell pageTitle="Speaking drill">
+    <>
       <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/speaking/drills">
@@ -105,6 +104,6 @@ export default function SpeakingDrillPlayerPage() {
           <InlineAlert variant="error">Could not start this speaking drill.</InlineAlert>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

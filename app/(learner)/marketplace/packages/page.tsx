@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Package, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -86,7 +85,7 @@ export default function PackagesPage() {
   );
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Content Packages"
         description="Compare preparation packages and find the one that fits your study timeline and goals."
@@ -261,6 +260,6 @@ export default function PackagesPage() {
           )}
         </>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

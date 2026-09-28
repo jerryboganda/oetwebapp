@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, Shield, Timer } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { Input } from '@/components/ui/form-controls';
 import { buttonClassName } from '@/components/ui/button';
@@ -173,7 +172,7 @@ export default function FreezePage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Freeze Center" backHref="/">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Account Freeze"
@@ -341,6 +340,6 @@ export default function FreezePage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

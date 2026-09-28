@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, History } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
@@ -87,7 +86,7 @@ export default function PlacementHistoryPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Placement History">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Placement test"
@@ -97,6 +96,6 @@ export default function PlacementHistoryPage() {
         />
         {body}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

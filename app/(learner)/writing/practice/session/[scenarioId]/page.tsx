@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PenTool } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -363,19 +362,19 @@ export default function WritingPracticeSessionPage() {
 
   if (insufficientCreditsMessage) {
     return (
-      <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+      <>
         <InsufficientCreditsModal
           open
           message={insufficientCreditsMessage}
           onClose={() => router.push('/writing')}
         />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (loadError) {
     return (
-      <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+      <>
         <div className="mx-auto max-w-xl py-8">
           <InlineAlert
             variant="error"
@@ -394,12 +393,12 @@ export default function WritingPracticeSessionPage() {
             {describeLoadError(loadError.cause)}
           </InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+    <>
       {/* Forced 5-minute reading window — non-skippable. Auto-closes into the
           writing view at 0:00. */}
       <WritingReadingWindowOverlay
@@ -523,6 +522,6 @@ export default function WritingPracticeSessionPage() {
           </div>
         </div>
       </Modal>
-    </LearnerDashboardShell>
+    </>
   );
 }

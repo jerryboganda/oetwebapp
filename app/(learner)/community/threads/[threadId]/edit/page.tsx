@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { PenLine, ArrowLeft } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -21,7 +20,7 @@ export default function EditThreadPage() {
   }, [threadId]);
 
   return (
-    <LearnerDashboardShell pageTitle="Edit Thread">
+    <>
       <LearnerPageHero
         title="Edit Thread"
         description="Update your thread content."
@@ -44,6 +43,6 @@ export default function EditThreadPage() {
           </InlineAlert>
         </Card>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

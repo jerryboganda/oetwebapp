@@ -6,7 +6,6 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -108,7 +107,7 @@ export default function PhraseSuggestionsPage() {
 
   /* ── render ────────────────────────────────── */
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="AI Phrase Coach"
         description="Get intelligent suggestions to upgrade your vocabulary, fix grammar, and improve writing tone"
@@ -281,6 +280,6 @@ export default function PhraseSuggestionsPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

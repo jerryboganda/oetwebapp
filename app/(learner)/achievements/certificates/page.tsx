@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Award, Download, Calendar } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -36,7 +35,7 @@ export default function CertificatesPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-48" />
           <div className="grid gap-4 sm:grid-cols-2">
@@ -44,12 +43,12 @@ export default function CertificatesPage() {
             <Skeleton className="h-40 rounded-xl" />
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="My Certificates"
         description="Certificates earned through your study achievements and milestones."
@@ -100,6 +99,6 @@ export default function CertificatesPage() {
           </div>
         </MotionSection>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -25,7 +25,6 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -181,20 +180,20 @@ export default function ReadingPracticePage() {
 
   if (authLoading || (loading && !home)) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-6">
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="warning">Sign in to access the Reading practice hub.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -204,7 +203,7 @@ export default function ReadingPracticePage() {
   const miniTestPaperId = accessiblePapers[0]?.id ?? null;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <InsufficientCreditsModal
         open={insufficientCreditsMessage !== null}
         message={insufficientCreditsMessage ?? ''}
@@ -358,6 +357,6 @@ export default function ReadingPracticePage() {
           )}
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

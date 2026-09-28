@@ -19,7 +19,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, TrendingDown, AlertTriangle, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -99,7 +98,7 @@ export default function WritingAnalyticsPage() {
   const latestPurpose = summary?.purposeTrend[summary.purposeTrend.length - 1] ?? null;
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Analytics">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Analytics"
@@ -320,6 +319,6 @@ export default function WritingAnalyticsPage() {
           </>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

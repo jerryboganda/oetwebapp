@@ -4,7 +4,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Target, ArrowRight, ArrowLeft, Calendar, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
@@ -63,7 +62,7 @@ export default function ProfileSetupGoalsPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile: Step 2">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 2 of 4"
@@ -180,6 +179,6 @@ export default function ProfileSetupGoalsPage() {
           </div>
         </form>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

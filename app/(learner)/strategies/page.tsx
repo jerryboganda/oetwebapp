@@ -16,7 +16,6 @@ import {
   Target,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
 import { fetchStrategyGuides, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -165,7 +164,7 @@ function LoadingState() {
 
 function DisabledState() {
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Strategy guides are being prepared"
         description="The guided OET strategy library is not available to learners yet. Your study plan, lessons, and practice tasks are still ready."
@@ -190,7 +189,7 @@ function DisabledState() {
           </Button>
         </div>
       </Card>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
@@ -265,7 +264,7 @@ export default function StrategiesPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-7">
         <LearnerPageHero
           eyebrow="Strategy Library"
@@ -365,6 +364,6 @@ export default function StrategiesPage() {
           </div>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

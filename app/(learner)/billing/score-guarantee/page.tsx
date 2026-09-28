@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, Shield, Target, TrendingUp, Upload } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -129,18 +128,18 @@ export default function ScoreGuaranteePage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Score guarantee" backHref="/billing">
+      <>
         <div className="space-y-6">
           <BackToBillingLink />
           <Skeleton className="h-44 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Score guarantee" backHref="/billing">
+    <>
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
@@ -343,6 +342,6 @@ export default function ScoreGuaranteePage() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

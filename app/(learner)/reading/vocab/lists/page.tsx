@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -108,7 +107,7 @@ export default function VocabListsPage() {
   });
 
   return (
-    <LearnerDashboardShell pageTitle="Vocab Lists">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <div className="flex items-center justify-between">
           <div>
@@ -193,6 +192,6 @@ export default function VocabListsPage() {
           </div>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

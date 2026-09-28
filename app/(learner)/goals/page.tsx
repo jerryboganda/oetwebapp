@@ -8,7 +8,6 @@ import { Save, ArrowRight, CalendarDays, Stethoscope, Target } from 'lucide-reac
 import { Button, Card, Checkbox, Input, Select } from '@/components/ui';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ProfessionSelector } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
@@ -298,7 +297,7 @@ export default function GoalSetupPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Set Your Goals">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Goal Setup"
@@ -493,6 +492,6 @@ export default function GoalSetupPage() {
           </Card>
         </form>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

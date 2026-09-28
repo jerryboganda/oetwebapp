@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { notFound, useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Headphones, ListChecks } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
@@ -128,7 +127,7 @@ export default function ListeningPartPracticePage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle={meta.title}>
+    <>
       <InsufficientCreditsModal
         open={insufficientCreditsMessage !== null}
         message={insufficientCreditsMessage ?? ''}
@@ -197,6 +196,6 @@ export default function ListeningPartPracticePage() {
           </section>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

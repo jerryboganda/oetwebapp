@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -66,7 +65,7 @@ export default function StrategyDetailPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={data?.strategy.title ?? 'Strategy'}>
+    <>
       <div className="mx-auto max-w-2xl space-y-5 sm:space-y-8">
         {/* Back link */}
         <Link
@@ -164,6 +163,6 @@ export default function StrategyDetailPage() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

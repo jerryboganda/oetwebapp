@@ -13,7 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Button, InlineAlert, Input, Textarea } from '@/components/ui';
@@ -104,11 +103,7 @@ export default function EscalationsPage() {
   }
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Escalations"
-      subtitle="Submit and track disputes for your graded submissions"
-      backHref="/"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Disputes & Escalations"
@@ -247,6 +242,6 @@ export default function EscalationsPage() {
           </div>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

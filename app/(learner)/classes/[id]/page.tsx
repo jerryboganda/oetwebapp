@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { CalendarDays, Clock, FileText, PlayCircle, Users, Video, X } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -121,22 +120,22 @@ export default function LiveClassDetailPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4"><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!detail) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="warning">Live class not found.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero title={detail.title} description={detail.description} icon={Video} />
 
@@ -217,6 +216,6 @@ export default function LiveClassDetailPage() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

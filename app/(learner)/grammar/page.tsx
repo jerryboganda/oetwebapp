@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { BookMarked, CheckCircle2, Sparkles, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -116,7 +115,7 @@ export default function GrammarPage() {
 
   // ── render ───────────────────────────────────────────────────────────
   return (
-    <LearnerDashboardShell pageTitle="Grammar">
+    <>
       <div className="space-y-5 sm:space-y-8">
 
         {/* ── Hero ── */}
@@ -248,7 +247,7 @@ export default function GrammarPage() {
         <GlobalProgressFooter overview={overview} loading={loading} />
 
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

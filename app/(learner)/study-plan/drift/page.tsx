@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, RefreshCw, Calendar } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -70,7 +69,7 @@ export default function StudyPlanDriftPage() {
   };
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero title="Study Plan Health" description="Detect drift from your study plan and get recommendations to get back on track." />
 
       <MotionSection className="space-y-6 max-w-4xl mx-auto">
@@ -156,6 +155,6 @@ export default function StudyPlanDriftPage() {
           </>
         ) : null}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

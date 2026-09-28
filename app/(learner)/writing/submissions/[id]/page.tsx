@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Clock, FileText, RefreshCw } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -41,7 +40,7 @@ export default function WritingSubmissionDetailPage() {
   const statusLabel = submission ? t(`writing.submissions.detail.status.${submission.status}`) : null;
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.submissions.detail.pageTitle')}>
+    <>
       <div className="space-y-6" aria-busy={!submission}>
         <LearnerPageHero
           eyebrow={t('writing.submissions.detail.eyebrow')}
@@ -108,6 +107,6 @@ export default function WritingSubmissionDetailPage() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

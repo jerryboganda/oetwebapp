@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { GraduationCap, Mic, Users } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerSurfaceCard } from '@/components/domain/learner-surface';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { fetchMockSpeakingAccess } from '@/lib/api';
@@ -61,7 +60,7 @@ export default function MockSpeakingGatewayPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Mock Speaking" subtitle="Choose how to complete this mock's Speaking section" backHref="/mocks">
+    <>
       {loadError ? (
         <p className="text-sm text-danger">{loadError}</p>
       ) : !access ? (
@@ -80,6 +79,6 @@ export default function MockSpeakingGatewayPage() {
           <LearnerSurfaceCard card={tutorCard} />
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

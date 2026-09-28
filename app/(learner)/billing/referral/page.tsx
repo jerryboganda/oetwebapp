@@ -11,7 +11,6 @@ import {
   Share2,
   Users,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -127,18 +126,18 @@ export default function ReferralPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Referral program" backHref="/billing">
+      <>
         <div className="space-y-6">
           <BackToBillingLink />
           <Skeleton className="h-44 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Referral program" backHref="/billing">
+    <>
       <div className="space-y-6">
         <BackToBillingLink />
 
@@ -367,6 +366,6 @@ export default function ReferralPage() {
           </ul>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

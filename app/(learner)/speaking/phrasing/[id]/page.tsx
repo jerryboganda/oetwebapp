@@ -1,6 +1,6 @@
 'use client';
 
-import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { LearnerNavActions } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -83,28 +83,27 @@ function BetterPhrasingContent() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Better Phrasing">
+      <>
         <div className="max-w-3xl mx-auto p-6 space-y-6">
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-64 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (error || segments.length === 0) {
     return (
-      <LearnerDashboardShell pageTitle="Better Phrasing">
+      <>
         <InlineAlert variant="error">Could not load phrasing data. Please try again.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Better Phrasing"
-      navActions={
+    <>
+      <LearnerNavActions>
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-muted">
             Segment {currentIndex + 1} of {segments.length}
@@ -118,8 +117,7 @@ function BetterPhrasingContent() {
             />
           </div>
         </div>
-      }
-    >
+      </LearnerNavActions>
       <main className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
           {disclaimer ? (
@@ -226,18 +224,18 @@ function BetterPhrasingContent() {
           </Button>
         </div>
       </footer>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
 export default function BetterPhrasingView() {
   return (
     <Suspense fallback={
-      <LearnerDashboardShell pageTitle="Better Phrasing">
+      <>
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </LearnerDashboardShell>
+      </>
     }>
       <BetterPhrasingContent />
     </Suspense>

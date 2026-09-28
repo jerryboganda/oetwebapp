@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { Shuffle, Zap, BookOpen, Headphones, Mic, PenLine } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { MotionItem } from '@/components/ui/motion-primitives';
@@ -60,7 +59,7 @@ export default function PracticePage() {
   }, []);
 
   return (
-    <LearnerDashboardShell pageTitle="Practice">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Practice"
@@ -100,6 +99,6 @@ export default function PracticePage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

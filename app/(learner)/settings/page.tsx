@@ -19,7 +19,6 @@ import {
   MonitorSmartphone,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { AuthContext } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
@@ -179,11 +178,7 @@ export default function Settings() {
   const isFrozen = Boolean(freezeState?.currentFreeze);
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Settings"
-      subtitle="Manage your account and app preferences"
-      backHref="/"
-    >
+    <>
       <div className="relative min-h-[calc(100dvh-4rem)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         <div className="space-y-7 sm:space-y-12 pb-16 relative z-10 px-4 sm:px-0">
@@ -282,6 +277,6 @@ export default function Settings() {
           </div>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

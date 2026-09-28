@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download, ShoppingBag, Globe } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -596,26 +595,26 @@ export default function PrivateSpeakingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4">
           <Skeleton className="h-20 rounded-xl" />
           <Skeleton className="h-64 rounded-xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!config?.isEnabled) {
     return (
-      <LearnerDashboardShell>
+      <>
         <LearnerPageHero title="Private Speaking Sessions" description="This feature is not currently available." icon={Mic} />
         <InlineAlert variant="info" className="mt-4">Private speaking sessions are temporarily unavailable. Check back once tutor availability is enabled.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="flex items-center justify-between mb-6">
         <LearnerPageHero
           title="Private Speaking Sessions"
@@ -989,6 +988,6 @@ export default function PrivateSpeakingPage() {
           </div>
         </div>
       </Modal>
-    </LearnerDashboardShell>
+    </>
   );
 }

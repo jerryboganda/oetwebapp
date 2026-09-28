@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BookOpen, Clock, Headphones, PenLine, Mic, ArrowRight } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -31,7 +30,7 @@ export const metadata: Metadata = {
 
 export default function ExamGuidePage() {
   return (
-    <LearnerDashboardShell>
+    <>
       <PageViewBeacon event="exam_guide_viewed" />
       <LearnerPageHero title="OET Exam Guide" description="Everything you need to know about the OET exam format, timing, scoring, and strategies." />
 
@@ -82,6 +81,6 @@ export default function ExamGuidePage() {
           <p className="text-sm">• <strong>Required score</strong>: Most regulatory bodies require minimum B (350+) in all subtests</p>
         </Card>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

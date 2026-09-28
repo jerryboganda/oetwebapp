@@ -14,7 +14,6 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { FreeSampleCard } from '@/components/domain/free-sample-card';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
@@ -279,22 +278,22 @@ export default function ListeningHome() {
 
   if (authLoading) {
     return (
-      <LearnerDashboardShell pageTitle="Listening">
+      <>
         <LearnerSkeleton variant="dashboard" />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <LearnerDashboardShell pageTitle="Listening">
+      <>
         <InlineAlert variant="info">Please sign in to access the listening module.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Listening">
+    <>
       <InsufficientCreditsModal
         open={insufficientCreditsMessage !== null}
         message={insufficientCreditsMessage ?? ''}
@@ -455,7 +454,7 @@ export default function ListeningHome() {
           </MotionSection>
         ) : null}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

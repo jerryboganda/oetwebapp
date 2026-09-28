@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookMarked, CheckCircle2, LayoutGrid, Sparkles, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { InlineAlert } from '@/components/ui/alert';
@@ -66,7 +65,7 @@ export default function GrammarTopicPage() {
   // ── loading skeleton ────────────────────────────────────────────────
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-6">
           <Skeleton className="h-40 rounded-2xl" />
           <div className="grid gap-4 md:grid-cols-2">
@@ -75,19 +74,19 @@ export default function GrammarTopicPage() {
             ))}
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   // ── error / not found ────────────────────────────────────────────────
   if (error || !data) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4">
           <BackLink />
           <InlineAlert variant="warning">{error ?? 'Topic not found.'}</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -104,7 +103,7 @@ export default function GrammarTopicPage() {
 
   // ── render ────────────────────────────────────────────────────────────
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
 
         {/* Back nav — sits above hero as a lightweight ghost link, matching dashboard back-nav convention. */}
@@ -155,7 +154,7 @@ export default function GrammarTopicPage() {
         </MotionSection>
 
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

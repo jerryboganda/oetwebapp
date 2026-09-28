@@ -12,7 +12,6 @@ import {
   Search,
   Video,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -403,7 +402,7 @@ export default function VideoLibraryPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <AppDownloadPromo variant="banner" />
         <LearnerPageHero
@@ -479,7 +478,7 @@ export default function VideoLibraryPage() {
 
         {renderBody()}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

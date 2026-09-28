@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Dumbbell, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -41,7 +40,7 @@ export default function WritingDrillPracticeDetailPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={drill?.title ?? 'Writing Drill'}>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button asChild variant="ghost" size="sm"><Link href="/writing/drills"><ArrowLeft className="h-4 w-4" /> Drills</Link></Button>
         <LearnerPageHero
@@ -72,6 +71,6 @@ export default function WritingDrillPracticeDetailPage() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

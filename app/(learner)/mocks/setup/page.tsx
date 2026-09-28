@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -392,7 +391,7 @@ export default function MockSetup() {
   const showProfession = isFullShape(mockType) || subType === 'writing' || subType === 'speaking';
 
   return (
-    <LearnerDashboardShell pageTitle="Configure Mock" subtitle="Set up your practice environment" backHref="/mocks">
+    <>
       <div className="space-y-5 sm:space-y-8 pb-24">
         <LearnerPageHero
           eyebrow="Mock Setup"
@@ -974,6 +973,6 @@ export default function MockSetup() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

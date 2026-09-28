@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Calculator, Building2, Globe, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-error';
@@ -33,7 +32,7 @@ export default function ScoreCalculatorPage() {
   }, [load]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Score Cross-Reference Calculator"
         description="Compare your OET score to IELTS, PTE, and CEFR levels and check institution requirements."
@@ -123,6 +122,6 @@ export default function ScoreCalculatorPage() {
           </MotionSection>
         </>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

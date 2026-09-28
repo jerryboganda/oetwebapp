@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, ChevronRight, CheckCircle2, Target, Mic } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -79,19 +78,19 @@ export default function LearningPathsPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Your Learning Path"
         description={data ? `${data.professionLabel} · ${data.examTypeCode.toUpperCase()} · ${data.overallProgress}% complete` : 'Personalized by your profession and goals'}
@@ -199,6 +198,6 @@ export default function LearningPathsPage() {
           </div>
         </MotionSection>
       ))}
-    </LearnerDashboardShell>
+    </>
   );
 }

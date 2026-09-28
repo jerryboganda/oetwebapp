@@ -8,7 +8,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Activity, AlertTriangle, ArrowRight, Target, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -61,7 +60,7 @@ export default function ListeningAnalyticsPage() {
     );
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening · Analytics"
@@ -198,7 +197,7 @@ export default function ListeningAnalyticsPage() {
           </div>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

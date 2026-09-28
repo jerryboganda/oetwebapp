@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquareText, Plus, Filter, MessageCircle, Eye, ThumbsUp, Pin, Lock, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Pagination } from '@/components/ui/pagination';
@@ -126,7 +125,7 @@ export default function CommunityPage() {
   ];
 
   return (
-    <LearnerDashboardShell pageTitle="Community">
+    <>
       <LearnerPageHero
         title="Community Threads"
         description="Ask questions, share insights, and learn together with fellow OET candidates."
@@ -239,6 +238,6 @@ export default function CommunityPage() {
           </div>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

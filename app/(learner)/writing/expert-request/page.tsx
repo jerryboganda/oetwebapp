@@ -15,7 +15,6 @@ import {
 import { MotionPage } from '@/components/ui/motion-primitives';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
@@ -93,19 +92,19 @@ function WritingExpertReviewContent() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Request Tutor Review">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-40 rounded-2xl" />
           <Skeleton className="h-32 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (isSuccess) {
     return (
-      <LearnerDashboardShell pageTitle="Request Submitted">
+      <>
         <div className="flex items-center justify-center min-h-[60vh] p-4">
           <MotionPage>
             <Card className="p-8 max-w-md w-full text-center">
@@ -116,12 +115,12 @@ function WritingExpertReviewContent() {
             </Card>
           </MotionPage>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Request Tutor Review">
+    <>
       {/* Sticky header */}
       <header className="bg-surface border-b border-border sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -226,7 +225,7 @@ function WritingExpertReviewContent() {
           </Button>
         </form>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

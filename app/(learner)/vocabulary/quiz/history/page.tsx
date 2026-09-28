@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, History, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -62,7 +61,7 @@ export default function VocabularyQuizHistoryPage() {
   const totalTerms = items.reduce((acc, x) => acc + x.termsQuizzed, 0);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6 flex items-center gap-3">
         <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -132,6 +131,6 @@ export default function VocabularyQuizHistoryPage() {
           </Button>
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

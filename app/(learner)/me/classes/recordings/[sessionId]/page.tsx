@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, FileText, Paperclip, Sparkles, Video } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -54,7 +53,7 @@ export default function RecordingPage() {
   }, [sessionId]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Link
@@ -178,6 +177,6 @@ export default function RecordingPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

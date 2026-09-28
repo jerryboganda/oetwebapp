@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { FeedbackForm } from '@/components/class/FeedbackForm';
 import { InlineAlert } from '@/components/ui/alert';
@@ -35,7 +34,7 @@ export default function ClassFeedbackPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <Link
           href="/me/classes/past"
@@ -61,6 +60,6 @@ export default function ClassFeedbackPage() {
           />
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

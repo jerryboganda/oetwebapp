@@ -16,7 +16,6 @@ import {
   Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { AsyncStateWrapper } from '@/components/state';
 import { fetchStudyPlan } from '@/lib/api';
@@ -148,7 +147,7 @@ export default function StudyPlanCalendarPage() {
   const today = new Date();
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Study Calendar"
         description="View your study plan tasks across the week or month. Stay on track with completed, pending, and missed indicators."
@@ -285,6 +284,6 @@ export default function StudyPlanCalendarPage() {
           <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-danger" /> Missed</span>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

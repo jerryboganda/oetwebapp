@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { BookOpen, CheckCircle2, Clock, Filter } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -23,9 +22,9 @@ const SKILLS: WritingSubSkill[] = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8
 function LessonsLoadingFallback() {
   const t = useTranslations();
   return (
-    <LearnerDashboardShell pageTitle={t('writing.lessons.pageTitle')}>
+    <>
       <div className="p-6 text-sm text-muted">{t('writing.lessons.loading')}</div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
@@ -86,7 +85,7 @@ function WritingLessonsCatalogueInner() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.lessons.pageTitle')}>
+    <>
       <div className="space-y-6" aria-busy={loading}>
         <LearnerPageHero
           eyebrow={t('writing.lessons.eyebrow')}
@@ -177,6 +176,6 @@ function WritingLessonsCatalogueInner() {
           })}
         </ul>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

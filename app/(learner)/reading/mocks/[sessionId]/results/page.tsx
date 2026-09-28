@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, BookOpen } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
@@ -66,7 +65,7 @@ export default function MockResultsPage() {
   }, [sessionId]);
 
   return (
-    <LearnerDashboardShell pageTitle="Mock Results">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <Link
           href="/reading/mocks"
@@ -343,6 +342,6 @@ export default function MockResultsPage() {
           </>
         ) : null}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

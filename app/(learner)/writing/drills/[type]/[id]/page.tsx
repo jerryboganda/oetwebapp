@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DrillPlayer } from '@/components/domain/writing-drills/drill-player';
@@ -47,7 +46,7 @@ export default async function WritingDrillPlayerPage({
   if (drill.type !== typeResult.data) notFound();
 
   return (
-    <LearnerDashboardShell pageTitle={drill.title}>
+    <>
       <header className="bg-navy dark:bg-surface text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
         <Link
           href={`/writing/drills/${drill.type}`}
@@ -82,6 +81,6 @@ export default async function WritingDrillPlayerPage({
         </Card>
         <DrillPlayer drill={drill} />
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

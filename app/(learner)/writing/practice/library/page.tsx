@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, FilterIcon, Layers, Library, PenTool, Search } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -97,7 +96,7 @@ export default function WritingPracticeLibraryPage() {
   }, [scenarios]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.practice.library.pageTitle')}>
+    <>
       <div className="space-y-6" aria-busy={loading}>
         <LearnerPageHero
           eyebrow={t('writing.practice.library.eyebrow')}
@@ -224,6 +223,6 @@ export default function WritingPracticeLibraryPage() {
           </div>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

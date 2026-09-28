@@ -3,7 +3,6 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +22,7 @@ import { PartTabs, SectionTabs, PartBody } from './_components/part-navigation';
 
 export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (
-    <Suspense fallback={<LearnerDashboardShell pageTitle="Reading"><Skeleton className="h-64" /></LearnerDashboardShell>}>
+    <Suspense fallback={<><Skeleton className="h-64" /></>}>
       <ReadingPaperPlayerContent params={params} />
     </Suspense>
   );
@@ -1027,27 +1026,27 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, [paperId, reloadPdfAnnotations]);
 
   if (loading) {
-    return <LearnerDashboardShell pageTitle="Reading"><Skeleton className="h-64" /></LearnerDashboardShell>;
+    return <><Skeleton className="h-64" /></>;
   }
 
   if (contentLockedMessage) {
     return (
-      <LearnerDashboardShell pageTitle="Reading" backHref="/reading">
+      <>
         <ContentLockedNotice message={contentLockedMessage} />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!structure) {
     return (
-      <LearnerDashboardShell pageTitle="Reading" backHref="/reading">
+      <>
         <InlineAlert variant="error">{error ?? 'Paper not found.'}</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle={structure.paper.title} backHref="/reading">
+    <>
       <main
         // Phase 5 closure — `--reading-font-scale` lets the player text
         // grow without the SSR layout shift that a full body zoom causes,
@@ -1244,6 +1243,6 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           </div>
         </Modal>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

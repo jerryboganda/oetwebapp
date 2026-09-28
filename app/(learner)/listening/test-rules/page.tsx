@@ -20,7 +20,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Headphones, Pencil, ShieldCheck, Timer, Volume2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -58,7 +57,7 @@ export default function ListeningTestRulesPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening Test Rules"
@@ -151,7 +150,7 @@ export default function ListeningTestRulesPage() {
           </Link>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

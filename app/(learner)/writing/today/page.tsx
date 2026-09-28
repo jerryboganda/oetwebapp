@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, CheckCircle2, ListChecks, RefreshCcw, SkipForward } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -149,7 +148,7 @@ export default function WritingTodayPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.today.pageTitle')}>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.today.eyebrow')}
@@ -219,6 +218,6 @@ export default function WritingTodayPage() {
           </ol>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

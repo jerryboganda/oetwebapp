@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardHero } from '@/components/reading/DashboardHero';
@@ -57,7 +56,7 @@ export default function ReadingStatsPage() {
   const daysToExam: number | null = null; // derived from profile exam date if available
 
   return (
-    <LearnerDashboardShell pageTitle="Reading Stats">
+    <>
       <main className="space-y-5 sm:space-y-8">
         {/* Back link */}
         <Link
@@ -161,6 +160,6 @@ export default function ReadingStatsPage() {
           </>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

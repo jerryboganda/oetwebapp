@@ -6,7 +6,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Lock, Map as MapIcon, Play } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -60,7 +59,7 @@ export default function ListeningCurriculumPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening · Skills Catalog"
@@ -107,7 +106,7 @@ export default function ListeningCurriculumPage() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

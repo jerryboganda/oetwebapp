@@ -1,6 +1,5 @@
 'use client';
 
-import { LearnerDashboardShell } from '@/components/layout';
 import { PlacementTestRunner } from '@/components/placement/placement-test-runner';
 
 /**
@@ -11,8 +10,8 @@ import { PlacementTestRunner } from '@/components/placement/placement-test-runne
  */
 export default function PlacementTestPage() {
   return (
-    <LearnerDashboardShell pageTitle="Placement Test" distractionFree>
+    <>
       <PlacementTestRunner />
-    </LearnerDashboardShell>
+    </>
   );
 }

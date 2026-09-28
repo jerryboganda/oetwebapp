@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { ChevronDown, Heart, Lock, Sparkles, Star, Volume2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -401,7 +400,7 @@ export default function RecallsWordsPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Recalls / Words"
@@ -904,6 +903,6 @@ export default function RecallsWordsPage() {
           </div>
         </div>
       </Modal>
-    </LearnerDashboardShell>
+    </>
   );
 }

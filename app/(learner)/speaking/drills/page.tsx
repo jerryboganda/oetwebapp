@@ -6,7 +6,6 @@
 // "speaking_drill" — see LearnerService.SpeakingDrills.cs).
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,7 +66,7 @@ export default function SpeakingDrillsPage() {
   }, [data]);
 
   return (
-    <LearnerDashboardShell pageTitle="Speaking Drills">
+    <>
       <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         <header className="space-y-2">
           <h1 className="text-2xl font-black text-navy">Speaking drills</h1>
@@ -137,7 +136,7 @@ export default function SpeakingDrillsPage() {
           </ul>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

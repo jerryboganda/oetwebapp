@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, MapPin, Plus, RefreshCw, X } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -143,7 +142,7 @@ export default function MockBookingsPage() {
   }, [rescheduleDates]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         eyebrow="Mocks"
         title="Your booked mocks"
@@ -276,6 +275,6 @@ export default function MockBookingsPage() {
           })}
         </ul>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -17,7 +17,6 @@ import {
   User,
   Trash2,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -234,7 +233,7 @@ export default function ThreadPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle={thread?.title ?? 'Thread'}>
+    <>
       <MotionSection className="space-y-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Threads
@@ -490,6 +489,6 @@ export default function ThreadPage() {
       </Modal>
 
       {modToast && <Toast variant={modToast.variant} message={modToast.message} onClose={() => setModToast(null)} />}
-    </LearnerDashboardShell>
+    </>
   );
 }

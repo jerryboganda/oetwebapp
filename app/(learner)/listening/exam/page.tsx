@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Headphones, ListChecks, Lock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
@@ -143,7 +142,7 @@ export default function ListeningFullExamPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Full Listening Exam">
+    <>
       <InsufficientCreditsModal
         open={insufficientCreditsMessage !== null}
         message={insufficientCreditsMessage ?? ''}
@@ -238,6 +237,6 @@ export default function ListeningFullExamPage() {
           />
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headphones, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -134,7 +133,7 @@ export default function MarketplacePage() {
   const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Content Marketplace"
         description="Browse community-contributed OET practice content or submit your own."
@@ -345,6 +344,6 @@ export default function MarketplacePage() {
           )}
         </section>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

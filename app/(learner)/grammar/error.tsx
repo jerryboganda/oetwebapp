@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -19,7 +18,7 @@ export default function GrammarError({
   }, [error]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mx-auto max-w-xl">
         <Card className="text-center">
           <div className="flex flex-col items-center gap-4 py-4">
@@ -44,6 +43,6 @@ export default function GrammarError({
           </div>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

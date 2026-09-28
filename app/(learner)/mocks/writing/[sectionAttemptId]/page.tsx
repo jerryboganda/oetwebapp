@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Lock, Save, Send } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { WritingEditor } from '@/components/domain/writing-editor';
@@ -97,7 +96,7 @@ export default function MockWritingSectionPage() {
   }, [phase, startEditing, submit]);
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Mock" subtitle="Strict 5 + 40 minute writing workflow." backHref="/mocks">
+    <>
       <div className="space-y-6">
         <Button variant="ghost" className="gap-2" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
@@ -173,6 +172,6 @@ export default function MockWritingSectionPage() {
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

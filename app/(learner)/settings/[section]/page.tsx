@@ -41,7 +41,6 @@ import {
   Wifi,
   type LucideIcon,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { NotificationPreferencesPanel } from '@/components/layout/notification-preferences-panel';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
@@ -1395,7 +1394,7 @@ export default function LearnerSettingsSectionPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={config?.title ?? 'Settings'} subtitle={config?.description ?? 'Manage learner settings'} backHref="/settings">
+    <>
       <div className="relative min-h-[calc(100dvh-4rem)]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         
@@ -1521,6 +1520,6 @@ export default function LearnerSettingsSectionPage() {
           ) : null}
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, ArrowRight, Briefcase } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { getWritingV2Profile } from '@/lib/writing/api';
@@ -56,7 +55,7 @@ export default function ProfileSetupProfessionPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile: Step 1">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 1 of 4"
@@ -144,6 +143,6 @@ export default function ProfileSetupProfessionPage() {
           </div>
         </form>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

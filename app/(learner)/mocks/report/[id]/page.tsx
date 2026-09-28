@@ -17,7 +17,6 @@ import {
   Download,
 } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { OetStatementOfResultsCard } from '@/components/domain';
 import { WeaknessNarrative } from '@/components/domain/mock-weakness-narrative';
 import { ReadinessDeltaBanner } from '@/components/domain/readiness-delta-banner';
@@ -234,23 +233,23 @@ function MockReportContent() {
 
   if (error) {
     return (
-      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+      <>
         <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!report) {
     return (
-      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+      <>
         <div className="space-y-6">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -314,11 +313,7 @@ function MockReportContent() {
   };
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Mock Report"
-      subtitle={`${report.title} · ${report.date}`}
-      backHref="/mocks"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
 
         {/* Readiness delta banner — surfaces the change this mock made
@@ -673,20 +668,20 @@ function MockReportContent() {
         </MotionSection>
 
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
 export default function MockReport() {
   return (
     <Suspense fallback={
-      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+      <>
         <div className="space-y-6">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
-      </LearnerDashboardShell>
+      </>
     }>
       <MockReportContent />
     </Suspense>

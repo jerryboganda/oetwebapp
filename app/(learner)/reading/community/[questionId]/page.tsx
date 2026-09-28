@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, MessageCircle, ThumbsUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,7 +69,7 @@ export default function QuestionDiscussionPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Discussion">
+    <>
       <main className="space-y-5 sm:space-y-8 max-w-2xl">
         <Link
           href="/reading"
@@ -157,6 +156,6 @@ export default function QuestionDiscussionPage() {
           </form>
         </div>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

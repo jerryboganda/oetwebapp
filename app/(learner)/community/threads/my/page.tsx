@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -106,7 +105,7 @@ export default function MyThreadsPage() {
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
   return (
-    <LearnerDashboardShell pageTitle="My Threads">
+    <>
       <LearnerPageHero
         title="My Threads"
         description="View and manage threads you've created."
@@ -203,6 +202,6 @@ export default function MyThreadsPage() {
           </div>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

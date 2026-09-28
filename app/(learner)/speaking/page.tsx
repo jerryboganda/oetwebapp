@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { LearnerDashboardShell } from '@/components/layout';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
@@ -84,9 +83,9 @@ export default function SpeakingHome() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Speaking">
+      <>
         <LearnerSkeleton variant="dashboard" />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -145,7 +144,7 @@ export default function SpeakingHome() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Speaking">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Speaking"
@@ -266,6 +265,6 @@ export default function SpeakingHome() {
           </section>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

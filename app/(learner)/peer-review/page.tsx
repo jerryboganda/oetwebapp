@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Users, Send, Star, CheckCircle2, Clock, MessageSquare } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -38,7 +37,7 @@ export default function PeerReviewPage() {
   };
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." />
 
       <MotionSection className="max-w-4xl mx-auto space-y-6">
@@ -125,6 +124,6 @@ export default function PeerReviewPage() {
           </div>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

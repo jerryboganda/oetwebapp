@@ -1,7 +1,6 @@
 'use client';
 
 import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -33,7 +32,7 @@ export default function FeedbackGuidePage() {
   ];
 
   return (
-    <LearnerDashboardShell>
+    <>
       <PageViewBeacon event="feedback_guide_viewed" />
       <LearnerPageHero
         title="Feedback Interpretation Guide"
@@ -92,6 +91,6 @@ export default function FeedbackGuidePage() {
           <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with a tutor reviewer.</p></div>
         </Card>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -19,7 +19,6 @@ import {
   Volume2,
 } from 'lucide-react';
 import { cleanListeningPrompt, cleanListeningOption } from '@/lib/listening-question-clean';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -145,7 +144,7 @@ function isListeningAudioCheckError(err: unknown): boolean {
 
 export default function ListeningPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (
-    <Suspense fallback={<LearnerDashboardShell pageTitle="Listening"><Skeleton className="h-64" /></LearnerDashboardShell>}>
+    <Suspense fallback={<><Skeleton className="h-64" /></>}>
       <ListeningPaperPlayerContent params={params} />
     </Suspense>
   );
@@ -619,22 +618,22 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   }, [activeSubSection?.partCode, attempt, currentIndex, flushPendingAnswers, isLastSection, logIntegrityEvent, subSections, submit]);
 
   if (loading) {
-    return <LearnerDashboardShell pageTitle="Listening"><Skeleton className="h-64" /></LearnerDashboardShell>;
+    return <><Skeleton className="h-64" /></>;
   }
 
   if (contentLockedMessage) {
     return (
-      <LearnerDashboardShell pageTitle="Listening" backHref="/listening">
+      <>
         <ContentLockedNotice message={contentLockedMessage} />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!session) {
     return (
-      <LearnerDashboardShell pageTitle="Listening" backHref="/listening">
+      <>
         <InlineAlert variant="error">{error ?? 'Listening paper not found.'}</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -647,7 +646,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const unansweredQuestionList = unansweredQuestionNumbers.map((number) => `Q${number}`).join(', ');
 
   return (
-    <LearnerDashboardShell pageTitle={session.paper.title} backHref="/listening">
+    <>
       <main className="space-y-5">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {mockAttemptId ? (
@@ -762,7 +761,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
           </>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

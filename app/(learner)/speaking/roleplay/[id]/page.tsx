@@ -14,7 +14,6 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
 import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -110,25 +109,25 @@ export default function RoleCardPreview() {
 
   if (loading || !freeKnown) {
     return (
-      <LearnerDashboardShell pageTitle="Role Card">
+      <>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!card) {
     return (
-      <LearnerDashboardShell pageTitle="Role Card">
+      <>
         <InlineAlert variant="error">Role card not found for this task.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle={card.title}>
+    <>
       <div className="space-y-4">
         <header>
           <p className="text-xs font-bold uppercase tracking-widest text-muted">
@@ -168,6 +167,6 @@ export default function RoleCardPreview() {
           </div>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { FolderOpen, FileText, HardDrive } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -42,7 +41,7 @@ export default function MaterialsPage() {
   }, [folders]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Course Materials"
         description="Every study resource shared by your tutors — search the whole library, or browse by section."
@@ -78,6 +77,6 @@ export default function MaterialsPage() {
 
         {!loading && !error && folders.length > 0 && <MaterialsBrowser folders={folders} />}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect } from 'react';
 import { FileText, BookOpen, ArrowLeftRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -48,17 +47,17 @@ function WritingCompareContent() {
 
   if (!resultId) {
     return (
-      <LearnerDashboardShell pageTitle="Compare Attempts">
+      <>
         <div className="p-6">
           <InlineAlert variant="warning">Open compare from a completed writing result.</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -66,12 +65,12 @@ function WritingCompareContent() {
             <Skeleton className="h-96 w-full rounded-xl" />
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-4">
         <Link href={`/writing/result?id=${resultId}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ChevronLeft className="w-4 h-4" /> Back to result
@@ -177,7 +176,7 @@ function WritingCompareContent() {
           </Card>
         </MotionSection>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }
 

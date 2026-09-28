@@ -7,7 +7,6 @@
  * countdown, and exposes the existing GDPR delete endpoint.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -72,7 +71,7 @@ export default function SpeakingRecordingsPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mx-auto max-w-5xl space-y-6 py-8">
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">My speaking recordings</h1>
@@ -124,6 +123,6 @@ export default function SpeakingRecordingsPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

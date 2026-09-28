@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import {
   PaperBookletSimulation,
   type PaperBookletContent,
@@ -436,7 +435,7 @@ export default function WritingPaperSessionPage() {
   );
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.paper.pageTitle')} distractionFree>
+    <>
       <InsufficientCreditsModal
         open={insufficientCreditsMessage !== null}
         message={insufficientCreditsMessage ?? ''}
@@ -477,6 +476,6 @@ export default function WritingPaperSessionPage() {
         highlights={pdfHighlights}
         onHighlightsChange={setPdfHighlights}
       />
-    </LearnerDashboardShell>
+    </>
   );
 }

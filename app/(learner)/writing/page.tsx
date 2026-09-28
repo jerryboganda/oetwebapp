@@ -11,7 +11,6 @@ import {
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Card, CardContent } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
@@ -90,7 +89,7 @@ export default function WritingHome() {
   }, []);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.hub.pageTitle')}>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={t('writing.hub.eyebrow')}
@@ -136,6 +135,6 @@ export default function WritingHome() {
           </section>
         </MotionSection>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

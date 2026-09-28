@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { ClipboardList, MessageCircleQuestion, Sparkles } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -119,7 +118,7 @@ export default function SpeakingTaskSelection() {
   const isDirty = JSON.stringify(draft) !== JSON.stringify(applied);
 
   return (
-    <LearnerDashboardShell pageTitle="Select Speaking Task">
+    <>
       <div className="space-y-6">
         <MotionSection>
           <div className="space-y-1">
@@ -258,6 +257,6 @@ export default function SpeakingTaskSelection() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CheckCircle2, Target } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -117,19 +116,19 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
+      <>
         <div className="flex flex-1 items-center justify-center p-4 md:p-8" role="status" aria-label="Loading onboarding">
           <div className="w-full max-w-2xl space-y-5 sm:space-y-8">
             <Skeleton className="h-12 w-full rounded-2xl" />
             <Skeleton className="h-72 w-full rounded-2xl" />
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
+    <>
       <div className="flex-1 flex items-center justify-center p-4 md:p-8 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="w-full max-w-2xl space-y-5 sm:space-y-8">
           {/* Stepper */}
@@ -189,6 +188,6 @@ export default function OnboardingPage() {
           </div>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
