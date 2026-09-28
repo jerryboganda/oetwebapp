@@ -116,13 +116,13 @@ every session. Waited >10 min first; they had moved on.
 
 ### Committed in `3ec54a76d`
 
-**`backend/tests/OetLearner.Api.Tests/EffectiveEntitlementResolverPerformanceTests.cs`** — query
+**`backend/tests/OetLearner.Api.Tests/Entitlements/EffectiveEntitlementResolverPerformanceTests.cs`** — query
 budget ratcheted 6→7 and 5→6, with a comment explaining exactly which lookup was added and why it
 is constant. The invariant that actually matters, `Assert.Equal(singleCount, manyCount)` (no N+1),
 was passing throughout and is untouched. **Only raise this number alongside a genuinely new constant
 lookup. A count that grows with the learner's data is an N+1 and must be fixed, not ratcheted.**
 
-**`backend/tests/OetLearner.Api.Tests/VocabularyRecallsPerformanceTests.cs`** — two fixes:
+**`backend/tests/OetLearner.Api.Tests/Recalls/VocabularyRecallsPerformanceTests.cs`** — two fixes:
 1. `Assert.Equal(2, …Contains("COUNT"))` → `Contains("COUNT(")`. The bare substring also matched the
    *column names* `ReviewCount` and `CorrectCount`, so a plain SELECT was counted as an aggregate
    and reported a regression that never happened.
@@ -176,8 +176,8 @@ do change it, the test constrains the shape: it requires ONE SQL statement menti
 Stage **explicit paths only — never `git add -A`**, the tree is full of three sessions' work:
 
 ```bash
-git add backend/tests/OetLearner.Api.Tests/EffectiveEntitlementResolverPerformanceTests.cs \
-        backend/tests/OetLearner.Api.Tests/VocabularyRecallsPerformanceTests.cs
+git add backend/tests/OetLearner.Api.Tests/Entitlements/EffectiveEntitlementResolverPerformanceTests.cs \
+        backend/tests/OetLearner.Api.Tests/Recalls/VocabularyRecallsPerformanceTests.cs
 ```
 
 No `Co-Authored-By` trailer (`.claude/settings.json` does not set `attribution.commit`).

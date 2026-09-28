@@ -218,7 +218,7 @@ internal static class Doc08ListeningReadingMocks
                 "docs/ai-learning-companion/REPO_GAP_ANALYSIS.md, F-072/F-074 row"),
             new DocumentationEvidenceSeed("EV-LRM-022", DocumentationEvidenceType.Testing,
                 "Deterministic seeded-shuffle helper with 9 unit tests; documented as not yet safe for graded Reading/Listening item ordering pending an option-id migration.",
-                "docs/MOCKS-RANDOMISATION.md; backend/src/OetLearner.Api/Services/RandomisationHelper.cs; backend/tests/OetLearner.Api.Tests/RandomisationHelperTests.cs"),
+                "docs/MOCKS-RANDOMISATION.md; backend/src/OetLearner.Api/Services/RandomisationHelper.cs; backend/tests/OetLearner.Api.Tests/Mocks/RandomisationHelperTests.cs"),
             new DocumentationEvidenceSeed("EV-LRM-023", DocumentationEvidenceType.Code,
                 "Idempotent, Git-sourced Recalls vocabulary seeder, versioned as Content Pack v1 (2026-05-05).",
                 "backend/src/OetLearner.Api/Services/Recalls/RecallsContentSeeder.cs"),

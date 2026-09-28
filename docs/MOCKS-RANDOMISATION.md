@@ -77,4 +77,4 @@ dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~RandomisationHel
 
 - [`MOCKS-OPTION-ID-MIGRATION.md`](./MOCKS-OPTION-ID-MIGRATION.md) — structural migration plan (Wave 1.1).
 - `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`.
-- `backend/tests/OetLearner.Api.Tests/RandomisationHelperTests.cs`.
+- `backend/tests/OetLearner.Api.Tests/Mocks/RandomisationHelperTests.cs`.

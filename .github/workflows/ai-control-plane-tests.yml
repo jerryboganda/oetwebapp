@@ -4,7 +4,7 @@ name: AI Control Plane Schema Tests
 # Runs the schema-only AiOperation/AiOperationAttempt/AiBudgetPeriod/
 # AiCreditReservation coverage (Services/AiControlPlaneSchemaTests.cs +
 # Services/AiControlPlaneSchemaPostgreSqlTests.cs), the shared PostgreSQL
-# test harness precedent (PostgreSqlPerformanceProviderTests.cs), and the
+# test harness precedent (Platform/PostgreSqlPerformanceProviderTests.cs), and the
 # migration-hygiene contract for the two new hand-authored migrations —
 # against a real PostgreSQL 16 service, since several of those tests assert
 # provider-specific DDL (xmin concurrency tokens, partition-safe conditional
@@ -33,8 +33,8 @@ on:
       - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
       - 'backend/src/OetLearner.Api/Services/Ai/AiOperationLeaseClaimer.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs'
-      - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
-      - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Platform/PostgreSqlPerformanceProviderTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Platform/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
   push:
     branches:
@@ -58,8 +58,8 @@ on:
       - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
       - 'backend/src/OetLearner.Api/Services/Ai/AiOperationLeaseClaimer.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs'
-      - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
-      - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Platform/PostgreSqlPerformanceProviderTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Platform/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
   workflow_dispatch:
 

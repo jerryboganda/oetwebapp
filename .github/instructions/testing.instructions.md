@@ -29,8 +29,26 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
 - Cover service logic, scoring, rulebook resolution, authorization, and error paths.
 - Keep tests isolated; do not depend on shared mutable external state.
 - One test project: `backend/tests/OetLearner.Api.Tests`. Put a new test in the folder of the
-  domain under test (`Speaking/`, `Writing/`, `Billing/`, `Services/`, ...) with namespace
-  `OetLearner.Api.Tests.<Folder>`. Do not add new test files at the project root.
+  domain under test with namespace `OetLearner.Api.Tests.<Folder>`. Do not add new test files at
+  the project root.
+  - Skills and exam: `Writing/`, `Speaking/`, `Listening/`, `Reading/`, `Mocks/`,
+    `Assessment/` (scoring), `Readiness/`, `Planner/`, `FreeSamples/`, `Rulebook/`,
+    `Pronunciation/`, `Conversation/` (AI conversation, ElevenLabs TTS/STT), `Recalls/`
+    (recalls, vocabulary, SM-2).
+  - Learner and staff: `Learner/`, `Expert/`, `Admin/`, `Classes/`, `LiveClasses/`,
+    `Notifications/`.
+  - Commerce and access: `Billing/` (checkout, payments, wallet, subscriptions, sponsor, AI
+    package credits), `Entitlements/`, `VideoLibrary/`, `Content/` (papers, uploads, storage,
+    media).
+  - AI platform: `Services/` (gateway, providers, credentials, assistant), `Companion/`,
+    `OwnerAgent/`.
+  - Cross-cutting: `Auth/`, `Platform/` (migrations, runtime settings, endpoint inventory,
+    health), `Observability/`.
+  - Only shared fixtures stay at the root (`TestRuntimeSettingsProvider`,
+    `SpeakingSettingsTestDefaults`, `InMemoryFileStorage`, `MemoryFileStorage`, `AssemblyInfo`),
+    plus a few tests held back while open branches edit them.
+  - A root type (namespace `OetLearner.Api.Tests`) is visible from every folder. A type in a
+    folder needs `using OetLearner.Api.Tests.<Folder>;` from any other folder.
 - Reuse `Infrastructure/` before writing a private fake: `TestWebApplicationFactory` (and
   `FirstPartyAuthTestWebApplicationFactory`, `BunnyMockedWebApplicationFactory`),
   `NotificationTestDoubles`, `[PostgreSqlFact]` + `PostgreSqlTestDatabase` (needs
@@ -40,8 +58,10 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
   No permanent `Skip`: delete the test or fix it.
 - When moving or renaming a test class, update the CI filters that name it:
   `writing-rev8-ci.yml` `DOTNET_FILTER`, `ai-control-plane-tests.yml` `paths` and `--filter`,
-  `rulebook-conformance.yml` `--filter`, `deploy.yml` `syntax-gate` filter, and the pinned
-  classes in `qa-smoke.yml` (`PlacementEndpointsTests`, `AuthFlowsTests`).
+  `rulebook-conformance.yml` `--filter`, `deploy.yml` `syntax-gate` filter, the `--filter` of
+  `ubag-integration-e2e.yml`, `ai-provider-benchmark.yml` and
+  `elevenlabs-realtime-stt-live-smoke.yml`, and the pinned classes in `qa-smoke.yml`
+  (`PlacementEndpointsTests`, `AuthFlowsTests`).
 
 ## When to add tests
 

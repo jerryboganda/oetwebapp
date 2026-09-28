@@ -1,0 +1,457 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiTools;
+using OetLearner.Api.Services.Rulebook;
+
+namespace OetLearner.Api.Tests.Services;
+
+public sealed class RegistryBackedProviderTests
+{
+    [Fact]
+    public async Task CompleteAsync_ExplicitMissingOpenAiProvider_ThrowsInsteadOfFallingBack()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK))));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "missing-provider",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "user",
+        }, CancellationToken.None));
+
+        Assert.Contains("missing-provider", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not active", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OpenAiCompatibleSuccessWithMissingMessage_ThrowsStableInvalidResponse()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"choices\":[{}]}", Encoding.UTF8, "application/json"),
+        })));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "user",
+        }, CancellationToken.None));
+
+        Assert.Contains("invalid", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("choices[0].message", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InvalidToolSchema_ThrowsBeforeSendingRequest()
+    {
+        var handlerWasCalled = false;
+        var provider = await NewProviderAsync(new StubHandler(_ =>
+        {
+            handlerWasCalled = true;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "user",
+            Tools = new[]
+            {
+                new AiToolDefinition(
+                    "lookup_case",
+                    "Lookup case",
+                    "Lookup a case record.",
+                    AiToolCategory.Read,
+                    "[]"),
+            },
+        }, CancellationToken.None));
+
+        Assert.Contains("tool schema", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(handlerWasCalled);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ResponseFormatJsonObject_SendsResponseFormat()
+    {
+        string? capturedBody = null;
+        var provider = await NewProviderAsync(new StubHandler(async req =>
+        {
+            capturedBody = req.Content is null ? null : await req.Content.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"summary\\\":\\\"ok\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":3}}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        }));
+
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "summarise",
+            ResponseFormatJson = "json_object",
+        }, CancellationToken.None);
+
+        Assert.Equal("{\"summary\":\"ok\"}", completion.Text);
+        Assert.NotNull(capturedBody);
+        using var doc = JsonDocument.Parse(capturedBody!);
+        var format = doc.RootElement.GetProperty("response_format");
+        Assert.Equal("json_object", format.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ForcedToolWithoutProviderToolCalls_CoercesArgsJson()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Here is the JSON: {\\\"verdicts\\\":[]} done.\"},\"finish_reason\":\"stop\"}]}",
+                Encoding.UTF8,
+                "application/json"),
+        })));
+
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "judge",
+            ResponseFormatJson = "json_object",
+            Tools = new[]
+            {
+                new AiToolDefinition(
+                    "emit_part_a_verdicts",
+                    "Emit verdicts",
+                    "Emit verdicts.",
+                    AiToolCategory.Read,
+                    "{\"type\":\"object\",\"properties\":{\"verdicts\":{\"type\":\"array\"}},\"required\":[\"verdicts\"]}"),
+            },
+            ToolChoice = "emit_part_a_verdicts",
+        }, CancellationToken.None);
+
+        var call = Assert.Single(completion.ToolCalls!);
+        Assert.Equal("emit_part_a_verdicts", call.ToolCode);
+        Assert.Equal("{\"verdicts\":[]}", call.ArgsJson);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_UbagFailure_SurfacesFacadeErrorDetail()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-provider-ubag-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            var dpProvider = new EphemeralDataProtectionProvider();
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "ubag",
+                Name = "UBAG (browser AI providers)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                Category = AiProviderCategory.TextChat,
+                BaseUrl = "http://ubag-vps-gateway-1:8080/v1/openai",
+                EncryptedApiKey = protector.Protect("ubag-test-pat-1234567890"),
+                ApiKeyHint = "ubag-pat",
+                DefaultModel = "mock",
+                IsActive = true,
+                FailoverPriority = 70,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            var provider = new RegistryBackedProvider(
+                new StubHttpClientFactory(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent(
+                        "{\"error\":{\"message\":\"Selector drift detected; all fallbacks failed.\",\"type\":\"provider_error\",\"code\":\"provider_transient\"}}",
+                        Encoding.UTF8,
+                        "application/json"),
+                }))),
+                new AiProviderRegistry(db, dpProvider),
+                Options.Create(new AiProviderOptions()));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+            {
+                ProviderCode = "ubag",
+                Model = "chatgpt_web",
+                SystemPrompt = "system",
+                UserPrompt = "ping",
+            }, CancellationToken.None));
+
+            Assert.Contains("UBAG provider", ex.Message);
+            Assert.Contains("Selector drift", ex.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteAsync_UbagToolsRequest_FailsFastWithGuidance()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-provider-ubag-tools-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            var dpProvider = new EphemeralDataProtectionProvider();
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "ubag",
+                Name = "UBAG (browser AI providers)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                Category = AiProviderCategory.TextChat,
+                BaseUrl = "http://ubag-vps-gateway-1:8080/v1/openai",
+                EncryptedApiKey = protector.Protect("ubag-test-pat-1234567890"),
+                ApiKeyHint = "ubag-pat",
+                DefaultModel = "mock",
+                IsActive = true,
+                FailoverPriority = 70,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            var called = false;
+            var provider = new RegistryBackedProvider(
+                new StubHttpClientFactory(new StubHandler(_ =>
+                {
+                    called = true;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+                })),
+                new AiProviderRegistry(db, dpProvider),
+                Options.Create(new AiProviderOptions()));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+            {
+                ProviderCode = "ubag",
+                Model = "chatgpt_web",
+                SystemPrompt = "system",
+                UserPrompt = "ping",
+                Tools = new[]
+                {
+                    new AiToolDefinition(
+                        "lookup_case",
+                        "Lookup case",
+                        "Lookup a case record.",
+                        AiToolCategory.Read,
+                        "{}"),
+                },
+                ToolChoice = "auto",
+            }, CancellationToken.None));
+
+            Assert.Contains("does not support native function calling", ex.Message);
+            Assert.False(called);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteAsync_UbagEmptyCompletion_ThrowsWithRetryGuidance()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-provider-ubag-empty-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            var dpProvider = new EphemeralDataProtectionProvider();
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "ubag",
+                Name = "UBAG (browser AI providers)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                Category = AiProviderCategory.TextChat,
+                BaseUrl = "http://ubag-vps-gateway-1:8080/v1/openai",
+                EncryptedApiKey = protector.Protect("ubag-test-pat-1234567890"),
+                ApiKeyHint = "ubag-pat",
+                DefaultModel = "mock",
+                IsActive = true,
+                FailoverPriority = 70,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            var provider = new RegistryBackedProvider(
+                new StubHttpClientFactory(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}],\"model\":\"chatgpt_web\"}",
+                        Encoding.UTF8,
+                        "application/json"),
+                }))),
+                new AiProviderRegistry(db, dpProvider),
+                Options.Create(new AiProviderOptions()));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+            {
+                ProviderCode = "ubag",
+                Model = "chatgpt_web",
+                SystemPrompt = "system",
+                UserPrompt = "ping",
+            }, CancellationToken.None));
+
+            Assert.Contains("returned no text", ex.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task ExtractUbagErrorDetail_ReturnsFacadeMessage()
+    {
+        Assert.Equal(
+            "Selector drift detected.",
+            RegistryBackedProvider.ExtractUbagErrorDetail(
+                "{\"error\":{\"message\":\"Selector drift detected.\",\"type\":\"provider_error\",\"code\":\"provider_transient\"}}"));
+        Assert.Null(RegistryBackedProvider.ExtractUbagErrorDetail(null));
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SendsPromptCachingHeaderAndSystemCacheBlock()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        var provider = await NewAnthropicProviderAsync(new StubHandler(async req =>
+        {
+            capturedRequest = req;
+            capturedBody = req.Content is null ? null : await req.Content.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}],\"usage\":{\"input_tokens\":12,\"output_tokens\":3},\"stop_reason\":\"end_turn\"}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        }));
+
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "anthropic",
+            Model = "claude-sonnet-5",
+            SystemPrompt = "rulebook and scoring criteria",
+            UserPrompt = "grade this",
+        }, CancellationToken.None);
+
+        Assert.Equal("ok", completion.Text);
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest!.Headers.TryGetValues("anthropic-beta", out var betaHeaders));
+        Assert.Contains("prompt-caching-2024-07-31", string.Join(",", betaHeaders));
+
+        Assert.NotNull(capturedBody);
+        using var doc = JsonDocument.Parse(capturedBody!);
+        var system = doc.RootElement.GetProperty("system");
+        Assert.Equal(JsonValueKind.Array, system.ValueKind);
+        var block = system[0];
+        Assert.Equal("text", block.GetProperty("type").GetString());
+        Assert.Equal("rulebook and scoring criteria", block.GetProperty("text").GetString());
+        Assert.Equal("ephemeral", block.GetProperty("cache_control").GetProperty("type").GetString());
+    }
+
+    private static async Task<RegistryBackedProvider> NewProviderAsync(HttpMessageHandler handler)
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase($"registry-provider-{Guid.NewGuid():N}")
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        var dpProvider = new EphemeralDataProtectionProvider();
+        var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "digitalocean-serverless",
+            Name = "DigitalOcean Serverless",
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            Category = AiProviderCategory.TextChat,
+            BaseUrl = "https://example.test/v1",
+            EncryptedApiKey = protector.Protect("sk-test-1234567890"),
+            ApiKeyHint = "...7890",
+            DefaultModel = "glm-5",
+            IsActive = true,
+            FailoverPriority = 10,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        return new RegistryBackedProvider(
+            new StubHttpClientFactory(handler),
+            new AiProviderRegistry(db, dpProvider),
+            Options.Create(new AiProviderOptions()));
+    }
+
+    private static async Task<AnthropicProvider> NewAnthropicProviderAsync(HttpMessageHandler handler)
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase($"anthropic-provider-{Guid.NewGuid():N}")
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        var dpProvider = new EphemeralDataProtectionProvider();
+        var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "anthropic",
+            Name = "Anthropic",
+            Dialect = AiProviderDialect.Anthropic,
+            Category = AiProviderCategory.TextChat,
+            BaseUrl = "https://anthropic.example.test/v1",
+            EncryptedApiKey = protector.Protect("anthropic-key-1234567890"),
+            ApiKeyHint = "...7890",
+            DefaultModel = "claude-sonnet-5",
+            IsActive = true,
+            FailoverPriority = 10,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        return new AnthropicProvider(
+            new StubHttpClientFactory(handler),
+            new AiProviderRegistry(db, dpProvider));
+    }
+
+    private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => responder(request);
+    }
+}
