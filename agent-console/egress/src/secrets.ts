@@ -1,3 +1,5 @@
+// Kept byte-identical in egress/src/ and dockerproxy/src/ (drift check:
+// agent-console/tests/proxy-shared-files.test.ts). Edit both copies.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
