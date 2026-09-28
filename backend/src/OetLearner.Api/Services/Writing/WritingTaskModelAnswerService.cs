@@ -1547,7 +1547,7 @@ public sealed class WritingTaskModelAnswerService(
     /// Canonical case-note rendering shared by generation and staleness
     /// checks: only <c>relevant</c>/<c>maybe</c> sentences, in order.
     /// </summary>
-    internal static string BuildCaseNotesText(IEnumerable<(string Text, string? Relevance)> sentences)
+    internal static string BuildCaseNotesText(IEnumerable<(string Text, string Relevance)> sentences)
         => string.Join("\n", sentences
             .Where(s => s.Relevance is "relevant" or "maybe")
             .Select(s => $"- {s.Text}"));
@@ -1560,7 +1560,7 @@ public sealed class WritingTaskModelAnswerService(
     /// </summary>
     internal static string ComputeSourceContentHash(
         string taskSnapshot,
-        IEnumerable<(string Text, string? Relevance)> sentences)
+        IEnumerable<(string Text, string Relevance)> sentences)
         => ComputeHash($"{taskSnapshot ?? string.Empty}\n---\n{BuildCaseNotesText(sentences)}");
 
     internal static string ComputeSourceContentHash(string taskSnapshot, string caseNotesText)
