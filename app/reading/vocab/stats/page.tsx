@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from '@/components/charts/dynamic-recharts';
 import { LearnerDashboardShell } from '@/components/layout';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
 
@@ -65,13 +66,18 @@ export default function VocabStatsPage() {
         </div>
 
         {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+          <div className="space-y-4">
+            <Skeleton className="h-72 w-full rounded-2xl" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
           </div>
         ) : (
           <>
             {/* Donut chart */}
-            <section className="rounded-2xl border border-border bg-surface px-6 py-6">
+            <section className="rounded-2xl border border-border bg-surface px-4 py-5 shadow-sm sm:px-6 sm:py-6">
               <h2 className="mb-4 text-base font-semibold text-navy">
                 Word Breakdown
               </h2>

@@ -18,9 +18,18 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
 
   return (
     <div
-      className="relative w-full cursor-pointer select-none"
+      role="button"
+      tabIndex={0}
+      aria-pressed={flipped}
+      className="relative w-full cursor-pointer select-none rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       style={{ perspective: '1000px' }}
       onClick={handleFlip}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleFlip();
+        }
+      }}
     >
       {/* Card container — perspective transform root */}
       <div

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { VocabItemDto } from '@/lib/reading-pathway-api';
 import { submitVocabReview } from '@/lib/reading-pathway-api';
+import { Button } from '@/components/ui/button';
 import VocabCard from './VocabCard';
 
 interface VocabReviewSessionProps {
@@ -99,13 +100,9 @@ export default function VocabReviewSession({ items, onComplete }: VocabReviewSes
       {/* Actions */}
       <div className="flex gap-3">
         {!isFlipped ? (
-          <button
-            type="button"
-            onClick={() => setIsFlipped(true)}
-            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-          >
+          <Button fullWidth size="lg" onClick={() => setIsFlipped(true)}>
             Reveal
-          </button>
+          </Button>
         ) : (
           RATING_BUTTONS.map(({ label, quality, className }) => (
             <button

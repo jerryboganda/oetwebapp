@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LearnerDashboardShell } from '@/components/layout';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
   getVocabLists,
@@ -127,18 +130,15 @@ export default function VocabListsPage() {
         {loading ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-48 motion-safe:animate-pulse rounded-2xl border border-border bg-background-light"
-              />
+              <Skeleton key={i} className="h-48 rounded-2xl" />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {displayLists.map((list) => (
-              <div
+              <Card
                 key={list.slug}
-                className="flex flex-col rounded-2xl border border-border bg-surface px-6 py-5"
+                className="flex flex-col"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
@@ -159,14 +159,14 @@ export default function VocabListsPage() {
                       Subscribed
                     </span>
                   ) : (
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      className="shrink-0"
                       disabled={subscribing[list.slug]}
                       onClick={() => void handleSubscribe(list.slug)}
-                      className="shrink-0 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
                     >
                       {subscribing[list.slug] ? 'Subscribing…' : 'Subscribe'}
-                    </button>
+                    </Button>
                   )}
                 </div>
 
@@ -188,7 +188,7 @@ export default function VocabListsPage() {
                     ))}
                   </div>
                 ) : null}
-              </div>
+              </Card>
             ))}
           </div>
         )}

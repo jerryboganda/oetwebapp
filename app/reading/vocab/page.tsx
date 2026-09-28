@@ -6,6 +6,9 @@ import { BookOpen, Brain, CalendarCheck, RefreshCw, Trophy } from 'lucide-react'
 import { toast } from 'sonner';
 import { isApiError } from '@/lib/api';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
   addVocabWord,
@@ -86,27 +89,19 @@ export default function VocabHubPage() {
     <LearnerDashboardShell pageTitle="Vocabulary">
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
-        <div className="rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 dark:border-primary-900/50 dark:bg-primary-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary-500">
-            SM-2 Spaced Repetition
-          </p>
-          <h1 className="text-2xl font-bold text-navy">
-            Vocabulary Builder
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Build your OET medical vocabulary with evidence-based spaced repetition. Review daily to maximise retention.
-          </p>
-        </div>
+        <LearnerPageHero
+          eyebrow="SM-2 Spaced Repetition"
+          icon={BookOpen}
+          title="Vocabulary Builder"
+          description="Build your OET medical vocabulary with evidence-based spaced repetition. Review daily to maximise retention."
+        />
 
         {/* Stats strip */}
         <section>
           {loading ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-background-light"
-                />
+                <Skeleton key={i} className="h-24 rounded-xl" />
               ))}
             </div>
           ) : (
@@ -131,57 +126,53 @@ export default function VocabHubPage() {
 
         {/* Quick actions */}
         <section className="flex flex-wrap gap-3">
-          <Link
-            href="/reading/vocab/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-primary-700 dark:hover:bg-primary-600 active:scale-95"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden />
-            Review Today&apos;s Cards
-            {stats?.dueToday ? (
-              <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                {stats.dueToday}
-              </span>
-            ) : null}
-          </Link>
-          <Link
-            href="/reading/vocab/lists"
-            className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-surface px-5 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50 dark:border-primary-800/60 dark:text-primary-300 dark:hover:bg-primary-950/30"
-          >
-            <BookOpen className="h-4 w-4" aria-hidden />
-            Browse Lists
-          </Link>
-          <Link
-            href="/reading/vocab/stats"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-5 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-          >
-            <Brain className="h-4 w-4" aria-hidden />
-            View Stats
-          </Link>
+          <Button asChild size="lg">
+            <Link href="/reading/vocab/review">
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              Review Today&apos;s Cards
+              {stats?.dueToday ? (
+                <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">
+                  {stats.dueToday}
+                </span>
+              ) : null}
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="bg-surface">
+            <Link href="/reading/vocab/lists">
+              <BookOpen className="h-4 w-4" aria-hidden />
+              Browse Lists
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="bg-surface">
+            <Link href="/reading/vocab/stats">
+              <Brain className="h-4 w-4" aria-hidden />
+              View Stats
+            </Link>
+          </Button>
         </section>
 
         {/* Add a word */}
-        <section className="rounded-2xl border border-border bg-surface px-6 py-6">
-          <h2 className="mb-3 text-base font-semibold text-navy">
+        <section className="rounded-2xl border border-border bg-surface px-4 py-5 shadow-sm sm:px-6 sm:py-6">
+          <h2 id="vocab-add-word-title" className="mb-3 text-base font-semibold text-navy">
             Add a Word
           </h2>
           <div className="flex gap-3">
             <input
               ref={inputRef}
               type="text"
+              aria-labelledby="vocab-add-word-title"
               value={newWord}
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleAddWord(); }}
               placeholder="e.g. haemoglobin"
-              className="flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
-            <button
-              type="button"
+            <Button
               disabled={addingWord || !newWord.trim()}
               onClick={() => void handleAddWord()}
-              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
             >
               {addingWord ? 'Adding…' : 'Add'}
-            </button>
+            </Button>
           </div>
         </section>
 
