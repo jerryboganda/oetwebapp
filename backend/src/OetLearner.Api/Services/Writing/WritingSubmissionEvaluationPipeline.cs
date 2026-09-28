@@ -1434,7 +1434,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
         }
         }
-        }
 
         var rubric = ParseRubric(result);
         if (rubric is null)
