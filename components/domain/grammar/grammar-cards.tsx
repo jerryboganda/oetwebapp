@@ -266,8 +266,8 @@ export function GrammarExerciseRunner({
   const isResultMode = Boolean(result);
   const tone = result
     ? result.isCorrect
-      ? 'border-emerald-200 bg-emerald-50/60'
-      : 'border-rose-200 bg-rose-50/60'
+      ? 'border-success/30 bg-success/5'
+      : 'border-danger/30 bg-danger/5'
     : '';
 
   return (
@@ -393,7 +393,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
       className={cn(
         'rounded-2xl border px-4 py-3 text-sm shadow-sm',
         accent === 'success'
-          ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
+          ? 'border-success/30 bg-success/10 text-navy'
           : 'border-border/70 bg-surface text-navy',
       )}
     >
