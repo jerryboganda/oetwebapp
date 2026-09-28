@@ -27,6 +27,8 @@ async function dismissTour(page: Page) {
 }
 
 async function openAsLearner(page: Page, request: APIRequestContext, route: string) {
+  // The post-login app-download modal is a dialog that would block nav clicks.
+  await page.addInitScript(() => window.sessionStorage.setItem('oet_app_promo_dismissed', 'true'));
   const recover = () => recoverBrowserSession(page, request, 'learner', route);
   // Single-active-session: the first visit mints a fresh session, which also lands on `route`.
   if (page.url().startsWith('http')) {
