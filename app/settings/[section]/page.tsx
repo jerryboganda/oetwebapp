@@ -175,9 +175,9 @@ const accentStyles: Record<LearnerSurfaceAccent, {
     toggleOn: 'bg-emerald-600',
   },
   slate: {
-    icon: 'bg-muted text-navy',
-    badge: 'border-border bg-muted text-navy',
-    softBadge: 'border-border bg-muted text-navy',
+    icon: 'bg-background-light text-navy',
+    badge: 'border-border bg-background-light text-navy',
+    softBadge: 'border-border bg-background-light text-navy',
     helperSurface: 'border-border bg-surface',
     helperGlow: 'from-slate-100 via-white to-white',
     inputFocus: 'focus:border-slate-400 focus:ring-2 focus:ring-slate-100',
