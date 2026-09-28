@@ -39,7 +39,7 @@ export function BillingToggle({
         <button
           type="button"
           aria-pressed={value === 'monthly'}
-          className={`rounded-full px-4 py-1.5 font-medium transition-colors ${
+          className={`min-h-9 rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
             value === 'monthly' ? 'bg-primary text-white dark:bg-violet-700 shadow-sm' : 'text-muted hover:text-navy'
           }`}
           onClick={() => onChange('monthly')}
@@ -49,7 +49,7 @@ export function BillingToggle({
         <button
           type="button"
           aria-pressed={value === 'annual'}
-          className={`rounded-full px-4 py-1.5 font-medium transition-colors ${
+          className={`min-h-9 rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
             value === 'annual' ? 'bg-primary text-white dark:bg-violet-700 shadow-sm' : 'text-muted hover:text-navy'
           }`}
           onClick={() => onChange('annual')}
