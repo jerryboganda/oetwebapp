@@ -21,6 +21,23 @@ Follow the layout under `backend/src/OetLearner.Api`:
 Keep endpoints thin; do not reach around services from endpoints. Use dependency injection,
 immutable DTOs, nullable annotations, and cancellation tokens on async operations.
 
+- Services over ~2,000 lines are `partial` and split as `X.<Area>.cs`; the core file keeps the
+  primary constructor, every field with an initializer, and shared private helpers.
+- Every route declares its auth intent: `.RequireAuthorization(...)` (usually on the group) or an
+  explicit `.AllowAnonymous()`. There is no fallback policy; `EndpointRegistrationTests` enforces it.
+
+## Errors
+
+- New or edited code signals failures with `throw ApiException.<Kind>(code, message)`
+  (`Validation`, `NotFound`, `Conflict`, `Forbidden`, `Unauthorized`, `PaymentRequired`,
+  `TooManyRequests`, `ServiceUnavailable`). The central handler in `Program.cs` turns it into
+  `{code, message, fieldErrors, retryable, supportHint, correlationId}`, which `lib/api/client.ts`
+  reads.
+- Inline `Results.X(new { error = ... })`, raw-string bodies and `Results.Problem` are legacy
+  shapes. Don't add new ones, and don't "fix" existing ones without checking the frontend
+  consumer: changing a response shape is a contract change.
+- Never echo `ex.Message` from framework/EF exceptions to clients.
+
 ## Data & safety
 
 - Use EF Core with parameterized queries and migrations. Never concatenate SQL with user input.
