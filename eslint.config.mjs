@@ -51,17 +51,21 @@ const ADMIN_KIT_ALLOWED = [
     "**/__tests__/**",
 ];
 
+// Block-level ignores only apply to their own block, so the restriction blocks
+// below reuse this list (otherwise they would lint stories without the TS parser).
+const BASE_IGNORES = [
+    "**/.next/**",
+    "**/node_modules/**",
+    "**/coverage/**",
+    "OET Web App Login only screens take from here/**",
+    ".storybook/**",
+    "**/__stories__/**",
+    "**/*.stories.ts",
+    "**/*.stories.tsx",
+];
+
 export default defineConfig([{
-    ignores: [
-        "**/.next/**",
-        "**/node_modules/**",
-        "**/coverage/**",
-        "OET Web App Login only screens take from here/**",
-        ".storybook/**",
-        "**/__stories__/**",
-        "**/*.stories.ts",
-        "**/*.stories.tsx",
-    ],
+    ignores: BASE_IGNORES,
     extends: [...next],
 }, {
     // React 19 / React Compiler advisory hook rules. These flag pervasive
@@ -88,12 +92,13 @@ export default defineConfig([{
     },
 }, {
     files: SHARED_TS_FILES,
+    ignores: BASE_IGNORES,
     rules: {
         "no-restricted-syntax": ["error", ...restrictedSyntax],
     },
 }, {
     files: SHARED_TS_FILES,
-    ignores: ADMIN_KIT_ALLOWED,
+    ignores: [...BASE_IGNORES, ...ADMIN_KIT_ALLOWED],
     rules: {
         "no-restricted-imports": ["error", { patterns: restrictedImportPatterns }],
     },
