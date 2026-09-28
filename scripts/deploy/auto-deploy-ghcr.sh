@@ -145,6 +145,13 @@ if [ "$(docker network inspect -f '{{.Internal}}' oet_agent_ctl 2>/dev/null || t
   echo "  WARNING: oet_agent_ctl exists but is not --internal; the owner-agent workflow will refuse to use it" >&2
 fi
 
+# The API slots also join the plain bridge network shared with the GEPA
+# placement engine stack (docker-compose.production.yml declares it external).
+# Create it on first use so a main deploy never depends on the GEPA compose
+# project having run first. NOT --internal: matches the engine stack's network.
+echo "--- ensuring placement engine network platform ---"
+docker network inspect platform >/dev/null 2>&1 || docker network create platform
+
 # Recreate ONLY the inactive web/API slot + backup sidecar.
 # Never recreate postgres. Never pass -v. Named volumes stay mounted.
 # --no-deps: compose would otherwise also recreate a *dependency* (postgres,

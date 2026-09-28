@@ -356,9 +356,17 @@ services:
       OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
       OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
       OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+      # GEPA placement engine connection (API slots only; ai-worker never calls
+      # the engine). Empty => the placement proxy fails closed with 503
+      # placement_engine_not_configured; no placeholder values, ever.
+      GEPA_ENGINE_BASE_URL: ${GEPA_ENGINE_BASE_URL:-}
+      GEPA_SERVICE_TOKEN: ${GEPA_SERVICE_TOKEN:-}
     networks:
       - internal
       - oet_agent_ctl
+      # Shared external bridge with the gepa-server-prod engine container
+      # (Placement:EngineBaseUrl=http://gepa-server-prod:8080).
+      - platform
 
   learner-api-green:
     <<: *learner-api-slot
@@ -369,9 +377,17 @@ services:
       OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
       OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
       OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+      # GEPA placement engine connection (API slots only; ai-worker never calls
+      # the engine). Empty => the placement proxy fails closed with 503
+      # placement_engine_not_configured; no placeholder values, ever.
+      GEPA_ENGINE_BASE_URL: ${GEPA_ENGINE_BASE_URL:-}
+      GEPA_SERVICE_TOKEN: ${GEPA_SERVICE_TOKEN:-}
     networks:
       - internal
       - oet_agent_ctl
+      # Shared external bridge with the gepa-server-prod engine container
+      # (Placement:EngineBaseUrl=http://gepa-server-prod:8080).
+      - platform
 
   ai-worker:
     <<: *learner-api-slot
@@ -551,3 +567,9 @@ networks:
   oet_agent_ctl:
     external: true
     name: oet_agent_ctl
+  # Shared bridge with the GEPA placement engine stack (gepa-server-prod).
+  # auto-deploy-ghcr.sh creates it on first use, so a main deploy never
+  # depends on the GEPA stack's compose project having run first.
+  platform:
+    external: true
+    name: platform

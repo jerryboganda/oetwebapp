@@ -538,6 +538,34 @@ if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" 
   require_min_length TYPESAFE__APIKEY 16
 fi
 
+# GEPA placement engine connection is OPTIONAL in the env file (same owner
+# policy as live voice / LiveKit / TypeSafe): when both keys are empty the
+# placement proxy fails closed with 503 placement_engine_not_configured and
+# unrelated deploys are never blocked. When EITHER key IS configured, BOTH are
+# validated in full — a half-configured engine connection would flip the
+# runtime placement flag on without a working engine behind it.
+gepa_url=$(read_env_value GEPA_ENGINE_BASE_URL || true)
+gepa_token=$(read_env_value GEPA_SERVICE_TOKEN || true)
+if [ -n "$gepa_url" ] || [ -n "$gepa_token" ]; then
+  case "$gepa_url" in
+    http://*|https://*) ;;
+    "")
+      echo "[env] GEPA_ENGINE_BASE_URL is required when GEPA_SERVICE_TOKEN is set" >&2
+      failed=1
+      ;;
+    *)
+      echo "[env] GEPA_ENGINE_BASE_URL must be an http(s):// URL" >&2
+      failed=1
+      ;;
+  esac
+  if [ -z "$gepa_token" ]; then
+    echo "[env] GEPA_SERVICE_TOKEN is required when GEPA_ENGINE_BASE_URL is set" >&2
+    failed=1
+  else
+    require_min_length GEPA_SERVICE_TOKEN 16
+  fi
+fi
+
 # Owner Agent Console (owner directive 2026-09-27) is OPTIONAL. When enabled, the
 # API slots and the oet-agent-console stack share these secrets. They must be
 # HEX (`openssl rand -hex 32` for the tokens, `openssl rand -hex 24` for the DB
