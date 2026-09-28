@@ -110,9 +110,9 @@ export default function WritingSkillTreePage() {
             const completedForSkill = lessonsForSkill.filter((l) => completionMap.has(l.id)).length;
             const allComplete = lessonsForSkill.length > 0 && completedForSkill === lessonsForSkill.length;
             const tone = allComplete
-              ? 'border-emerald-300/70 bg-emerald-50/60'
+              ? 'border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-800/50 dark:bg-emerald-950/20'
               : masteryValue >= 70
-                ? 'border-amber-300/70 bg-amber-50/60'
+                ? 'border-amber-300/70 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/20'
                 : 'border-border bg-background';
             return (
               <li key={skill}>

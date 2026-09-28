@@ -125,14 +125,14 @@ function WritingExpertReviewContent() {
       {/* Sticky header */}
       <header className="bg-surface border-b border-border sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <Link href={submissionId ? `/writing/result?id=${submissionId}` : '/writing'} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
+          <Link href={submissionId ? `/writing/result?id=${submissionId}` : '/writing'} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Back"><ChevronLeft className="w-5 h-5" aria-hidden="true" /></Link>
           <h1 className="font-bold text-lg text-navy leading-tight">Request Tutor Review</h1>
         </div>
       </header>
 
       <main className="py-8">
         {/* Context Banner */}
-        <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden">
+        <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden dark:border dark:border-border dark:bg-surface dark:text-navy">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
           <div className="relative z-10">
             <div className="flex items-center gap-2 text-info text-xs font-bold uppercase tracking-widest mb-2"><ShieldCheck className="w-4 h-4" /> Human-in-the-loop</div>
@@ -155,7 +155,7 @@ function WritingExpertReviewContent() {
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Clock className="w-4 h-4" /> 1. Turnaround Speed</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {turnaroundOptions.map(option => (
-                <label key={option.id} className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
+                <label key={option.id} className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow,background-color] duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
                   <input type="radio" name="speed" className="sr-only" checked={speed === option.id} onChange={() => setSpeed(option.id)} />
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-bold text-navy">{option.label}</span>
@@ -178,8 +178,8 @@ function WritingExpertReviewContent() {
                 const isSelected = selectedFocus.includes(area.id);
                 const isDisabled = !isSelected && selectedFocus.length >= 3;
                 return (
-                  <button key={area.id} type="button" disabled={isDisabled} onClick={() => toggleFocus(area.id)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isSelected ? 'bg-primary border-primary text-white dark:bg-primary-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
+                  <button key={area.id} type="button" disabled={isDisabled} aria-pressed={isSelected} onClick={() => toggleFocus(area.id)}
+                    className={`min-h-10 px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected ? 'bg-primary border-primary text-white dark:bg-primary-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
                     {area.label}
                   </button>
                 );
@@ -190,7 +190,7 @@ function WritingExpertReviewContent() {
           {/* 3. Notes */}
           <section>
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> 3. Notes for Reviewer</h3>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 resize-none text-sm" />
+            <textarea aria-label="Notes for reviewer" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 resize-none text-sm bg-surface text-navy placeholder:text-muted" />
           </section>
 
           {/* 4. Credits */}

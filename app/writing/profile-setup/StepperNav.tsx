@@ -31,7 +31,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                     isCurrent
                       ? 'border-primary bg-primary/10 text-primary'
                       : isComplete
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                         : 'border-border bg-background text-navy hover:border-primary/40',
                   )}
                   aria-current={isCurrent ? 'step' : undefined}

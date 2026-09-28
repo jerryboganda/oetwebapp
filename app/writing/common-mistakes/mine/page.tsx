@@ -62,12 +62,12 @@ export default function WritingMyMistakesPage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {top5.length > 0 ? (
-          <section aria-labelledby="top5-heading" className="rounded-2xl border border-amber-200/60 bg-amber-50/40 p-5 shadow-sm">
-            <h2 id="top5-heading" className="text-base font-bold text-amber-900">{t('writing.mistakes.mine.top5.heading')}</h2>
-            <p className="mt-1 text-xs text-amber-800">{t('writing.mistakes.mine.top5.subtitle')}</p>
+          <section aria-labelledby="top5-heading" className="rounded-2xl border border-amber-200/60 bg-amber-50/40 p-5 shadow-sm dark:border-amber-800/50 dark:bg-amber-950/20">
+            <h2 id="top5-heading" className="text-base font-bold text-amber-900 dark:text-amber-200">{t('writing.mistakes.mine.top5.heading')}</h2>
+            <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">{t('writing.mistakes.mine.top5.subtitle')}</p>
             <ol className="mt-3 space-y-2">
               {top5.map((row, idx) => (
-                <li key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/60 bg-surface p-3">
+                <li key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/60 bg-surface p-3 dark:border-amber-800/50">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">#{idx + 1}</span>
                     <div>

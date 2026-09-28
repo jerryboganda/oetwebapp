@@ -513,7 +513,7 @@ export default function WritingSubmissionResultsPage() {
             ) : null}
           </div>
           {offerRevision && grade?.revisionInvite?.reason ? (
-            <Card padding="md" className="mt-4 border-amber-300/70 bg-amber-50/60">
+            <Card padding="md" className="mt-4 border-amber-300/70 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/20">
               <CardContent>
                 <p className="text-sm text-amber-900">
                   <span className="font-bold">{t('writing.submissions.results.next.whyRevise')}</span>{' '}

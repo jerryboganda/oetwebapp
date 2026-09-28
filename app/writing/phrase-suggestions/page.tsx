@@ -169,8 +169,10 @@ export default function PhraseSuggestionsPage() {
         {suggestions.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             <button
+              type="button"
+              aria-pressed={!filter}
               onClick={() => setFilter(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+              className={`min-h-9 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
                 ${!filter ? 'bg-primary text-white dark:bg-primary-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
             >
               All ({suggestions.length})
@@ -181,8 +183,10 @@ export default function PhraseSuggestionsPage() {
               return (
                 <button
                   key={key}
+                  type="button"
+                  aria-pressed={filter === key}
                   onClick={() => setFilter(filter === key ? null : key)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+                  className={`min-h-9 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
                     ${filter === key ? `${cfg.bg} ${cfg.color} border-current` : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
                 >
                   {cfg.label} ({count})
@@ -209,7 +213,7 @@ export default function PhraseSuggestionsPage() {
                           <button
                             type="button"
                             onClick={() => setExpandedId(expanded ? null : s.id)}
-                            className="p-2.5 -m-1"
+                            className="p-2.5 -m-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             aria-expanded={expanded}
                             aria-label={expanded ? `Hide explanation for ${cfg.label} suggestion` : `Show explanation for ${cfg.label} suggestion`}
                           >
