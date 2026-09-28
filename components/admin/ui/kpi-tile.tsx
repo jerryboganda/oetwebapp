@@ -125,7 +125,7 @@ export const KpiTile = React.forwardRef<HTMLDivElement, KpiTileProps>(
                   {icon}
                 </span>
               ) : null}
-              <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">
+              <p className="min-w-0 line-clamp-2 break-words text-xs font-semibold uppercase tracking-wide text-admin-fg-muted sm:tracking-wider" title={label}>
                 {label}
               </p>
             </div>
