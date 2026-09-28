@@ -170,7 +170,7 @@ internal static class Doc08ListeningReadingMocks
                 "docs/listening/grader.md, \"MissReason heuristics\" table"),
             new DocumentationEvidenceSeed("EV-LRM-006", DocumentationEvidenceType.Code,
                 "MissReason persisted at grade time via a dedicated migration; legacy NULL rows shown as \"no reason recorded\".",
-                "backend/src/OetLearner.Api/Migrations/20260521210000_AddListeningAnswerMissReason.cs; docs/listening/grader.md"),
+                "backend/src/OetLearner.Api/Data/Migrations/20260521210000_AddListeningAnswerMissReason.cs; docs/listening/grader.md"),
             new DocumentationEvidenceSeed("EV-LRM-007", DocumentationEvidenceType.Testing,
                 "Canonical Listening grader regression fixture.",
                 "backend/tests/OetLearner.Api.Tests/Listening/ListeningGraderMissReasonTests.cs"),
@@ -231,5 +231,6 @@ internal static class Doc08ListeningReadingMocks
             new DocumentationEvidenceSeed("EV-LRM-026", DocumentationEvidenceType.Code,
                 "Review page prefers relational MissReason and falls back to legacy errorType for pre-migration attempts.",
                 "docs/listening/grader.md, \"Cross-references\" section; app/listening/review/[id]/page.tsx"),
-        ]);
+        ],
+        Revision: 2);
 }

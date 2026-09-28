@@ -42,6 +42,7 @@ a module sub-doc, or a dated record; check its date before trusting it.
 ## Releases
 
 - [app-release-playbook.md](app-release-playbook.md) — compulsory procedure for Android, iOS and desktop releases; see also [play-store-automation.md](play-store-automation.md), [releases/RELEASE-LEDGER.md](releases/RELEASE-LEDGER.md) and [tauri-desktop-shell.md](tauri-desktop-shell.md).
+- [desktop/NATIVE-CAPABILITIES-PLAN.md](desktop/NATIVE-CAPABILITIES-PLAN.md) — plan for putting the desktop shell's 16 registered-but-ungranted Tauri commands to use: security model, phases, flags and owner questions.
 
 ## Frontend and QA
 

@@ -75,10 +75,11 @@ internal static class Doc10PlatformArchitecture
             new DocumentationSectionBlock(
                 "Desktop and mobile: thin shells around the same web app",
                 "Both non-web surfaces are documented as thin shells rather than independently built native " +
-                "applications. The Windows/macOS desktop shell is built with Tauri 2 and is described as \"a " +
-                "remote-only thin client that loads `https://app.oetwithdrhesham.co.uk` (no bundled frontend; " +
-                "least-privilege ACL in `src-tauri/capabilities/`)\" (EV-PLATFORM-004). The Android and iOS apps " +
-                "are built with Capacitor and \"wrap the same web app\" (EV-PLATFORM-004). This is directly " +
+                "applications. The Windows/macOS desktop shell is built with Tauri 2 and is documented as a " +
+                "\"remote-only thin client\" that \"loads the live web app (`https://app.oetwithdrhesham.co.uk`) " +
+                "over HTTPS\", with no frontend bundled and a least-privilege ACL in `src-tauri/capabilities/` " +
+                "(EV-PLATFORM-004). The Android and iOS apps are built with Capacitor 7 and load the same web app " +
+                "(EV-PLATFORM-004). This is directly " +
                 "visible in the shell's own configuration: `capacitor.config.ts` sets `server.url` to the " +
                 "production web app URL by default, gives Android an HTTPS scheme and iOS a `capacitor` scheme, " +
                 "and ships a self-contained, network-free `error.html` recovery screen for a failed first load " +
@@ -147,10 +148,10 @@ internal static class Doc10PlatformArchitecture
             new DocumentationSectionBlock(
                 "Toolchain: pinned versions, not \"whatever is installed\"",
                 "The project pins its toolchain explicitly rather than leaving it to whatever happens to be on a " +
-                "given machine: \"Package manager is pnpm 10 (`corepack`/`pnpm@10.33.0`), Node 22.x, .NET SDK " +
-                "10.x — all installed on the Windows host; run validation directly here (never on the VPS)\" " +
+                "given machine: `package.json` declares `\"packageManager\": \"pnpm@10.33.0\"`, `global.json` " +
+                "sets the .NET SDK floor at `10.0.201`, and the CI workflows install Node 22 and .NET 10.0.x " +
                 "(EV-PLATFORM-020). Frontend and backend also have separate, documented local ports (the Next.js " +
-                "dev server and the API) with a proxy configuration for local development, and the desktop and " +
+                "dev server on 3000 and the API on 5198), and the desktop and " +
                 "mobile shells have their own additional toolchain requirements layered on top — `rustup` and " +
                 "WebView2/MSVC for the Tauri desktop build, JDK 21 for Capacitor's Android build — reflecting that " +
                 "each shell, while thin at runtime, still has a real native build pipeline behind it " +
@@ -162,8 +163,9 @@ internal static class Doc10PlatformArchitecture
                 "real, sharded Postgres/pgvector instance rather than against a lightweight substitute " +
                 "(EV-PLATFORM-013), and the frontend has its own separate layers: `pnpm test` for Vitest unit " +
                 "tests, and a dedicated `pnpm run test:e2e:smoke` script for a Playwright smoke matrix that " +
-                "requires the local stack to be up (EV-PLATFORM-021). At full scale in CI, this becomes " +
-                "substantial: the platform's own operating guidance states that \"a full QA Smoke (13 e2e shards + " +
+                "`qa-smoke.yml` runs against the containerized `docker-compose.desktop.yml` stack " +
+                "(EV-PLATFORM-021). At full scale in CI, this becomes " +
+                "substantial: the contributor contract states that \"a full QA Smoke (13 e2e shards + " +
                 "backend + frontend, parallel on hosted infra) takes roughly an hour\" (EV-PLATFORM-021) — a " +
                 "concrete, quantified description of the test suite's real size, not an approximation. Test " +
                 "execution is explicitly confined to GitHub Actions under the same compute-location policy " +
@@ -173,20 +175,22 @@ internal static class Doc10PlatformArchitecture
             new DocumentationSectionBlock(
                 "Local development: containerized dependencies, native application processes",
                 "Day-to-day local development deliberately mixes two models rather than forcing everything into " +
-                "one: the database and API can run in containers (a Podman-based stack exposing the API on port " +
-                "8080, proxied to the Next.js dev server via `.env.development.local`), while the frontend itself " +
+                "one: the database and API can run in containers (a Podman stack, `docker-compose.hotreload.yml`, " +
+                "exposing the API on port 8080, which the Next.js dev server reaches through " +
+                "`NEXT_PUBLIC_API_BASE_URL` in `.env.local`), while the frontend itself " +
                 "runs as a native `pnpm run dev` process for fast iteration rather than being rebuilt inside a " +
-                "container on every change (EV-PLATFORM-022). A single documented command, `/start-dev`, brings up " +
-                "the Podman database-and-API stack together with the native Next.js process in one step " +
-                "(EV-PLATFORM-022). This mirrors the same principle seen at production scale — infrastructure that " +
+                "container on every change (EV-PLATFORM-022). A single documented launcher, `start-dev.ps1`, brings " +
+                "up the Podman database-and-API stack, waits for the API health check, and then starts the native " +
+                "Next.js process (EV-PLATFORM-022). This mirrors the same principle seen at production scale — infrastructure that " +
                 "genuinely benefits from container isolation (a database, a backend API) is containerized, while " +
                 "the process a developer is actively iterating on is not forced through a container rebuild loop " +
                 "just for consistency's sake."),
             new DocumentationSectionBlock(
                 "Deployment pipeline: build once on CI, deploy as prebuilt images",
-                "The deploy path is stated as a single line in the repository's own operating guidance: \"push to " +
-                "`main` → GitHub Actions `Build & Deploy (web + API)` → GHCR images → blue/green on the VPS ... " +
-                "The VPS only pulls prebuilt images; never build or test there.\" (EV-PLATFORM-004). This is not " +
+                "Every push to `main` runs the GitHub Actions workflow `Build & Deploy (web + API)`, which builds " +
+                "the web and API images, pushes them to GHCR and rolls them out blue/green on the VPS; the " +
+                "contributor contract states the VPS's side of that in one line: \"The VPS ... only pulls prebuilt " +
+                "GHCR images and runs health gates.\" (EV-PLATFORM-004). This is not " +
                 "just policy prose — the concrete workflow files exist in `.github/workflows/`, including " +
                 "`deploy.yml` (web + API build → GHCR → VPS blue/green deploy with a health gate), `qa-smoke.yml` " +
                 "(sharded frontend Vitest/lint/typecheck/build and backend `dotnet test` against Postgres/" +
@@ -196,20 +200,30 @@ internal static class Doc10PlatformArchitecture
                 "confirming that build/test/release automation is broken out per surface rather than handled by " +
                 "one monolithic script (EV-PLATFORM-011)."),
             new DocumentationSectionBlock(
-                "Eleven environment-specific compose configurations, not one config for everything",
-                "The repository ships eleven distinct Docker Compose files rather than one file reused everywhere " +
-                "with overrides guessed at deploy time: `docker-compose.dev.yml`, `docker-compose.hotreload.yml`, " +
-                "`docker-compose.local.yml`, `docker-compose.backend.yml`, `docker-compose.desktop.yml`, " +
-                "`docker-compose.staging.yml`, `docker-compose.vps.yml`, `docker-compose.production.yml`, " +
-                "`docker-compose.production.build.yml`, `docker-compose.production.hostports.yml`, and " +
-                "`docker-compose.production.prebuilt-web.yml` (EV-PLATFORM-019). Each name maps to a genuinely " +
-                "different operating mode — local hot-reload development, a desktop-backend runtime, a staging " +
-                "environment, and several production variants distinguishing a from-source build from a prebuilt-" +
-                "image pull and from host-port exposure. Keeping these explicit and separate, instead of one " +
-                "compose file with runtime flags, is what makes it possible to state precisely, in the deployment " +
-                "pipeline described below, that the production VPS only ever runs the prebuilt-image variant and " +
-                "never the build variant — the separation is enforced by which file is used, not by developer " +
-                "discipline alone."),
+                "Environment-specific compose configurations, not one config for everything",
+                "The repository keeps a separate Docker Compose file for each operating mode rather than one file " +
+                "reused everywhere with overrides guessed at deploy time. The operating-mode files are " +
+                "`docker-compose.dev.yml` (Postgres, the API and the agent gateway in containers, with Next.js run " +
+                "natively), " +
+                "`docker-compose.hotreload.yml` (a containerized Postgres and hot-reloading API), " +
+                "`docker-compose.local.yml` (a local stack that mirrors production), `docker-compose.backend.yml` " +
+                "(Postgres and the API only), `docker-compose.desktop.yml` (a self-contained Postgres, API, AI-gateway " +
+                "and web stack with demo accounts that CI workflows such as `qa-smoke.yml` and `performance.yml` " +
+                "start), `docker-compose.staging.yml` (staging), " +
+                "`docker-compose.production.yml` (production), `docker-compose.production.build.yml` (an emergency " +
+                "source-build override for production), `docker-compose.production.hostports.yml` (a host-port " +
+                "exposure overlay), and `docker-compose.agent-console.yml` (the owner-only agent console sidecar, run as " +
+                "its own compose project and deployed only by its own workflow). At the time of this revision a stale, " +
+                "pre-blue/green `docker-compose.vps.yml` also remains in the repository; its own header marks it as " +
+                "used by no deploy path, and it is slated for removal (EV-PLATFORM-019). Production uses " +
+                "exactly one of them: the `deploy.yml` workflow copies `docker-compose.production.yml` to the VPS, and " +
+                "the rollout script it runs there (`scripts/deploy/auto-deploy-ghcr.sh`) refuses to start without the " +
+                "GHCR web and API image references built by that same run and brings the blue/green slots up with " +
+                "`--no-build` (EV-PLATFORM-019). Keeping these files explicit and separate, instead of one compose file " +
+                "with runtime flags, is what makes it possible to state precisely, in the deployment pipeline described " +
+                "above, that the production VPS runs prebuilt images and never builds from source on the normal deploy " +
+                "path — the separation is enforced by which file and which flags the deploy workflow uses, not by " +
+                "developer discipline alone."),
             new DocumentationSectionBlock(
                 "Environment separation: where computation is, and is not, allowed to run",
                 "The platform enforces a hard three-way split between where code is written, where it is built " +
@@ -219,9 +233,10 @@ internal static class Doc10PlatformArchitecture
                 "PACKAGE. Production VPS = DEPLOY + SERVE PRODUCTION ONLY.\" with an explicit statement that there " +
                 "are \"no discretionary exceptions\" and that hidden local compute paths — local Docker, WSL, " +
                 "local VMs, background processes, or subagents — are not permitted workarounds (EV-PLATFORM-012). " +
-                "The production VPS itself is described in the same governance material as a single, multi-tenant " +
-                "machine that also hosts other stacks, which is precisely why it is restricted to pulling prebuilt " +
-                "images and running health checks rather than doing any building, testing, or ad hoc debugging " +
+                "The deployment guide describes the production VPS as a shared host and forbids source builds and " +
+                "test runs there because they \"bypass the production digest-input gate and can overload the shared " +
+                "host\", which is why the VPS is restricted to pulling prebuilt images and running health checks " +
+                "rather than doing any building, testing, or ad hoc debugging " +
                 "(EV-PLATFORM-004). Together, this gives the platform three cleanly separated environments — " +
                 "development, verification, and production — with the verification stage running on disposable, " +
                 "auditable CI infrastructure rather than on the machine serving live learners."),
@@ -238,14 +253,15 @@ internal static class Doc10PlatformArchitecture
                 "Backend engineering rules: Minimal API endpoints under Endpoints/, DI/cancellation-token/server-side-authz conventions, and EF Core PostgreSQL patterns.",
                 "AGENTS.md, section \"Backend Rules\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-004", DocumentationEvidenceType.Architecture,
-                "Per-surface architecture description (frontend, backend, hand-authored EF migrations, Tauri/Capacitor shells) and the one-line deploy path (push to main -> GitHub Actions Build & Deploy -> GHCR -> blue/green on the VPS, VPS pulls prebuilt images only).",
-                "CLAUDE.md, section \"Architecture\""),
+                "Per-surface architecture sources (hand-authored EF migrations, the Tauri remote-only thin client, the Capacitor shell), the deploy path (push to main -> Build & Deploy (web + API) -> GHCR -> blue/green on the VPS) and the VPS's role as a shared host that only pulls prebuilt images and runs health gates.",
+                "docs/adr/0001-hand-authored-ef-migrations.md; docs/tauri-desktop-shell.md (opening paragraph and section \"Security & capabilities (least privilege)\"); README.md, section \"Stack\"; .github/workflows/deploy.yml; AGENTS.md, section \"GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT\" (\"The VPS ... only pulls prebuilt GHCR images and runs health gates\"); DEPLOYMENT.md, section \"8. Updating the deployment\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-005", DocumentationEvidenceType.Code,
                 "Capacitor shell configuration: appId, remote server.url pointed at the production web app, per-platform URL scheme, and the offline error.html recovery screen.",
                 "capacitor.config.ts"),
             new DocumentationEvidenceSeed("EV-PLATFORM-006", DocumentationEvidenceType.DataKnowledge,
                 "Real release note confirming a shipped web-only fix reached the installed Android/desktop apps with no app rebuild, because both shells load the remote URL.",
-                ".github/agent-state.local.md (15/16 Sep owner briefs entry, \"No app rebuild needed for any of it\")"),
+                ".github/agent-state.local.md at 8ddbdd110^, its last tracked revision (15/16 Sep owner briefs entry, \"No app rebuild needed for any of it\")",
+                IsInternalOnly: true),
             new DocumentationEvidenceSeed("EV-PLATFORM-007", DocumentationEvidenceType.Code,
                 "The IFileStorage interface and its documented purpose: a thin abstraction over disk storage so a later slice can swap to S3/R2, with all media I/O required to depend on it instead of raw File.*/Path.* calls.",
                 "backend/src/OetLearner.Api/Services/Content/IFileStorage.cs"),
@@ -283,16 +299,17 @@ internal static class Doc10PlatformArchitecture
                 "The admin console (app/admin/**, components/domain/admin/**, components/admin/**) is a governed surface within the same web app, requiring a dedicated operational-discipline instruction file and explicitly barred from generic landing-page treatment.",
                 "AGENTS.md, section \"Admin UI\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-019", DocumentationEvidenceType.Deployment,
-                "Eleven distinct Docker Compose files for eleven distinct operating modes (dev, hotreload, local, backend, desktop, staging, vps, production, production.build, production.hostports, production.prebuilt-web), confirming the VPS runs a dedicated prebuilt-image variant rather than a shared/overridden config.",
-                "Repository root (docker-compose.*.yml files present in this checkout)"),
+                "One Docker Compose file per operating mode (dev, hotreload, local, backend, desktop, staging, production, production.build, production.hostports, agent-console), plus a stale pre-blue/green docker-compose.vps.yml that no deploy path uses; the production deploy copies only docker-compose.production.yml to the VPS and its rollout script requires the GHCR web/API image refs from the same run and starts the blue/green slots with --no-build.",
+                "Repository root (docker-compose.*.yml); DEPLOYMENT.md, section \"Dockerfile & compose-file matrix\"; .github/workflows/deploy.yml (VPS rollout step); scripts/deploy/auto-deploy-ghcr.sh; docker-compose.production.build.yml and docker-compose.vps.yml (header comments)"),
             new DocumentationEvidenceSeed("EV-PLATFORM-020", DocumentationEvidenceType.Code,
-                "Pinned toolchain versions (pnpm 10 / pnpm@10.33.0, Node 22.x, .NET SDK 10.x) and the additional native toolchain requirements for the Tauri desktop build (rustup, WebView2/MSVC) and Capacitor Android build (JDK 21).",
-                "CLAUDE.md, section \"Commands\""),
+                "Pinned toolchain versions (packageManager pnpm@10.33.0; .NET SDK floor 10.0.201; Node 22 and .NET 10.0.x in CI), the documented local ports, and the additional native toolchain requirements for the Tauri desktop build (stable Rust via rustup, WebView2/MSVC) and Capacitor Android build (JDK 21).",
+                "package.json (packageManager); global.json; README.md, sections \"Rust toolchain (desktop)\" and \"Local Baseline\"; .github/workflows/qa-smoke.yml and deploy.yml (setup-node 22, setup-dotnet 10.0.x); .github/workflows/mobile-ci.yml (JAVA_VERSION '21'); .github/workflows/tauri-ci.yml (dtolnay/rust-toolchain@stable)"),
             new DocumentationEvidenceSeed("EV-PLATFORM-021", DocumentationEvidenceType.Testing,
-                "The frontend test layering (Vitest unit tests via pnpm test; a Playwright smoke matrix via pnpm run test:e2e:smoke) and the quantified full QA Smoke run size (13 e2e shards plus backend and frontend, parallel on hosted infra, roughly one hour).",
-                "CLAUDE.md, section \"Commands\"; AGENTS.md, section \"GitHub Actions on a public-when-working repo — COMPULSORY\""),
+                "The frontend test layering (Vitest unit tests via pnpm test; a Playwright smoke matrix via pnpm run test:e2e:smoke, run by qa-smoke.yml against the docker-compose.desktop.yml stack) and the quantified full QA Smoke run size (13 e2e shards plus backend and frontend, parallel on hosted infra, roughly one hour).",
+                "package.json (scripts test, test:e2e:smoke); .github/workflows/qa-smoke.yml (e2e-smoke job); AGENTS.md, section \"GitHub Actions on a public-when-working repo — COMPULSORY\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-022", DocumentationEvidenceType.Architecture,
-                "Local development model: a Podman-based container stack for the database/API (port 8080, proxied via .env.development.local) alongside a native pnpm run dev frontend process, brought up together by a single documented /start-dev command.",
-                "CLAUDE.md, sections \"Commands\" and \"Project knowledge (load before assuming)\""),
-        ]);
+                "Local development model: a Podman stack (docker-compose.hotreload.yml) for the database and API on port 8080, reached by a native pnpm run dev frontend through NEXT_PUBLIC_API_BASE_URL in .env.local, both brought up by the start-dev.ps1 launcher.",
+                "docs/QUICK-START.md; start-dev.ps1; docker-compose.hotreload.yml"),
+        ],
+        Revision: 2);
 }

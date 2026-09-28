@@ -137,7 +137,7 @@ in `docs/ops/incident-response-runbook.md` (past examples: `docs/incidents/`).
 Speaking audio is content-addressed in `IFileStorage` and swept by
 `SpeakingAudioRetentionWorker` (parity with Conversation/Pronunciation).
 
-- Retention window: `SpeakingOptions.AudioRetentionDays` (default 365).
+- Retention window: `SpeakingComplianceOptions.AudioRetentionDays` (default 365).
 - Worker runs daily at 02:00 UTC; deletes expired blobs and writes
   `AuditEvent { Action="SpeakingRecordingPurged" }`.
 - Manual purge: admin → recordings → access audit → erase. Backend writes

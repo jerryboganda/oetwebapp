@@ -14,11 +14,19 @@ public sealed record DocumentationEvidenceSeed(
     string SourceReference,
     bool IsInternalOnly = false);
 
-/// <summary>Real, sourced content for one of the 15 specialist reports (or the Master Dossier).</summary>
+/// <summary>
+/// Real, sourced content for one of the 15 specialist reports (or the Master Dossier).
+/// <see cref="Revision"/> is the version number this content is published as. Bump it
+/// whenever a module's sections or evidence change: on the next startup
+/// <see cref="DocumentationCenterSeeder"/> publishes the new text as that version and
+/// marks the older one <c>Superseded</c>. Leaving it unchanged means production keeps
+/// serving the text it already has.
+/// </summary>
 public sealed record DocumentationModuleSeed(
     string Code,
     string Title,
     string Description,
     int SortOrder,
     IReadOnlyList<DocumentationSectionBlock> Sections,
-    IReadOnlyList<DocumentationEvidenceSeed> Evidence);
+    IReadOnlyList<DocumentationEvidenceSeed> Evidence,
+    int Revision = 1);

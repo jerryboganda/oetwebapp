@@ -16,7 +16,8 @@ internal static class Doc13InnovationTimeline
                 "How this timeline is sourced",
                 "Every date below is taken directly from a dated entry in the repository's own working records — " +
                 "the always-loaded contributor contract (`AGENTS.md`), the project's continuity log " +
-                "(`.github/agent-state.local.md`), the release changelog (`CHANGELOG.md`), the security control " +
+                "(`.github/agent-state.local.md`, which PR #269 made a local-only file; the evidence items that cite " +
+                "it are internal-only and are left out of external exports), the release changelog (`CHANGELOG.md`), the security control " +
                 "register, and the git commit history itself — rather than from memory or estimation. Where a " +
                 "commit hash and date are cited, they were read directly from `git log` output against this " +
                 "checkout. This document does not claim completeness: it reports what is dated and checkable, and " +
@@ -136,7 +137,8 @@ internal static class Doc13InnovationTimeline
                 "AGENTS.md, section \"Ship-It Workflow — COMPULSORY (owner directive 2026-07-05, tightened 2026-08-24)\""),
             new DocumentationEvidenceSeed("EV-TIMELINE-003", DocumentationEvidenceType.DataKnowledge,
                 "Antigravity AI gateway v0.2 production deployment (commit 451e7bb6c, 2026-08-24), initially live in degraded standby pending a production API key.",
-                ".github/agent-state.local.md (\"Antigravity integration DEPLOYED TO PRODUCTION\" entry)"),
+                ".github/agent-state.local.md at 8ddbdd110^, its last tracked revision (\"Antigravity integration DEPLOYED TO PRODUCTION\" entry)",
+                IsInternalOnly: true),
             new DocumentationEvidenceSeed("EV-TIMELINE-004", DocumentationEvidenceType.DataKnowledge,
                 "Owner rule (2026-09-05) requiring every previously-live Android release track to move together, issued after Closed Testing users were left stuck on a stale build.",
                 "AGENTS.md, section \"OET Domain Invariants\" (App releases bullet)"),
@@ -145,7 +147,8 @@ internal static class Doc13InnovationTimeline
                 "AGENTS.md, section \"GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT\""),
             new DocumentationEvidenceSeed("EV-TIMELINE-006", DocumentationEvidenceType.Testing,
                 "Apple compatibility hardening (PR #220) merged 2026-09-12 as commit d7c0c67db, raising the iOS floor to 16.4 and running the iOS build/simulator CI job for the first time.",
-                "git log (commit d7c0c67db, 2026-09-12); .github/agent-state.local.md (\"Apple platform compatibility hardening\" entry)"),
+                "git log (commit d7c0c67db, 2026-09-12); .github/agent-state.local.md at 8ddbdd110^, its last tracked revision (\"Apple platform compatibility hardening\" entry)",
+                IsInternalOnly: true),
             new DocumentationEvidenceSeed("EV-TIMELINE-007", DocumentationEvidenceType.DataKnowledge,
                 "Writing Model Answer owner-clarification rounds one and two (OA-01..OA-15, OA2-01..OA2-20), dated 2026-09-13 and 2026-09-14.",
                 "AGENTS.md, section \"OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)\""),
@@ -172,12 +175,15 @@ internal static class Doc13InnovationTimeline
                 "git log --since=2026-07-01 --until=2026-09-24 --oneline (run against this checkout; count of returned lines)"),
             new DocumentationEvidenceSeed("EV-TIMELINE-015", DocumentationEvidenceType.DataKnowledge,
                 "Owner order (2026-09-04) defining \"cut app releases\" as all three native pathways together (Android, iOS, Windows desktop), written down as a canonical playbook.",
-                ".github/agent-state.local.md (\"App release playbook\" entry, \"Owner order 2026-09-04\")"),
+                ".github/agent-state.local.md at 8ddbdd110^, its last tracked revision (\"App release playbook\" entry, \"Owner order 2026-09-04\")",
+                IsInternalOnly: true),
             new DocumentationEvidenceSeed("EV-TIMELINE-016", DocumentationEvidenceType.Testing,
                 "Live production catalogue scan (2026-09-05, 194 published Writing tasks, 0 initially publish-ready) followed by a genuine end-to-end paid submission test on a live learner account (2026-09-06): empty submission graded and retrievable, a real recovered band-D grade, and a retried submission resolving to the identical grade with zero duplicate credit debit.",
-                ".github/agent-state.local.md (\"LIVE CATALOGUE SCAN 2026-09-05\" and \"FINAL DECISION EXECUTION 2026-09-06\" entries)"),
+                ".github/agent-state.local.md at 8ddbdd110^, its last tracked revision (\"LIVE CATALOGUE SCAN 2026-09-05\" and \"FINAL DECISION EXECUTION 2026-09-06\" entries)",
+                IsInternalOnly: true),
             new DocumentationEvidenceSeed("EV-TIMELINE-017", DocumentationEvidenceType.DataKnowledge,
                 "3,011 total commits across this checkout's full recorded history, for scale comparison against the 1,325 counted in the 1 July - 24 September 2026 window.",
                 "git log --oneline --all (run against this checkout; count of returned lines)"),
-        ]);
+        ],
+        Revision: 2);
 }

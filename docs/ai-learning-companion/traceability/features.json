@@ -1239,7 +1239,7 @@
       "dependencies": "Approved pedagogy + retrieval + evaluation",
       "implementation_status": "PARTIAL",
       "notes": "",
-      "repo_evidence": "Listening explanations, `ListeningPathwayAnalyticsService`, `ListeningPathwayGenerator`, dictation surface.",
+      "repo_evidence": "Listening explanations, `ListeningPathwayGenerator`, dictation surface.",
       "repo_gap": "No spelling/accent/prediction-failure taxonomy feeding Error DNA.",
       "repo_stage": "Stage 2",
       "risk": "Medium"
@@ -2049,7 +2049,7 @@
       "dependencies": "Reliable memory + notification preferences",
       "implementation_status": "PARTIAL",
       "notes": "Appendix A visibly contains F-113 but the extracted matrix omits rows F-114 through F-122; preserve these features and require owner/phase sign-off. Section 46 also makes non-outcome gamification and fully proactive autonomy non-goals for the first 12 months.",
-      "repo_evidence": "`EngagementService`, `NotificationRuleEngine`, `NotificationPolicyOverride`.",
+      "repo_evidence": "`EngagementService`, `NotificationPolicyOverride`.",
       "repo_gap": "No inactivity-risk model.",
       "repo_stage": "Stage 3",
       "risk": "Low"
@@ -2066,8 +2066,8 @@
       "phase": "Stage 3 / TO VERIFY",
       "dependencies": "Reliable memory + notification preferences",
       "implementation_status": "PARTIAL",
-      "notes": "Appendix A visibly contains F-113 but the extracted matrix omits rows F-114 through F-122; preserve these features and require owner/phase sign-off. Section 46 also makes non-outcome gamification and fully proactive autonomy non-goals for the first 12 months.",
-      "repo_evidence": "`NotificationRuleEngine` plus readiness blockers can identify a weak subtest.",
+      "notes": "Appendix A visibly contains F-113 but the extracted matrix omits rows F-114 through F-122; preserve these features and require owner/phase sign-off. Section 46 also makes non-outcome gamification and fully proactive autonomy non-goals for the first 12 months. OWNER REVIEW 2026-09-28: PR #269 deleted the unused `NotificationRuleEngine` class. Admins can still create and edit `NotificationRule` rows through `NotificationRuleEndpoints` (/v1/admin/notification-rules) but nothing evaluates them. The PARTIAL rating now rests on readiness blockers alone; owner to confirm or re-rate.",
+      "repo_evidence": "Readiness blockers can identify a weak subtest.",
       "repo_gap": "Not wired into a reminder rule.",
       "repo_stage": "Stage 3",
       "risk": "Low"
@@ -2121,7 +2121,7 @@
       "dependencies": "Reliable memory + notification preferences",
       "implementation_status": "PARTIAL",
       "notes": "Appendix A visibly contains F-113 but the extracted matrix omits rows F-114 through F-122; preserve these features and require owner/phase sign-off. Section 46 also makes non-outcome gamification and fully proactive autonomy non-goals for the first 12 months.",
-      "repo_evidence": "`MobilePushDispatcher`, `WebPushDispatcher`, `SoketiPushDispatcher`, `BrevoEmailSender`, `NotificationConsent`.",
+      "repo_evidence": "`MobilePushDispatcher`, `WebPushDispatcher`, `BrevoEmailSender`, `NotificationConsent`.",
       "repo_gap": "No progress-summary content.",
       "repo_stage": "Stage 3",
       "risk": "Low"

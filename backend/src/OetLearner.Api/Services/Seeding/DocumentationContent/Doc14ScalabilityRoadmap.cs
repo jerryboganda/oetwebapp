@@ -128,7 +128,7 @@ internal static class Doc14ScalabilityRoadmap
         [
             new DocumentationEvidenceSeed("EV-SCALE-001", DocumentationEvidenceType.Architecture,
                 "One ASP.NET Core backend serving five client surfaces (web, Android, iOS, Windows desktop, macOS desktop) via thin remote shells (Tauri 2, Capacitor).",
-                "AGENTS.md, section \"Stack\"; CLAUDE.md, section \"Architecture\" (Shells bullet)"),
+                "AGENTS.md, section \"Stack\"; README.md, section \"Stack\"; docs/tauri-desktop-shell.md (opening paragraph); capacitor.config.ts (server.url)"),
             new DocumentationEvidenceSeed("EV-SCALE-002", DocumentationEvidenceType.Code,
                 "The AiProviderDialect enum: eleven distinct provider wire-protocols (OpenAI-compatible, Anthropic, Cloudflare, Copilot, Gemini native, Azure/ElevenLabs TTS, Azure ASR, Whisper ASR, Azure phoneme, ElevenLabs STT) behind one dispatch point.",
                 "backend/src/OetLearner.Api/Domain/AiProviderEntities.cs (AiProviderDialect enum)"),
@@ -156,5 +156,6 @@ internal static class Doc14ScalabilityRoadmap
             new DocumentationEvidenceSeed("EV-SCALE-010", DocumentationEvidenceType.Security,
                 "Live, admin-configurable AI cost-governance controls: a scoped global kill switch, a monthly USD budget with soft-warn/hard-kill percentage triggers, and per-user spend-anomaly detection against a trailing seven-day median.",
                 "docs/AI-USAGE-POLICY.md, section 7 \"Global safety controls\""),
-        ]);
+        ],
+        Revision: 2);
 }
