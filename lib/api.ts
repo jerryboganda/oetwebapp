@@ -1375,6 +1375,9 @@ export {
   uploadSpeakingReviewCriterionVoiceNote,
   uploadWritingMarkingVoiceNote,
   uploadWritingReviewCriterionVoiceNote,
+  listSpeakingReviewVoiceNotes,
+  uploadSpeakingReviewVoiceNote,
+  deleteSpeakingReviewVoiceNote,
 } from './api/expert';
 
 // ─── Admin / CMS API ───

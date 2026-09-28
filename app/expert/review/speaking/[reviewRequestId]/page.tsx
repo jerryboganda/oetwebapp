@@ -13,9 +13,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
 import { VoiceNoteRecorder } from '@/components/domain/expert/VoiceNoteRecorder';
-import { fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
+import { deleteSpeakingReviewVoiceNote, fetchAuthorizedObjectUrl, fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, listSpeakingReviewVoiceNotes, saveDraftReview, submitExpertSpeakingReview, uploadSpeakingReviewVoiceNote } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
 import type { ExpertChecklistItem, ExpertLearnerReviewContext, ExpertReviewHistory, ExpertSavedDraft, ExpertTranscriptLine, SpeakingCriterionKey, SpeakingReviewDetail, TimestampComment } from '@/lib/types/expert';
@@ -395,54 +393,11 @@ export default function SpeakingReviewWorkspace() {
   }, [clearReviewDraft, isDirty, persistDraft, reviewRequestId, reworkReason, router]);
 
   // ── Voice-note feedback (Phase 4 — task W2-G) ──
-  // Direct inline fetch per W2-G ownership boundary (cannot extend lib/api.ts).
-  // Endpoint owner: Agent W2-B.
-  const buildAuthHeaders = useCallback(async (extras?: Record<string, string>): Promise<Headers> => {
-    const token = await ensureFreshAccessToken();
-    const headers = new Headers({ Accept: 'application/json' });
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-    if (typeof document !== 'undefined') {
-      const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-      if (csrfMatch) headers.set('x-csrf-token', csrfMatch[1]);
-    }
-    if (extras) {
-      Object.entries(extras).forEach(([key, value]) => headers.set(key, value));
-    }
-    return headers;
-  }, []);
-
-  const speakingVoiceNotesUrl = useMemo(() => {
-    if (!reviewRequestId) return null;
-    const base = (env.apiBaseUrl || '').replace(/\/$/, '');
-    return `${base}/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`;
-  }, [reviewRequestId]);
-
-  // Deletion is NOT nested under the review: the backend exposes it as
-  // /v1/expert/speaking/voice-notes/{voiceNoteId} (SpeakingReviewVoiceNoteEndpoints).
-  const speakingVoiceNoteDeleteBase = useMemo(() => {
-    const base = (env.apiBaseUrl || '').replace(/\/$/, '');
-    return `${base}/v1/expert/speaking/voice-notes`;
-  }, []);
-
   const loadVoiceNotes = useCallback(async () => {
-    if (!speakingVoiceNotesUrl) return;
+    if (!reviewRequestId) return;
     setVoiceNotesLoading(true);
     try {
-      const headers = await buildAuthHeaders();
-      const response = await fetch(speakingVoiceNotesUrl, { method: 'GET', headers, credentials: 'include' });
-      if (response.status === 404) {
-        setVoiceNotes([]);
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(`Failed to load voice notes (${response.status}).`);
-      }
-      const body = (await response.json().catch(() => ({}))) as Record<string, unknown> | unknown[];
-      const items: unknown[] = Array.isArray(body)
-        ? body
-        : Array.isArray((body as Record<string, unknown>).items)
-          ? ((body as Record<string, unknown>).items as unknown[])
-          : [];
+      const items = await listSpeakingReviewVoiceNotes(reviewRequestId);
       const normalized = items.map(normalizeSpeakingVoiceNote).filter((item): item is SpeakingVoiceNote => item !== null);
       setVoiceNotes(normalized);
     } catch (error) {
@@ -452,7 +407,7 @@ export default function SpeakingReviewWorkspace() {
     } finally {
       setVoiceNotesLoading(false);
     }
-  }, [buildAuthHeaders, speakingVoiceNotesUrl]);
+  }, [reviewRequestId]);
 
   useEffect(() => {
     if (!reviewRequestId) return;
@@ -496,28 +451,10 @@ export default function SpeakingReviewWorkspace() {
   useEffect(() => () => stopRecordingTracks(), [stopRecordingTracks]);
 
   const uploadVoiceNote = useCallback(async (file: File, durationSeconds: number) => {
-    if (!speakingVoiceNotesUrl) return;
+    if (!reviewRequestId) return;
     setIsUploadingVoiceNote(true);
     try {
-      const headers = await buildAuthHeaders();
-      // Let the browser set the multipart boundary automatically.
-      headers.delete('Content-Type');
-      const form = new FormData();
-      form.append('file', file, file.name);
-      if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
-        form.append('durationSeconds', String(Math.round(durationSeconds)));
-      }
-      const response = await fetch(speakingVoiceNotesUrl, { method: 'POST', headers, body: form, credentials: 'include' });
-      if (!response.ok) {
-        let message = `Voice-note upload failed (${response.status}).`;
-        try {
-          const err = await response.json();
-          message = err?.message ?? err?.title ?? message;
-        } catch {
-          // ignore
-        }
-        throw new Error(message);
-      }
+      await uploadSpeakingReviewVoiceNote(reviewRequestId, { file, durationSeconds });
       setToast({ variant: 'success', message: 'Voice note attached to this review.' });
       analytics.track('speaking_voice_note_added', { reviewRequestId });
       await loadVoiceNotes();
@@ -526,7 +463,7 @@ export default function SpeakingReviewWorkspace() {
     } finally {
       setIsUploadingVoiceNote(false);
     }
-  }, [buildAuthHeaders, loadVoiceNotes, reviewRequestId, speakingVoiceNotesUrl]);
+  }, [loadVoiceNotes, reviewRequestId]);
 
   const handleStartRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -565,25 +502,10 @@ export default function SpeakingReviewWorkspace() {
   }, []);
 
   const handleDeleteVoiceNote = useCallback(async (noteId: string) => {
-    if (!speakingVoiceNotesUrl) return;
+    if (!reviewRequestId) return;
     setDeletingVoiceNoteId(noteId);
     try {
-      const headers = await buildAuthHeaders();
-      const response = await fetch(`${speakingVoiceNoteDeleteBase}/${encodeURIComponent(noteId)}`, {
-        method: 'DELETE',
-        headers,
-        credentials: 'include',
-      });
-      if (!response.ok && response.status !== 204) {
-        let message = `Delete failed (${response.status}).`;
-        try {
-          const err = await response.json();
-          message = err?.message ?? err?.title ?? message;
-        } catch {
-          // ignore
-        }
-        throw new Error(message);
-      }
+      await deleteSpeakingReviewVoiceNote(noteId);
       setVoiceNotes((current) => current.filter((note) => note.id !== noteId));
       setVoiceNoteUrls((current) => {
         const next = { ...current };
@@ -599,7 +521,7 @@ export default function SpeakingReviewWorkspace() {
     } finally {
       setDeletingVoiceNoteId(null);
     }
-  }, [buildAuthHeaders, reviewRequestId, speakingVoiceNoteDeleteBase, speakingVoiceNotesUrl]);
+  }, [reviewRequestId]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
