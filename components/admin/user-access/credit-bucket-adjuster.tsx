@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/admin/ui/input';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import {
   adjustAdminUserAiCredits,
   type AiPackageCreditSnapshot,

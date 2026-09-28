@@ -12,11 +12,14 @@ This is the single design-system spec for every surface in the web app: learner,
 | Motion for motion/react (durations, easings, springs, surface presets) | `lib/motion.ts` (mirrors the CSS `--duration-*` / `--ease-*`) |
 | Motion components | `components/ui/motion-primitives.tsx` (`MotionPage/Section/List/Item/Presence/Collapse/FadeSwitch`) |
 | Shared primitives | `components/ui/*`: Button, Card, Badge, Tabs, Modal/Drawer, InlineAlert/Toast, form-controls, Skeleton, EmptyState/ErrorState, DataTable, StatCard, Stepper, Pagination, FilterBar, BulkActionBar |
-| Dense admin primitives (Radix-based) | `components/admin/ui/*`, with admin page layouts in `components/admin/layout/*` |
+| Dense admin primitives (Radix-based) | `components/admin/ui/*`, with admin page layouts in `components/admin/layout/*`. Admin routes only; ESLint-enforced (`eslint.config.mjs`), which also bans aliasing a kit primitive (e.g. `Button as LegacyButton`) |
+| Global toast | `components/ui/toaster.tsx` (`toast()`, mounted once in `app/providers.tsx`). Inline page messages: `InlineAlert`/`Toast` in `components/ui/alert.tsx` |
 | Learner page compositions | `components/domain/learner-surface.tsx`: LearnerPageHero, LearnerSurfaceSectionHeader, LearnerSurfaceCard |
 | App shell | `components/layout/*`: AppShell, role shells, TopNav, ProfileMenu, Sidebar, BottomNav, GlobalSearch |
 | Chart colours | `lib/domain/chart-palette.ts` |
 | Accessibility preferences (large text, high contrast, reduce motion) | `contexts/accessibility-context.tsx`, with the CSS at the bottom of `app/globals.css` |
+
+**Which kit:** admin pages use the dense `components/admin/ui` primitives, and `components/ui` for what the admin kit lacks: Modal/Drawer, DataTable with mobile cards, FilterBar, Pagination, InlineAlert, PageSkeleton, Tabs. Everything outside admin routes uses `components/ui`.
 
 **Adding a new screen:**
 1. Wrap it in the role shell.
@@ -96,6 +99,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.
   - Under reduced motion, keep every **state** visible (active fills, selected rings). Drop only the movement.
 - **Never animate** exam timers, audio/recording controls or anything on the critical path of a live attempt.
+- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content`. It is skipped on first paint, in the learner shell (learner pages animate themselves), with `distractionFree`, and on exam/live routes (`isExamOrLiveRoute`). Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
 
 ## 6. Components
 | Component | Styling | Behaviour |
@@ -107,6 +111,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
 | Overlays | admin Dialog/AlertDialog use `--z-modal`; Select/DropdownMenu use `--z-popover` | One `--z-*` scale in `app/globals.css` |
 | Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
+| Command palette | `GlobalSearch`: a `Modal`-based combobox/listbox, mounted once per AppShell | Ctrl/⌘K or the header trigger; not mounted on `distractionFree` or exam/live routes (`isExamOrLiveRoute`); rows only from the role's real nav plus learner content search |
 | Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 

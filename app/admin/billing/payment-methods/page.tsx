@@ -26,7 +26,7 @@ import {
 } from '@/components/admin/ui/select';
 import { Switch } from '@/components/admin/ui/switch';
 import { Textarea } from '@/components/admin/ui/textarea';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   listAdminPaymentMethods,

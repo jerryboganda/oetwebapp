@@ -10,8 +10,7 @@ import { MobileRuntimeGate } from '@/components/mobile/mobile-runtime-gate';
 import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-bridge';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthenticatedNotificationCenter } from '@/components/providers/authenticated-notification-center';
-import { Toaster } from '@/components/admin/ui/toaster';
-import { TooltipProvider } from '@/components/admin/ui/tooltip';
+import { Toaster } from '@/components/ui/toaster';
 import { RuntimeShellBridges } from '@/components/shell/runtime-shell-bridges';
 import { AiAssistantProvider } from '@/contexts/ai-assistant-context';
 import { CompanionMount } from '@/components/providers/companion-mount';
@@ -102,64 +101,55 @@ export function AppProviders({
         AppVersionGateProvider wraps the whole tree (outside AuthProvider) so the
         forced-update gate can block even unauthenticated/expired sessions. It
         renders no UI itself — ShellControls + ForcedUpdateOverlay are mounted
-        deeper (below) where Theme/Tooltip context is available, and consume the
+        deeper (below) where Theme context is available, and consume the
         gate via useAppVersionGate().
       */}
       <AppVersionGateProvider>
       <ThemeProvider nonce={nonce}>
-        {/*
-          TooltipProvider must wrap every admin (and learner) consumer of the
-          Tooltip primitive so portals share a single delay context. 800ms hover
-          delay matches the Material spec; focus opens are instant by default.
-          skipDelayDuration={500} makes moving between adjacent tooltips (e.g. a
-          toolbar) open instantly — the whole row then feels fast after the first.
-        */}
-        <TooltipProvider delayDuration={800} skipDelayDuration={500}>
-          <QueryProvider>
-            <AuthProvider>
-              <RuntimeLifecycleBridge />
-              <MobileRuntimeGate />
+        <QueryProvider>
+          <AuthProvider>
+            <RuntimeLifecycleBridge />
+            <MobileRuntimeGate />
+            {/*
+              AccessibilityProvider reads the learner's saved Settings →
+              Accessibility preferences (large text, high contrast, reduce
+              motion, keyboard hints) and applies them to <html> + the
+              motion/react MotionConfig. It sits inside AuthProvider (it needs
+              the user id to read the settings cache) and wraps the visible app
+              + shell so the preferences affect everything the learner sees.
+            */}
+            <AccessibilityProvider>
               {/*
-                AccessibilityProvider reads the learner's saved Settings →
-                Accessibility preferences (large text, high contrast, reduce
-                motion, keyboard hints) and applies them to <html> + the
-                motion/react MotionConfig. It sits inside AuthProvider (it needs
-                the user id to read the settings cache) and wraps the visible app
-                + shell so the preferences affect everything the learner sees.
+                AI Learning Companion (docs/ai-learning-companion/). Sits inside
+                AuthProvider because it needs session.accessToken for the SignalR
+                hub and the role for its permission check. The provider only
+                opens a connection when the user actually has access, and
+                CompanionMount additionally gates on the server-owned
+                `ai_learning_companion` flag — which ships disabled — so this
+                renders nothing until an operator enables it in /admin/flags.
               */}
-              <AccessibilityProvider>
-                {/*
-                  AI Learning Companion (docs/ai-learning-companion/). Sits inside
-                  AuthProvider because it needs session.accessToken for the SignalR
-                  hub and the role for its permission check. The provider only
-                  opens a connection when the user actually has access, and
-                  CompanionMount additionally gates on the server-owned
-                  `ai_learning_companion` flag — which ships disabled — so this
-                  renders nothing until an operator enables it in /admin/flags.
-                */}
-                <AiAssistantProvider>
-                  <AuthenticatedNotificationCenter>
-                    {children}
-                  </AuthenticatedNotificationCenter>
-                  <CompanionMount />
-                </AiAssistantProvider>
-                {/*
-                  Shell-only update UI (returns null on the website): the
-                  top-center Reload + Check-for-updates cluster and the
-                  non-dismissible forced-update overlay. Mounted here so they
-                  inherit Theme + Tooltip context.
-                */}
-                <RuntimeShellBridges />
-                {/*
-                  Global sonner toaster — rendered once at the root so any
-                  `toast()` call anywhere in the tree surfaces in the same anchor.
-                  Theme is read from next-themes inside the component.
-                */}
-                <Toaster />
-              </AccessibilityProvider>
-            </AuthProvider>
-          </QueryProvider>
-        </TooltipProvider>
+              <AiAssistantProvider>
+                <AuthenticatedNotificationCenter>
+                  {children}
+                </AuthenticatedNotificationCenter>
+                <CompanionMount />
+              </AiAssistantProvider>
+              {/*
+                Shell-only update UI (returns null on the website): the
+                top-center Reload + Check-for-updates cluster and the
+                non-dismissible forced-update overlay. Mounted here so they
+                inherit Theme context.
+              */}
+              <RuntimeShellBridges />
+              {/*
+                Global sonner toaster — rendered once at the root so any
+                `toast()` call anywhere in the tree surfaces in the same anchor.
+                Theme is read from next-themes inside the component.
+              */}
+              <Toaster />
+            </AccessibilityProvider>
+          </AuthProvider>
+        </QueryProvider>
       </ThemeProvider>
       </AppVersionGateProvider>
       </RuntimeConfigProvider>

@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/admin/ui/select';
 import { InlineAlert } from '@/components/ui/alert';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import { useAuth } from '@/contexts/auth-context';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';

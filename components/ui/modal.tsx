@@ -27,6 +27,10 @@ interface ModalProps {
   children: ReactNode;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
+  /** Accessible name when there is no visible `title`. */
+  ariaLabel?: string;
+  /** Merged over the body's padding/overflow (e.g. `p-0 sm:p-0` for edge-to-edge content). */
+  bodyClassName?: string;
 }
 
 const sizeStyles: Record<string, string> = {
@@ -279,7 +283,7 @@ function OverlayCloseButton({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function Modal({ open, onClose, title, children, className, size = 'md' }: ModalProps) {
+export function Modal({ open, onClose, title, children, className, size = 'md', ariaLabel, bodyClassName }: ModalProps) {
   const portalTarget = useBodyPortalTarget();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -299,7 +303,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
           role="dialog"
           aria-modal="true"
           aria-labelledby={title ? titleId : undefined}
-          aria-label={title ? undefined : 'Dialog'}
+          aria-label={title ? undefined : (ariaLabel ?? 'Dialog')}
         >
           <motion.div
             className="fixed inset-0 bg-navy/25 backdrop-blur-[2px]"
@@ -327,7 +331,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
                 <OverlayCloseButton onClose={onClose} />
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">{children}</div>
+            <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5', bodyClassName)}>{children}</div>
           </motion.div>
         </div>
       ) : null}

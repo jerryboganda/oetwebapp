@@ -7,7 +7,6 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 import { AdminRouteFreshnessBadge, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState as LegacyEmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Select } from '@/components/ui/form-controls';
 import { getAdminQualityAnalyticsData } from '@/lib/admin';
@@ -17,6 +16,7 @@ import type { AdminQualityAnalytics } from '@/lib/types/admin';
 import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { ChartCard } from '@/components/admin/ui/chart-card';
 
@@ -182,8 +182,8 @@ export default function QualityAnalyticsPage() {
           status={pageStatus}
           onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
-            <LegacyEmptyState
-              icon={<BarChart3 className="h-10 w-10 text-admin-fg-muted" />}
+            <EmptyState
+              icon={<BarChart3 />}
               title="No quality analytics are available for this filter set"
               description="Try a broader time range or clear the current subtest and profession filters."
             />
