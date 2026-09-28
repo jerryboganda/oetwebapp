@@ -397,12 +397,13 @@ export function inspectSource(relPath, source) {
     // real TypeScript parser is unavailable — so for .ts/.tsx the gate relies
     // on the leftover-splice patterns above plus the authoritative TS parse
     // (local) and the Next.js/Docker build (CI). Other code (e.g. .cs) keeps
-    // the balance check. LearnerService.cs is ~14k lines with heavy $@" SQL
-    // interpolation that trips the naive C# scanner — rely on dotnet build
+    // the balance check. LearnerService.cs (and its LearnerService.<Part>.cs
+    // partials) carry heavy $@" SQL interpolation that trips the naive C#
+    // scanner — rely on dotnet build
     // instead. AiOperationLeaseTests.cs carries plain """ DDL payloads whose
     // SQL single-quote defaults the scanner mistakes for C# char literals —
     // dotnet build is authoritative there too.
-    if (ext !== '.ts' && ext !== '.tsx' && !relPath.endsWith('LearnerService.cs') && !relPath.endsWith('AiOperationLeaseTests.cs')) {
+    if (ext !== '.ts' && ext !== '.tsx' && !/LearnerService(\.[A-Za-z]+)?\.cs$/.test(relPath) && !relPath.endsWith('AiOperationLeaseTests.cs')) {
       const fault = findBalanceFault(source, ext);
       if (fault) findings.push(`${relPath}: ${fault}`);
     }
