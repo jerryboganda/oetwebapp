@@ -6,6 +6,7 @@ import { CreditCard } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -51,13 +52,13 @@ export default function UpdateCardPage() {
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
-        icon={<CreditCard className="h-6 w-6" />}
+        icon={CreditCard}
         eyebrow="Billing"
         title="Update your card"
         description="Use this one-time link to update the card on file for your subscription."
       />
 
-      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <Card padding="lg" className="space-y-4">
         {state === 'loading' && <Skeleton className="h-24 w-full" />}
 
         {state === 'invalid' && (
@@ -68,7 +69,7 @@ export default function UpdateCardPage() {
 
         {state === 'success' && details && (
           <>
-            <p className="text-sm">
+            <p className="text-sm text-navy">
               Verified for subscription <code>{details.subscriptionId.slice(0, 12)}…</code>. Click below to open the secure card-update form for your gateway.
             </p>
             <div className="flex justify-end">
@@ -76,7 +77,7 @@ export default function UpdateCardPage() {
             </div>
           </>
         )}
-      </div>
+      </Card>
     </LearnerDashboardShell>
   );
 }

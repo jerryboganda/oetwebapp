@@ -1,5 +1,6 @@
 'use client';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
 
 import { PriceCell } from './PackageCard';
@@ -45,18 +46,18 @@ export interface FeatureMatrixProps {
 
 export function FeatureMatrix({ plans, loading, error, emptyMessage }: FeatureMatrixProps) {
   if (loading) {
-    return <div className="mt-6 h-72 animate-pulse rounded-2xl border border-border bg-surface" />;
+    return <Skeleton className="mt-6 h-72 w-full rounded-2xl" />;
   }
   if (error) {
     return (
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-8 text-center text-muted">
+      <div role="alert" className="mt-6 rounded-2xl border border-danger/30 bg-danger/5 p-8 text-center text-sm text-navy">
         {error}
       </div>
     );
   }
   if (plans.length === 0) {
     return (
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-8 text-center text-muted">
+      <div className="mt-6 rounded-2xl border border-dashed border-border bg-background-light p-8 text-center text-muted">
         {emptyMessage ?? 'No products are published right now. Please check back soon.'}
       </div>
     );

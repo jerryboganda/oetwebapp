@@ -737,11 +737,14 @@ function CheckoutReviewContent() {
             ) : null}
 
             <div className="mt-4 border-t border-border pt-4">
-              <label className="block text-sm font-medium">
+              <label className="block text-sm font-medium text-navy">
                 Coupon code
                 <div className="mt-2 flex gap-2">
                   <input
-                    className="w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm outline-none focus:border-primary"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                     value={couponCode}
                     onChange={(event) => setCouponCode(event.target.value)}
                     placeholder="Optional"
