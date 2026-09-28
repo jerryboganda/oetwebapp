@@ -482,6 +482,24 @@ describe('admin billing plan API helpers', () => {
     expect(body.contentOverridesJson).toBe('{"videos":{"exclude":["vid-1"]}}');
     expect(body.deliveryMethod).toBe('automatic_web');
   });
+
+  // Regression: diagnosticMockEntitlement was dropped from the rebuilt body, so every plan
+  // save reset BillingPlan.DiagnosticMockEntitlement to the server default 'one_per_lifetime'.
+  it('forwards diagnosticMockEntitlement on create and update', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const { createAdminBillingPlan, updateAdminBillingPlan } = await import('../api');
+    await createAdminBillingPlan({ name: 'Plan', price: 100, interval: 'one_time', diagnosticMockEntitlement: 'unlimited' });
+    await updateAdminBillingPlan('plan_1', { code: 'plan', name: 'Plan', price: 100, interval: 'one_time', diagnosticMockEntitlement: 'unlimited' });
+
+    const calls = fetchMock.mock.calls as unknown as Array<[unknown, RequestInit | undefined]>;
+    expect(JSON.parse(String(calls[0]?.[1]?.body)).diagnosticMockEntitlement).toBe('unlimited');
+    expect(JSON.parse(String(calls[1]?.[1]?.body)).diagnosticMockEntitlement).toBe('unlimited');
+  });
 });
 
 describe('admin mock bundle API helpers', () => {

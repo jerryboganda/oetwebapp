@@ -246,6 +246,8 @@ export interface AdminBillingPlanOet2026Fields {
   telegramInviteUrl?: string;
   deliveryInstructions?: string;
   contentOverridesJson?: string;
+  // Blank/null resets to 'one_per_lifetime' server-side, so it must be forwarded.
+  diagnosticMockEntitlement?: string;
 }
 
 export async function createAdminBillingPlan(payload: {
@@ -305,6 +307,7 @@ export async function createAdminBillingPlan(payload: {
       telegramInviteUrl: payload.telegramInviteUrl ?? null,
       deliveryInstructions: payload.deliveryInstructions ?? null,
       contentOverridesJson: payload.contentOverridesJson ?? null,
+      diagnosticMockEntitlement: payload.diagnosticMockEntitlement ?? null,
     }),
   });
 }
@@ -366,6 +369,7 @@ export async function updateAdminBillingPlan(planId: string, payload: {
       telegramInviteUrl: payload.telegramInviteUrl ?? null,
       deliveryInstructions: payload.deliveryInstructions ?? null,
       contentOverridesJson: payload.contentOverridesJson ?? null,
+      diagnosticMockEntitlement: payload.diagnosticMockEntitlement ?? null,
     }),
   });
 }
