@@ -79,6 +79,10 @@ public sealed class WhopGateway : IPaymentGateway
             ["currency"] = currency.ToLowerInvariant(),
             ["initial_price"] = price,
             ["title"] = "OET With Dr Hesham",
+            // Buyers must see and pay the quoted amount in the quoted currency. With
+            // adaptive pricing on, Whop re-prices the plan into the buyer's local
+            // currency (e.g. AED in the UAE).
+            ["adaptive_pricing_enabled"] = false,
         };
 
         var payload = new Dictionary<string, object?>
@@ -301,7 +305,7 @@ public sealed class WhopGateway : IPaymentGateway
         decimal converted;
         try
         {
-            converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "USD", ct), 2, MidpointRounding.AwayFromZero);
+            converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "GBP", ct), 2, MidpointRounding.AwayFromZero);
         }
         catch (InvalidOperationException ex)
         {
@@ -312,11 +316,11 @@ public sealed class WhopGateway : IPaymentGateway
             throw new PaymentGatewayApiException(
                 GatewayName,
                 422,
-                $"Whop FX conversion produced an invalid {currency}->USD amount.");
+                $"Whop FX conversion produced an invalid {currency}->GBP amount.");
         }
 
-        _logger?.LogInformation("Whop converting {From} to USD for checkout", currency);
-        return (converted, "USD");
+        _logger?.LogInformation("Whop converting {From} to GBP for checkout", currency);
+        return (converted, "GBP");
     }
 
     private async Task<(int Status, string Body)> PostCheckoutAsync(
