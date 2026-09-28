@@ -3292,6 +3292,26 @@ if (app.Environment.IsDevelopment())
     }
 }
 
+// Writing AI subscription provider seeder — runs in all environments.
+// Idempotent: inserts the two subscription sidecar rows (writing-claude-sub /
+// writing-codex-sub) only when absent; existing rows are never overwritten so
+// admins can retune them via /admin/ai-providers. Non-fatal.
+{
+    using var seedScope = app.Services.CreateScope();
+    var writingAiSeedDb = seedScope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Data.LearnerDbContext>();
+    try
+    {
+        await OetLearner.Api.Services.Seeding.WritingSubscriptionProviderSeeder
+            .SeedAsync(writingAiSeedDb, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "Writing AI provider seeder failed (non-fatal)");
+    }
+}
+
 app.Run();
 
 static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)

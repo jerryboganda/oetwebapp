@@ -17,6 +17,11 @@ RUN chown -R 10002:10002 /srv/writing-ai
 
 USER 10002
 
+# The base image's ENTRYPOINT (oet-agent-entrypoint) is the console's control
+# plane: it demands uid 0 and would exec the CONSOLE's server. The facade runs
+# its own node server directly, so the inherited entrypoint is cleared.
+ENTRYPOINT []
+
 ENV NODE_ENV=production \
     PORT=8080 \
     CODEX_HOME=/home/agent/.codex
