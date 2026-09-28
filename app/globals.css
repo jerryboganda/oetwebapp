@@ -271,6 +271,18 @@
   --color-destructive-foreground: #fffefb;
   --color-input:                 var(--color-border);
   --color-ring:                  var(--color-primary);
+
+  /* Aliases for names used in the codebase that had no token (the classes
+     rendered no colour at all, e.g. text-error on overdue/validation text). */
+  --color-error:                 var(--color-danger);
+  --color-brand:                 var(--color-primary);
+  --color-link:                  var(--color-primary);
+  --color-fg:                    var(--color-navy);
+  --color-surface-muted:         var(--color-background-light);
+  --color-background-card:       var(--color-surface);
+  --color-border-muted:          var(--color-border);
+  --color-admin-bg-canvas:       var(--admin-bg-page);
+  --color-admin-success-tint-strong: var(--admin-success-tint-strong);
 }
 
 @layer utilities {
