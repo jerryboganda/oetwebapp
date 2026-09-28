@@ -17,9 +17,9 @@ interface ProgressBarProps {
 
 const colorStyles: Record<string, string> = {
   primary: 'bg-primary',
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  danger: 'bg-red-500',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
 };
 
 export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, size = 'sm', color = 'primary', className }: ProgressBarProps) {

@@ -321,7 +321,7 @@ export default function AdminMockBookingsCalendarPage() {
             <table className="min-w-full border-collapse text-xs" aria-label="Mock booking calendar grid">
               <thead>
                 <tr>
-                  <th scope="col" className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-bg-surface px-2 py-2 text-left text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
+                  <th scope="col" className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-bg-surface px-2 py-2 text-left text-3xs font-black uppercase tracking-widest text-admin-fg-muted">
                     Time
                   </th>
                   {weekDays.map((day) => {
@@ -332,7 +332,7 @@ export default function AdminMockBookingsCalendarPage() {
                         key={day.toISOString()}
                         className="min-w-[140px] border-b border-admin-border px-2 py-2 text-left"
                       >
-                        <p className="text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
+                        <p className="text-3xs font-black uppercase tracking-widest text-admin-fg-muted">
                           {header.weekday}
                         </p>
                         <p className="text-xs font-bold text-admin-fg-strong">{header.date}</p>
@@ -346,7 +346,7 @@ export default function AdminMockBookingsCalendarPage() {
                   <tr key={`${row.hour}-${row.minute}`} className="align-top">
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-surface px-2 py-1 text-left text-[11px] font-bold text-admin-fg-muted"
+                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-bg-surface px-2 py-1 text-left text-2xs font-bold text-admin-fg-muted"
                     >
                       {row.label}
                     </th>
@@ -367,10 +367,10 @@ export default function AdminMockBookingsCalendarPage() {
                                   key={booking.bookingId || booking.id}
                                   type="button"
                                   onClick={() => openBookingModal(booking)}
-                                  className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-border-focus)] ${
+                                  className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-2xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-border-focus)] ${
                                     tutorMissing
                                       ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20'
-                                      : 'border-admin-border bg-admin-bg-surface-raised hover:bg-admin-bg-elevated/60'
+                                      : 'border-admin-border bg-admin-bg-subtle hover:bg-admin-bg-elevated/60'
                                   }`}
                                   aria-label={`Open booking ${booking.bookingId || booking.id}`}
                                 >

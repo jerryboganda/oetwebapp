@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Calculator, Globe, GraduationCap, ArrowLeftRight, Info } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/empty-error';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -43,16 +44,23 @@ const GRADE_COLORS: Record<string, string> = {
 export default function ScoreCalculatorPage() {
   const [data, setData] = useState<EquivalenceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [oetScore, setOetScore] = useState<number>(350);
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
 
-  useEffect(() => {
-    analytics.track('score_calculator_viewed');
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadFailed(false);
     apiRequest<EquivalenceData>('/v1/reference/score-equivalences')
       .then(setData)
-      .catch(() => {})
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    analytics.track('score_calculator_viewed');
+    load();
+  }, [load]);
 
   /* find matching row for the score input */
   const matchedRow = data?.equivalences.find(e => oetScore >= e.oetScoreMin && oetScore <= e.oetScoreMax);
@@ -65,7 +73,7 @@ export default function ScoreCalculatorPage() {
     return (
       <LearnerDashboardShell>
         <div className="max-w-3xl mx-auto space-y-4">
-          <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
+          <Skeleton className="h-8 w-64 max-w-full" /><Skeleton className="h-4 w-96 max-w-full" />
           <Skeleton className="h-32" /><Skeleton className="h-64" />
         </div>
       </LearnerDashboardShell>
@@ -80,12 +88,19 @@ export default function ScoreCalculatorPage() {
       />
 
       <div className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
+        {loadFailed ? (
+          <ErrorState
+            title="Score equivalences unavailable"
+            message="The equivalence table could not be loaded. Retry to see IELTS, PTE and CEFR comparisons."
+            onRetry={load}
+          />
+        ) : null}
 
         {/* ── Score Input ────────────────────── */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Calculator className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Enter Your OET Score</h2>
+            <Calculator className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h2 className="font-semibold text-navy">Enter Your OET Score</h2>
           </div>
           <div className="space-y-3">
             <input
@@ -93,6 +108,7 @@ export default function ScoreCalculatorPage() {
               min={0} max={500} step={10}
               value={oetScore}
               onChange={e => setOetScore(Number(e.target.value))}
+              aria-label="OET score"
               className="w-full h-2 accent-primary"
             />
             <div className="flex items-center justify-between">
@@ -104,23 +120,23 @@ export default function ScoreCalculatorPage() {
 
           {matchedRow && (
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-center p-3 rounded-xl bg-background-light">
                 <p className="text-xs text-muted mb-1">OET Grade</p>
                 <Badge className={`text-base px-3 py-1 ${GRADE_COLORS[matchedRow.oetGrade] || ''}`}>
                   {matchedRow.oetGrade}
                 </Badge>
               </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-center p-3 rounded-xl bg-background-light">
                 <p className="text-xs text-muted mb-1">IELTS</p>
-                <p className="text-xl font-bold">{matchedRow.ielts}</p>
+                <p className="text-xl font-bold text-navy">{matchedRow.ielts}</p>
               </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-center p-3 rounded-xl bg-background-light">
                 <p className="text-xs text-muted mb-1">PTE</p>
-                <p className="text-xl font-bold">{matchedRow.pte}</p>
+                <p className="text-xl font-bold text-navy">{matchedRow.pte}</p>
               </div>
-              <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-center p-3 rounded-xl bg-background-light">
                 <p className="text-xs text-muted mb-1">CEFR</p>
-                <p className="text-xl font-bold">{matchedRow.cefr}</p>
+                <p className="text-xl font-bold text-navy">{matchedRow.cefr}</p>
               </div>
             </div>
           )}
@@ -128,14 +144,14 @@ export default function ScoreCalculatorPage() {
 
         {/* ── Equivalence Table ──────────────── */}
         <Card className="overflow-hidden">
-          <div className="p-4 border-b flex items-center gap-2">
-            <ArrowLeftRight className="h-4 w-4 text-muted" />
-            <h2 className="font-semibold text-sm">Full Equivalence Table</h2>
+          <div className="p-4 border-b border-border flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4 text-muted" aria-hidden="true" />
+            <h2 className="font-semibold text-sm text-navy">Full Equivalence Table</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-muted/30 text-left">
+                <tr className="bg-background-light text-left text-muted">
                   <th className="px-4 py-2 font-medium">OET Grade</th>
                   <th className="px-4 py-2 font-medium">OET Score</th>
                   <th className="px-4 py-2 font-medium">IELTS</th>
@@ -147,7 +163,7 @@ export default function ScoreCalculatorPage() {
                 {data?.equivalences.map((row, i) => {
                   const isMatch = matchedRow === row;
                   return (
-                    <tr key={i} className={isMatch ? 'bg-primary/5 font-medium' : 'hover:bg-muted/20'}>
+                    <tr key={i} className={isMatch ? 'bg-primary/5 font-medium' : 'hover:bg-background-light'}>
                       <td className="px-4 py-2.5">
                         <Badge variant="outline" className={`${GRADE_COLORS[row.oetGrade] || ''} border-0 text-xs`}>
                           {row.oetGrade}
@@ -167,23 +183,27 @@ export default function ScoreCalculatorPage() {
 
         {/* ── Institution Requirements ────────── */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-muted" />
-              <h2 className="font-semibold">Institution Requirements</h2>
+              <Globe className="h-5 w-5 text-muted" aria-hidden="true" />
+              <h2 className="font-semibold text-navy">Institution Requirements</h2>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button
+                type="button"
+                aria-pressed={!countryFilter}
                 onClick={() => setCountryFilter(null)}
-                className={`px-3 py-1 rounded-full text-xs border ${!countryFilter ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
+                className={`inline-flex min-h-9 items-center px-3 py-1 rounded-full text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!countryFilter ? 'bg-primary text-white border-primary dark:bg-violet-700' : 'bg-surface text-navy border-border hover:border-border-hover'}`}
               >
                 All
               </button>
               {countries.map(c => (
                 <button
                   key={c}
+                  type="button"
+                  aria-pressed={countryFilter === c}
                   onClick={() => setCountryFilter(countryFilter === c ? null : c)}
-                  className={`px-3 py-1 rounded-full text-xs border ${countryFilter === c ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
+                  className={`inline-flex min-h-9 items-center px-3 py-1 rounded-full text-xs border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${countryFilter === c ? 'bg-primary text-white border-primary dark:bg-violet-700' : 'bg-surface text-navy border-border hover:border-border-hover'}`}
                 >
                   {c}
                 </button>
@@ -197,12 +217,12 @@ export default function ScoreCalculatorPage() {
               return (
                 <MotionItem key={i}>
                   <Card className={`p-4 transition-colors ${meetsReq ? 'border-success/30' : ''}`}>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <GraduationCap className="h-4 w-4 text-muted shrink-0" />
-                          <span className="font-medium text-sm">{req.body}</span>
-                          <Badge variant="outline" className="text-[10px]">{req.country}</Badge>
+                          <GraduationCap className="h-4 w-4 text-muted shrink-0" aria-hidden="true" />
+                          <span className="font-medium text-sm text-navy">{req.body}</span>
+                          <Badge variant="outline" className="text-3xs">{req.country}</Badge>
                         </div>
                         <p className="text-xs text-muted ml-6">
                           Min OET: <strong>{req.oetMinGrade}</strong> ({req.oetMinScore}) · Min IELTS: <strong>{req.ieltsMin}</strong>
@@ -220,8 +240,8 @@ export default function ScoreCalculatorPage() {
         </div>
 
         {/* disclaimer */}
-        <div className="flex items-start gap-2 text-xs text-muted bg-muted/30 rounded-lg p-3">
-          <Info className="h-4 w-4 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 text-xs text-muted bg-background-light border border-border rounded-xl p-3">
+          <Info className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
           <p>Score equivalences are approximate and based on publicly available official guidance. Always verify requirements directly with the accepting institution or regulatory body.</p>
         </div>
       </div>

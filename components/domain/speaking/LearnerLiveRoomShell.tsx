@@ -60,7 +60,7 @@ function LearnerRoomInterior({ onEnd, children }: { onEnd: () => void; children?
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-sm text-white/70" role="status">{remoteConnected ? 'Your tutor is connected (audio only).' : 'Waiting for your tutor to join…'}</div>
       </div>
-      {children ? <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-navy/60 px-4 py-2 text-sm text-white backdrop-blur">{children}</div> : null}
+      {children ? <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-navy/60 dark:bg-black/60 px-4 py-2 text-sm text-white backdrop-blur">{children}</div> : null}
       <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/60 px-3 py-2 backdrop-blur">
         <Button
           type="button"

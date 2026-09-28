@@ -2,6 +2,7 @@
 
 import { Download, ExternalLink, FileText } from 'lucide-react';
 
+import { Skeleton } from '@/components/ui/skeleton';
 import type { SubscriptionInvoice } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
 
@@ -20,14 +21,16 @@ export interface InvoiceTableProps {
 export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTableProps) {
   if (loading) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">
-        Loading invoices...
+      <div className="space-y-2 rounded-2xl border border-border bg-surface p-4 shadow-sm" aria-label="Loading invoices">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-10 w-full rounded-lg" />
+        ))}
       </div>
     );
   }
   if (invoices.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-10 text-center">
+      <div className="rounded-2xl border border-dashed border-border bg-background-light p-10 text-center">
         <FileText className="mx-auto h-8 w-8 text-muted" aria-hidden="true" />
         <p className="mt-3 text-sm text-muted">
           {emptyMessage ?? 'You have no invoices on record yet.'}
@@ -52,7 +55,7 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
         <tbody className="divide-y divide-border">
           {invoices.map((invoice) => (
             <tr key={invoice.invoiceId} className="hover:bg-background-light/50">
-              <td className="px-4 py-3 text-muted">
+              <td className="whitespace-nowrap px-4 py-3 text-muted">
                 {invoice.date ? new Date(invoice.date).toLocaleDateString() : '-'}
               </td>
               <td className="px-4 py-3 font-medium text-navy">{invoice.number ?? invoice.invoiceId}</td>
@@ -60,7 +63,7 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
               <td className="px-4 py-3">
                 <StatusPill status={invoice.status} />
               </td>
-              <td className="px-4 py-3 text-right font-medium text-navy">
+              <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-navy">
                 {formatMoney(invoice.amount, { currency: invoice.currency })}
               </td>
               <td className="px-4 py-3 text-right text-xs">
@@ -72,7 +75,7 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
-                      <Download className="h-3.5 w-3.5" /> PDF
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" /> PDF
                     </a>
                   ) : null}
                   {invoice.hostedInvoiceUrl ? (
@@ -82,7 +85,7 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" /> View
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> View
                     </a>
                   ) : null}
                 </div>
@@ -107,7 +110,7 @@ function StatusPill({ status }: { status: string }) {
           : 'bg-background-light text-muted';
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${tone}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone}`}
     >
       {status || 'unknown'}
     </span>

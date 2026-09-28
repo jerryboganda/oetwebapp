@@ -5,6 +5,7 @@ import { FileText, Plus, RefreshCcw, Sparkles, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { apiClient } from '@/lib/api';
 import type { WritingScenarioDto } from '@/lib/writing/types';
 
@@ -129,22 +130,24 @@ export default function AdminWritingScenariosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-navy"><FileText className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Scenarios</h1>
-          <p className="mt-1 text-sm text-muted">Manage the V2 scenario library. Status governs visibility to learners.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
-          <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New scenario</Button>
-        </div>
-      </header>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Writing Scenarios"
+        description="Manage the V2 scenario library. Status governs visibility to learners."
+        icon={<FileText className="h-5 w-5" />}
+        actions={
+          <>
+            <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
+            <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New scenario</Button>
+          </>
+        }
+      />
 
-      {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
 
       <Card>
         <CardContent>
-          <h2 className="text-base font-bold text-navy"><Sparkles className="mr-1 inline h-4 w-4 text-amber-600" aria-hidden="true" /> Generate with AI</h2>
+          <h2 className="text-base font-bold text-navy"><Sparkles className="mr-1 inline h-4 w-4 text-admin-primary" aria-hidden="true" /> Generate with AI</h2>
           <p className="mt-1 text-xs text-muted">Provide a short briefing. The model returns a draft scenario you can edit before publishing.</p>
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
@@ -164,6 +167,7 @@ export default function AdminWritingScenariosPage() {
 
       <Card>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Scenario list">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
@@ -192,6 +196,7 @@ export default function AdminWritingScenariosPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 

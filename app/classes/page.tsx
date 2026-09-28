@@ -134,8 +134,9 @@ export default function LiveClassesPage() {
                       key={track}
                       type="button"
                       onClick={() => setFilter(track)}
+                      aria-pressed={filter === track}
                       className={cn(
-                        'min-h-10 rounded-full border px-4 text-sm font-medium transition-colors',
+                        'min-h-11 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                         filter === track
                           ? 'border-primary bg-primary text-white dark:bg-violet-700'
                           : 'border-border bg-background text-muted hover:border-primary/50 hover:text-navy',
@@ -157,11 +158,11 @@ export default function LiveClassesPage() {
                   if (!session) return null;
                   const canJoin = isJoinAvailable(session, now);
                   return (
-                    <Link key={`${item.id}-${session.id}`} href={`/classes/${item.slug}`} className="rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/50">
+                    <Link key={`${item.id}-${session.id}`} href={`/classes/${item.slug}`} className="rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-navy">{item.title}</p>
-                          <p className="mt-1 flex items-center gap-1 text-xs text-muted"><CalendarDays className="h-3.5 w-3.5" /> {formatDate(session.scheduledStartAt)}</p>
+                          <p className="mt-1 flex items-center gap-1 text-xs text-muted"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /> {formatDate(session.scheduledStartAt)}</p>
                         </div>
                         <Badge variant={canJoin ? 'success' : 'info'}>{canJoin ? 'Join now' : session.status}</Badge>
                       </div>
@@ -206,9 +207,9 @@ export default function LiveClassesPage() {
 
                       {session ? (
                         <div className="mt-5 grid gap-3 rounded-xl bg-background-light p-4 text-sm md:grid-cols-3">
-                          <div className="flex items-center gap-2 text-muted"><Clock className="h-4 w-4" /> {formatDate(session.scheduledStartAt)}</div>
-                          <div className="flex items-center gap-2 text-muted"><Users className="h-4 w-4" /> {seatsLabel(session)}</div>
-                          <div className="flex items-center gap-2 text-muted"><GraduationCap className="h-4 w-4" /> {item.tutorDisplayName ?? 'Tutor to confirm'}</div>
+                          <div className="flex items-center gap-2 text-muted"><Clock className="h-4 w-4" aria-hidden="true" /> {formatDate(session.scheduledStartAt)}</div>
+                          <div className="flex items-center gap-2 text-muted"><Users className="h-4 w-4" aria-hidden="true" /> {seatsLabel(session)}</div>
+                          <div className="flex items-center gap-2 text-muted"><GraduationCap className="h-4 w-4" aria-hidden="true" /> {item.tutorDisplayName ?? 'Tutor to confirm'}</div>
                         </div>
                       ) : null}
 
@@ -219,16 +220,16 @@ export default function LiveClassesPage() {
                         {session?.isEnrolled ? (
                           canJoin ? (
                             <Link href={`/classes/${item.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: 'primary', size: 'sm' })}>
-                              <PlayCircle className="h-4 w-4" /> Join class
+                              <PlayCircle className="h-4 w-4" aria-hidden="true" /> Join class
                             </Link>
                           ) : (
                             <Button type="button" variant="secondary" size="sm" disabled>
-                              <PlayCircle className="h-4 w-4" /> Opens 30m before
+                              <PlayCircle className="h-4 w-4" aria-hidden="true" /> Opens 30m before
                             </Button>
                           )
                         ) : session ? (
                           <Button type="button" size="sm" onClick={() => handleEnroll(session.id)} loading={enrollingSessionId === session.id}>
-                            <RotateCcw className="h-4 w-4" /> Reserve seat
+                            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Reserve seat
                           </Button>
                         ) : null}
                       </div>

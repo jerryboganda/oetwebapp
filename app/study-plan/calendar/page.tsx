@@ -176,14 +176,18 @@ export default function StudyPlanCalendarPage() {
 
           <div className="flex rounded-lg border border-border">
             <button
+              type="button"
+              aria-pressed={view === 'week'}
               onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === 'week' ? 'bg-primary text-primary-foreground' : 'text-muted hover:text-navy'}`}
+              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'week' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
             >
               Week
             </button>
             <button
+              type="button"
+              aria-pressed={view === 'month'}
               onClick={() => setView('month')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === 'month' ? 'bg-primary text-primary-foreground' : 'text-muted hover:text-navy'}`}
+              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'month' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
             >
               Month
             </button>
@@ -226,7 +230,7 @@ export default function StudyPlanCalendarPage() {
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                         isToday
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-primary-foreground dark:bg-violet-700'
                           : isCurrentMonth || view === 'week'
                             ? 'text-navy'
                             : 'text-muted'
@@ -244,7 +248,7 @@ export default function StudyPlanCalendarPage() {
                           <button
                             key={task.id}
                             onClick={() => task.route && router.push(task.route)}
-                            className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight transition-colors hover:bg-background-light"
+                            className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-2xs leading-tight transition-colors hover:bg-background-light"
                           >
                             <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${SUBTEST_DOT[task.subTest]}`} />
                             <StatusMeta.Icon className={`h-3 w-3 flex-shrink-0 ${StatusMeta.className}`} />
@@ -255,7 +259,7 @@ export default function StudyPlanCalendarPage() {
                         );
                       })}
                       {dayTasks.length > (view === 'month' ? 3 : 5) && (
-                        <span className="block px-1 text-[10px] text-muted">
+                        <span className="block px-1 text-3xs text-muted">
                           +{dayTasks.length - (view === 'month' ? 3 : 5)} more
                         </span>
                       )}

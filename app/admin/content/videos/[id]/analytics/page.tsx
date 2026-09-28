@@ -64,11 +64,11 @@ function RetentionBars({ buckets }: { buckets: number[] }) {
               style={{ height: `${Math.max(2, (value / max) * 120)}px` }}
               title={`${index * 10}–${index * 10 + 10}%: ${value} viewer${value === 1 ? '' : 's'}`}
             />
-            <span className="text-[10px] tabular-nums text-admin-fg-muted">{index * 10}</span>
+            <span className="text-3xs tabular-nums text-admin-fg-muted">{index * 10}</span>
           </div>
         ))}
       </div>
-      <p className="mt-1 text-center text-[10px] uppercase tracking-widest text-admin-fg-muted">
+      <p className="mt-1 text-center text-3xs uppercase tracking-widest text-admin-fg-muted">
         % of video watched
       </p>
     </div>

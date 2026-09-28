@@ -10,19 +10,18 @@ import {
   type SponsoredLearner,
 } from '@/lib/api';
 import { Card } from '@/components/ui/card';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ErrorState } from '@/components/ui/empty-error';
+
+const STATUS_VARIANTS: Record<string, BadgeProps['variant']> = {
+  Active: 'success',
+  Pending: 'warning',
+  Revoked: 'danger',
+};
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    Active: 'bg-success/10 text-success',
-    Pending: 'bg-warning/10 text-warning',
-    Revoked: 'bg-danger/10 text-danger',
-  };
-
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[status] ?? 'bg-background-light text-navy'}`}>
-      {status}
-    </span>
-  );
+  return <Badge variant={STATUS_VARIANTS[status] ?? 'muted'}>{status}</Badge>;
 }
 
 export default function SponsorLearnersPage() {
@@ -85,7 +84,10 @@ export default function SponsorLearnersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-navy">Sponsored Learners</h1>
+      <header>
+        <h1 className="text-2xl font-bold text-navy">Sponsored Learners</h1>
+        <p className="mt-1 text-sm text-muted">Invite learners to your sponsorship and manage who is covered.</p>
+      </header>
 
       {/* Invite form */}
       <Card padding="lg">
@@ -96,7 +98,7 @@ export default function SponsorLearnersPage() {
               Email address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" aria-hidden="true" />
               <input
                 id="invite-email"
                 type="email"
@@ -108,21 +110,17 @@ export default function SponsorLearnersPage() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={inviteLoading}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 transition-[color,background-color,transform] duration-200"
-          >
+          <Button type="submit" disabled={inviteLoading}>
             {inviteLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
-              <UserPlus className="h-4 w-4" />
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
             )}
             Invite
-          </button>
+          </Button>
         </form>
-        {inviteError && <p className="mt-2 text-sm text-danger">{inviteError}</p>}
-        {inviteSuccess && <p className="mt-2 text-sm text-success">{inviteSuccess}</p>}
+        {inviteError && <p role="alert" className="mt-2 text-sm text-danger">{inviteError}</p>}
+        {inviteSuccess && <p role="status" className="mt-2 text-sm text-success">{inviteSuccess}</p>}
       </Card>
 
       {/* Learners list */}
@@ -133,18 +131,16 @@ export default function SponsorLearnersPage() {
           ))}
         </div>
       ) : error ? (
-        <Card padding="lg" className="text-center">
-          <p className="text-sm text-danger">{error}</p>
-        </Card>
+        <ErrorState title="Learners could not be loaded" message={error} onRetry={() => void loadLearners()} />
       ) : learners.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <Users className="mx-auto h-10 w-10 text-muted mb-3" />
+          <Users className="mx-auto h-10 w-10 text-muted mb-3" aria-hidden="true" />
           <p className="text-sm text-muted">No sponsored learners yet. Use the form above to invite your first learner.</p>
         </Card>
       ) : (
         <Card padding="none" className="overflow-hidden">
           <div className="px-6 py-4 border-b border-border">
-            <p className="text-sm text-muted">{total} learner{total !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-muted tabular-nums">{total} learner{total !== 1 ? 's' : ''}</p>
           </div>
           <div className="divide-y divide-border">
             {learners.map((learner) => (
@@ -159,11 +155,13 @@ export default function SponsorLearnersPage() {
                   <StatusBadge status={learner.status} />
                   {learner.status !== 'Revoked' && (
                     <button
+                      type="button"
                       onClick={() => handleRemove(learner.id)}
-                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-danger hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       title="Remove sponsorship"
+                      aria-label={`Remove sponsorship for ${learner.learnerEmail}`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )}
                 </div>

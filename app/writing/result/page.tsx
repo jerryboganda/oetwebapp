@@ -269,7 +269,7 @@ function WritingResultContent() {
         </div>
 
         <MotionSection delayIndex={7} className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-8">
-          <Link href={`/writing/feedback?id=${resultId}`} className="group rounded-2xl border border-primary/20 bg-primary px-4 py-5 text-center text-white transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 hover:shadow-md">
+          <Link href={`/writing/feedback?id=${resultId}`} className="group rounded-2xl border border-primary/20 bg-primary px-4 py-5 text-center text-white transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />
             <span className="font-bold">View Detailed Feedback</span>
             <span className="text-xs text-info mt-1">See criterion breakdown</span>

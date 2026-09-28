@@ -730,7 +730,7 @@ export default function SpeakingReviewWorkspace() {
             {reviewDetail?.artifactStatus && (
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {Object.entries(reviewDetail.artifactStatus).map(([artifact, artifactState]) => (
-                  <div key={artifact} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted">
+                  <div key={artifact} className="rounded-lg bg-background-light px-3 py-2 text-xs text-muted">
                     <p className="font-semibold text-foreground">{artifact}</p>
                     <p>{artifactState.state}{artifactState.isStale ? ' • stale' : ''}</p>
                     {artifactState.message ? <p className="mt-1 text-muted">{artifactState.message}</p> : null}
@@ -755,17 +755,17 @@ export default function SpeakingReviewWorkspace() {
                   <div key={line.id} id={`transcript-line-${line.id}`}>
                     <button
                       type="button"
-                      className={`w-full text-left p-3 rounded-lg border transition-colors ${isActive ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-surface border-transparent hover:border-border'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${isActive ? 'bg-lavender border-primary/30 shadow-sm' : 'bg-surface border-transparent hover:border-border'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                       onClick={() => handleTranscriptClick(line.startTime)}
                       aria-label={`Seek to ${line.startTime.toFixed(1)} seconds for ${line.speaker}`}
                     >
                       <div className="flex items-center justify-between mb-1 gap-3">
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-bold ${line.speaker === 'candidate' ? 'text-primary' : 'text-muted'}`}>{line.speaker === 'candidate' ? 'Candidate' : 'Interlocutor'}</span>
-                          <span className="text-xs text-muted flex items-center gap-1"><PlayCircle className="w-3 h-3" /> {line.startTime.toFixed(1)}s</span>
+                          <span className="text-xs tabular-nums text-muted flex items-center gap-1"><PlayCircle className="w-3 h-3" aria-hidden="true" /> {line.startTime.toFixed(1)}s</span>
                         </div>
                         {!workspaceMeta?.isReadOnly && (
-                          <span className="text-xs text-muted flex items-center gap-1"><MessageSquare className="w-3 h-3" /> Add note</span>
+                          <span className="text-xs text-muted flex items-center gap-1"><MessageSquare className="w-3 h-3" aria-hidden="true" /> Add note</span>
                         )}
                       </div>
                       <p className="text-sm text-navy">{line.text}</p>
@@ -774,18 +774,18 @@ export default function SpeakingReviewWorkspace() {
                     {!workspaceMeta?.isReadOnly && (
                       <div className="mt-1 flex justify-end">
                         <Button size="sm" variant="outline" onClick={() => setActiveCommentLine((current) => current === line.id ? null : line.id)} aria-label={`Add comment at ${line.startTime.toFixed(1)} seconds`}>
-                          <MessageSquare className="w-3 h-3 mr-1" /> Comment
+                          <MessageSquare className="w-3 h-3 mr-1" aria-hidden="true" /> Comment
                         </Button>
                       </div>
                     )}
 
                     {activeCommentLine === line.id && !workspaceMeta?.isReadOnly && (
-                      <div className="ml-4 mt-1 p-2 bg-blue-50 border border-blue-200 rounded">
+                      <div className="ml-4 mt-1 p-2 bg-background-light border border-border rounded">
                         <div className="flex gap-2">
                           <input
                             type="text"
                             placeholder="Your comment..."
-                            className="flex-1 text-sm border border-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            className="flex-1 text-sm bg-surface text-navy border border-border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
                             autoFocus
                             onKeyDown={(event) => {
                               if (event.key === 'Enter') {
@@ -802,10 +802,10 @@ export default function SpeakingReviewWorkspace() {
                     )}
 
                     {lineComments.map((comment) => (
-                      <div key={comment.id} className="ml-4 mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex justify-between items-start gap-3">
+                      <div key={comment.id} className="ml-4 mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-sm flex justify-between items-start gap-3 dark:bg-amber-950/40 dark:border-amber-800/60">
                         <p className="text-navy">{comment.text}</p>
                         {!workspaceMeta?.isReadOnly && (
-                          <button onClick={() => { setTimestampComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
+                          <button type="button" onClick={() => { setTimestampComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-danger text-xs shrink-0" aria-label="Remove comment">&times;</button>
                         )}
                       </div>
                     ))}
@@ -886,11 +886,11 @@ export default function SpeakingReviewWorkspace() {
               ) : (
                 <div className="space-y-3" role="list" aria-label="AI-detected flags">
                   {reviewDetail.aiFlags.map((flag) => (
-                    <div key={flag.id} className={`p-3 border rounded-md ${flag.severity === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-blue-200 bg-blue-50'}`} role="listitem">
-                      <div className="flex items-center gap-2 font-semibold text-sm mb-1" style={{ color: flag.severity === 'warning' ? '#92400e' : '#1e40af' }}>
-                        <Flag className="w-4 h-4" /> {flag.type}
+                    <div key={flag.id} className={`p-3 border rounded-md ${flag.severity === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200' : 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-200'}`} role="listitem">
+                      <div className={`flex items-center gap-2 font-semibold text-sm mb-1 ${flag.severity === 'warning' ? 'text-amber-800 dark:text-amber-300' : 'text-blue-800 dark:text-blue-300'}`}>
+                        <Flag className="w-4 h-4" aria-hidden="true" /> {flag.type}
                       </div>
-                      <p className="text-xs" style={{ color: flag.severity === 'warning' ? '#78350f' : '#1e3a8a' }}>{flag.message}</p>
+                      <p className="text-xs">{flag.message}</p>
                       <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" onClick={() => handleTranscriptClick(flag.timestampStart)} aria-label={`Go to ${flag.timestampStart.toFixed(1)} seconds`}>
                         Go to {flag.timestampStart.toFixed(1)}s
                       </Button>
@@ -934,14 +934,14 @@ export default function SpeakingReviewWorkspace() {
             )}
 
             {reviewDetail?.aiSuggestedScores && Object.keys(reviewDetail.aiSuggestedScores).length > 0 && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                <p className="text-sm font-semibold text-blue-900">AI Reference Scores</p>
-                <p className="mt-1 text-xs text-blue-700">These scores are advisory AI guidance and are visually separated from your final rubric judgment.</p>
+              <div className="rounded-xl border border-info/20 bg-info/5 p-3">
+                <p className="text-sm font-semibold text-navy">AI Reference Scores</p>
+                <p className="mt-1 text-xs text-info">These scores are advisory AI guidance and are visually separated from your final rubric judgment.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {ALL_CRITERIA.map(({ key, label }) => (
                     <div key={`ai-${key}`} className="rounded-lg bg-surface px-3 py-2 text-sm text-navy">
                       <span className="font-medium">{label}</span>
-                      <span className="ml-2 text-blue-700">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
+                      <span className="ml-2 tabular-nums text-info">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
                     </div>
                   ))}
                 </div>
@@ -956,7 +956,7 @@ export default function SpeakingReviewWorkspace() {
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewHistory.entries.slice(-4).reverse().map((entry) => (
-                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted">
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-background-light px-3 py-2 text-xs text-muted">
                       <p className="font-medium text-foreground">{entry.action.replace(/_/g, ' ')}</p>
                       <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
                       {entry.details ? <p className="mt-1">{entry.details}</p> : null}
@@ -993,7 +993,7 @@ export default function SpeakingReviewWorkspace() {
                   </p>
                   {isRecording && recordingStartedAt && (
                     <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-danger" aria-hidden="true" />
                       Recording...
                     </p>
                   )}
@@ -1030,16 +1030,16 @@ export default function SpeakingReviewWorkspace() {
                 {voiceNotesLoading ? (
                   <p className="text-xs text-muted">Loading voice notes...</p>
                 ) : voiceNotes.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border bg-muted p-3 text-xs text-muted">
+                  <p className="rounded-lg border border-dashed border-border bg-background-light p-3 text-xs text-muted">
                     No voice notes yet. Record one above to attach spoken feedback.
                   </p>
                 ) : (
                   voiceNotes.map((note) => (
-                    <div key={note.id} className="rounded-lg border border-border bg-muted p-3" role="listitem">
+                    <div key={note.id} className="rounded-lg border border-border bg-background-light p-3" role="listitem">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-navy">{note.fileName}</p>
-                          <p className="text-[11px] text-muted">
+                          <p className="text-2xs text-muted">
                             {formatDuration(note.durationSeconds)} • {new Date(note.createdAt).toLocaleString()}
                           </p>
                         </div>
@@ -1050,7 +1050,7 @@ export default function SpeakingReviewWorkspace() {
                               type="button"
                               onClick={() => void handleDeleteVoiceNote(note.id)}
                               disabled={deletingVoiceNoteId === note.id}
-                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-2xs font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
                               aria-label={`Delete voice note ${note.fileName}`}
                             >
                               <Trash2 className="h-3 w-3" /> {deletingVoiceNoteId === note.id ? 'Deleting...' : 'Delete'}

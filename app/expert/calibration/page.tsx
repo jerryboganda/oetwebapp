@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle, Clock, GraduationCap, Inbox, MessageSquare, Settings, Sparkles } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -108,15 +109,15 @@ export default function CalibrationCenterPage() {
       key: 'status',
       header: 'Status',
       render: (row) => {
-        const statusStyle = row.status === 'completed'
-          ? 'bg-emerald-50 text-emerald-700'
+        const statusVariant = row.status === 'completed'
+          ? 'success'
           : row.status === 'draft'
-            ? 'bg-blue-50 text-blue-700'
-            : 'bg-amber-50 text-amber-700';
+            ? 'info'
+            : 'warning';
         return (
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusStyle}`}>
+          <Badge variant={statusVariant}>
             {row.status === 'draft' ? 'Draft' : row.status === 'completed' ? 'Completed' : 'Pending'}
-          </span>
+          </Badge>
         );
       },
     },
@@ -129,7 +130,7 @@ export default function CalibrationCenterPage() {
         }
 
         if (row.status === 'draft') {
-          return <span className="text-xs text-blue-700">Draft saved</span>;
+          return <span className="text-xs text-info">Draft saved</span>;
         }
 
         const alignmentScore = row.alignmentScore ?? 0;
@@ -278,11 +279,11 @@ export default function CalibrationCenterPage() {
                   <ol className="relative ml-2 space-y-4 border-l border-border">
                     {notes.map((note) => (
                       <li key={note.id} className="ml-4">
-                        <span className={`absolute -left-2 h-4 w-4 rounded-full border-2 border-white ${note.type === 'completed' ? 'bg-emerald-400' : note.type === 'comment' ? 'bg-blue-400' : 'bg-border'}`} />
+                        <span aria-hidden="true" className={`absolute -left-2 h-4 w-4 rounded-full border-2 border-surface ${note.type === 'completed' ? 'bg-success' : note.type === 'comment' ? 'bg-info' : 'bg-border'}`} />
                         <div className="mb-0.5 flex items-center gap-2">
-                          {note.type === 'completed' ? <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> : null}
-                          {note.type === 'comment' ? <MessageSquare className="h-3.5 w-3.5 text-blue-600" /> : null}
-                          {note.type === 'system' ? <Settings className="h-3.5 w-3.5 text-muted" /> : null}
+                          {note.type === 'completed' ? <CheckCircle className="h-3.5 w-3.5 text-success" aria-hidden="true" /> : null}
+                          {note.type === 'comment' ? <MessageSquare className="h-3.5 w-3.5 text-info" aria-hidden="true" /> : null}
+                          {note.type === 'system' ? <Settings className="h-3.5 w-3.5 text-muted" aria-hidden="true" /> : null}
                           <time className="text-xs text-muted">{new Date(note.createdAt).toLocaleString()}</time>
                         </div>
                         <div className="flex items-start justify-between gap-3">

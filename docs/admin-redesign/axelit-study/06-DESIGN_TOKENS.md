@@ -1,3 +1,5 @@
+> **Superseded 2026-09-28:** the admin palette now uses the shared violet system. The `--admin-*` variables remain as an alias layer. See `/DESIGN.md` (single design-system spec) and `app/admin/_design/admin-tokens.css`. The blue values below are historical.
+
 # DESIGN_TOKENS.md — Complete token reference
 
 Every CSS custom property captured from Axelit's `:root`, in the exact value it ships with. Use this as the single source of truth when porting tokens to OET (with OET-appropriate hue substitutions).

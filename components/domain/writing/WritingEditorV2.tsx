@@ -230,11 +230,11 @@ export function WritingEditorV2({
       )}
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-[10px] uppercase tracking-wider font-bold text-muted">
+        <span className="text-3xs uppercase tracking-wider font-bold text-muted">
           {mode}
           {disabled ? ' · read-only' : ''}
         </span>
-        <span className="text-[10px] uppercase tracking-wider font-bold text-muted">
+        <span className="text-3xs uppercase tracking-wider font-bold text-muted">
           {effectiveSpellCheck ? 'Spell-check on' : 'Spell-check off'}
         </span>
       </div>
@@ -447,7 +447,7 @@ function useAnnotationOverlay(annotations: WritingEditorAnnotation[]): ReactNode
     if (!annotations || annotations.length === 0) return null;
     return (
       <ul
-        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-navy/60 text-white text-[11px] px-3 py-2 space-y-1 backdrop-blur-sm"
+        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-navy/60 dark:bg-black/60 text-white text-2xs px-3 py-2 space-y-1 backdrop-blur-sm"
         aria-label="Inline annotations"
         aria-live="polite"
         aria-atomic="false"

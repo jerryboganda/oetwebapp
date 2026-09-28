@@ -313,7 +313,7 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
             </span>
             <span className="ml-auto font-bold text-navy">{Math.round(state.progress * 100)}%</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
             <div
               className="h-full bg-primary transition-[width] duration-200"
               style={{ width: `${state.progress * 100}%` }}

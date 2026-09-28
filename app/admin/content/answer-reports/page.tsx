@@ -183,7 +183,7 @@ export default function AdminAnswerKeyReportsPage() {
                   >
                     {option.label}
                     {count === null ? null : (
-                      <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">
+                      <span className="ml-2 rounded-full bg-current/15 px-2 py-0.5 text-xs tabular-nums">
                         {count}
                       </span>
                     )}

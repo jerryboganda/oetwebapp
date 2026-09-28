@@ -90,8 +90,8 @@ export function SpeakingRoleCard({
     <div className={cn('space-y-3', className)} role="region" aria-label="Role card details" data-testid="speaking-role-card">
       {(prepLabel || roleplayLabel) && (
         <div className="flex flex-wrap gap-2">
-          {prepLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-bold tracking-wide text-muted">PREP: {prepLabel}</span>}
-          {roleplayLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-[11px] font-bold tracking-wide text-muted">ROLE-PLAY: {roleplayLabel}</span>}
+          {prepLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-2xs font-bold tracking-wide text-muted">PREP: {prepLabel}</span>}
+          {roleplayLabel && <span className="rounded-full border border-border bg-surface px-3 py-1 text-2xs font-bold tracking-wide text-muted">ROLE-PLAY: {roleplayLabel}</span>}
         </div>
       )}
 
@@ -132,14 +132,14 @@ export function SpeakingRoleCard({
         </div>
 
         {disclaimer && (
-          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] italic text-slate-500">
+          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-2xs italic text-slate-500">
             {disclaimer}
           </footer>
         )}
       </article>
 
       {sourceAttribution && (
-        <p className="px-1 text-[11px] leading-relaxed text-muted/80 text-center">
+        <p className="px-1 text-2xs leading-relaxed text-muted/80 text-center">
           {sourceAttribution}
         </p>
       )}

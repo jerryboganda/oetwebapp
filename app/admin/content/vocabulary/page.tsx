@@ -512,7 +512,7 @@ export default function AdminVocabularyPage() {
       <select
         value={category}
         onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
       >
         <option value="">All categories ({total})</option>
         {categories.map(c => (
@@ -524,7 +524,7 @@ export default function AdminVocabularyPage() {
       <select
         value={profession}
         onChange={(e) => { setProfession(e.target.value); setPage(1); }}
-        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
       >
         <option value="">All professions</option>
         <option value="medicine">Medicine</option>
@@ -535,7 +535,7 @@ export default function AdminVocabularyPage() {
       <select
         value={status}
         onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
       >
         <option value="">All statuses</option>
         <option value="active">Active</option>
@@ -665,7 +665,7 @@ export default function AdminVocabularyPage() {
                   <span>{audioProgress.withAudio} of {audioProgress.total} terms have audio</span>
                   <span className="font-mono font-semibold text-admin-fg-strong">{audioProgress.percentComplete}%</span>
                 </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--admin-bg-inset)]">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--admin-bg-subtle)]">
                   <div
                     className="h-full rounded-full transition-[width,background-color] duration-500 ease-out"
                     style={{

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { Fraunces, Manrope, Montserrat } from 'next/font/google';
+import { Fraunces, Manrope } from 'next/font/google';
 import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
 import { loadAllMessages, resolveLocale } from '@/i18n';
 import { AppProviders } from './providers';
@@ -24,15 +24,6 @@ const bodyFont = Manrope({
 const displayFont = Fraunces({
   subsets: ['latin'],
   variable: '--font-display',
-  display: 'swap',
-});
-
-// Admin UI typography (consumed by `app/admin/_design/admin-tokens.css`
-// via the `--font-montserrat` CSS variable on <html>).
-const adminFont = Montserrat({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-montserrat',
   display: 'swap',
 });
 
@@ -151,7 +142,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const messages = await loadAllMessages(locale);
   const direction = locale === 'ar' ? 'rtl' : 'ltr';
   return (
-    <html lang={locale} dir={direction} className={`${bodyFont.variable} ${displayFont.variable} ${adminFont.variable}`} suppressHydrationWarning>
+    <html lang={locale} dir={direction} className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
       <head>
         {/*
           CSP for Capacitor WebView and web — restrict script/style/connect sources.

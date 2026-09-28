@@ -130,7 +130,7 @@ export function ApprovalCard({ approval, onDecide, resolution, context, classNam
 
         {command ? (
           <div>
-            <p className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-admin-fg-muted">Full command</p>
+            <p className="mb-1 font-semibold uppercase tracking-wide text-3xs text-admin-fg-muted">Full command</p>
             <pre
               className="max-h-80 overflow-auto rounded-lg border border-admin-border bg-admin-bg-subtle p-3 font-mono text-xs leading-5 text-admin-fg-default"
               data-testid="approval-command"
@@ -153,11 +153,11 @@ export function ApprovalCard({ approval, onDecide, resolution, context, classNam
 
         {analysis.base64.length > 0 ? (
           <div>
-            <p className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-admin-fg-muted">Decoded base64</p>
+            <p className="mb-1 font-semibold uppercase tracking-wide text-3xs text-admin-fg-muted">Decoded base64</p>
             <ul className="space-y-1.5">
               {analysis.base64.map((segment) => (
                 <li key={segment.encoded} className="rounded-lg border border-admin-border bg-admin-bg-surface p-2">
-                  <p className="truncate font-mono text-[10px] text-admin-fg-muted" title={segment.encoded}>
+                  <p className="truncate font-mono text-3xs text-admin-fg-muted" title={segment.encoded}>
                     {segment.encoded.length > 60 ? `${segment.encoded.slice(0, 60)}…` : segment.encoded}
                   </p>
                   <pre className="mt-1 max-h-40 overflow-auto font-mono text-xs" data-testid="approval-base64-decoded">
@@ -180,7 +180,7 @@ export function ApprovalCard({ approval, onDecide, resolution, context, classNam
 
         {approval.reasons.length > 0 ? (
           <div>
-            <p className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-admin-fg-muted">Why it needs you</p>
+            <p className="mb-1 font-semibold uppercase tracking-wide text-3xs text-admin-fg-muted">Why it needs you</p>
             <ul className="list-disc space-y-0.5 pl-5">
               {approval.reasons.map((reason, index) => (
                 <li key={`${reason}-${index}`}>

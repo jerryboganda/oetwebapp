@@ -371,7 +371,7 @@ export function TutorMarkingWorkspace({
             ) : null}
             {task.fixedInstructions.length > 0 ? (
               <div className="mt-2">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted">In your answer</p>
+                <p className="text-2xs font-bold uppercase tracking-wider text-muted">In your answer</p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-navy">
                   {task.fixedInstructions.map((ins, i) => <li key={i}>{ins}</li>)}
                 </ul>

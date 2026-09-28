@@ -84,7 +84,7 @@ export function ToolCallCard({ tool, awaitingApproval = false }: ToolCallCardPro
         <div className="space-y-2 border-t border-admin-border px-3 py-2">
           {tool.command ? (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-fg-muted">Command</p>
+              <p className="text-3xs font-semibold uppercase tracking-wide text-admin-fg-muted">Command</p>
               <pre className="mt-1 max-h-48 overflow-auto rounded bg-admin-bg-subtle p-2 font-mono">
                 <VisibleText text={tool.command} />
               </pre>
@@ -104,7 +104,7 @@ export function ToolCallCard({ tool, awaitingApproval = false }: ToolCallCardPro
           ) : null}
           {inputText && !tool.command ? (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-fg-muted">Input</p>
+              <p className="text-3xs font-semibold uppercase tracking-wide text-admin-fg-muted">Input</p>
               <pre className="mt-1 max-h-48 overflow-auto rounded bg-admin-bg-subtle p-2 font-mono">
                 <VisibleText text={inputText.slice(0, PREVIEW_LIMIT)} />
               </pre>
@@ -112,7 +112,7 @@ export function ToolCallCard({ tool, awaitingApproval = false }: ToolCallCardPro
           ) : null}
           {outputPreview ? (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-fg-muted">
+              <p className="text-3xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                 {tool.result ? 'Result' : 'Output (streaming)'}
                 {tool.outputTruncated || output.length > PREVIEW_LIMIT ? ' · showing the tail' : ''}
               </p>

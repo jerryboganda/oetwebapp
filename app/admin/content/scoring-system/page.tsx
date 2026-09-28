@@ -457,7 +457,7 @@ export default function AdminScoringSystemPage() {
             <label className="text-sm font-medium">
               Assessment
               <select
-                className="mt-1 block rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm"
+                className="mt-1 block rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                 value={assessment}
                 onChange={(event) => setAssessment(event.target.value as 'listening' | 'reading')}
               >
@@ -468,7 +468,7 @@ export default function AdminScoringSystemPage() {
             <label className="min-w-56 flex-1 text-sm font-medium">
               New version key
               <input
-                className="mt-1 block w-full rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm"
+                className="mt-1 block w-full rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                 value={scoreTableVersion}
                 onChange={(event) => setScoreTableVersion(event.target.value)}
                 placeholder="owner-approved-version"
@@ -503,7 +503,7 @@ export default function AdminScoringSystemPage() {
 
           <div className="overflow-x-auto rounded-md border border-admin-border">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-fg-muted">
+              <thead className="bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
                 <tr>
                   <th className="px-3 py-2">Version</th>
                   <th className="px-3 py-2">Rows</th>
@@ -556,7 +556,7 @@ export default function AdminScoringSystemPage() {
             <h2 className="text-sm font-semibold">Marking policy version</h2>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <input
-                className="rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm"
+                className="rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                 value={markingPolicyVersion}
                 onChange={(event) => setMarkingPolicyVersion(event.target.value)}
                 placeholder="owner-approved-marking-v1"
@@ -579,7 +579,7 @@ export default function AdminScoringSystemPage() {
             </Button>
             <div className="overflow-x-auto rounded-md border border-admin-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-fg-muted">
+                <thead className="bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
                   <tr><th className="px-3 py-2">Version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
                 </thead>
                 <tbody>
@@ -609,15 +609,15 @@ export default function AdminScoringSystemPage() {
           <div className="space-y-3 border-t border-admin-border pt-5">
             <h2 className="text-sm font-semibold">Approved rationale evidence</h2>
             <div className="grid gap-3 md:grid-cols-2">
-              <input className="rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={rationaleQuestionId} onChange={(event) => setRationaleQuestionId(event.target.value)} placeholder="Question revision ID" aria-label="Rationale question revision ID" />
-              <input className="rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={rationaleEvidenceCount} onChange={(event) => setRationaleEvidenceCount(event.target.value)} inputMode="numeric" placeholder="Evidence count" aria-label="Rationale evidence count" />
+              <input className="rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={rationaleQuestionId} onChange={(event) => setRationaleQuestionId(event.target.value)} placeholder="Question revision ID" aria-label="Rationale question revision ID" />
+              <input className="rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={rationaleEvidenceCount} onChange={(event) => setRationaleEvidenceCount(event.target.value)} inputMode="numeric" placeholder="Evidence count" aria-label="Rationale evidence count" />
             </div>
-            <input className="w-full rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={rationaleSource} onChange={(event) => setRationaleSource(event.target.value)} placeholder="Source sentence or transcript evidence" aria-label="Rationale source sentence" />
+            <input className="w-full rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={rationaleSource} onChange={(event) => setRationaleSource(event.target.value)} placeholder="Source sentence or transcript evidence" aria-label="Rationale source sentence" />
             <Textarea value={rationaleText} onChange={(event) => setRationaleText(event.target.value)} rows={4} placeholder="Why the approved answer is correct" aria-label="Rationale text" />
             <Button onClick={() => void saveRationale()} disabled={rationaleSaving} loading={rationaleSaving}>Create rationale draft</Button>
             <div className="overflow-x-auto rounded-md border border-admin-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-fg-muted">
+                <thead className="bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
                   <tr><th className="px-3 py-2">Question revision</th><th className="px-3 py-2">Evidence</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
                 </thead>
                 <tbody>
@@ -643,10 +643,10 @@ export default function AdminScoringSystemPage() {
             <h2 className="text-sm font-semibold">Controlled re-mark job</h2>
             <p className="text-xs text-admin-fg-muted">Create, separately approve, and then execute a deterministic re-mark. Both answer-key snapshots are retained for audit.</p>
             <div className="grid gap-3 md:grid-cols-2">
-              <input className="rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={remarkAttemptId} onChange={(event) => setRemarkAttemptId(event.target.value)} placeholder="Submitted attempt ID" aria-label="Re-mark attempt ID" />
-              <input className="rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={remarkQuestionId} onChange={(event) => setRemarkQuestionId(event.target.value)} placeholder="Question revision ID" aria-label="Re-mark question revision ID" />
+              <input className="rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={remarkAttemptId} onChange={(event) => setRemarkAttemptId(event.target.value)} placeholder="Submitted attempt ID" aria-label="Re-mark attempt ID" />
+              <input className="rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={remarkQuestionId} onChange={(event) => setRemarkQuestionId(event.target.value)} placeholder="Question revision ID" aria-label="Re-mark question revision ID" />
             </div>
-            <input className="w-full rounded-md border border-admin-border bg-admin-surface px-3 py-2 text-sm" value={remarkReason} onChange={(event) => setRemarkReason(event.target.value)} placeholder="Reason for controlled re-mark" aria-label="Re-mark reason" />
+            <input className="w-full rounded-md border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm" value={remarkReason} onChange={(event) => setRemarkReason(event.target.value)} placeholder="Reason for controlled re-mark" aria-label="Re-mark reason" />
             <div className="grid gap-3 lg:grid-cols-2">
               <Textarea value={remarkOriginalKey} onChange={(event) => setRemarkOriginalKey(event.target.value)} rows={6} className="font-mono text-xs" aria-label="Original answer key snapshot JSON" placeholder="Original answer key snapshot JSON" />
               <Textarea value={remarkNewKey} onChange={(event) => setRemarkNewKey(event.target.value)} rows={6} className="font-mono text-xs" aria-label="New answer key snapshot JSON" placeholder="New answer key snapshot JSON" />
@@ -654,7 +654,7 @@ export default function AdminScoringSystemPage() {
             <Button onClick={() => void saveReMarkJob()} disabled={remarkSaving} loading={remarkSaving}>Create re-mark job</Button>
             <div className="overflow-x-auto rounded-md border border-admin-border">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-fg-muted">
+                <thead className="bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
                   <tr><th className="px-3 py-2">Attempt</th><th className="px-3 py-2">Question</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Action</th></tr>
                 </thead>
                 <tbody>

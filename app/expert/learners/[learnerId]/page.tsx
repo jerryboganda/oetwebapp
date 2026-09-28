@@ -181,20 +181,20 @@ export default function AssignedLearnerPage() {
                       <thead className="border-b border-border bg-background-light">
                         <tr>
                           <th scope="col" className="p-3 text-left font-semibold text-muted">Sub-Test</th>
-                          <th scope="col" className="p-3 text-left font-semibold text-muted">Latest Score</th>
+                          <th scope="col" className="p-3 text-right font-semibold text-muted">Latest Score</th>
                           <th scope="col" className="p-3 text-left font-semibold text-muted">Grade</th>
-                          <th scope="col" className="p-3 text-left font-semibold text-muted">Attempts</th>
+                          <th scope="col" className="p-3 text-right font-semibold text-muted">Attempts</th>
                         </tr>
                       </thead>
                       <tbody>
                         {learner.subTestScores.map((subTestScore) => (
                           <tr key={subTestScore.subTest} className="border-b border-border last:border-0">
                             <td className="p-3 font-medium capitalize text-navy">{subTestScore.subTest}</td>
-                            <td className="p-3">{subTestScore.latestScore ?? '-'}</td>
+                            <td className="p-3 text-right tabular-nums">{subTestScore.latestScore ?? '-'}</td>
                             <td className="p-3">
                               {subTestScore.latestGrade ? <Badge variant={subTestScore.latestGrade.startsWith('A') || subTestScore.latestGrade.startsWith('B') ? 'success' : 'warning'}>{subTestScore.latestGrade}</Badge> : '-'}
                             </td>
-                            <td className="p-3">{subTestScore.attempts}</td>
+                            <td className="p-3 text-right tabular-nums">{subTestScore.attempts}</td>
                           </tr>
                         ))}
                         {learner.subTestScores.length === 0 ? (

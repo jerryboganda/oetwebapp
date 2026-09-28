@@ -78,13 +78,13 @@ export function ScoreConversionEvidence({
         </p>
       )}
       <div
-        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy p-4 text-white shadow-inner"
+        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy dark:bg-surface p-4 text-white shadow-inner"
         role="img"
         aria-label={graphAriaLabel}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Platform score graph</p>
+            <p className="text-3xs font-black uppercase tracking-[0.18em] text-white/70">Platform score graph</p>
             <p className="mt-1 text-sm font-black tracking-tight">AI Practice Score — not an official OET result</p>
           </div>
           <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-black tabular-nums">
@@ -103,7 +103,7 @@ export function ScoreConversionEvidence({
             />
           ) : null}
         </div>
-        <div className="mt-2 flex justify-between text-[10px] font-bold tabular-nums text-white/60" aria-hidden="true">
+        <div className="mt-2 flex justify-between text-3xs font-bold tabular-nums text-white/60" aria-hidden="true">
           <span>0</span>
           <span>250</span>
           <span>500</span>

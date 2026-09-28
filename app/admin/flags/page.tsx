@@ -203,11 +203,11 @@ export default function FlagsPage() {
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Owner</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Owner</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{flag.owner || 'Unassigned'}</p>
         </div>
         <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Rollout</p>
+          <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Rollout</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{flag.rolloutPercentage}%</p>
         </div>
       </div>

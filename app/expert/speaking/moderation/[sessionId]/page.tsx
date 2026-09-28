@@ -68,7 +68,7 @@ function ScoreSummary({ title, score }: { title: string; score?: SpeakingCriteri
     return (
       <Card className="p-4">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mt-2 text-sm text-muted-foreground">Not submitted yet.</p>
+        <p className="mt-2 text-sm text-muted">Not submitted yet.</p>
       </Card>
     );
   }
@@ -81,7 +81,7 @@ function ScoreSummary({ title, score }: { title: string; score?: SpeakingCriteri
       <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
         {ALL_CRITERIA.map((c) => (
           <div key={c} className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground">{CRITERION_LABEL[c]}</dt>
+            <dt className="text-muted">{CRITERION_LABEL[c]}</dt>
             <dd className="font-medium">{score[c]}</dd>
           </div>
         ))}
@@ -217,16 +217,16 @@ export default function SpeakingModerationCasePage() {
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Scale className="h-6 w-6 text-primary" aria-hidden />
-            <h1 className="text-2xl font-semibold tracking-tight">Moderation case</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-navy">Moderation case</h1>
             {status && (
               <Badge variant={isPendingModeration ? 'danger' : isClosed ? 'success' : 'warning'}>
                 {moderationStatusLabel(status)}
               </Badge>
             )}
           </div>
-          <p className="font-mono text-xs text-muted-foreground">Session {sessionId}</p>
+          <p className="font-mono text-xs text-muted">Session {sessionId}</p>
           {moderation?.variancePoints != null && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted">
               Variance between markers: <span className="font-medium">{moderation.variancePoints} scaled points</span>
               {moderation.varianceReason ? ` — ${moderation.varianceReason}` : ''}
             </p>
@@ -255,7 +255,7 @@ export default function SpeakingModerationCasePage() {
             {moderation.finalDecisionNote && (
               <Card className="p-4">
                 <h3 className="text-sm font-semibold">Moderator decision note</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted">
                   {moderation.finalDecisionNote}
                 </p>
               </Card>
@@ -264,10 +264,10 @@ export default function SpeakingModerationCasePage() {
             {(isPendingSecond || isPendingModeration) && (
               <Card className="flex flex-col gap-4 p-4">
                 <div>
-                  <h2 className="text-lg font-semibold">
+                  <h2 className="text-lg font-semibold text-navy">
                     {isPendingSecond ? 'Submit your independent second mark' : 'Reconcile the final moderated score'}
                   </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-muted">
                     {isPendingSecond
                       ? 'Score the session without reference to the first marker. If your marks agree within threshold the final score is reconciled automatically.'
                       : 'Enter the reconciled final score after reviewing both markers above, or request a reattempt if the recording cannot be fairly assessed.'}
@@ -280,7 +280,7 @@ export default function SpeakingModerationCasePage() {
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="font-medium">Decision note (optional)</span>
                     <textarea
-                      className="min-h-[80px] rounded-md border border-input bg-background p-2 text-sm"
+                      className="min-h-[80px] rounded-md border border-border bg-background p-2 text-sm"
                       value={decisionNote}
                       onChange={(e) => setDecisionNote(e.target.value)}
                       placeholder="Briefly record why this final score was chosen."

@@ -16,7 +16,7 @@ export function GroundedReadingPassageQna({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">
+          <p className="text-2xs font-black uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">
             AI reading helper
           </p>
           <p className="mt-1 text-xs text-muted">

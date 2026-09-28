@@ -71,7 +71,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
               <Icon className="h-6 w-6" />
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <div className="flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wide text-muted">
                 <span>{websitePackage?.profession ?? professionLabel(config, plan.profession)}</span>
                 <span aria-hidden="true">·</span>
                 <span>{websitePackage?.category ?? categoryLabel(config, plan.productCategory)}</span>
@@ -95,7 +95,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             <div className="grid grid-cols-2 gap-2">
               {stats.map((stat) => (
                 <div key={stat.label} className="rounded-xl border border-border bg-background-light px-3 py-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{stat.label}</p>
+                  <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">{stat.label}</p>
                   <p className="text-sm font-semibold text-navy">{stat.value}</p>
                 </div>
               ))}

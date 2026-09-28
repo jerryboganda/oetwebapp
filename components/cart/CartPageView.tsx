@@ -61,7 +61,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
       ) : null}
 
       {!hasItems ? (
-        <div className="rounded-2xl border border-border bg-surface p-10 text-center">
+        <div className="rounded-2xl border border-dashed border-border bg-background-light p-10 text-center">
           <ShoppingBag className="mx-auto h-10 w-10 text-muted" aria-hidden="true" />
           <h2 className="mt-4 text-lg font-semibold text-navy">Your cart is empty</h2>
           <p className="mt-1 text-sm text-muted">
@@ -69,7 +69,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
           </p>
           <Button asChild className="mt-6">
             <Link href={emptyStateHref}>
-              Browse catalogue <ArrowRight className="ml-1 h-4 w-4" />
+              Browse catalogue <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </Button>
         </div>
@@ -124,7 +124,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
               >
                 Proceed to checkout <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
-              <p className="mt-3 text-center text-[11px] text-muted">
+              <p className="mt-3 text-center text-2xs text-muted">
                 Secure checkout - Stripe handles your card details.
               </p>
             </Card>
@@ -145,7 +145,9 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                   onChange={(event) => setPromoInput(event.target.value)}
                   placeholder="Enter code"
                   aria-label="Promo code"
-                  className="flex-1 rounded-lg border border-border bg-background-light px-3 py-2 text-sm uppercase tracking-wider focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-background-light px-3 py-2 text-sm uppercase tracking-wider focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
                 <Tag className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
               </form>

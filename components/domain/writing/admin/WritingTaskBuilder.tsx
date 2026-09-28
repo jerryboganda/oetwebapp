@@ -107,7 +107,7 @@ function PdfSlot({
       <div className="space-y-3">
         {mediaAssetId ? (
           <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-sm font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-sm font-medium text-primary-700 ring-1 ring-inset ring-primary-200">
               <svg
                 viewBox="0 0 16 16"
                 className="h-3.5 w-3.5 shrink-0"
@@ -146,7 +146,7 @@ function PdfSlot({
         ) : uploading ? (
           <div className="flex items-center gap-3 text-sm text-admin-fg-muted">
             <svg
-              className="h-4 w-4 animate-spin text-violet-600"
+              className="h-4 w-4 animate-spin text-primary-600"
               viewBox="0 0 24 24"
               fill="none"
               aria-hidden="true"

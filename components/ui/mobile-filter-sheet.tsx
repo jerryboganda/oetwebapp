@@ -82,7 +82,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
         </span>
         <span className="flex items-center gap-2">
           {totalSelected > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white dark:bg-violet-700">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-3xs font-bold text-white dark:bg-violet-700">
               {totalSelected}
             </span>
           )}
@@ -116,7 +116,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-bold text-navy">{group.label}</h3>
                   {selectedCount > 0 && (
-                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-2xs font-semibold text-primary">
                       {selectedCount} selected
                     </span>
                   )}

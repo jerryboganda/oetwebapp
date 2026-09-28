@@ -5,6 +5,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, MessageCircle, ThumbsUp } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getQuestionComments, postComment, type CommentDto } from '@/lib/reading-pathway-api';
 
 function formatRelativeTime(iso: string): string {
@@ -83,16 +86,14 @@ export default function QuestionDiscussionPage() {
         </div>
 
         {error ? (
-          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {error}
-          </div>
+          <InlineAlert variant="error">{error}</InlineAlert>
         ) : null}
 
         {/* Comments list */}
         {loading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-20 motion-safe:animate-pulse rounded-xl bg-background-light" />
+              <Skeleton key={i} className="h-20 rounded-xl" />
             ))}
           </div>
         ) : comments.length === 0 ? (
@@ -111,7 +112,7 @@ export default function QuestionDiscussionPage() {
                       {comment.userDisplayName}
                     </span>
                     {comment.isExpert ? (
-                      <span className="inline-block rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                      <span className="inline-block rounded-full bg-primary-100 dark:bg-primary-900/30 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
                         Expert
                       </span>
                     ) : null}
@@ -144,17 +145,14 @@ export default function QuestionDiscussionPage() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={4}
+              aria-label="Write a reply"
               placeholder="Share your thoughts, ask a question, or explain your approach…"
               className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 dark:bg-background-dark"
             />
             <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={posting || !body.trim()}
-                className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,transform] duration-200"
-              >
+              <Button type="submit" disabled={posting || !body.trim()}>
                 {posting ? 'Posting…' : 'Post'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>

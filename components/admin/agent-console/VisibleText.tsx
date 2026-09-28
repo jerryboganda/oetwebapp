@@ -46,7 +46,7 @@ export function VisibleText({ text, level = 'strict', className }: VisibleTextPr
           <Fragment key={index}>
             <span
               className={cn(
-                'mx-px inline-block rounded px-1 align-baseline font-mono text-[10px] font-semibold leading-4',
+                'mx-px inline-block rounded px-1 align-baseline font-mono text-3xs font-semibold leading-4',
                 CATEGORY_STYLES[segment.category] ?? CATEGORY_STYLES.control,
               )}
               title={`${segment.label} ${segment.name}`}

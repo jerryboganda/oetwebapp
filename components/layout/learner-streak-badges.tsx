@@ -64,7 +64,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
           </span>
           <span className="leading-tight">
             <span className="block text-[14px] font-bold text-navy">{streak}</span>
-            <span className="hidden text-[11px] text-muted xl:block">day streak</span>
+            <span className="hidden text-2xs text-muted xl:block">day streak</span>
           </span>
         </Link>
       ) : null}
@@ -81,7 +81,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
           <span className="leading-tight">
             <span className="flex items-baseline justify-between gap-3">
               <span className="text-[14px] font-bold text-navy">Level {xp.level}</span>
-              <span className="hidden text-[11px] text-muted xl:inline">{tier}</span>
+              <span className="hidden text-2xs text-muted xl:inline">{tier}</span>
             </span>
             <span className="mt-1 hidden items-center gap-2 xl:flex">
               <span className="block h-1.5 w-24 overflow-hidden rounded-full bg-background-light">

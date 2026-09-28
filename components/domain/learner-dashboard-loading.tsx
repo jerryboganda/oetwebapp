@@ -18,7 +18,7 @@ export function LearnerDashboardLoadingCard() {
     >
       <div className="flex h-full flex-col justify-between gap-4 sm:gap-6">
         <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary sm:text-xs">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-2xs font-bold uppercase tracking-wider text-primary sm:text-xs">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             Next action
           </div>

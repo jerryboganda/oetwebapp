@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowRight, Check, Loader2, ShoppingBag } from 'lucide-react';
 import { quoteAddonEligibility } from '@/lib/api';
 import type { AddonQuoteResponse, AddonEligibleParent } from '@/lib/types/admin';
+import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { formatDate } from '@/lib/domain/datetime';
 
@@ -99,23 +100,23 @@ export function AddonPurchaseModal({
                 <Check className="mt-0.5 h-4 w-4 flex-none" />
                 <p className="font-medium text-navy">You already have The Tutor Book.</p>
               </div>
-              <a
-                href="/learner/tutor-book"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900"
-              >
-                Open The Tutor Book
-              </a>
+              <Button asChild variant="secondary" fullWidth className="font-bold">
+                <a href="/learner/tutor-book">Open The Tutor Book</a>
+              </Button>
             </div>
           )}
 
           {status === 'ineligible' && quote && isTutorBook && quote.reason !== 'addon_already_owned' && (
             <div className="space-y-4">
               <div className="rounded-lg border border-border bg-background-light p-4 text-sm text-navy">
-                You&apos;ll pay £45 — the standard price. A £32 discount applies automatically once you&apos;re
-                enrolled on an eligible course.
+                You&apos;ll pay the standard price (shown at checkout). The discounted add-on price applies
+                automatically once you&apos;re enrolled on an eligible course.
               </div>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                fullWidth
+                className="font-bold"
                 onClick={() => {
                   const query = new URLSearchParams({
                     productType: 'plan_purchase',
@@ -125,10 +126,9 @@ export function AddonPurchaseModal({
                   router.push(`${checkoutPath}?${query.toString()}`);
                   onClose();
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900"
               >
-                <ShoppingBag className="h-4 w-4" /> Continue to checkout — £45
-              </button>
+                <ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continue to checkout
+              </Button>
             </div>
           )}
 
@@ -197,8 +197,11 @@ export function AddonPurchaseModal({
                 </div>
               )}
 
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                fullWidth
+                className="font-bold"
                 disabled={!selectedParent}
                 onClick={() => {
                   const query = new URLSearchParams({
@@ -210,10 +213,9 @@ export function AddonPurchaseModal({
                   router.push(`${checkoutPath}?${query.toString()}`);
                   onClose();
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <ShoppingBag className="h-4 w-4" /> Continue to checkout
-              </button>
+                <ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continue to checkout
+              </Button>
             </div>
           )}
         </div>

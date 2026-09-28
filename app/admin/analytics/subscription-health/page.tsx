@@ -7,6 +7,7 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { analytics } from '@/lib/analytics';
@@ -24,10 +25,11 @@ const apiRequest = apiClient.request;
 export default function SubscriptionHealthPage() {
   const [data, setData] = useState<SubHealthData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     analytics.track('admin_subscription_health_viewed');
-    apiRequest<SubHealthData>('/v1/admin/analytics/subscription-health').then(setData).catch(() => {}).finally(() => setLoading(false));
+    apiRequest<SubHealthData>('/v1/admin/analytics/subscription-health').then(setData).catch(() => setLoadFailed(true)).finally(() => setLoading(false));
   }, []);
 
   const breadcrumbs = [
@@ -135,7 +137,7 @@ export default function SubscriptionHealthPage() {
             )}
           </BentoGrid>
         ) : (
-          <Card><CardContent><p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p></CardContent></Card>
+          <Card><CardContent>{loadFailed ? <EmptyState variant="error" size="sm" title="Could not load subscription health" description="The analytics request failed. Try again." primaryAction={{ label: 'Retry', onClick: () => window.location.reload() }} /> : <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>}</CardContent></Card>
         )
       }
     />

@@ -133,7 +133,7 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h4 className="font-bold text-navy">{websitePackage?.name ?? addon.name}</h4>
-                <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
+                <p className="mt-1 text-2xs uppercase tracking-wider text-muted">
                   requires {addon.eligibilityFlag || 'n/a'}
                 </p>
               </div>
@@ -196,7 +196,7 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
             <CheckCircle2 className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Your current plan</p>
+            <p className="text-2xs font-bold uppercase tracking-[0.16em] text-primary">Your current plan</p>
             <p className="text-base font-bold text-navy">{snapshot.planCode ?? snapshot.tier}</p>
             {expiry ? <p className="text-sm text-muted">Access until {expiry}</p> : null}
           </div>
@@ -206,7 +206,7 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
             {stats.map((stat) => (
               <div key={stat.label} className="rounded-xl border border-border bg-surface px-3 py-2 text-center">
                 <p className="text-base font-bold text-navy">{stat.value}</p>
-                <p className="text-[11px] uppercase tracking-wider text-muted">{stat.label}</p>
+                <p className="text-2xs uppercase tracking-wider text-muted">{stat.label}</p>
               </div>
             ))}
           </div>

@@ -812,12 +812,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       return <WebNotAllowedNotice />;
     }
     return (
-      <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-4 bg-navy px-6 py-10 text-center">
+      <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-4 bg-background-dark px-6 py-10 text-center">
         <p className="max-w-md text-sm leading-6 text-white/75">{phase.message}</p>
         <button
           type="button"
           onClick={() => void engageProtectionAndStart()}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600"
         >
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
           Try again
@@ -926,7 +926,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       )}
 
       {phase.kind === 'attesting' && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-navy/90 text-white">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-background-dark/90 text-white">
           <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
           <p className="text-sm text-white/75">Verifying this device for secure playback…</p>
         </div>

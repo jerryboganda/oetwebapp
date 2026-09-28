@@ -204,7 +204,7 @@ function Detail({
 }) {
   return (
     <div className="rounded-lg bg-background-light px-3 py-2">
-      <dt className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted">
+      <dt className="flex items-center gap-1 text-2xs uppercase tracking-wider text-muted">
         <span aria-hidden="true">{icon}</span> {label}
       </dt>
       <dd className="mt-0.5 text-sm font-medium text-navy">{children}</dd>
@@ -215,7 +215,7 @@ function Detail({
 function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
   if (paused) {
     return (
-      <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-warning">
+      <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-warning">
         Paused
       </span>
     );
@@ -232,7 +232,7 @@ function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
         : 'bg-background-light text-muted';
   return (
     <span
-      className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${tone}`}
+      className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone}`}
     >
       {status.replaceAll('_', ' ')}
     </span>

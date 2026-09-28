@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { RecallTierBadge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
@@ -117,8 +118,8 @@ export default function FlashcardsPage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
-          <ArrowLeft className="w-5 h-5" />
+        <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero
           title="Flashcard Review"
@@ -139,12 +140,12 @@ export default function FlashcardsPage() {
             <h2 className="mb-2 text-2xl font-bold text-navy">All done!</h2>
             <p className="mb-6 text-muted">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
           <div className="flex gap-3 justify-center">
-            <Link href="/vocabulary" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
-              Back to Vocabulary
-            </Link>
-            <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-              <RotateCcw className="w-4 h-4" /> Review Again
-            </button>
+            <Button variant="outline" asChild>
+              <Link href="/vocabulary">Back to Vocabulary</Link>
+            </Button>
+            <Button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }}>
+              <RotateCcw className="w-4 h-4" aria-hidden="true" /> Review Again
+            </Button>
           </div>
           </Card>
         </MotionSection>
@@ -152,7 +153,9 @@ export default function FlashcardsPage() {
         <Card className="border-border bg-surface px-4 sm:px-8 py-8 sm:py-16 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-success" />
           <p className="text-muted">No flashcards due right now. Come back later!</p>
-          <Link href="/vocabulary" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Back to Vocabulary</Link>
+          <Button variant="outline" asChild className="mt-4">
+            <Link href="/vocabulary">Back to Vocabulary</Link>
+          </Button>
         </Card>
       ) : card ? (
         <div className="max-w-xl mx-auto">
@@ -193,7 +196,7 @@ export default function FlashcardsPage() {
                   {card.ipaPronunciation && <div className="text-sm italic text-muted">{card.ipaPronunciation}</div>}
                   <button
                     onClick={(event) => { event.stopPropagation(); void playAudio(card.termId); }}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Volume2 className="h-3.5 w-3.5" /> Play audio
                   </button>

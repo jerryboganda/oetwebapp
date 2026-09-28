@@ -219,7 +219,7 @@ export function WizardShell({ bundle: initialBundle, children }: WizardShellProp
                           : 'bg-background-light text-navy hover:bg-primary hover:text-white')
                     }
                   >
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/30 text-[11px]">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/30 text-2xs">
                       {idx + 1}
                     </span>
                     {WIZARD_STEP_LABELS[step]}

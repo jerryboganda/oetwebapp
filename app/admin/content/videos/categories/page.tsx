@@ -386,7 +386,7 @@ export default function AdminVideoCategoriesPage() {
                 value={mergeTargetId}
                 onChange={(e) => setMergeTargetId(e.target.value)}
                 required
-                className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-admin-accent"
+                className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default focus:outline-none focus:ring-2 focus:ring-admin-primary"
               >
                 <option value="" disabled>
                   Choose a target category…

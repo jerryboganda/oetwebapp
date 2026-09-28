@@ -8,6 +8,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { InlineAlert } from '@/components/ui/alert';
 import {
   fetchRecallsLibrary,
   fetchRecallsToday,
@@ -80,7 +81,7 @@ export default function RecallsFavouritesPage() {
         />
 
         {error && (
-          <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">{error}</div>
+          <InlineAlert variant="warning">{error}</InlineAlert>
         )}
 
         {loading ? (
@@ -90,10 +91,10 @@ export default function RecallsFavouritesPage() {
             ))}
           </div>
         ) : items && items.length > 0 ? (
-            <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
+            <ul className="divide-y divide-border rounded-2xl border border-border bg-surface shadow-sm">
               {items.map((it) => (
                 <li key={it.cardId} className="flex items-center gap-3 p-3">
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-navy">{it.term}</span>
                       <RecallTierBadge
@@ -110,7 +111,7 @@ export default function RecallsFavouritesPage() {
                     type="button"
                     onClick={() => handleRemove(it)}
                     aria-label={`Remove ${it.term} from favourites`}
-                    className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Heart size={13} className="fill-current" aria-hidden="true" />
                     Remove

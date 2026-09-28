@@ -75,7 +75,7 @@ export function DrillCard({ drill, onSubmit, submitting = false, className }: Dr
           <h3 className="font-extrabold text-base">
             {drill.drillType.replace(/-/g, ' ').replace(/\b\w/g, (s) => s.toUpperCase())}
           </h3>
-          <span className="text-[10px] uppercase tracking-wider font-bold text-muted">
+          <span className="text-3xs uppercase tracking-wider font-bold text-muted">
             Targets {drill.targetSubSkill}
             {drill.targetCanonRuleId ? ` · ${drill.targetCanonRuleId}` : ''}
           </span>
@@ -152,7 +152,7 @@ export function DrillCard({ drill, onSubmit, submitting = false, className }: Dr
                 >
                   <GripVertical className="w-4 h-4 text-muted shrink-0" aria-hidden="true" />
                   <span className="text-sm flex-1">{item}</span>
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-muted">{idx + 1}</span>
+                  <span className="text-3xs uppercase tracking-wider font-bold text-muted">{idx + 1}</span>
                 </li>
               ))}
             </ul>

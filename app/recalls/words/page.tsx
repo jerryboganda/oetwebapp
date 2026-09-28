@@ -451,7 +451,7 @@ export default function RecallsWordsPage() {
                     onClick={() => handleRecallSetChange('')}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                       selectedRecallSet === '' && !freePreviewOnly
-                        ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                        ? 'border-primary bg-primary text-white dark:bg-primary-700'
                         : 'border-border text-muted hover:border-primary hover:text-primary'
                     }`}
                   >
@@ -486,7 +486,7 @@ export default function RecallsWordsPage() {
                       title={s.description}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                         selectedRecallSet === s.code
-                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                          ? 'border-primary bg-primary text-white dark:bg-primary-700'
                           : 'border-border text-muted hover:border-primary hover:text-primary'
                       }`}
                     >
@@ -508,7 +508,7 @@ export default function RecallsWordsPage() {
                     onClick={() => handleCategoryChange(filter.key)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                       selectedCategory === filter.key
-                        ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                        ? 'border-primary bg-primary text-white dark:bg-primary-700'
                         : 'border-border text-muted hover:border-primary hover:text-primary'
                     }`}
                   >
@@ -864,7 +864,7 @@ export default function RecallsWordsPage() {
             </Button>
             <Link
               href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
               onClick={() => setShowUpgradeModal(false)}
             >
               View upgrade options
@@ -896,7 +896,7 @@ export default function RecallsWordsPage() {
             </Button>
             <Link
               href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
               onClick={() => setShowLockedModal(false)}
             >
               View upgrade options

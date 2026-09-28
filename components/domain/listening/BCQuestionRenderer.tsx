@@ -234,7 +234,7 @@ export function BCQuestionRenderer({
                 } ${locked ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[0.75em] font-black transition-colors ${
-                  isSelected ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border-hover text-muted'
+                  isSelected ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border-hover text-muted'
                 }`}>
                   {optionLabel}
                 </span>

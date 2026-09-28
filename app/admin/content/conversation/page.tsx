@@ -121,7 +121,7 @@ export default function AdminConversationTemplatesPage() {
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+          className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border-default)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
         >
           <option value="">All</option>
           <option value="draft">Draft</option>
@@ -222,7 +222,7 @@ export default function AdminConversationTemplatesPage() {
                     </Button>
                   )}
                   {row.status === 'archived' && (
-                    <Button variant="secondary" size="sm" className="text-red-600" onClick={() => handleForceDelete(row.id)}>
+                    <Button variant="secondary" size="sm" className="text-admin-danger" onClick={() => handleForceDelete(row.id)}>
                       Force delete
                     </Button>
                   )}

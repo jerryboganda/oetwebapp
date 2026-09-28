@@ -48,7 +48,7 @@ function ActivityIndicator({ active, label, level }: IndicatorProps) {
       <span
         className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-          active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500',
+          active ? 'bg-success/15 text-success' : 'bg-background-light text-muted',
         )}
         aria-hidden
       >
@@ -56,9 +56,9 @@ function ActivityIndicator({ active, label, level }: IndicatorProps) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-navy" aria-live="polite">{label}</p>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-background-light" aria-hidden>
           <div
-            className="h-full rounded-full bg-emerald-500 transition-[width] duration-100"
+            className="h-full rounded-full bg-success transition-[width] duration-100"
             style={{ width: `${active ? Math.round(level * 100) : 0}%` }}
           />
         </div>

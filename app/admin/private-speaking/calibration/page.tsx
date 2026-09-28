@@ -65,7 +65,7 @@ export default function AdminSpeakingCalibrationPage() {
       render: (row) => (
         <div className="flex flex-col">
           <span className="font-bold">{row.tutorName || row.tutorId}</span>
-          <span className="text-[10px] uppercase tracking-widest text-muted">id {row.tutorId}</span>
+          <span className="text-3xs uppercase tracking-widest text-muted">id {row.tutorId}</span>
         </div>
       ),
     },

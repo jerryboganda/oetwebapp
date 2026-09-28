@@ -11,6 +11,7 @@ import { MotionItem, MotionPage } from '@/components/ui/motion-primitives';
 import { fetchReviewSummary, fetchDueReviewItems, submitReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 type ReviewSummary = { due: number; total: number; dueToday: number; mastered: number; upcoming?: number };
 type ReviewItem = {
@@ -154,28 +155,24 @@ export default function ReviewPage() {
 
       {!started && !done && items.length === 0 && (
         <div className="mx-auto max-w-xl">
-          <div className="bg-surface border border-border rounded-2xl shadow-sm p-8 text-center">
-            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
+          <Card className="p-8 text-center">
+            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" aria-hidden="true" />
             <h3 className="text-lg font-bold text-navy mb-2">No items due for review</h3>
             <p className="text-muted mb-6">You&apos;re all caught up. New items will appear here as you complete more practice activities.</p>
-            <button
+            <Button
               onClick={() => { setLoading(true); setError(null); Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => { if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary); if (itemsR.status === 'fulfilled') { const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []); setItems(loadedItems as ReviewItem[]); } setLoading(false); }); }}
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
-              <RotateCcw className="w-4 h-4" /> Refresh
-            </button>
-          </div>
+              <RotateCcw className="w-4 h-4" aria-hidden="true" /> Refresh
+            </Button>
+          </Card>
         </div>
       )}
 
       {!started && !done && items.length > 0 && (
         <div className="flex justify-center">
-          <button
-            onClick={() => setStarted(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
-          >
-            Start Review ({items.length} items) <ChevronRight className="w-5 h-5" />
-          </button>
+          <Button size="lg" onClick={() => setStarted(true)}>
+            Start Review ({items.length} items) <ChevronRight className="w-5 h-5" aria-hidden="true" />
+          </Button>
         </div>
       )}
 
@@ -226,7 +223,8 @@ export default function ReviewPage() {
                         key={q}
                         onClick={() => handleRate(q)}
                         disabled={submitting}
-                        className={`py-2 rounded-lg text-sm font-medium transition-colors ${QUALITY_COLORS[q]} disabled:opacity-50`}
+                        type="button"
+                        className={`min-h-11 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${QUALITY_COLORS[q]} disabled:opacity-50`}
                       >
                         {label}
                       </button>
@@ -244,12 +242,11 @@ export default function ReviewPage() {
           <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
           <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
           <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
-          <button
+          <Button
             onClick={() => { setStarted(false); setDone(false); setCurrent(0); setRevealed(false); setSessionStats({ reviewed: 0, correct: 0 }); }}
-            className="mx-auto inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-medium text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
           >
-            <RotateCcw className="w-4 h-4" /> Review Again
-          </button>
+            <RotateCcw className="w-4 h-4" aria-hidden="true" /> Review Again
+          </Button>
         </MotionPage>
       )}
       </div>

@@ -1,113 +1,145 @@
-# Design System: OET Prep Learner Platform
+# Design System: OET Prep Platform
 **Project ID:** jerryboganda/oetwebapp
 
-This document is the source of truth for learner-facing UI. The dashboard is the canonical reference; every other page should feel like the same product, just with a different level of density or focus.
+This is the single design-system spec for every surface in the web app: learner, expert/tutor, sponsor and admin. They share one palette, one typeface, one motion vocabulary and one set of tokens. Only **density** differs; admin and expert are denser than learner. The learner dashboard is the canonical reference page.
 
-## 1. Visual Theme & Atmosphere
+## 0. Where things live (read this first)
+| Concern | Location |
+| --- | --- |
+| Design tokens (colour, type, radius, elevation, motion, z-index) | `app/globals.css`, in the `@theme` / `@theme static` blocks |
+| Dark-mode token values | `app/globals.css`, in `:root.dark` (class-based, via next-themes) |
+| Admin alias layer (`--admin-*`, the same palette at admin density) | `app/admin/_design/admin-tokens.css` |
+| Motion for motion/react (durations, easings, springs, surface presets) | `lib/motion.ts` (mirrors the CSS `--duration-*` / `--ease-*`) |
+| Motion components | `components/ui/motion-primitives.tsx` (`MotionPage/Section/List/Item/Presence/Collapse/FadeSwitch`) |
+| Shared primitives | `components/ui/*`: Button, Card, Badge, Tabs, Modal/Drawer, InlineAlert/Toast, form-controls, Skeleton, EmptyState/ErrorState, DataTable, StatCard, Stepper, Pagination, FilterBar, BulkActionBar |
+| Dense admin primitives (Radix-based) | `components/admin/ui/*`, with admin page layouts in `components/admin/layout/*` |
+| Learner page compositions | `components/domain/learner-surface.tsx`: LearnerPageHero, LearnerSurfaceSectionHeader, LearnerSurfaceCard |
+| App shell | `components/layout/*`: AppShell, role shells, TopNav, ProfileMenu, Sidebar, BottomNav, GlobalSearch |
+| Chart colours | `lib/domain/chart-palette.ts` |
+| Accessibility preferences (large text, high contrast, reduce motion) | `contexts/accessibility-context.tsx`, with the CSS at the bottom of `app/globals.css` |
+
+**Adding a new screen:**
+1. Wrap it in the role shell.
+2. Open it with `LearnerPageHero` (learner) or admin `PageHeader` (admin).
+3. Build the body from `Card` / `LearnerSurfaceCard`.
+4. Give every data view a loading, an empty and an error state.
+5. Use only the token classes below; no hex values and no `text-[Npx]`.
+
+## 1. Visual theme and atmosphere
 - Warm clinical calm, not sterile.
-- Airy cream canvas, not dense dark chrome.
-- Premium academic workspace, not a marketing landing page.
+- An airy cream canvas, not dense dark chrome.
+- A premium academic workspace, not a marketing landing page.
 - Supportive and trustworthy, with gentle motion and soft cards.
 - Data-rich, but never cold or cluttered.
 
-The overall feeling is a guided study environment. Surfaces are soft, spacing is generous, and the interface should reduce anxiety rather than create it.
+## 2. Colour
+Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*` for text or surfaces.
 
-## 2. Color Palette & Roles
-| Token | Hex | Role | Notes |
+| Class | Light | Dark | Role |
 | --- | --- | --- | --- |
-| Primary Violet | `#7c3aed` | Primary actions, active nav, focus states, hero accents | The signature brand accent. Use for CTAs and selected states. |
-| Primary Deep Violet | `#6d28d9` | Hover and pressed states | Slightly darker for interaction depth. |
-| Lavender Mist | `#ede9fe` | Soft highlights, icon tiles, chips, subtle backgrounds | Used for calm emphasis, not large surfaces. |
-| Cream Canvas | `#f7f5ef` | App backdrop | The default page background in light mode. |
-| Surface White | `#fffefb` | Cards, panels, hero containers | Main content surface. |
-| Navy Ink | `#0f172a` | Headings, primary text, important icons | Highest-contrast text color in light mode. |
-| Muted Slate | `#526072` | Supporting text, labels, metadata | Use for second-level information. |
-| Border Mist | `#d8e0e8` | Card borders, dividers, field outlines | Keep borders subtle and light. |
-| Success Green | `#10b981` | Streaks, completed states, positive trends | Use for reassurance and completion. |
-| Warning Amber | `#d97706` | Freeze states, cautions, pending attention | Reserve for non-critical warnings. |
-| Danger Red | `#ef4444` | Errors, destructive actions, critical alerts | Use sparingly and clearly. |
-| Info Blue | `#2563eb` | Informational states, chart series, detail highlights | Good for neutral data emphasis. |
-| Dark Canvas | `#07111d` | Dark mode page background | Deep blue-black, not pure black. |
-| Dark Surface | `#0f172a` | Dark mode cards and panels | The main inverted surface color. |
-| Dark Text | `#e5eef9` | Dark mode primary text | Keep contrast soft but legible. |
-| Soft Dark Border | `#1f2937` | Dark mode borders and separators | Do not over-contrast the border layer. |
+| `primary` | `#7c3aed` | `#a78bfa` | Primary actions, active nav, focus, accents |
+| `primary-dark` | `#6d28d9` | `#8b5cf6` | Hover/pressed |
+| `primary-50…950` | static violet ramp | same | Tints, chart fills, fixed fills (does not flip) |
+| `lavender` | `#ede9fe` | `#1e1b4b` | Soft highlights, icon tiles, chips |
+| `background-light` | `#f7f5ef` | `#07111d` | Page canvas |
+| `surface` | `#fffefb` | `#0f172a` | Cards, panels, menus |
+| `navy` | `#0f172a` | `#e5eef9` | Headings and primary text |
+| `muted` | `#526072` | `#94a3b8` | Secondary text, metadata |
+| `border` / `border-hover` | `#d8e0e8` / `#b9c6d1` | `#1f2937` / `#334155` | Borders, dividers |
+| `success` / `warning` / `danger` / `info` | `#10b981` / `#d97706` / `#ef4444` / `#2563eb` | | Status only. Info blue is never the brand accent. |
+| `gold`, `oet-navy`, `oet-teal` | | | OET corporate accents (billing, certificates) |
 
-Use tint-based backgrounds for chips, icon badges, and status chips. Reserve saturated fills for actions and selected states.
+- **Admin** uses the same violet; there is no separate brand colour. Its `--admin-*` variables are aliases whose light and dark values match the table above.
+- **White text on a primary fill** needs `dark:bg-violet-700` in dark mode for AA contrast. Button already does this.
 
-## 3. Typography Rules
-- Primary typeface: Manrope for all UI text.
-- Display typeface: Fraunces only for brand lockups or rare premium emphasis.
-- Headings should be semibold or bold with tight tracking and clear hierarchy.
-- Eyebrows should be 11-12px, uppercase, and widely tracked.
-- Body text should stay in the 14-16px range with calm line height.
-- Data figures can be larger and heavier, but they should still feel editorial, not dashboard-brutal.
+## 3. Typography
+- **Typefaces:** Manrope (`--font-sans`) for all UI, admin included. Fraunces (`font-display`) only for rare brand moments.
+- **Scale:**
+  - `text-3xs` (10px): dense badges, chart ticks
+  - `text-2xs` (11px): eyebrows, captions, metadata
+  - `text-xs` (12px) through `text-4xl`: Tailwind defaults
 
-The dashboard uses Manrope for navigation, cards, controls, and most content. Fraunces appears sparingly in brand moments only. Do not overuse display type on utility pages.
+  The micro sizes are rem-based, so the "large text" accessibility setting scales them.
+- **Eyebrows:** `text-2xs font-bold uppercase tracking-[0.16em] text-muted`.
+- **Body:** 14–16px with a calm line height. Headings are semibold or bold with tight tracking.
+- **Numbers:** use `tabular-nums` in tables and metrics, and right-align numeric columns.
 
-## 4. Component Stylings
-| Component | Styling | Behavior |
+## 4. Shape, elevation, spacing
+- **Radius roles:**
+  - `rounded-control` (10px): inputs, buttons, chips
+  - `rounded-card` (16px): cards, panels. Existing cards use `rounded-2xl`, which is equivalent.
+  - `rounded-surface` (24px): heroes, modals, sheets
+- **Elevation:**
+  - `shadow-xs` (hairline)
+  - `shadow-sm` (resting card)
+  - `shadow-clinical` (hover or raised)
+  - `shadow-md` (popover/menu)
+  - `shadow-lg` (dialog)
+
+  Cards always pair a border with a shadow, never a shadow alone.
+- **Spacing:** use Tailwind's 4px scale. Card padding comes from `Card padding="sm|md|lg"`, which is mobile-dense and desktop-comfortable. Avoid arbitrary `p-[13px]`.
+- **Z-index:** overlay 40 < modal 50 < drawer 60 < popover 70 < toast 80.
+
+## 5. Motion
+- **Durations:**
+  - `--duration-instant` 120ms
+  - `fast` 160ms
+  - `normal` 220ms
+  - `slow` 280ms
+  - `hero` 360ms
+- **Easing:** `ease-standard` (decisive ease-out), `ease-enter`, `ease-exit`. motion/react uses the same values through `motionTokens` in `lib/motion.ts`.
+- **Surface presets:** use `getSurfaceMotion('route'|'section'|'list'|'item'|'overlay'|'state')` or the Motion* components. Don't hand-write springs.
+- **Animate only `transform` and `opacity`**, never layout properties.
+- **Hover:** a lift of at most 1px, gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`).
+- **Active indicators** (tabs, sidebar, bottom nav) use a shared-layout `layoutId`. Scope each instance's id with `useId`.
+- **Reduced motion is mandatory.**
+  - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.
+  - Under reduced motion, keep every **state** visible (active fills, selected rings). Drop only the movement.
+- **Never animate** exam timers, audio/recording controls or anything on the critical path of a live attempt.
+
+## 6. Components
+| Component | Styling | Behaviour |
 | --- | --- | --- |
-| Buttons | Rounded-lg base shape, 44-48px touch targets, violet primary fill, navy secondary fill, light outline and ghost variants | Hover should gently lift or tint, and active should scale down slightly. |
-| Cards and containers | Rounded-2xl by default, 1px border, Surface White background, shadow-sm baseline, shadow-clinical on hover | Use a slightly larger radius for hero cards and larger feature panels. |
-| Inputs and forms | Soft surface fill, 1px border, rounded-lg or rounded-xl, no native chrome, clear primary focus ring | Filters should feel like part of the system, not default browser controls. |
-| Navigation | Sticky glass top nav, sticky desktop sidebar, bottom nav on mobile, pill-like active state highlight | Navigation should always feel anchored and calm, never loud. |
-| Data visuals | White chart canvas inside rounded surfaces, faint gridlines, small legends, one dominant accent per series | Charts should breathe and stay easy to read at a glance. |
-| Empty states | Centered, explanatory, and framed inside a card or dashed surface | Never leave a blank region without context and a next step. |
-| Motion | 160-320ms springs and fades, 1px hover lift, subtle route transitions, staggered entry for sections | Motion should clarify hierarchy, not decorate it. |
+| Button | `components/ui/button`. Variants `primary` / `secondary` / `ghost` / `destructive` / `outline`; sizes 44–48px tall | Micro hover/tap, `loading` spinner, `asChild` for links, native haptics |
+| Card | Border, `bg-surface`, `shadow-sm`; `hoverable` gives a clinical hover | Mobile-dense padding |
+| Inputs | `form-controls`: soft surface, 1px border, primary focus ring | Label, hint and error wired with aria |
+| Tabs | Segmented pill with a moving active pill | Arrow/Home/End keys |
+| Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
+| Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
+| Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
+| Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 
-Preferred primitives: `AppShell`, `LearnerDashboardShell`, `LearnerWorkspaceContainer`, `TopNav`, `Sidebar`, `BottomNav`, `LearnerPageHero`, `LearnerSurfaceSectionHeader`, `LearnerSurfaceCard`, `Card`, `Button`, `ProgressBar`, `MotionSection`, and `MotionItem`.
+## 7. Layout and responsive behaviour
+- Keep the workspace about 1200px wide.
+- Pages flow as: hero → action cards → main grid → supporting rail.
+- **Mobile (<lg):**
+  - The sidebar becomes the top-nav drawer and the bottom nav appears.
+  - Content is a single column.
+  - Touch targets are ≥44px.
+  - Tables scroll inside `overflow-x-auto` or become cards.
+  - No horizontal page scroll at 360px.
+- **Desktop:** sticky chrome with a scrolling workspace. Tool pages may split into dual panels.
+- **Safe areas:** use `--safe-area-inset-*`, `.overlay-safe-area`, `.keyboard-safe-bottom`. Never hardcode device insets.
+- **Admin and expert:** dense tables, sticky headers, keyboard-reachable row actions, and no airy consumer spacing.
 
-## 5. Layout Principles
-- Treat the shell as the canvas: sticky chrome, centered workspace, and a single scrollable content area.
-- Keep the main workspace around 1200px wide with generous horizontal padding.
-- Start pages with a hero surface or summary card, then move into card clusters and supporting rails.
-- Use the dashboard composition as the baseline: hero, action cards, main grid, then a supporting side rail.
-- Utility pages like Grammar and Progress should still inherit the same hero-card rhythm.
-- Use white space as structure. Separate sections with breathing room rather than hard separators.
-- Let cards fill their rails. Do not let content float directly on the page background.
+## 8. Do's and don'ts
+**Do:**
+- Use the shared primitives and tokens.
+- Keep violet as the one accent and navy as the text anchor.
+- Show explicit empty, loading and error states.
+- Keep the shell and spacing consistent across all roles.
 
-The best pages feel like a calm sequence of surfaces, not a list of disconnected widgets.
+**Don't:**
+- Add hex colours, `text-[Npx]`, new shadow recipes or a second brand colour.
+- Use default browser controls that ignore the system.
+- Add loud gradients, glassmorphism on content cards, neon glows or decorative motion.
+- Remove the ambient background blooms from learner pages.
+- Change exam-player layouts or timing for visual reasons.
 
-## 6. Depth & Elevation
-- The page background is a warm cream field with soft ambient color blooms and a faint grid veil.
-- Cards sit above the canvas with border plus shadow, not shadow alone.
-- Hover elevation should be minimal: one step up, slightly darker border, slightly stronger shadow.
-- The top nav uses a glass-panel treatment with blur and translucent border.
-- The sidebar and modals sit above the base chrome with stronger separation.
-- Dark mode should deepen surfaces, not replace the system with pure black blocks.
-
-Avoid heavy shadows, harsh outlines, and neon glow. The interface should feel premium because it is controlled, not because it is loud.
-
-## 7. Do's and Don'ts
-Do:
-- Use the shared dashboard primitives for all learner pages.
-- Keep purple as the primary accent and navy as the anchor text color.
-- Use soft corners, calm spacing, and restrained motion.
-- Show explicit empty states when data is missing.
-- Keep the shell, chrome, and spacing consistent across dashboard, grammar, progress, and content pages.
-
-Don't:
-- Don't use default browser controls or isolated dark selects that ignore the shell language.
-- Don't make a utility page feel like a separate product.
-- Don't remove the ambient background or collapse everything into a flat white page.
-- Don't overuse Fraunces or all-caps headings.
-- Don't add loud gradients, aggressive shadows, or extra visual systems.
-- Don't leave charts or panels empty without explanation.
-
-## 8. Responsive Behavior
-- Mobile: the sidebar collapses into top navigation, the bottom nav appears, and content stacks to one column.
-- Mobile touch targets should stay at least 44px tall.
-- Tablet: cards collapse gracefully, but hero surfaces should keep their breathing room and hierarchy.
-- Desktop: the sidebar and top nav stay sticky while the workspace scrolls inside the viewport.
-- Desktop grids can move to 2-column or 12-column arrangements as long as the card rhythm stays intact.
-- Dedicated tool pages can split into dual panels on desktop, but they must keep the same surface, border, and typography language.
-
-## 9. Agent Prompt Guide
-- Build new screens as if they belong to the dashboard first, not as isolated pages.
-- Keep the mood warm, clinical, and premium, with cream surfaces and violet accents.
-- Use Manrope for UI and Fraunces only for brand moments.
-- Prefer rounded 24-32px surfaces, soft shadows, and gentle motion.
-- If a page feels plain, add a hero surface, a supporting section header, and at least one card rail.
-- If data is missing, render a calm empty state card with a next action.
-
-Ready-to-use prompt: Build this page in the OET Prep dashboard system. Use a warm cream canvas, a violet primary accent, navy headlines, soft rounded cards, sticky glass chrome, and calm empty states. Keep the layout airy, data-rich, and consistent with the dashboard, not like a separate product.
+## 9. Agent prompt guide
+Build this page in the OET Prep system. Use:
+- a warm cream canvas, violet primary accent, navy headlines, soft bordered cards and sticky glass chrome
+- tokens from `app/globals.css` and primitives from `components/ui`
+- `LearnerPageHero` on learner pages, or admin `PageHeader` and admin primitives at admin density
+- loading, empty and error states on every data view
+- motion from `lib/motion.ts` presets, respecting reduced motion

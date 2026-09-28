@@ -27,7 +27,7 @@ export function ReadinessBlockerCard({ blocker }: ReadinessBlockerCardProps) {
           </span>
           <h3 className="text-sm font-bold text-navy">{blocker.title}</h3>
         </div>
-        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${tokens.chip}`}>{severity}</span>
+        <span className={`text-3xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${tokens.chip}`}>{severity}</span>
       </div>
       <p className="text-xs text-muted leading-relaxed">{blocker.description}</p>
       {impact > 0 && (

@@ -174,7 +174,7 @@ export default function AdminWritingReviewPage() {
 
           <SettingsSection title="Integrity acknowledgement">
             {paper.integrityAcknowledgedByAdminId ? (
-              <div className="flex items-start gap-3 rounded-admin border border-admin-success-tint-strong bg-admin-success-tint p-4 text-sm">
+              <div className="flex items-start gap-3 rounded-admin border border-admin-success/25 bg-admin-success/10 p-4 text-sm">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 text-admin-success" />
                 <div>
                   <div className="font-semibold text-admin-success">
@@ -188,7 +188,7 @@ export default function AdminWritingReviewPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-start gap-3 rounded-admin border border-admin-warning-tint-strong bg-admin-warning-tint p-4 text-sm">
+              <div className="flex items-start gap-3 rounded-admin border border-admin-warning/25 bg-admin-warning/10 p-4 text-sm">
                 <ShieldAlert className="mt-0.5 h-5 w-5 text-admin-warning" />
                 <div>
                   <div className="font-semibold text-admin-warning">Integrity acknowledgement missing</div>
@@ -288,7 +288,7 @@ export default function AdminWritingReviewPage() {
 function MetadataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 rounded-admin border border-admin-border bg-admin-bg-subtle p-3">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-admin-fg-muted">{label}</dt>
+      <dt className="text-3xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">{label}</dt>
       <dd className="text-sm text-admin-fg-strong">{value}</dd>
     </div>
   );

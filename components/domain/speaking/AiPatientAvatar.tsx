@@ -60,12 +60,12 @@ export function AiPatientAvatar({
         ) : null}
         <div className="flex flex-wrap items-center justify-center gap-1">
           {typeof patientAge === 'number' ? (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted">
+            <span className="rounded-full bg-background-light px-2 py-0.5 text-xs text-muted">
               {patientAge}
             </span>
           ) : null}
           {interlocutorRole ? (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted">
+            <span className="rounded-full bg-background-light px-2 py-0.5 text-xs text-muted">
               {interlocutorRole}
             </span>
           ) : null}
@@ -74,7 +74,7 @@ export function AiPatientAvatar({
 
       <div
         className={[
-          'h-1 w-20 rounded-full bg-muted transition-opacity',
+          'h-1 w-20 rounded-full bg-border transition-opacity',
           learnerIsSpeaking ? 'opacity-100' : 'opacity-30',
         ].join(' ')}
         aria-hidden

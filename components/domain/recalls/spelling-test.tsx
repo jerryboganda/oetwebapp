@@ -134,7 +134,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-4">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
             How many words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -157,7 +157,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
             Which words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -350,7 +350,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
           Word {position} of {total}
         </span>
         {item.fromMistakes && (
-          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-medium text-warning">
             Review mistake
           </span>
         )}

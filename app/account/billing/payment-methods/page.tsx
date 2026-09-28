@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, CreditCard, ShieldCheck } from 'lucide-react';
 
 import { BillingPortalLauncher } from '@/components/billing/BillingPortalLauncher';
+import { Card } from '@/components/ui/card';
 
 /**
  * Payment-methods landing. We never store card details on our side -
@@ -18,7 +19,7 @@ export default function AccountPaymentMethodsPage() {
           href="/account/billing"
           className="inline-flex items-center gap-1 text-xs text-muted hover:text-navy"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Billing overview
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Billing overview
         </Link>
         <h1 className="mt-2 text-3xl font-bold text-navy">Payment methods</h1>
         <p className="mt-1 text-sm text-muted">
@@ -27,7 +28,7 @@ export default function AccountPaymentMethodsPage() {
         </p>
       </header>
 
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <Card padding="lg">
         <div className="flex items-start gap-3">
           <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CreditCard className="h-5 w-5" aria-hidden="true" />
@@ -41,9 +42,9 @@ export default function AccountPaymentMethodsPage() {
             <BillingPortalLauncher className="mt-4">Open Stripe portal</BillingPortalLauncher>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted">
+      <Card padding="lg" className="text-sm text-muted shadow-none">
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-success" aria-hidden="true" />
           <p>
@@ -55,7 +56,7 @@ export default function AccountPaymentMethodsPage() {
             .
           </p>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

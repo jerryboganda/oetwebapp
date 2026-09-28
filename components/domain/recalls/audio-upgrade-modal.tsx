@@ -48,8 +48,8 @@ export function useRecallsAudioUpgrade() {
       size="sm"
     >
       <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-xl bg-amber-50 p-3 text-amber-900">
-          <Lock className="h-5 w-5 flex-shrink-0" />
+        <div className="flex items-center gap-3 rounded-xl bg-warning/10 p-3 text-navy">
+          <Lock className="h-5 w-5 flex-shrink-0 text-warning" aria-hidden="true" />
           <p className="text-sm">
             British TTS pronunciations for Recalls cards are part of paid plans.
           </p>
@@ -62,8 +62,8 @@ export function useRecallsAudioUpgrade() {
             Not now
           </Button>
           <Button variant="primary" asChild>
-<Link href="/catalog" className="inline-flex">Upgrade</Link>
-</Button>
+            <Link href="/catalog">Upgrade</Link>
+          </Button>
         </div>
       </div>
     </Modal>

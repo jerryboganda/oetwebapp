@@ -262,17 +262,17 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
               {question.partCode} · Q{question.displayOrder}
             </span>
             {question.flaggedForReview ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                 <Flag className="h-3 w-3" aria-hidden="true" /> Flagged
               </span>
             ) : null}
             {question.isInvalid ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                 <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Invalid — admin review
               </span>
             ) : null}
             {question.answerRevisionCount > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <Pencil className="h-3 w-3" aria-hidden="true" /> {question.answerRevisionCount} revision
                 {question.answerRevisionCount === 1 ? '' : 's'}
               </span>

@@ -85,7 +85,7 @@ export function MockItemAnalysisActions({
         <Badge variant="muted" className="inline-flex items-center gap-1">
           <ShieldOff className="h-3 w-3" aria-hidden /> Retired
         </Badge>
-        <span className="text-[10px] text-muted">
+        <span className="text-3xs text-muted">
           {new Date(retiredAt).toLocaleDateString()}
           {retiredByAdminId ? ` · ${retiredByAdminId}` : null}
         </span>

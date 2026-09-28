@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Sparkles, ArrowRight, Clock, AlertTriangle, Trophy, Target, CheckCircle2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -9,6 +9,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -47,13 +49,19 @@ export default function NextActionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    analytics.track('content_view', { page: 'next-actions' });
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     apiRequest<NextActionsData>('/v1/learner/next-actions')
       .then(setData)
       .catch(() => setError('Unable to load recommendations.'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    analytics.track('content_view', { page: 'next-actions' });
+    load();
+  }, [load]);
 
   if (loading) {
     return (
@@ -74,12 +82,23 @@ export default function NextActionsPage() {
         icon={<Sparkles className="w-7 h-7" />}
       />
 
-      {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="error"
+          title="Error"
+          action={<Button size="sm" variant="outline" onClick={load}>Retry</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       {data && data.actions.length === 0 && (
-        <InlineAlert variant="info" title="All caught up!">
-          No immediate actions needed. Keep up your daily practice.
-        </InlineAlert>
+        <LearnerEmptyState
+          icon={CheckCircle2}
+          title="All caught up!"
+          description="No immediate actions needed. Keep up your daily practice."
+          primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+        />
       )}
 
       {data && data.actions.length > 0 && (
@@ -103,9 +122,11 @@ export default function NextActionsPage() {
                           {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
                         </div>
                       </div>
-                      <a href={action.actionUrl} className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 transition-[color,background-color,transform] duration-200">
-                          Go <ArrowRight className="w-4 h-4 ml-1" />
-                      </a>
+                      <Button asChild size="sm" className="shrink-0">
+                        <a href={action.actionUrl} aria-label={`Go: ${action.title}`}>
+                          Go <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                        </a>
+                      </Button>
                     </div>
                   </Card>
                 </MotionItem>

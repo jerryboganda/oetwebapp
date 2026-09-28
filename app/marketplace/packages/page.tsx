@@ -8,6 +8,7 @@ import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { buttonClassName } from '@/components/ui/button';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchContentPackages, fetchFreePreviewAssets } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -95,7 +96,9 @@ export default function PackagesPage() {
       <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => changeFilter('')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover-primary'}`}
+          type="button"
+          aria-pressed={!typeFilter}
+          className={`min-h-11 px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!typeFilter ? 'bg-primary text-white dark:bg-violet-700' : 'border border-border bg-background-light text-muted hover:text-navy'}`}
         >
           All Packages
         </button>
@@ -103,7 +106,9 @@ export default function PackagesPage() {
           <button
             key={key}
             onClick={() => changeFilter(key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover-primary'}`}
+            type="button"
+            aria-pressed={typeFilter === key}
+            className={`min-h-11 px-4 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${typeFilter === key ? 'bg-primary text-white dark:bg-violet-700' : 'border border-border bg-background-light text-muted hover:text-navy'}`}
           >
             {label}
           </button>
@@ -142,7 +147,7 @@ export default function PackagesPage() {
                       >
                         {websitePackage ? (
                           <>
-                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
                               Package {websitePackage.packageNo}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -156,7 +161,7 @@ export default function PackagesPage() {
                               {websitePackage.metaChips.map((chip) => (
                                 <span
                                   key={chip}
-                                  className="rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted"
+                                  className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
                                 >
                                   {chip}
                                 </span>
@@ -169,8 +174,8 @@ export default function PackagesPage() {
                           </>
                         ) : (
                           <Badge
-                            className={`mb-3 self-start text-[10px] ${
-                              PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-muted'
+                            className={`mb-3 self-start text-3xs ${
+                              PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-background-light'
                             }`}
                           >
                             {PACKAGE_TYPE_LABELS[pkg.packageType] ?? pkg.packageType}
@@ -196,7 +201,7 @@ export default function PackagesPage() {
                           <ul className="mb-4 mt-4 flex-1 space-y-2">
                             {features.map((feature) => (
                               <li key={feature} className="flex items-start gap-2 text-sm">
-                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                                 <span>{feature}</span>
                               </li>
                             ))}
@@ -218,9 +223,9 @@ export default function PackagesPage() {
                               ? websitePackagePurchaseHref(websitePackage)
                               : `/marketplace/packages/${encodeURIComponent(pkg.code)}`
                           }
-                          className="mt-auto flex items-center justify-center gap-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+                          className={buttonClassName({ fullWidth: true, className: 'mt-auto' })}
                         >
-                          View Details <ChevronRight className="h-4 w-4" />
+                          View Details <ChevronRight className="h-4 w-4" aria-hidden="true" />
                         </Link>
                       </div>
                     </MotionItem>
@@ -242,7 +247,7 @@ export default function PackagesPage() {
                         href="/videos"
                         className="group block rounded-lg border border-border bg-surface p-4 hover:shadow-sm transition-shadow"
                       >
-                        <Badge variant="muted" className="text-[10px] mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
+                        <Badge variant="muted" className="text-3xs mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
                         <h3 className="text-sm font-medium leading-tight group-hover:text-primary transition-colors">{preview.title}</h3>
                         {preview.conversionCtaText && (
                           <p className="text-xs text-primary mt-2">{preview.conversionCtaText}</p>

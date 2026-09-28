@@ -176,7 +176,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
         <span className="font-mono text-xs">
           {r.accountId ? r.accountId.slice(0, 8) : '-'}
           {r.failoverTrace && (
-            <span className="ml-1 text-[10px] text-admin-fg-muted">⤳</span>
+            <span className="ml-1 text-3xs text-admin-fg-muted">⤳</span>
           )}
         </span>
       ),

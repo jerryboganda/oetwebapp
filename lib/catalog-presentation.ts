@@ -227,7 +227,7 @@ export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
   legend: [
     { key: 'W', label: 'Writing add-ons', description: 'Writing letter assessment add-ons are offered on this product.' },
     { key: 'S', label: 'Speaking add-ons', description: 'Extra private speaking sessions can be added to this product.' },
-    { key: 'TB', label: 'Tutor Book £32', description: 'Discounted £32 Tutor Book add-on is available with this product.' },
+    { key: 'TB', label: 'Tutor Book discount', description: 'Discounted Tutor Book add-on is available with this product.' },
   ],
   sections: {
     showFilters: true,
@@ -355,7 +355,7 @@ export function addOnEnabledFlags(plan: PublicCatalogPlanRow): Array<{ key: stri
   if (plan.writingAddonsEnabled) flags.push({ key: 'W', label: 'Writing add-ons' });
   if (plan.speakingAddonsEnabled) flags.push({ key: 'S', label: 'Human Tutor Speaking add-ons' });
   if (plan.speakingPracticeAccessEnabled) flags.push({ key: 'SP', label: 'Speaking Practice Card Access' });
-  if (plan.tutorBookDiscountEnabled) flags.push({ key: 'TB', label: 'Tutor Book £32' });
+  if (plan.tutorBookDiscountEnabled) flags.push({ key: 'TB', label: 'Tutor Book discount' });
   return flags;
 }
 

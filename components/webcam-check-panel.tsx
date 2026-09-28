@@ -133,8 +133,8 @@ export function WebcamCheckPanel({
       <div
         className={cn(
           'flex flex-col gap-3 p-4 rounded-xl border transition-colors',
-          isPassed && 'border-emerald-200 bg-emerald-50/50',
-          isBlocked && 'border-red-200 bg-red-50/50',
+          isPassed && 'border-success/30 bg-success/5',
+          isBlocked && 'border-danger/30 bg-danger/5',
           !isPassed && !isBlocked && 'border-border bg-background-light',
         )}
       >
@@ -142,9 +142,9 @@ export function WebcamCheckPanel({
           <div
             className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300',
-              isPassed && 'bg-emerald-100 text-emerald-600',
-              isBlocked && 'bg-red-100 text-red-600',
-              isBusy && 'bg-primary text-white dark:bg-violet-700 scale-110',
+              isPassed && 'bg-success/15 text-success',
+              isBlocked && 'bg-danger/10 text-danger',
+              isBusy && 'bg-primary text-white dark:bg-primary-700 scale-110',
               !isPassed && !isBlocked && !isBusy && 'bg-primary/10 text-primary',
             )}
           >
@@ -159,10 +159,10 @@ export function WebcamCheckPanel({
             )}
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1" aria-live="polite">
             <p className="text-sm font-semibold text-navy">Camera check</p>
             {isPassed ? (
-              <p className="text-xs text-emerald-600 font-medium tracking-wide">
+              <p className="text-xs text-success font-medium tracking-wide">
                 Passed. Webcam is streaming.
               </p>
             ) : isBusy ? (
@@ -170,7 +170,7 @@ export function WebcamCheckPanel({
                 Waiting for browser permission…
               </p>
             ) : isBlocked ? (
-              <p className="text-xs text-red-600 font-medium">
+              <p className="text-xs text-danger font-medium">
                 {status === 'unavailable'
                   ? 'No camera detected on this device.'
                   : 'Camera blocked. Enable it to continue.'}
@@ -223,7 +223,7 @@ export function WebcamCheckPanel({
       </div>
 
       {isBlocked && hasInteracted ? (
-        <InlineAlert variant="error" className="shadow-sm rounded-xl border-red-200">
+        <InlineAlert variant="error" className="shadow-sm rounded-xl border-danger/30">
           {errorMessage ??
             (status === 'unavailable'
               ? 'No camera was detected. Connect a webcam and retry.'

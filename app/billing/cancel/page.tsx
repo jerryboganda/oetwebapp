@@ -6,6 +6,7 @@ import { XCircle, Tag } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
@@ -83,7 +84,7 @@ export default function CancelSubscriptionPage() {
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
-        icon={<XCircle className="h-6 w-6" />}
+        icon={XCircle}
         eyebrow="Billing"
         title="Cancel subscription"
         description="Tell us why so we can do better. You can change your mind at any step."
@@ -91,16 +92,16 @@ export default function CancelSubscriptionPage() {
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <Card padding="lg" className="space-y-4">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {step === 'reason' && (
           <div className="space-y-3">
             <Select label="Why are you cancelling?" value={reason} options={REASONS} onChange={(e) => setReason(e.target.value)} />
-            <Textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Anything else? (optional)" />
-            <div className="flex justify-end gap-2">
+            <Textarea id="cancel-detail" label="Anything else? (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Anything else? (optional)" />
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="ghost" onClick={() => router.push('/billing')}>Never mind</Button>
-              <Button onClick={submitReason} disabled={working}>Continue</Button>
+              <Button onClick={submitReason} loading={working}>Continue</Button>
             </div>
           </div>
         )}
@@ -114,9 +115,9 @@ export default function CancelSubscriptionPage() {
                 Stay with us and we’ll apply the coupon code <strong>{intent.offeredCouponCode}</strong> to your next renewal.
               </p>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="ghost" onClick={() => setStep('confirm')}>Cancel anyway</Button>
-              <Button onClick={acceptOffer} disabled={working}>Apply discount &amp; stay</Button>
+              <Button onClick={acceptOffer} loading={working}>Apply discount &amp; stay</Button>
             </div>
           </div>
         )}
@@ -130,13 +131,13 @@ export default function CancelSubscriptionPage() {
                 After that, premium features lock; your account remains.
               </p>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="ghost" onClick={() => router.push('/billing')}>Take me back</Button>
-              <Button variant="destructive" onClick={confirmCancel} disabled={working}>Confirm cancel</Button>
+              <Button variant="destructive" onClick={confirmCancel} loading={working}>Confirm cancel</Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </LearnerDashboardShell>
   );
 }

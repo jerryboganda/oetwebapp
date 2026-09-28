@@ -21,7 +21,7 @@ const EXAM_CONFIG: Record<string, { label: string; bg: string; text: string; rin
 };
 
 const SIZE_CLASSES: Record<BadgeSize, string> = {
-  sm: 'px-2 py-0.5 text-[11px]',
+  sm: 'px-2 py-0.5 text-2xs',
   md: 'px-2.5 py-1 text-xs',
 };
 

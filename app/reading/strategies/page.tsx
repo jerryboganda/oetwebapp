@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, CheckCircle2, Clock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -27,12 +29,12 @@ function StrategyCard({ strategy }: { strategy: ReadingStrategyDto }) {
   return (
     <Link
       href={`/reading/strategies/${strategy.slug}`}
-      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md"
+      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="flex-1 text-sm font-semibold leading-snug text-foreground">{strategy.title}</h3>
         {strategy.isRead ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Read" />
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-label="Read" />
         ) : (
           <BookOpen className="h-4 w-4 shrink-0 text-muted" aria-label="Unread" />
         )}
@@ -87,12 +89,13 @@ export default function StrategiesPage() {
   return (
     <LearnerDashboardShell pageTitle="Reading Strategies">
       <div className="space-y-5 sm:space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Strategy Library</h1>
-          <p className="mt-1 text-sm text-muted">
-            Evidence-based reading strategies to improve accuracy and speed in OET Part A, B, and C.
-          </p>
-        </div>
+        <LearnerPageHero
+          eyebrow="Reading strategies"
+          icon={BookOpen}
+          accent="blue"
+          title="Strategy Library"
+          description="Evidence-based reading strategies to improve accuracy and speed in OET Part A, B, and C."
+        />
 
         {/* Filter chips */}
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
@@ -100,11 +103,12 @@ export default function StrategiesPage() {
             <button
               key={cat}
               type="button"
+              aria-pressed={activeCategory === cat}
               onClick={() => setActiveCategory(cat)}
               className={cn(
-                'rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
+                'min-h-9 rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 activeCategory === cat
-                  ? 'border-primary bg-primary text-white dark:border-violet-600 dark:bg-violet-700'
+                  ? 'border-primary bg-primary text-white dark:border-primary-600 dark:bg-primary-700'
                   : 'border-border bg-surface text-muted hover:border-primary/40 hover:bg-primary/5',
               )}
             >
@@ -122,7 +126,11 @@ export default function StrategiesPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <InlineAlert variant="info">No strategies found for this category.</InlineAlert>
+          <EmptyState
+            icon={<BookOpen className="h-8 w-8" />}
+            title="No strategies found for this category."
+            action={activeCategory === 'All' ? undefined : { label: 'Show all strategies', onClick: () => setActiveCategory('All') }}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((strategy) => (

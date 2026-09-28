@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,15 +14,12 @@ import {
   CreditCard,
   FilePenLine,
   Flag,
-  Flame,
   Headphones,
   Mic,
   Sparkles,
   Shield,
   Star,
   Timer,
-  TrendingUp,
-  Trophy,
   Wallet,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
@@ -65,28 +62,6 @@ const LearnerDashboardDetails = dynamic(
     loading: () => null,
   },
 );
-
-const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
-  Writing: FilePenLine,
-  Speaking: Mic,
-  Reading: BookOpen,
-  Listening: Headphones,
-};
-
-const SUBTEST_COLORS: Record<SubTest, string> = {
-  Writing: 'text-rose-500 bg-rose-50',
-  Speaking: 'text-purple-600 bg-purple-50',
-  Reading: 'text-blue-600 bg-blue-50',
-  Listening: 'text-indigo-600 bg-indigo-50',
-};
-
-// Left-edge accent used to make each task instantly scannable by skill.
-const SUBTEST_SPINE: Record<SubTest, string> = {
-  Writing: 'bg-rose-400',
-  Speaking: 'bg-purple-400',
-  Reading: 'bg-blue-400',
-  Listening: 'bg-indigo-400',
-};
 
 function hasLiveReadinessEvidence(readiness: ReturnType<typeof useDashboardHome>['data']['readiness']) {
   if (!readiness) return false;
@@ -190,13 +165,13 @@ function DashboardSubscriptionStrip({
           <button
             type="button"
             onClick={onReloadPaymentStatus}
-            className="shrink-0 rounded-md bg-lavender/60 px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-lavender"
+            className="shrink-0 rounded-md bg-lavender/60 px-2 py-0.5 text-2xs font-semibold text-primary transition-colors hover:bg-lavender"
           >
             Reload payment status
           </button>
         ) : null}
         {!isLoading && !hasError ? (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
           </span>
         ) : null}
@@ -207,7 +182,7 @@ function DashboardSubscriptionStrip({
           {facts.map(({ icon: Icon, label }) => (
             <span
               key={label}
-              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-[11px] font-semibold text-navy ring-1 ring-border/70 transition-colors hoverable:bg-lavender/50 hoverable:ring-primary/25"
+              className="flex min-w-0 items-center gap-1.5 rounded-lg bg-background-light px-2.5 py-1.5 text-2xs font-semibold text-navy ring-1 ring-border/70 transition-colors hoverable:bg-lavender/50 hoverable:ring-primary/25"
             >
               <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
               <span className="truncate">{label}</span>
@@ -218,7 +193,7 @@ function DashboardSubscriptionStrip({
 
       <Link
         href="/catalog"
-        className="-mx-2 inline-flex items-center gap-1 self-start rounded-lg px-2 py-1 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10"
+        className="-mx-2 inline-flex items-center gap-1 self-start rounded-lg px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
       >
         See all catalog <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
@@ -232,7 +207,6 @@ export default function Dashboard() {
   const authContext = useContext(AuthContext);
   const queryClient = useQueryClient();
   const { data, error, reload, retryLabel, supportRef, status } = useDashboardHome();
-  const [scoringExpanded, setScoringExpanded] = useState(false);
   const purchaseSuccess = searchParams?.get('purchase') === 'success';
   const queryUserId = authContext?.user?.userId ?? 'current';
   const supplementalQueriesEnabled = authContext
@@ -305,6 +279,9 @@ export default function Dashboard() {
     ]);
   }, [purchaseSuccess, queryClient, queryUserId, supplementalQueriesEnabled]);
 
+  // Real count only — never default a missing value to 0 (owner rule: no fabricated state).
+  const pendingReviewCount = home?.cards?.pendingExpertReviews?.count;
+
   const dashboardHeroHighlights = [
     {
       icon: Calendar,
@@ -314,7 +291,7 @@ export default function Dashboard() {
     {
       icon: Star,
       label: 'Pending reviews',
-      value: `${home?.cards?.pendingExpertReviews?.count ?? 0} in progress`,
+      value: pendingReviewCount != null ? `${pendingReviewCount} in progress` : '—',
     },
     {
       icon: CheckCircle2,
@@ -365,7 +342,7 @@ export default function Dashboard() {
     description: nextMockRecommendation.rationale,
     metaItems: [
       { icon: Calendar, label: home?.cards?.examDate?.value ?? 'Exam date not set' },
-      { icon: Star, label: `${home?.cards?.pendingExpertReviews?.count ?? 0} pending reviews` },
+      ...(pendingReviewCount != null ? [{ icon: Star, label: `${pendingReviewCount} pending reviews` }] : []),
     ],
     primaryAction: {
       label: 'Open Mock Center',
@@ -459,13 +436,13 @@ export default function Dashboard() {
           <OnboardingChecklist />
 
           {freeze ? (
-            <Card className="border-amber-200 bg-amber-50/70 shadow-sm">
+            <Card className="border-warning/30 bg-warning/10">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700">Read-only mode</p>
-                    <CardTitle className="mt-2 flex items-center gap-2 text-xl text-amber-950">
-                      <Shield className="h-5 w-5" />
+                    <p className="text-3xs font-medium uppercase tracking-wide text-muted">Read-only mode</p>
+                    <CardTitle className="mt-2 flex items-center gap-2 text-xl text-navy">
+                      <Shield className="h-5 w-5 text-warning" aria-hidden="true" />
                       Your account is currently frozen
                     </CardTitle>
                   </div>
@@ -476,18 +453,18 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Status</p>
-                  <p className="mt-1 text-sm font-normal text-amber-950">{String(freeze.status ?? 'active')}</p>
+                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Status</p>
+                  <p className="mt-1 text-sm font-normal text-navy">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Started</p>
-                  <p className="mt-1 text-sm font-normal text-amber-950">
+                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Started</p>
+                  <p className="mt-1 text-sm font-normal text-navy">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70">Ends</p>
-                  <p className="mt-1 text-sm font-normal text-amber-950">
+                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Ends</p>
+                  <p className="mt-1 text-sm font-normal text-navy">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>
                 </div>

@@ -1652,7 +1652,7 @@ function SubSectionAudio({
 
   if (!subSection.audioUrl) {
     return (
-      <div className="rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5" data-testid="listening-black-player">
+      <div className="rounded-2xl bg-navy dark:bg-surface p-4 text-white shadow-xl shadow-navy/10 sm:p-5" data-testid="listening-black-player">
         <div className="flex items-center gap-2 text-sm font-semibold text-white/80">
           <Volume2 className="h-4 w-4" aria-hidden="true" />
           No audio is attached to this sub-section.

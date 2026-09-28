@@ -162,7 +162,7 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
                 <span className="font-mono"><VisibleText text={flow.verificationUrl} /></span>
               </p>
             )}
-            {safeUrl ? <p className="break-all font-mono text-[11px] text-admin-fg-muted">{safeUrl}</p> : null}
+            {safeUrl ? <p className="break-all font-mono text-2xs text-admin-fg-muted">{safeUrl}</p> : null}
           </div>
         ) : !finished ? (
           <p className="flex items-center gap-2 text-admin-fg-muted">

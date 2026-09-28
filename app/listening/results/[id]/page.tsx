@@ -149,12 +149,12 @@ function ListeningResultsContent() {
     return (
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-danger" />
+          <AlertCircle className="h-12 w-12 text-danger" aria-hidden />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
           <Button variant="ghost" asChild>
-<Link href="/listening">Back to Listening</Link>
-</Button>
+            <Link href="/listening">Back to Listening</Link>
+          </Button>
         </div>
       </LearnerDashboardShell>
     );
@@ -287,7 +287,7 @@ function ListeningResultsContent() {
             <div>
               <h2 id="listening-show-script-heading" className="text-lg font-black text-navy">
                 Show Script
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-widest text-white">
+                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-3xs font-black uppercase tracking-widest text-white">
                   Post-submit
                 </span>
               </h2>
@@ -332,7 +332,7 @@ function ListeningResultsContent() {
                   <button
                     onClick={() => toggleItem(item.questionId)}
                     aria-expanded={isExpanded}
-                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light sm:p-6"
+                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:p-6"
                   >
                     <div className="mt-0.5 shrink-0">
                       {item.isInvalid ? (
@@ -359,7 +359,7 @@ function ListeningResultsContent() {
                         <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
-                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                              <span className={`mb-2 block text-3xs font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 Your Answer
                               </span>
                               <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
@@ -368,7 +368,7 @@ function ListeningResultsContent() {
                             </div>
                             {!item.isCorrect && !item.isInvalid ? (
                               <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-                                <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-success">
+                                <span className="mb-2 block text-3xs font-black uppercase tracking-widest text-success">
                                   Correct Answer
                                 </span>
                                 <p className="text-sm font-medium text-success">{item.correctAnswer}</p>
@@ -439,8 +439,8 @@ export default function ListeningResults() {
   return (
     <Suspense fallback={
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-1 items-center justify-center" role="status" aria-label="Loading results">
+          <Loader2 className="h-8 w-8 animate-spin text-primary motion-reduce:animate-none" aria-hidden />
         </div>
       </LearnerDashboardShell>
     }>

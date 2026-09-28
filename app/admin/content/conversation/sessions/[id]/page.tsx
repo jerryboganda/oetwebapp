@@ -183,12 +183,12 @@ export default function AdminSessionDetailPage() {
           {strengths.length > 0 && (<div className="mb-2 text-xs"><strong>Strengths:</strong> {strengths.join(' | ')}</div>)}
           {improvements.length > 0 && (<div className="mb-2 text-xs"><strong>Improvements:</strong> {improvements.join(' | ')}</div>)}
           {suggestedPractice.length > 0 && (<div className="mb-2 text-xs"><strong>Practice:</strong> {suggestedPractice.join(' | ')}</div>)}
-          {appliedRules.length > 0 && (<div className="text-[10px] text-admin-fg-muted">Rules applied: {appliedRules.join(', ')}</div>)}
+          {appliedRules.length > 0 && (<div className="text-3xs text-admin-fg-muted">Rules applied: {appliedRules.join(', ')}</div>)}
         </SettingsSection>
       )}
 
       <SettingsSection title="Scenario">
-        <pre className="overflow-x-auto rounded-admin-lg border border-admin-border bg-[var(--admin-bg-subtle)] p-3 text-[11px] text-admin-fg-default">{JSON.stringify(scenario, null, 2)}</pre>
+        <pre className="overflow-x-auto rounded-admin-lg border border-admin-border bg-[var(--admin-bg-subtle)] p-3 text-2xs text-admin-fg-default">{JSON.stringify(scenario, null, 2)}</pre>
       </SettingsSection>
 
       <SettingsSection title="Transcript">
@@ -197,7 +197,7 @@ export default function AdminSessionDetailPage() {
             const anns = detail.annotations.filter((a) => a.turnNumber === t.turnNumber);
             return (
               <div key={t.turnNumber} className="rounded-admin-lg border border-admin-border p-3">
-                <div className="mb-1 text-[10px] font-semibold uppercase text-admin-fg-muted">
+                <div className="mb-1 text-3xs font-semibold uppercase text-admin-fg-muted">
                   Turn {t.turnNumber} · {t.role} · {t.durationMs}ms{t.confidenceScore != null ? ` · conf ${(t.confidenceScore * 100).toFixed(0)}%` : ''}
                   {t.aiFeatureCode && ` · ${t.aiFeatureCode}`}
                 </div>
@@ -207,8 +207,8 @@ export default function AdminSessionDetailPage() {
                     <Badge variant={a.type === 'strength' ? 'success' : a.type === 'error' ? 'danger' : 'warning'} size="sm">{a.type}</Badge>
                     <div className="flex-1">
                       {a.evidence}
-                      {a.ruleId && (<span className="ml-2 font-mono text-[10px] text-[var(--admin-primary)]">{a.ruleId}</span>)}
-                      {a.suggestion && (<div className="mt-0.5 text-[11px] text-[var(--admin-primary)]">{a.suggestion}</div>)}
+                      {a.ruleId && (<span className="ml-2 font-mono text-3xs text-[var(--admin-primary)]">{a.ruleId}</span>)}
+                      {a.suggestion && (<div className="mt-0.5 text-2xs text-[var(--admin-primary)]">{a.suggestion}</div>)}
                     </div>
                   </div>
                 ))}

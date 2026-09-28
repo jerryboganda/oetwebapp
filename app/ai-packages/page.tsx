@@ -185,7 +185,7 @@ export default function AiPackagesPage() {
     <article key={pkg.code} className="flex min-h-[320px] flex-col rounded-lg border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+          <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
             Package {websitePackage.packageNo}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-navy">{websitePackage.name}</h2>
@@ -200,7 +200,7 @@ export default function AiPackagesPage() {
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {websitePackage.metaChips.map((chip) => (
-          <span key={chip} className="rounded-full bg-background-light px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+          <span key={chip} className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted">
             {chip}
           </span>
         ))}

@@ -68,13 +68,14 @@ export default function MyPastClassesPage() {
         <div className="flex gap-3 border-b border-border pb-1 text-sm">
           <Link
             href="/me/classes/upcoming"
-            className="pb-2 text-muted hover:text-navy"
+            className="border-b-2 border-transparent pb-2 text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Upcoming
           </Link>
           <Link
             href="/me/classes/past"
-            className="border-b-2 border-primary pb-2 font-semibold text-primary"
+            aria-current="page"
+            className="border-b-2 border-primary pb-2 font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Past
           </Link>
@@ -88,11 +89,17 @@ export default function MyPastClassesPage() {
           </div>
         ) : classes.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" />
+            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" aria-hidden="true" />
             <p className="text-sm font-medium text-navy">No past classes yet</p>
             <p className="mt-1 text-sm text-muted">
               Completed classes and their recordings will appear here.
             </p>
+            <Link
+              href="/me/classes/upcoming"
+              className={buttonClassName({ variant: 'outline', size: 'sm' }) + ' mt-4 inline-flex'}
+            >
+              View upcoming classes
+            </Link>
           </div>
         ) : (
           <div className="space-y-4">
@@ -117,7 +124,7 @@ export default function MyPastClassesPage() {
                       </div>
                       <h2 className="text-lg font-semibold text-navy">{item.title}</h2>
                       <p className="flex items-center gap-1.5 text-sm text-muted">
-                        <CalendarDays className="h-4 w-4" />
+                        <CalendarDays className="h-4 w-4" aria-hidden="true" />
                         {formatDate(session.scheduledStartAt)}
                         {item.tutorDisplayName ? ` · ${item.tutorDisplayName}` : null}
                       </p>
@@ -129,7 +136,7 @@ export default function MyPastClassesPage() {
                           href={`/me/classes/recordings/${session.id}`}
                           className={buttonClassName({ variant: 'secondary', size: 'sm' })}
                         >
-                          <PlayCircle className="h-4 w-4" />
+                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
                           Watch recording
                         </Link>
                       ) : (
@@ -138,7 +145,7 @@ export default function MyPastClassesPage() {
                           disabled
                           className={buttonClassName({ variant: 'ghost', size: 'sm' }) + ' cursor-not-allowed opacity-50'}
                         >
-                          <PlayCircle className="h-4 w-4" />
+                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
                           Recording pending
                         </button>
                       )}

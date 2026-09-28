@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, ClipboardList } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   listMyReadingAssignments,
@@ -103,17 +104,14 @@ export function MyReadingAssignments({ className }: MyReadingAssignmentsProps) {
                 <p className="text-sm font-semibold text-navy">{kindLabel(item.kind)}</p>
                 {item.note ? <p className="mt-0.5 text-sm text-muted">{item.note}</p> : null}
                 {due ? (
-                  <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700">
+                  <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
                     <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" /> Due {due}
                   </p>
                 ) : null}
               </div>
-              <Link
-                href={`/reading/paper/${item.paperId}`}
-                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100"
-              >
-                Start
-              </Link>
+              <Button asChild size="sm" className="shrink-0">
+                <Link href={`/reading/paper/${item.paperId}`}>Start</Link>
+              </Button>
             </li>
           );
         })}

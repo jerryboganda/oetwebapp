@@ -217,7 +217,7 @@ export default function WritingBuddyPage() {
         {optedIn && !pair ? (
           <Card>
             <CardContent className="space-y-3 p-6 text-center">
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-violet-500" aria-hidden="true" />
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-500" aria-hidden="true" />
               <h2 className="text-lg font-bold text-navy">Looking for a buddy…</h2>
               <p className="text-sm text-navy/80">
                 {matchStatus === 'queued'
@@ -260,11 +260,11 @@ export default function WritingBuddyPage() {
                     {messages.map((m) => (
                       <article
                         key={m.id}
-                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ml-auto bg-primary text-white dark:bg-violet-700' : 'bg-surface text-navy'}`}
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ml-auto bg-primary text-white dark:bg-primary-700' : 'bg-surface text-navy'}`}
                       >
                         <p className="whitespace-pre-wrap">{m.bodyMarkdown}</p>
                         <time
-                          className={`mt-1 block text-[10px] uppercase tracking-wider ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
+                          className={`mt-1 block text-3xs uppercase tracking-wider ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
                           dateTime={m.sentAt}
                         >
                           {new Date(m.sentAt).toLocaleString()}

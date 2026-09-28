@@ -8,6 +8,7 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
 import { fetchFluencyTimeline } from '@/lib/api';
 
@@ -58,12 +59,12 @@ export default function FluencyTimelinePage() {
       <LearnerPageHero title="Fluency Timeline" description="Visualize your speaking pace, pauses, and filler words across the recording." />
 
       <MotionSection className="space-y-6 max-w-5xl mx-auto">
-        <div className="flex gap-3 items-end">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <label className="text-sm font-medium text-muted mb-1 block">Speaking Attempt ID</label>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter attempt ID..." value={attemptId} onChange={e => setAttemptId(e.target.value)} />
+            <label htmlFor="fluency-attempt-id" className="text-sm font-medium text-muted mb-1 block">Speaking Attempt ID</label>
+            <input id="fluency-attempt-id" className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Enter attempt ID..." value={attemptId} onChange={e => setAttemptId(e.target.value)} />
           </div>
-          <button onClick={() => load(attemptId)} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100">Analyze</button>
+          <Button onClick={() => load(attemptId)}>Analyze</Button>
         </div>
 
         {loading && !data && <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
@@ -72,10 +73,10 @@ export default function FluencyTimelinePage() {
           <>
             <LearnerSurfaceSectionHeader title="Overview Metrics" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{data.averageWordsPerMinute}</p><p className="text-xs text-muted">Avg WPM</p><p className="text-xs text-muted/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold">{data.totalFillerWords}</p><p className="text-xs text-muted">Filler Words</p><p className="text-xs text-muted/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold">{data.pauseCount}</p><p className="text-xs text-muted">Long Pauses</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted">Total Duration</p><p className="text-xs text-muted/70">{data.totalWords} words</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold text-navy">{data.averageWordsPerMinute}</p><p className="text-xs text-muted">Avg WPM</p><p className="text-xs text-muted/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold text-navy">{data.totalFillerWords}</p><p className="text-xs text-muted">Filler Words</p><p className="text-xs text-muted/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold text-navy">{data.pauseCount}</p><p className="text-xs text-muted">Long Pauses</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold text-navy">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted">Total Duration</p><p className="text-xs text-muted/70">{data.totalWords} words</p></Card></MotionItem>
             </div>
 
             <LearnerSurfaceSectionHeader title="Segment Timeline" />
@@ -85,7 +86,7 @@ export default function FluencyTimelinePage() {
                   <Card className="p-3 flex items-start gap-3">
                     <div className="flex-shrink-0 w-16 text-center">
                       <p className="text-xs font-mono text-muted">{seg.startTime.toFixed(1)}s</p>
-                      <Badge className={`mt-1 text-[10px] ${RATING_COLORS[seg.fluencyRating]}`}>{seg.fluencyRating}</Badge>
+                      <Badge className={`mt-1 text-3xs ${RATING_COLORS[seg.fluencyRating]}`}>{seg.fluencyRating}</Badge>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">{seg.text}</p>
@@ -96,7 +97,7 @@ export default function FluencyTimelinePage() {
                       </div>
                     </div>
                     <div className="flex-shrink-0 w-20">
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-2 rounded-full bg-border overflow-hidden">
                         <div className={`h-full rounded-full ${seg.fluencyRating === 'good' ? 'bg-success' : seg.fluencyRating === 'fair' ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.min(100, seg.wordsPerMinute / 2)}%` }} />
                       </div>
                     </div>

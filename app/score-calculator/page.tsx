@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Calculator, Building2, Globe, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
+import { ErrorState } from '@/components/ui/empty-error';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { getScoreEquivalencesData } from '@/lib/learner-data';
 import { analytics } from '@/lib/analytics';
@@ -18,20 +18,26 @@ export default function ScoreCalculatorPage() {
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
 
-  useEffect(() => {
-    analytics.track('content_view', { page: 'score-calculator' });
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     getScoreEquivalencesData()
       .then(setData)
       .catch(() => setError('Unable to load score equivalences.'))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    analytics.track('content_view', { page: 'score-calculator' });
+    load();
+  }, [load]);
+
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Score Cross-Reference Calculator"
         description="Compare your OET score to IELTS, PTE, and CEFR levels and check institution requirements."
-        icon={<Calculator className="w-7 h-7" />}
+        icon={Calculator}
       />
 
       {loading && (
@@ -41,7 +47,7 @@ export default function ScoreCalculatorPage() {
         </div>
       )}
 
-      {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
+      {error && <ErrorState title="Score equivalences unavailable" message={error} onRetry={load} />}
 
       {data && (
         <>
@@ -65,7 +71,7 @@ export default function ScoreCalculatorPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {data.equivalences.map((row) => (
-                    <MotionItem
+                    <tr
                       key={row.oetGrade}
                       className={`cursor-pointer transition-colors ${
                         highlight === row.oetGrade
@@ -79,7 +85,7 @@ export default function ScoreCalculatorPage() {
                       <td className="px-4 py-3 text-sm text-navy">{row.ielts}</td>
                       <td className="px-4 py-3 text-sm text-navy">{row.pte}</td>
                       <td className="px-4 py-3 text-sm text-navy">{row.cefr}</td>
-                    </MotionItem>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -97,7 +103,7 @@ export default function ScoreCalculatorPage() {
               {data.institutions.map((inst) => (
                 <MotionItem
                   key={`${inst.institution}-${inst.profession}`}
-                  className="rounded-xl border border-border p-4 bg-surface flex flex-col"
+                  className="flex flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm"
                 >
                   <h3 className="font-semibold text-navy text-sm">{inst.institution}</h3>
                   <p className="text-xs text-muted mt-1">{inst.country} &middot; {inst.profession}</p>
@@ -109,7 +115,7 @@ export default function ScoreCalculatorPage() {
                     className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
                     onClick={() => analytics.track('score_calculator_target_set', { institution: inst.institution, grade: inst.minimumOetGrade })}
                   >
-                    <Target className="w-3 h-3" /> Target this score
+                    <Target className="w-3 h-3" aria-hidden="true" /> Target this score
                   </Link>
                 </MotionItem>
               ))}

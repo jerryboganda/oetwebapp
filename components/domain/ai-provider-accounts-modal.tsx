@@ -209,7 +209,7 @@ export function AiProviderAccountsModal({ open, providerId, providerLabel, onClo
         ? (
           <div className="flex flex-col gap-1">
             <Badge variant={accountTestStatusVariant(a.lastTestStatus)}>{a.lastTestStatus}</Badge>
-            {a.lastTestedAt && <span className="text-[10px] text-muted">{new Date(a.lastTestedAt).toLocaleString()}</span>}
+            {a.lastTestedAt && <span className="text-3xs text-muted">{new Date(a.lastTestedAt).toLocaleString()}</span>}
           </div>
         )
         : <span className="text-xs text-muted">N/A</span>,

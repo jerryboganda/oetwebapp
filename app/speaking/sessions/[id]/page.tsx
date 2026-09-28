@@ -274,7 +274,7 @@ export default function SpeakingSessionRecordingPage() {
           aria-live={isWarning ? 'polite' : 'off'}
           className={cn(
             'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-base tabular-nums',
-            isWarning ? 'bg-danger/10 text-danger' : 'bg-muted text-foreground',
+            isWarning ? 'bg-danger/10 text-danger' : 'bg-background-light text-foreground',
           )}
         >
           <Activity className="h-4 w-4" aria-hidden />

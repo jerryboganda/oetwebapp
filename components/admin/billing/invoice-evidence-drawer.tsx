@@ -307,7 +307,7 @@ function EvidenceSection({ title, children }: { title: string; children: ReactNo
 function EvidenceField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-lg bg-admin-bg-subtle px-3 py-2">
-      <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{label}</dt>
+      <dt className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</dt>
       <dd className="mt-1 break-words text-sm font-medium text-admin-fg-strong">{children || 'Not recorded'}</dd>
     </div>
   );

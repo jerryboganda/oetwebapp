@@ -323,8 +323,8 @@ export function InterlocutorScriptEditor({
         <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">Lay-language triggers</h3>
         <p className="text-xs text-muted">
           Jargon terms the AI should prompt the candidate to explain in lay language (e.g.{' '}
-          <code className="rounded bg-background-light px-1 py-0.5 text-[10px]">NSAIDs</code>,{' '}
-          <code className="rounded bg-background-light px-1 py-0.5 text-[10px]">PRN</code>). Press
+          <code className="rounded bg-background-light px-1 py-0.5 text-3xs">NSAIDs</code>,{' '}
+          <code className="rounded bg-background-light px-1 py-0.5 text-3xs">PRN</code>). Press
           Enter or comma to add.
         </p>
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background-light p-2">

@@ -7,6 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Calendar, Clock, Video, Star, Plus, Trash2, Pencil, X, Link2, Unlink, Download, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import {
   type PrivateSpeakingCalendarStatus,
   fetchExpertPrivateSpeakingProfile,
@@ -44,19 +46,16 @@ type AvailabilityRule = {
 type ExpertTab = 'sessions' | 'availability';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+const SESSION_STATUS_VARIANTS: Record<string, BadgeProps['variant']> = {
+  Confirmed: 'info',
+  InProgress: 'warning',
+  Completed: 'muted',
+  Cancelled: 'danger',
+  NoShow: 'danger',
+};
+
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    Confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    InProgress: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-    Completed: 'bg-background-light text-muted',
-    Cancelled: 'bg-red-100 text-red-600',
-    NoShow: 'bg-red-100 text-red-600',
-  };
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] ?? 'bg-background-light text-muted'}`}>
-      {status}
-    </span>
-  );
+  return <Badge variant={SESSION_STATUS_VARIANTS[status] ?? 'muted'}>{status}</Badge>;
 }
 
 export default function ExpertPrivateSpeakingPage() {
@@ -393,7 +392,7 @@ export default function ExpertPrivateSpeakingPage() {
         />
         <InlineAlert variant="error">
           {error ?? 'Failed to load your private speaking data.'}
-          <button onClick={() => void loadData()} className="ml-2 underline text-sm">Try again</button>
+          <button type="button" onClick={() => void loadData()} className="ml-2 underline text-sm">Try again</button>
         </InlineAlert>
       </div>
     );
@@ -438,19 +437,19 @@ export default function ExpertPrivateSpeakingPage() {
       {error && (
         <InlineAlert variant="warning" className="mb-2">
           {error}
-          <button onClick={() => setError(null)} className="ml-2 underline text-sm">Dismiss</button>
+          <button type="button" onClick={() => setError(null)} className="ml-2 underline text-sm">Dismiss</button>
         </InlineAlert>
       )}
 
       {notice && (
         <InlineAlert variant="success" className="mb-2">
           {notice}
-          <button onClick={() => setNotice(null)} className="ml-2 underline text-sm">Dismiss</button>
+          <button type="button" onClick={() => setNotice(null)} className="ml-2 underline text-sm">Dismiss</button>
         </InlineAlert>
       )}
 
       {/* Profile summary */}
-      <div className="rounded-2xl border border-border bg-surface p-5">
+      <Card padding="none" className="p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-bold text-navy">{profile.displayName}</h3>
@@ -478,12 +477,12 @@ export default function ExpertPrivateSpeakingPage() {
             )}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
         {(['sessions', 'availability'] as ExpertTab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} type="button" onClick={() => setTab(t)} aria-pressed={tab === t}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
               tab === t ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-navy'
             }`}>
@@ -510,12 +509,12 @@ export default function ExpertPrivateSpeakingPage() {
                 const canMarkNoShow = slotEnded
                   && ['Confirmed', 'InProgress'].includes(session.status);
                 return (
-                  <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
+                  <Card key={session.id} padding="none" className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <StatusBadge status={session.status} />
-                          {isStartingSoon && <span className="text-xs text-amber-600 font-medium animate-pulse">Starting soon</span>}
+                          {isStartingSoon && <span className="text-xs text-warning font-medium animate-pulse">Starting soon</span>}
                         </div>
                         <p className="text-sm font-medium text-navy">
                           {start.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -528,33 +527,37 @@ export default function ExpertPrivateSpeakingPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {(session.status === 'Confirmed' || session.status === 'InProgress') && (
-                          <button onClick={() => handleStartSession(session)} disabled={startingSessionId === session.id}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                            <Video className="w-4 h-4" /> {startingSessionId === session.id ? 'Opening...' : 'Open LiveKit'}
-                          </button>
+                          <Button type="button" size="sm" onClick={() => handleStartSession(session)} disabled={startingSessionId === session.id}>
+                            <Video className="w-4 h-4" aria-hidden="true" /> {startingSessionId === session.id ? 'Opening...' : 'Open LiveKit'}
+                          </Button>
                         )}
-                        <button onClick={() => handleDownloadInvite(session.id)}
-                          className="flex items-center gap-1.5 px-3 py-2 border border-border text-muted hover:text-navy rounded-lg text-sm font-medium transition-colors">
-                          <Download className="w-4 h-4" /> Calendar
-                        </button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleDownloadInvite(session.id)}>
+                          <Download className="w-4 h-4" aria-hidden="true" /> Calendar
+                        </Button>
                         {canMarkNoShow && (
-                          <button
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleMarkNoShow(session)}
                             disabled={markingNoShowId === session.id}
-                            className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                            className="border-danger/30 text-danger hover:bg-danger/10"
                           >
-                            <UserX className="w-4 h-4" /> {markingNoShowId === session.id ? 'Marking…' : 'Mark learner no-show'}
-                          </button>
+                            <UserX className="w-4 h-4" aria-hidden="true" /> {markingNoShowId === session.id ? 'Marking…' : 'Mark learner no-show'}
+                          </Button>
                         )}
-                        <button
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => setCancelTarget(session)}
-                          className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                          className="border-danger/30 text-danger hover:bg-danger/10"
                         >
-                          <X className="w-4 h-4" /> Cancel
-                        </button>
+                          <X className="w-4 h-4" aria-hidden="true" /> Cancel
+                        </Button>
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
@@ -568,7 +571,7 @@ export default function ExpertPrivateSpeakingPage() {
               {pastSessions.map(session => {
                 const start = new Date(session.sessionStartUtc);
                 return (
-                  <div key={session.id} className="rounded-2xl border border-border bg-surface p-5">
+                  <Card key={session.id} padding="none" className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -588,7 +591,7 @@ export default function ExpertPrivateSpeakingPage() {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
@@ -607,21 +610,21 @@ export default function ExpertPrivateSpeakingPage() {
 
           <div className="space-y-2">
             {availability.map(rule => (
-              <div key={rule.id} className="rounded-2xl border border-border bg-surface p-4">
+              <Card key={rule.id} padding="none" className="p-4">
                 {editingRuleId === rule.id ? (
                   <div className="flex items-center gap-3 flex-wrap">
-                    <select value={editRule.dayOfWeek} onChange={e => setEditRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
+                    <select aria-label="Day of week" value={editRule.dayOfWeek} onChange={e => setEditRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
                       disabled={savingRule}
-                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface">
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20">
                       {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
                     </select>
-                    <input type="time" value={editRule.startTime} onChange={e => setEditRule(r => ({ ...r, startTime: e.target.value }))}
+                    <input type="time" aria-label="Start time" value={editRule.startTime} onChange={e => setEditRule(r => ({ ...r, startTime: e.target.value }))}
                       disabled={savingRule}
-                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     <span className="text-sm text-muted">to</span>
-                    <input type="time" value={editRule.endTime} onChange={e => setEditRule(r => ({ ...r, endTime: e.target.value }))}
+                    <input type="time" aria-label="End time" value={editRule.endTime} onChange={e => setEditRule(r => ({ ...r, endTime: e.target.value }))}
                       disabled={savingRule}
-                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     <label className="flex items-center gap-1.5 text-sm text-muted">
                       <input type="checkbox" checked={editRule.isActive} onChange={e => setEditRule(r => ({ ...r, isActive: e.target.checked }))}
                         disabled={savingRule}
@@ -646,44 +649,44 @@ export default function ExpertPrivateSpeakingPage() {
                       {!rule.isActive && <span className="text-xs text-muted ml-2 italic">(inactive)</span>}
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => startEditRule(rule)} className="text-muted hover:text-navy p-2.5 -m-1" aria-label="Edit rule">
-                        <Pencil className="w-4 h-4" />
+                      <button type="button" onClick={() => startEditRule(rule)} className="text-muted hover:text-navy p-2.5 -m-1" aria-label="Edit rule">
+                        <Pencil className="w-4 h-4" aria-hidden="true" />
                       </button>
-                      <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-2.5 -m-1" aria-label="Delete rule">
-                        <Trash2 className="w-4 h-4" />
+                      <button type="button" onClick={() => handleDeleteRule(rule.id)} className="text-danger/80 hover:text-danger p-2.5 -m-1" aria-label="Delete rule">
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
                 )}
-              </div>
+              </Card>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-border bg-surface p-5">
+          <Card padding="none" className="p-5">
             <h4 className="text-sm font-bold text-navy mb-3">Add New Rule</h4>
             <div className="flex items-center gap-3 flex-wrap">
-              <select value={newRule.dayOfWeek} onChange={e => setNewRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
-                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface">
+              <select aria-label="New rule day of week" value={newRule.dayOfWeek} onChange={e => setNewRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20">
                 {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
               </select>
-              <input type="time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
-                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+              <input type="time" aria-label="New rule start time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20" />
               <span className="text-sm text-muted">to</span>
-              <input type="time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
-                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+              <input type="time" aria-label="New rule end time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
+                className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/20" />
               <Button onClick={handleAddRule} size="sm">
-                <Plus className="w-4 h-4 mr-1" /> Add Rule
+                <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add Rule
               </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {/* ── Cancel Confirmation Dialog ────────────── */}
       {cancelTarget && (
         <div className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/40 backdrop-blur-sm">
-          <div className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-navy mb-2">Cancel Session</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-session-title" className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-xl">
+            <h3 id="cancel-session-title" className="text-lg font-bold text-navy mb-2">Cancel Session</h3>
             <p className="text-sm text-muted mb-4">
               Are you sure you want to cancel the session on{' '}
               <span className="font-medium text-navy">
@@ -692,32 +695,35 @@ export default function ExpertPrivateSpeakingPage() {
               </span>?
               This action cannot be undone.
             </p>
-            <label className="block text-sm font-medium text-muted mb-1">
+            <label htmlFor="cancel-session-reason" className="block text-sm font-medium text-muted mb-1">
               Reason (optional)
             </label>
             <textarea
+              id="cancel-session-reason"
               value={cancelReason}
               onChange={e => setCancelReason(e.target.value)}
               rows={2}
               maxLength={500}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy mb-4 resize-none"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy mb-4 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="e.g. Schedule conflict"
             />
             <div className="flex justify-end gap-2">
-              <button
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={() => { setCancelTarget(null); setCancelReason(''); }}
                 disabled={cancelling}
-                className="px-4 py-2 text-sm font-medium text-muted hover:text-navy transition-colors"
               >
                 Keep Session
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
                 onClick={handleCancelSession}
                 disabled={cancelling}
-                className="px-4 py-2 text-sm font-medium text-white bg-danger hover:bg-danger/90 disabled:opacity-50 rounded-lg transition-colors"
               >
                 {cancelling ? 'Cancelling…' : 'Confirm Cancel'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

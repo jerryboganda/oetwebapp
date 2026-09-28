@@ -190,14 +190,14 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
                               void archiveThread(thread.id);
                             }}
                             aria-label={`Confirm delete ${thread.title ?? 'Untitled conversation'}`}
-                            className="rounded bg-red-500 px-1.5 py-0.5 text-[11px] font-medium text-white hover:bg-red-600"
+                            className="rounded bg-red-500 px-1.5 py-0.5 text-2xs font-medium text-white hover:bg-red-600"
                           >
                             Delete
                           </button>
                           <button
                             onClick={() => setConfirmDeleteId(null)}
                             aria-label="Cancel delete"
-                            className="rounded px-1.5 py-0.5 text-[11px] hover:bg-background"
+                            className="rounded px-1.5 py-0.5 text-2xs hover:bg-background"
                           >
                             Keep
                           </button>

@@ -152,7 +152,7 @@ export function WeaknessNarrative({
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <span className="text-sm font-black text-navy">{t.tag}</span>
                           {t.subtest ? (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-muted">
+                            <span className="text-3xs font-black uppercase tracking-widest text-muted">
                               {t.subtest}
                             </span>
                           ) : null}

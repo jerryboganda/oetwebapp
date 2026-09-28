@@ -181,18 +181,18 @@ export default function AuditLogsPage() {
           <p className="truncate font-semibold text-admin-fg-strong">{log.actor}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-admin-fg-muted">{log.resource}</p>
         </div>
-        <span className="rounded-full bg-admin-bg-subtle px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
+        <span className="rounded-full bg-admin-bg-subtle px-3 py-1 text-2xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
           {new Date(log.timestamp).toLocaleDateString()}
         </span>
       </div>
 
       <div className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-sm">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Action</p>
+        <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Action</p>
         <p className="mt-1 font-medium text-admin-fg-strong">{log.action}</p>
       </div>
 
       <div className="rounded-admin bg-admin-bg-subtle px-3 py-2 text-sm">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Details</p>
+        <p className="text-2xs uppercase tracking-[0.12em] text-admin-fg-muted">Details</p>
         <p className="mt-1 line-clamp-3 text-admin-fg-muted">{log.details}</p>
       </div>
 

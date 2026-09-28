@@ -5,6 +5,11 @@ export type MotionSurface = 'route' | 'list' | 'section' | 'item' | 'overlay' | 
 
 type MotionPoint = readonly [number, number, number, number];
 
+/**
+ * Motion tokens for motion/react. The CSS side mirrors these exact values as
+ * --duration-{instant,fast,normal,slow,hero} and --ease-{standard,enter,exit}
+ * in app/globals.css — change both together.
+ */
 export const motionTokens = {
   duration: {
     instant: 0.12,

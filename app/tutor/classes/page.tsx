@@ -117,7 +117,7 @@ export default function TutorClassesPage() {
                 <th scope="col" className="px-4 py-3 font-semibold text-navy">Type</th>
                 <th scope="col" className="px-4 py-3 font-semibold text-navy">Status</th>
                 <th scope="col" className="px-4 py-3 font-semibold text-navy">Next session</th>
-                <th scope="col" className="px-4 py-3 font-semibold text-navy">Sessions</th>
+                <th scope="col" className="px-4 py-3 text-right font-semibold text-navy">Sessions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -153,7 +153,7 @@ export default function TutorClassesPage() {
                         ? new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(next))
                         : 'N/A'}
                     </td>
-                    <td className="px-4 py-3 text-muted">{item.sessions.length}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted">{item.sessions.length}</td>
                   </tr>
                 );
               })}

@@ -203,7 +203,7 @@ export function TutorCuePanel({
         <span
           className={cn(
             'rounded-md px-2 py-0.5 font-mono text-base tabular-nums',
-            isTimerWarning ? 'bg-rose-50 text-rose-700' : 'bg-muted text-foreground',
+            isTimerWarning ? 'bg-rose-50 text-rose-700' : 'bg-background-light text-foreground',
           )}
           aria-live="polite"
         >
@@ -242,7 +242,7 @@ export function TutorCuePanel({
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Opening response
             </h4>
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
+            <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
               {script.openingResponse}
             </p>
             <Button
@@ -313,7 +313,7 @@ export function TutorCuePanel({
               type="button"
               onClick={() => setHiddenOpen((v) => !v)}
               aria-expanded={hiddenOpen}
-              className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-left text-sm font-medium text-foreground hover-primary"
+              className="flex w-full items-center justify-between rounded-md border border-border bg-background-light px-3 py-2 text-left text-sm font-medium text-foreground hover-primary"
             >
               <span className="inline-flex items-center gap-2">
                 <EyeOff className="h-4 w-4 text-muted" aria-hidden />
@@ -337,7 +337,7 @@ export function TutorCuePanel({
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Closing cue
             </h4>
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
+            <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
               {script.closingCue || (
                 <span className="italic text-muted">No closing cue recorded.</span>
               )}

@@ -317,7 +317,7 @@ function GlobalProgressFooter({
     <Card className="bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Your grammar progress</p>
+          <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">Your grammar progress</p>
           <p className="mt-1 text-base font-bold text-navy">
             {overview.lessonsMastered} mastered ·{' '}
             {overview.lessonsCompleted} completed ·{' '}

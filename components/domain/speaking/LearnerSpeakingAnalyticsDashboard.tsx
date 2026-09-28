@@ -281,13 +281,13 @@ export function LearnerSpeakingAnalyticsDashboard({
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" fontSize={11} stroke="hsl(var(--muted))" />
-                <YAxis domain={[0, 6]} fontSize={11} stroke="hsl(var(--muted))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis dataKey="date" fontSize={11} stroke="var(--color-muted)" />
+                <YAxis domain={[0, 6]} fontSize={11} stroke="var(--color-muted)" />
                 <Tooltip
                   contentStyle={{
-                    background: 'var(--surface)',
-                    border: '1px solid hsl(var(--border))',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: 8,
                   }}
                 />
@@ -327,14 +327,14 @@ export function LearnerSpeakingAnalyticsDashboard({
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" domain={[0, 6]} fontSize={11} stroke="hsl(var(--muted))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis type="number" domain={[0, 6]} fontSize={11} stroke="var(--color-muted)" />
                 <YAxis
                   type="category"
                   dataKey="label"
                   width={150}
                   fontSize={11}
-                  stroke="hsl(var(--muted))"
+                  stroke="var(--color-muted)"
                 />
                 <Tooltip
                   formatter={((value: unknown) => [
@@ -342,14 +342,14 @@ export function LearnerSpeakingAnalyticsDashboard({
                     'Normalised score',
                   ]) as never}
                   contentStyle={{
-                    background: 'var(--surface)',
-                    border: '1px solid hsl(var(--border))',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: 8,
                   }}
                 />
                 <Bar
                   dataKey="normalized"
-                  fill="hsl(var(--primary))"
+                  fill="var(--color-primary)"
                   radius={[0, 6, 6, 0]}
                 />
               </BarChart>

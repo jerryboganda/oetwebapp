@@ -372,7 +372,7 @@ function QuestionRow({
   const requiredType = q.partCode.startsWith('B') || isPartC ? 'multiple_choice_3' : 'short_answer';
   const optionLetters = ['A', 'B', 'C'];
   return (
-    <li className="rounded-lg bg-muted p-3">
+    <li className="rounded-lg bg-background-light p-3">
       <div className="flex items-center gap-3 mb-2">
         <Badge variant="info">Q{q.number}</Badge>
         <Select

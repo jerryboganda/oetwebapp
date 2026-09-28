@@ -105,7 +105,7 @@ export default function RecallsHomePage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {tabs.map((t) => (
-              <Link key={t.href} href={t.href}>
+              <Link key={t.href} href={t.href} className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                 <motion.div
                   whileHover={{ scale: 1.01 }}
                   className="group flex h-full cursor-pointer items-start gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:shadow-md"
@@ -125,7 +125,7 @@ export default function RecallsHomePage() {
                     </div>
                     <p className="mt-1 text-sm text-muted">{t.description}</p>
                   </div>
-                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hoverable:translate-x-0.5" />
+                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hoverable:translate-x-0.5" aria-hidden="true" />
                 </motion.div>
               </Link>
             ))}

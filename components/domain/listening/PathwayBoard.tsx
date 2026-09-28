@@ -61,7 +61,7 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-muted">
+        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-2xs font-black uppercase tracking-[0.16em] text-muted">
           Stage {index + 1}
         </span>
         <StatusBadge status={stage.status} />
@@ -91,7 +91,7 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
 
   return (
     <li>
-      <Link href={stage.actionHref!} aria-label={`${actionVerb} ${meta.label}`} className="block">
+      <Link href={stage.actionHref!} aria-label={`${actionVerb} ${meta.label}`} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
         {body}
       </Link>
     </li>
@@ -128,7 +128,7 @@ function StatusBadge({ status }: { status: PathwayStageView['status'] }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-2 py-1 text-xs font-bold text-muted">
+    <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-2 py-1 text-xs font-bold text-muted ring-1 ring-border">
       <Lock className="h-3.5 w-3.5" aria-hidden /> Locked
     </span>
   );

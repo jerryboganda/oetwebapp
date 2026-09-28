@@ -433,7 +433,7 @@ export default function WritingPracticeSessionPage() {
                     <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </>
                 ) : null}
-                <span className="text-[11px] font-medium text-muted">
+                <span className="text-2xs font-medium text-muted">
                   {t('writing.practice.session.timing', {
                     reading: Math.round(windowSeconds / 60),
                     writing: Math.round(writingWindowSeconds / 60),

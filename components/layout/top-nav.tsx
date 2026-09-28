@@ -7,24 +7,22 @@ import { AuthContext } from '@/contexts/auth-context';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import { PLACEMENT_NAV_HREF, usePlacementAccess } from '@/hooks/use-placement-access';
 import type { UserRole } from '@/lib/types/auth';
-import { ChevronDown, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import { HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { GlobalSearch } from './global-search';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 import { getWorkspaceSettingsHref, mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
 import { LearnerStreakBadges } from './learner-streak-badges';
-import { UserAvatar } from '@/components/ui/user-avatar';
+import { ProfileMenu } from './profile-menu';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { TourLauncher } from '@/components/onboarding/tour-launcher';
-import { HelpCenterDrawer } from '@/components/onboarding/help-center-drawer';
-import { trackHelpCenterOpened } from '@/lib/onboarding/tour-events';
 
 export interface MobileMenuSection {
   label: string;
@@ -64,127 +62,6 @@ const ROLE_LABEL: Record<string, string> = {
   expert: 'Tutor',
   admin: 'Admin',
 };
-
-/** Avatar + name + role with a small account menu. */
-function ProfileMenu({
-  displayName,
-  avatarUrl,
-  email,
-  roleLabel,
-  settingsHref,
-  onSignOut,
-  workspaceRole,
-}: {
-  displayName: string;
-  avatarUrl?: string | null;
-  email: string;
-  roleLabel: string;
-  settingsHref: string;
-  onSignOut?: () => void;
-  workspaceRole?: UserRole;
-}) {
-  const [open, setOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        // The dashboard tour anchors on this attribute to show learners where
-        // to replay tours; help lives in this menu now, so the anchor moves
-        // here with it.
-        data-tour="learner-help-launcher"
-        onClick={() => setOpen((current) => !current)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={cn(
-          'flex items-center gap-2.5 rounded-full p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:rounded-xl lg:p-1.5 lg:pr-3',
-          HEADER_CHIP,
-          HEADER_CHIP_HOVER,
-        )}
-      >
-        <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-7 w-7 lg:h-9 lg:w-9" />
-        <span className="hidden min-w-0 text-left leading-tight xl:block">
-          <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
-          <span className="block text-[11px] text-muted">{roleLabel}</span>
-        </span>
-        <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted lg:block" aria-hidden="true" />
-      </button>
-
-      {open ? (
-        <div
-          role="menu"
-          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-xl"
-        >
-          <div className="border-b border-border px-2.5 pb-2 pt-1.5">
-            <p className="truncate text-[13px] font-bold text-navy">{displayName}</p>
-            {email ? <p className="truncate text-[11.5px] text-muted">{email}</p> : null}
-          </div>
-          <Link
-            href={settingsHref}
-            prefetch={false}
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="mt-1 flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-background-light"
-          >
-            <Settings className="h-4 w-4 text-muted" aria-hidden="true" />
-            Settings
-          </Link>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              setHelpOpen(true);
-              trackHelpCenterOpened({
-                role: workspaceRole,
-                route: typeof window !== 'undefined' ? window.location.pathname : undefined,
-              });
-            }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-background-light"
-            aria-haspopup="dialog"
-          >
-            <HelpCircle className="h-4 w-4 text-muted" aria-hidden="true" />
-            Help &amp; guided tours
-          </button>
-          {onSignOut ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onSignOut();
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-danger transition-colors hover:bg-danger/10"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              Sign out
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <HelpCenterDrawer open={helpOpen} onClose={() => setHelpOpen(false)} workspaceRole={workspaceRole} />
-    </div>
-  );
-}
 
 function matchesPathPrefix(pathname: string, prefix: string): boolean {
   const normalizedPrefix = prefix !== '/' && prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
@@ -432,7 +309,7 @@ export function TopNav({
                 <TourLauncher workspaceRole={workspaceRole} />
                 <ThemeToggle />
                 <NotificationCenter />
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-2xs font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
                   {initials}
                 </div>
               </>
@@ -471,7 +348,7 @@ export function TopNav({
                     <div className="space-y-4">
                       {visibleSectionedItems?.map((section) => (
                         <div key={section.label}>
-                          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
+                          <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
                           <ul className="flex flex-col gap-1">
                             {section.items.map((item, itemIndex) => {
                               const active = sectionedActiveHref === item.href;
@@ -505,7 +382,7 @@ export function TopNav({
                       ))}
 
                       <div className="border-t border-border/60 pt-4">
-                        <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
+                        <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={getWorkspaceSettingsHref(workspaceRole)}

@@ -23,6 +23,7 @@ import { ArrowRight, CheckCircle2, Headphones, Pencil, ShieldCheck, Timer, Volum
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { getListeningTestRulesPolicy, type ListeningTestRulesPolicyDto } from '@/lib/listening-api';
 
@@ -140,7 +141,7 @@ export default function ListeningTestRulesPage() {
           />
         </MotionItem>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Badge variant="muted">Static briefing · no data collected on this page</Badge>
           <Link
             href="/listening"
@@ -165,10 +166,10 @@ function RuleCard({
   points: string[];
   tone?: 'amber';
 }) {
-  const accent = tone === 'amber' ? 'text-amber-600' : 'text-primary';
+  const accent = tone === 'amber' ? 'text-warning' : 'text-primary';
   return (
     <MotionItem>
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <Card padding="lg">
         <div className="flex items-start gap-3">
           <Icon className={`h-5 w-5 shrink-0 ${accent}`} aria-hidden />
           <h2 className="text-lg font-semibold text-navy">{title}</h2>
@@ -181,7 +182,7 @@ function RuleCard({
             </li>
           ))}
         </ul>
-      </div>
+      </Card>
     </MotionItem>
   );
 }

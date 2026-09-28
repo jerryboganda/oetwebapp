@@ -5,6 +5,7 @@ import { BookOpen, Plus, RefreshCcw, TestTube, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { apiClient } from '@/lib/api';
 import type { WritingCanonRuleV2Dto } from '@/lib/writing/types';
 
@@ -138,22 +139,24 @@ export default function AdminWritingCanonPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-navy"><BookOpen className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Canon Rules</h1>
-          <p className="mt-1 text-sm text-muted">Dr Ahmed&apos;s rule library. Versioning is manual: bump <code>version</code> before publishing breaking changes.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
-          <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New rule</Button>
-        </div>
-      </header>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Writing Canon Rules"
+        description="Dr Ahmed's rule library. Versioning is manual: bump version before publishing breaking changes."
+        icon={<BookOpen className="h-5 w-5" />}
+        actions={
+          <>
+            <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
+            <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New rule</Button>
+          </>
+        }
+      />
 
-      {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
 
       <Card>
         <CardContent>
-          <h2 className="text-base font-bold text-navy"><TestTube className="mr-1 inline h-4 w-4 text-amber-600" aria-hidden="true" /> Test rule detection</h2>
+          <h2 className="text-base font-bold text-navy"><TestTube className="mr-1 inline h-4 w-4 text-admin-primary" aria-hidden="true" /> Test rule detection</h2>
           <p className="mt-1 text-xs text-muted">Paste a draft letter and pick a rule id. We&apos;ll show any violations the engine flags.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
@@ -170,12 +173,13 @@ export default function AdminWritingCanonPage() {
           <div className="mt-3 flex items-center justify-end gap-2">
             <Button onClick={() => void runTest()} loading={busy === 'test'} disabled={!testText || !testRuleId}>Run test</Button>
           </div>
-          {testResult ? <p role="status" className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">{testResult}</p> : null}
+          {testResult ? <p role="status" className="mt-2 rounded-admin border border-admin-success/30 bg-admin-success/10 p-2 text-xs text-emerald-800 dark:text-emerald-200">{testResult}</p> : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Canon rules">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
@@ -206,6 +210,7 @@ export default function AdminWritingCanonPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 

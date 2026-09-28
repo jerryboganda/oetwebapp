@@ -12,6 +12,8 @@ import {
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatMoney } from '@/lib/money';
 import { formatDate } from '@/lib/domain/datetime';
 import { BillingPortalLauncher } from '@/components/billing/BillingPortalLauncher';
@@ -65,7 +67,7 @@ export default function AccountBillingPage() {
         </div>
         <Button asChild variant="outline">
           <Link href="/billing">
-            Open full billing dashboard <ArrowRight className="ml-1 h-4 w-4" />
+            Open full billing dashboard <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </Button>
       </header>
@@ -77,12 +79,12 @@ export default function AccountBillingPage() {
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <Card padding="lg">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
-            <Wallet className="h-4 w-4" /> Current plan
+            <Wallet className="h-4 w-4" aria-hidden="true" /> Current plan
           </div>
           {loading ? (
-            <p className="mt-3 text-sm text-muted">Loading...</p>
+            <Skeleton className="mt-3 h-12 w-full" />
           ) : subscription ? (
             <>
               <p className="mt-2 text-lg font-semibold text-navy">{subscription.planName}</p>
@@ -105,14 +107,14 @@ export default function AccountBillingPage() {
               </Button>
             </>
           )}
-        </div>
+        </Card>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <Card padding="lg">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
-            <Receipt className="h-4 w-4" /> Wallet
+            <Receipt className="h-4 w-4" aria-hidden="true" /> Wallet
           </div>
           {loading ? (
-            <p className="mt-3 text-sm text-muted">Loading...</p>
+            <Skeleton className="mt-3 h-12 w-full" />
           ) : (
             <>
               <p className="mt-2 text-lg font-semibold text-navy">
@@ -123,17 +125,17 @@ export default function AccountBillingPage() {
               <p className="text-xs text-muted">Credits and refunds applied here first.</p>
             </>
           )}
-        </div>
+        </Card>
 
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <Card padding="lg">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
-            <CreditCard className="h-4 w-4" /> Payment method
+            <CreditCard className="h-4 w-4" aria-hidden="true" /> Payment method
           </div>
           <p className="mt-2 text-sm text-muted">Stripe stores your card details securely.</p>
           <BillingPortalLauncher variant="outline" className="mt-3">
             Update card
           </BillingPortalLauncher>
-        </div>
+        </Card>
       </section>
 
       <section>
@@ -145,22 +147,22 @@ export default function AccountBillingPage() {
         </div>
         <div className="mt-3 space-y-2">
           {loading ? (
-            <p className="text-sm text-muted">Loading invoices...</p>
+            <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
           ) : recentInvoices.length === 0 ? (
-            <p className="text-sm text-muted">No invoices yet.</p>
+            <p className="rounded-lg border border-dashed border-border bg-background-light px-4 py-6 text-center text-sm text-muted">No invoices yet.</p>
           ) : (
             recentInvoices.map((invoice) => (
               <div
                 key={invoice.invoiceId}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
               >
-                <div>
-                  <p className="font-medium text-navy">{invoice.number ?? invoice.invoiceId}</p>
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-navy">{invoice.number ?? invoice.invoiceId}</p>
                   <p className="text-xs text-muted">
                     {invoice.date ? formatDate(invoice.date) : '-'} - {invoice.status}
                   </p>
                 </div>
-                <p className="font-semibold text-navy">
+                <p className="shrink-0 font-semibold text-navy">
                   {formatMoney(invoice.amount, { currency: invoice.currency })}
                 </p>
               </div>
@@ -172,14 +174,14 @@ export default function AccountBillingPage() {
       <section className="grid gap-3 sm:grid-cols-2">
         <Link
           href="/account/billing/invoices"
-          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-background-light"
+          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <h3 className="font-semibold text-navy">All invoices</h3>
           <p className="mt-1 text-sm text-muted">Download PDFs or revisit receipts.</p>
         </Link>
         <Link
           href="/account/billing/payment-methods"
-          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-background-light"
+          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <h3 className="font-semibold text-navy">Payment methods</h3>
           <p className="mt-1 text-sm text-muted">Manage cards via Stripe Customer Portal.</p>

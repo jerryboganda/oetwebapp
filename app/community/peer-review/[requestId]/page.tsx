@@ -131,8 +131,8 @@ export default function PeerReviewDetailPage() {
     return (
       <LearnerDashboardShell pageTitle="Peer Review">
         <div className="space-y-4">
-          <Link href="/community/peer-review" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Back to Peer Reviews
+          <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
           </Link>
           <Card className="p-6 text-center">
             <p className="text-muted-foreground">{error ?? 'Review not found'}</p>
@@ -145,8 +145,8 @@ export default function PeerReviewDetailPage() {
   return (
     <LearnerDashboardShell pageTitle="Peer Review">
       <div className="space-y-6">
-        <Link href="/community/peer-review" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to Peer Reviews
+        <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
         </Link>
 
         <LearnerPageHero
@@ -196,7 +196,7 @@ export default function PeerReviewDetailPage() {
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
                   key={star}
-                  className={`w-5 h-5 ${star <= feedback.rating ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`}
+                  className={`w-5 h-5 ${star <= feedback.rating ? 'text-warning fill-warning' : 'text-muted-foreground'}`}
                 />
               ))}
               <span className="ml-2 text-sm font-medium">{feedback.rating}/5</span>
@@ -204,13 +204,13 @@ export default function PeerReviewDetailPage() {
             <p className="text-sm text-foreground whitespace-pre-wrap">{feedback.comments}</p>
             {feedback.strengthNotes && (
               <div>
-                <span className="text-xs font-medium text-green-700 dark:text-green-400">Strengths</span>
+                <span className="text-xs font-medium text-success">Strengths</span>
                 <p className="text-sm text-muted-foreground">{feedback.strengthNotes}</p>
               </div>
             )}
             {feedback.improvementNotes && (
               <div>
-                <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Areas for Improvement</span>
+                <span className="text-xs font-medium text-warning">Areas for Improvement</span>
                 <p className="text-sm text-muted-foreground">{feedback.improvementNotes}</p>
               </div>
             )}
@@ -223,17 +223,19 @@ export default function PeerReviewDetailPage() {
             <h3 className="font-semibold text-sm">Submit Your Feedback</h3>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">Rating</label>
+              <p className="block text-sm font-medium text-navy">Rating</p>
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
                     type="button"
                     onClick={() => setRating(star)}
-                    className="p-0.5 transition-transform hoverable:scale-110 active:scale-95 motion-reduce:active:scale-100"
+                    aria-label={`${star} star${star === 1 ? '' : 's'}`}
+                    aria-pressed={rating === star}
+                    className="flex h-11 w-11 items-center justify-center rounded-lg transition-transform hoverable:scale-110 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Star
-                      className={`w-6 h-6 ${star <= rating ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`}
+                      className={`w-6 h-6 ${star <= rating ? 'text-warning fill-warning' : 'text-muted-foreground'}`}
                     />
                   </button>
                 ))}
@@ -242,10 +244,11 @@ export default function PeerReviewDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">
+              <label htmlFor="peer-feedback-text" className="block text-sm font-medium text-navy">
                 Your Feedback
               </label>
               <textarea
+                id="peer-feedback-text"
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
                 placeholder="Provide constructive feedback on this submission..."
@@ -258,7 +261,7 @@ export default function PeerReviewDetailPage() {
               onClick={handleSubmitFeedback}
               disabled={submitting || !feedbackText.trim() || rating < 1}
             >
-              <Send className="w-4 h-4 mr-1" />
+              <Send className="w-4 h-4" aria-hidden="true" />
               {submitting ? 'Submitting...' : 'Submit Feedback'}
             </Button>
           </Card>
@@ -267,8 +270,8 @@ export default function PeerReviewDetailPage() {
         {/* Success message after feedback */}
         {submitSuccess && (
           <Card className="p-5">
-            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-              <CheckCircle className="w-5 h-5" />
+            <div role="status" className="flex items-center gap-2 text-success">
+              <CheckCircle className="w-5 h-5" aria-hidden="true" />
               <span className="font-medium">Feedback submitted successfully!</span>
             </div>
             <p className="text-sm text-muted-foreground mt-2">
@@ -281,7 +284,7 @@ export default function PeerReviewDetailPage() {
         {isSubmitter && !feedback && request.status !== 'completed' && (
           <Card className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="w-5 h-5" />
+              <Clock className="w-5 h-5" aria-hidden="true" />
               <span className="text-sm">
                 {request.status === 'open'
                   ? 'Waiting for a peer to claim your review...'

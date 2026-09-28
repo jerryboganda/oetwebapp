@@ -477,16 +477,16 @@ export default function AdminNotificationTemplatesPage() {
           <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-admin-fg-strong">Name</label>
-                <Input
+                <label htmlFor="template-field-1" className="text-sm font-medium text-admin-fg-strong">Name</label>
+                <Input id="template-field-1"
                   placeholder="Template name"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-admin-fg-strong">Event Key</label>
-                <Input
+                <label htmlFor="template-field-2" className="text-sm font-medium text-admin-fg-strong">Event Key</label>
+                <Input id="template-field-2"
                   placeholder="e.g. user.welcome, exam.reminder"
                   value={form.eventKey}
                   onChange={(e) => setForm((f) => ({ ...f, eventKey: e.target.value }))}
@@ -510,8 +510,8 @@ export default function AdminNotificationTemplatesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-admin-fg-strong">Locale</label>
-                <Input
+                <label htmlFor="template-field-3" className="text-sm font-medium text-admin-fg-strong">Locale</label>
+                <Input id="template-field-3"
                   placeholder="e.g. en, ar, fr"
                   value={form.locale}
                   onChange={(e) => setForm((f) => ({ ...f, locale: e.target.value }))}
@@ -520,8 +520,8 @@ export default function AdminNotificationTemplatesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">Subject Template</label>
-              <Input
+              <label htmlFor="template-field-4" className="text-sm font-medium text-admin-fg-strong">Subject Template</label>
+              <Input id="template-field-4"
                 placeholder="Welcome to OET, {{firstName}}!"
                 value={form.subjectTemplate}
                 onChange={(e) => setForm((f) => ({ ...f, subjectTemplate: e.target.value }))}
@@ -529,8 +529,8 @@ export default function AdminNotificationTemplatesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">Body Template</label>
-              <textarea
+              <label htmlFor="template-field-5" className="text-sm font-medium text-admin-fg-strong">Body Template</label>
+              <textarea id="template-field-5"
                 className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 rows={4}
                 placeholder="Hi {{firstName}}, your exam is in {{daysUntilExam}} days…"
@@ -540,10 +540,10 @@ export default function AdminNotificationTemplatesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">
+              <label htmlFor="template-field-6" className="text-sm font-medium text-admin-fg-strong">
                 Text Template (plain text fallback)
               </label>
-              <textarea
+              <textarea id="template-field-6"
                 className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 font-mono text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 rows={3}
                 placeholder="Plain text version of the notification…"
@@ -553,10 +553,10 @@ export default function AdminNotificationTemplatesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-admin-fg-strong">
+              <label htmlFor="template-field-7" className="text-sm font-medium text-admin-fg-strong">
                 HTML Template (email only)
               </label>
-              <textarea
+              <textarea id="template-field-7"
                 className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 font-mono text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 rows={5}
                 placeholder="<html><body>{{bodyContent}}</body></html>"
@@ -599,8 +599,8 @@ export default function AdminNotificationTemplatesPage() {
                 <div className="grid grid-cols-2 gap-2">
                   {previewTemplate.variables.map((variable) => (
                     <div key={variable} className="space-y-1">
-                      <label className="text-xs text-admin-fg-muted">{variable}</label>
-                      <Input
+                      <label htmlFor={`template-var-${variable}`} className="text-xs text-admin-fg-muted">{variable}</label>
+                      <Input id={`template-var-${variable}`}
                         value={previewVariables[variable] ?? ''}
                         onChange={(e) =>
                           setPreviewVariables((prev) => ({
@@ -638,7 +638,7 @@ export default function AdminNotificationTemplatesPage() {
                     HTML Preview
                   </p>
                   <div
-                    className="rounded-admin border border-admin-border bg-white p-3 text-sm"
+                    className="rounded-admin border border-admin-border bg-white p-3 text-sm text-slate-900"
                     dangerouslySetInnerHTML={{
                       __html: sanitizeBodyHtml(renderPreview(previewTemplate.htmlTemplate)),
                     }}

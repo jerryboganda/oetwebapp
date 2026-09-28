@@ -6,6 +6,7 @@ import { notFound, useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Headphones, ListChecks } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -166,7 +167,7 @@ export default function ListeningPartPracticePage() {
               renderPaper={(paper) => {
                 const itemCount = countForPart(paper, part);
                 return (
-                  <article className="flex h-full flex-col rounded-2xl border border-violet-100 bg-surface p-5 shadow-sm dark:border-violet-900/40">
+                  <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
                     <h3 className="text-base font-bold text-navy">
                       {paper.title} · Part {part}
                     </h3>
@@ -181,14 +182,13 @@ export default function ListeningPartPracticePage() {
                       </span>
                     </p>
                     <div className="mt-auto pt-4">
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
                         onClick={() => handleStart(paper)}
                         disabled={startingPaperId === paper.id}
-                        className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
                       >
                         {startingPaperId === paper.id ? 'Starting...' : `Start Part ${part} practice`}
-                      </button>
+                      </Button>
                     </div>
                   </article>
                 );

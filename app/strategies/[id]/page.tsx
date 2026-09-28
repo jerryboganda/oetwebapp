@@ -109,7 +109,7 @@ function LoadingState() {
   return (
     <LearnerDashboardShell>
       <div className="space-y-5">
-        <Skeleton className="h-36 rounded-[24px]" />
+        <Skeleton className="h-36 rounded-surface" />
         <Skeleton className="h-96 rounded-2xl" />
       </div>
     </LearnerDashboardShell>
@@ -308,10 +308,12 @@ export default function StrategyGuidePage() {
             variant="warning"
             title="Upgrade required"
             action={
-              <Link href="/subscriptions" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-                View plans
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
+              <Button asChild>
+                <Link href="/subscriptions">
+                  View plans
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
             }
           >
             This guide is attached to package content that is not included in your current access.

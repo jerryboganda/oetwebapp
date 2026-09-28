@@ -143,7 +143,7 @@ export default function LiveClassDetailPage() {
         {error ? (
           <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
             <span>{error}</span>
-            <button type="button" onClick={() => setError(null)} className="rounded-full p-1 hover:bg-background-light"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setError(null)} aria-label="Dismiss" className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><X className="h-4 w-4" aria-hidden="true" /></button>
           </InlineAlert>
         ) : null}
 

@@ -10,6 +10,8 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Card } from '@/components/ui/card';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
 import { fetchRecallsAudio, fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
@@ -177,8 +179,8 @@ function VocabQuizContent() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
-          <ArrowLeft className="w-5 h-5" />
+        <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero title="Vocabulary Quiz" description="Test your medical vocabulary knowledge" icon={HelpCircle} />
       </div>
@@ -190,10 +192,12 @@ function VocabQuizContent() {
           {QUIZ_FORMATS.map(fmt => (
             <button
               key={fmt.id}
+              type="button"
+              aria-pressed={format === fmt.id}
               onClick={() => setFormat(fmt.id)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`min-h-9 rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 format === fmt.id
-                  ? 'bg-primary text-white dark:bg-violet-700'
+                  ? 'bg-primary text-white dark:bg-primary-700'
                   : 'border border-border bg-background-light text-navy hover:border-primary/30'
               }`}
             >
@@ -239,15 +243,15 @@ function VocabQuizContent() {
               </div>
             )}
             <div className="flex flex-wrap gap-3 justify-center">
-              <Link href="/vocabulary" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
-                Back to Vocabulary
-              </Link>
-              <Link href="/vocabulary/quiz/history" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
-                See history
-              </Link>
-              <button onClick={() => loadQuiz(format)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-                <RotateCcw className="w-4 h-4" /> New Quiz
-              </button>
+              <Button variant="outline" asChild>
+                <Link href="/vocabulary">Back to Vocabulary</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/vocabulary/quiz/history">See history</Link>
+              </Button>
+              <Button onClick={() => loadQuiz(format)}>
+                <RotateCcw className="w-4 h-4" aria-hidden="true" /> New Quiz
+              </Button>
             </div>
           </Card>
         </MotionSection>
@@ -282,7 +286,7 @@ function VocabQuizContent() {
             {q.format === 'audio_recognition' && (
               <button
                 onClick={() => void playAudio(q.termId)}
-                className="mt-4 inline-flex items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Play audio again"
               >
                 <Volume2 className="h-4 w-4" /> Play audio
@@ -304,7 +308,7 @@ function VocabQuizContent() {
                     key={idx}
                     onClick={() => handleSelect(idx)}
                     disabled={revealed}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${cls}`}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cls}`}
                   >
                     <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold" aria-hidden="true">
                       {idx + 1}
@@ -332,13 +336,9 @@ function VocabQuizContent() {
                 autoFocus
               />
               {!revealed && (
-                <button
-                  onClick={handleTextSubmit}
-                  disabled={!textAnswer.trim()}
-                  className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
-                >
+                <Button onClick={handleTextSubmit} disabled={!textAnswer.trim()}>
                   Submit answer
-                </button>
+                </Button>
               )}
               {revealed && (
                 <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
@@ -352,21 +352,18 @@ function VocabQuizContent() {
 
           {revealed && (
             <MotionSection className="mt-4 flex justify-end">
-              <button
-                onClick={nextQuestion}
-                disabled={submitting}
-                className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
-                autoFocus
-              >
+              <Button onClick={nextQuestion} disabled={submitting} autoFocus>
                 {current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question →'}
-              </button>
+              </Button>
             </MotionSection>
           )}
         </div>
       ) : !premiumBlock ? (
-        <div className="text-center py-12 text-muted/60">
-          No quiz questions available for this format. Try another format or add more words to your vocabulary list first.
-        </div>
+        <EmptyState
+          icon={<HelpCircle className="h-7 w-7" aria-hidden="true" />}
+          title="No quiz questions available for this format"
+          description="Try another format or add more words to your vocabulary list first."
+        />
       ) : null}
     </LearnerDashboardShell>
   );

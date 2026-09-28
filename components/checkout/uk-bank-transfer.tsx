@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { ChevronDown, Globe2, Landmark, MapPin, ShieldCheck, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CopyField } from './copy-field';
@@ -157,13 +158,12 @@ export function UkBankTransfer({ uploadHref }: UkBankTransferProps) {
           </p>
 
           {uploadHref ? (
-            <Link
-              href={uploadHref}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-primary/90"
-            >
-              <Upload className="h-4 w-4" />
-              I&apos;ve transferred — upload my receipt
-            </Link>
+            <Button asChild fullWidth className="mt-3 font-bold">
+              <Link href={uploadHref}>
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                I&apos;ve transferred — upload my receipt
+              </Link>
+            </Button>
           ) : null}
         </div>
       ) : null}

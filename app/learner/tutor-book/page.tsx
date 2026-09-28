@@ -11,6 +11,8 @@ import {
   type TutorBookUpdate,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { buttonClassName } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Tab = 'reader' | 'audio' | 'updates';
 
@@ -48,7 +50,7 @@ export default function TutorBookPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-background p-12">
+      <div className="min-h-screen bg-background p-4 sm:p-12">
         <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
           <h1 className="text-xl font-bold text-navy">Sign in to read The Tutor Book</h1>
           <p className="mt-2 text-sm text-muted">This module is available only to buyers with an active enrolment.</p>
@@ -59,16 +61,16 @@ export default function TutorBookPage() {
 
   if (forbidden) {
     return (
-      <div className="min-h-screen bg-background p-12">
+      <div className="min-h-screen bg-background p-4 sm:p-12">
         <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
-          <BookOpen className="mx-auto h-12 w-12 text-muted opacity-50" />
+          <BookOpen className="mx-auto h-12 w-12 text-muted opacity-50" aria-hidden="true" />
           <h1 className="mt-4 text-xl font-bold text-navy">The Tutor Book is locked</h1>
           <p className="mt-2 text-sm text-muted">
-            Purchase The Tutor Book (£45) or the £32 add-on alongside an eligible course to unlock the reader, audio scripts and updates.
+            Purchase The Tutor Book, or the discounted add-on alongside an eligible course, to unlock the reader, audio scripts and updates.
           </p>
           <a
             href="/marketplace/packages/tutor-book"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white dark:bg-violet-700"
+            className={buttonClassName({ className: 'mt-6' })}
           >
             View The Tutor Book
           </a>
@@ -79,35 +81,35 @@ export default function TutorBookPage() {
 
   return (
     <div className="min-h-screen bg-background text-navy">
-      <header className="border-b border-border bg-gradient-to-r from-oet-navy to-oet-teal px-6 py-8 text-white">
+      <header className="border-b border-border bg-gradient-to-r from-oet-navy to-oet-teal px-4 py-8 text-white sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">OET 2026 · Reader</p>
-            <h1 className="mt-1 text-3xl font-bold">The Tutor Book: First Edition 2026</h1>
+            <h1 className="mt-1 text-2xl font-bold sm:text-3xl">The Tutor Book: First Edition 2026</h1>
             <p className="mt-1 text-sm text-white/75">Personalised PDF, audio scripts and live updates.</p>
           </div>
           <a
             href={tutorBookDownloadUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-bold text-oet-navy transition-colors hover:bg-gold-dark"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-bold text-oet-navy transition-colors hover:bg-gold-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            <Download className="h-4 w-4" /> Download my copy
+            <Download className="h-4 w-4" aria-hidden="true" /> Download my copy
           </a>
         </div>
       </header>
 
       <nav className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-6xl gap-1 px-6">
+        <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 sm:px-6">
           <TabButton active={tab === 'reader'} onClick={() => setTab('reader')} icon={<BookOpen className="h-4 w-4" />} label="Reader" />
           <TabButton active={tab === 'audio'} onClick={() => setTab('audio')} icon={<Headphones className="h-4 w-4" />} label={`Audio Scripts (${audio.length})`} />
           <TabButton active={tab === 'updates'} onClick={() => setTab('updates')} icon={<Megaphone className="h-4 w-4" />} label={`Updates (${updates.length})`} />
         </div>
       </nav>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         {loading ? (
-          <div className="h-96 animate-pulse rounded-xl bg-surface" />
+          <Skeleton className="h-96 rounded-xl" />
         ) : tab === 'reader' ? (
           <ReaderTab buyerEmail={user.email ?? ''} buyerName={(user as { name?: string }).name ?? ''} whatsAppAccess={whatsAppAccess} />
         ) : tab === 'audio' ? (
@@ -125,8 +127,9 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-        active ? 'border-gold text-oet-navy' : 'border-transparent text-muted hover:text-navy'
+      aria-pressed={active}
+      className={`inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
+        active ? 'border-gold text-navy' : 'border-transparent text-muted hover:text-navy'
       }`}
     >
       {icon} {label}
@@ -172,9 +175,9 @@ function ReaderTab({
           href={whatsAppAccess.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-navy hover:bg-background-light"
+          className={buttonClassName({ variant: 'outline', className: 'bg-surface' })}
         >
-          <ExternalLink className="h-4 w-4" />
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
           Access and updates through WhatsApp: +{whatsAppAccess.number}
         </a>
       )}
@@ -196,7 +199,7 @@ function AudioTab({ audio }: { audio: TutorBookAudioScript[] }) {
         <li key={`${script.chapter}-${i}`} className="rounded-2xl border border-border bg-surface p-5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted">Chapter {script.chapter}</p>
+              <p className="text-3xs uppercase tracking-wider text-muted">Chapter {script.chapter}</p>
               <h3 className="text-base font-bold">{script.title}</h3>
             </div>
             {script.transcriptUrl && (
@@ -229,7 +232,7 @@ function UpdatesTab({ updates }: { updates: TutorBookUpdate[] }) {
             <time className="text-xs text-muted">{new Date(update.publishedAt).toLocaleDateString()}</time>
           </header>
           <p className="mt-2 whitespace-pre-line text-sm text-navy/90">{update.bodyMarkdown}</p>
-          <p className="mt-2 text-[10px] uppercase tracking-wider text-muted">Audience: {update.audience}</p>
+          <p className="mt-2 text-3xs uppercase tracking-wider text-muted">Audience: {update.audience}</p>
         </li>
       ))}
     </ul>

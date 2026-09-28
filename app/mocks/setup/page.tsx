@@ -450,7 +450,7 @@ export default function MockSetup() {
                         </p>
                       </div>
                       {exhausted ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-danger">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 text-3xs font-black uppercase tracking-widest text-danger">
                           <Lock className="h-3 w-3" /> Exhausted
                         </span>
                       ) : null}
@@ -555,7 +555,7 @@ export default function MockSetup() {
                         } ${disabled ? 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent' : ''}`}
                       >
                         <div className="mb-3 flex items-center justify-between">
-                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted'}`}>
+                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted'}`}>
                             <Icon className="h-5 w-5" />
                           </span>
                           {isSelected ? <Check className="h-5 w-5 text-primary" /> : null}
@@ -682,17 +682,17 @@ export default function MockSetup() {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {bundle.releasePolicy ? (
-                          <span className="rounded-md bg-warning/10 px-2 py-1 text-[11px] font-black uppercase tracking-widest text-warning">
+                          <span className="rounded-md bg-warning/10 px-2 py-1 text-2xs font-black uppercase tracking-widest text-warning">
                             {bundle.releasePolicy.replace(/_/g, ' ')}
                           </span>
                         ) : null}
                         {bundle.sourceStatus ? (
-                          <span className="rounded-md bg-background-light px-2 py-1 text-[11px] font-black uppercase tracking-widest text-muted">
+                          <span className="rounded-md bg-background-light px-2 py-1 text-2xs font-black uppercase tracking-widest text-muted">
                             {bundle.sourceStatus.replace(/_/g, ' ')}
                           </span>
                         ) : null}
                         {bundle.sections.map((section) => (
-                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 text-[11px] font-black uppercase tracking-widest text-muted">
+                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 text-2xs font-black uppercase tracking-widest text-muted">
                             {section.subtest} / {section.timeLimitMinutes}m
                           </span>
                         ))}
@@ -742,7 +742,7 @@ export default function MockSetup() {
                     ['Review after submit', modePolicy.reviewAfterSubmission ? 'Released' : 'Hidden'],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-xl bg-surface px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted">{label}</p>
+                      <p className="text-3xs font-black uppercase tracking-widest text-muted">{label}</p>
                       <p className="mt-1 text-sm font-bold text-navy">{value}</p>
                     </div>
                   ))}
@@ -805,7 +805,7 @@ export default function MockSetup() {
                   <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
                   <p className="mt-1 text-xs text-muted">Use the official timing for each section automatically.</p>
                   {mode === 'exam' ? (
-                    <p className="mt-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-danger">
+                    <p className="mt-2 flex items-center gap-1 text-3xs font-black uppercase tracking-widest text-danger">
                       <Info className="h-3 w-3" /> Required in exam mode
                     </p>
                   ) : null}
@@ -844,7 +844,7 @@ export default function MockSetup() {
                       <div key={stage.id} className="rounded-xl bg-surface p-3">
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-sm font-bold text-navy">{stage.label}</p>
-                          <span className="shrink-0 rounded-full bg-background-light px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-muted">
+                          <span className="shrink-0 rounded-full bg-background-light px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-muted">
                             {stage.duration}
                           </span>
                         </div>
@@ -887,7 +887,7 @@ export default function MockSetup() {
                 description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />
-              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-warning">
+              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 text-3xs font-black uppercase tracking-widest text-warning">
                 {availableCredits} credits available
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -909,7 +909,7 @@ export default function MockSetup() {
                     >
                       <p className="text-sm font-bold text-navy">{option.label}</p>
                       <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
-                      <p className="mt-3 text-[11px] font-black uppercase tracking-widest text-muted">
+                      <p className="mt-3 text-2xs font-black uppercase tracking-widest text-muted">
                         {option.cost} credit{option.cost === 1 ? '' : 's'}
                       </p>
                     </button>

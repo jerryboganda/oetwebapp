@@ -149,7 +149,7 @@ export default function ScoringQualityPage() {
                         <XAxis dataKey="criterion" fontSize={12} />
                         <YAxis domain={[0, 6]} />
                         <Tooltip />
-                        <Bar dataKey="mean" fill="#6366f1" name="Mean Score" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="mean" fill="#7c3aed" name="Mean Score" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
@@ -178,7 +178,7 @@ export default function ScoringQualityPage() {
                         <XAxis dataKey="date" tickFormatter={(v: string) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} fontSize={11} />
                         <YAxis domain={[0, 6]} />
                         <Tooltip labelFormatter={(v) => new Date(String(v)).toLocaleDateString()} />
-                        <Line type="monotone" dataKey="averageScore" stroke="#6366f1" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="averageScore" stroke="#7c3aed" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </CardContent>
