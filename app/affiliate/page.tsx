@@ -8,6 +8,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { apiClient, isApiError } from '@/lib/api';
 
 interface AffiliateStats {
   affiliateCode: string;
@@ -44,16 +45,12 @@ export default function AffiliatePortalPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/backend/v1/affiliates/me');
-      if (res.status === 404) {
+      setStats(await apiClient.get<AffiliateStats>('/v1/affiliates/me'));
+    } catch (err: any) {
+      if (isApiError(err) && err.status === 404) {
         setError('No affiliate record found. Contact partnerships@oet to apply.');
         return;
       }
-      if (!res.ok) {
-        throw new Error(`Failed to load (${res.status})`);
-      }
-      setStats(await res.json());
-    } catch (err: any) {
       setError(err?.message ?? 'Failed to load affiliate stats.');
     }
   }, []);
