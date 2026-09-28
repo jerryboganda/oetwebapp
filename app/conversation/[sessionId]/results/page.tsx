@@ -309,18 +309,17 @@ export default function ConversationResultsPage() {
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-4 py-6">
-          <Link href="/conversation"
-            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-            <RotateCcw className="h-4 w-4" /> Practice again
-          </Link>
-          <Link href="/review"
-            className="rounded-xl bg-background-light px-6 py-2.5 font-semibold text-navy transition-colors hover:bg-border">
-            Open Review
-          </Link>
-          <Link href="/speaking"
-            className="rounded-xl bg-background-light px-6 py-2.5 font-semibold text-navy transition-colors hover:bg-border">
-            Back to Speaking
-          </Link>
+          <Button asChild>
+            <Link href="/conversation">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Practice again
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/review">Open Review</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/speaking">Back to Speaking</Link>
+          </Button>
         </div>
       </div>
     </LearnerDashboardShell>
