@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -19,7 +20,7 @@ public sealed class SponsorBillingReadModelTests : IAsyncDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<LearnerDbContext> _options;
-    private readonly FixedClock _clock = new(DateTimeOffset.Parse("2026-05-09T12:00:00Z"));
+    private readonly FixedTimeProvider _clock = new(DateTimeOffset.Parse("2026-05-09T12:00:00Z"));
 
     public SponsorBillingReadModelTests()
     {
@@ -248,10 +249,5 @@ public sealed class SponsorBillingReadModelTests : IAsyncDisposable
             null => Array.Empty<SponsorInvoice>(),
             _ => throw new InvalidOperationException($"Unexpected invoices payload type: {raw.GetType().FullName}")
         };
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

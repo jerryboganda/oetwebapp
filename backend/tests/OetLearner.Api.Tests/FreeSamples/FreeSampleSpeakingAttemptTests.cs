@@ -9,6 +9,7 @@ using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.FreeSamples;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.FreeSamples;
 
@@ -259,18 +260,5 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         Assert.Equal(inFlight, resumed);
         Assert.Single(_db.FreeSampleClaims);
         Assert.Equal(inFlight, (await _db.FreeSampleUses.SingleAsync()).ResourceId);
-    }
-
-    private sealed class TestHostEnvironment(string contentRootPath)
-        : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
-    {
-        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
-        public Microsoft.Extensions.FileProviders.IFileProvider WebRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
-        public string WebRootPath { get; set; } = string.Empty;
-        public string EnvironmentName { get; set; } = "Development";
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; }
-            = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

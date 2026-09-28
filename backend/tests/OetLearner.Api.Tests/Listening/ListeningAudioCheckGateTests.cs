@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -26,12 +27,6 @@ namespace OetLearner.Api.Tests.Listening;
 /// </summary>
 public class ListeningAudioCheckGateTests
 {
-    // Frozen clock so the TTL boundary is deterministic.
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
     // Use a date far enough in the future that the 24-h audio-check TTL never
     // expires relative to the real DateTimeOffset.UtcNow used by
     // ListeningLearnerService.StartRelationalAttemptAsync.
@@ -129,7 +124,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedIntroAttempt(db, ListeningAttemptMode.Exam);
         SeedProfile(db, audioCheckPassedAt: null);
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -143,7 +138,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedIntroAttempt(db, ListeningAttemptMode.Exam);
         // No LearnerListeningProfile row at all — fail closed.
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -158,7 +153,7 @@ public class ListeningAudioCheckGateTests
         SeedIntroAttempt(db, ListeningAttemptMode.Exam);
         // Passed just past the TTL boundary → expired.
         SeedProfile(db, audioCheckPassedAt: Now.AddMilliseconds(-(ListeningSessionService.AudioCheckTtlMs + 1)));
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -172,7 +167,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedIntroAttempt(db, ListeningAttemptMode.Exam);
         SeedProfile(db, audioCheckPassedAt: Now.AddHours(-1));
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -190,7 +185,7 @@ public class ListeningAudioCheckGateTests
         SeedIntroAttempt(db, ListeningAttemptMode.Exam);
         // Passed exactly TTL ago — still valid (>= boundary).
         SeedProfile(db, audioCheckPassedAt: Now.AddMilliseconds(-ListeningSessionService.AudioCheckTtlMs));
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -204,7 +199,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedIntroAttempt(db, ListeningAttemptMode.Home);
         SeedProfile(db, audioCheckPassedAt: null);
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -245,7 +240,7 @@ public class ListeningAudioCheckGateTests
         SeedPaperRow(db, ContentEntitlementService.FreeSampleTag);
         // No tech-readiness snapshot AND no sound-check profile.
         SeedIntroAttempt(db, ListeningAttemptMode.Exam, withTechReadiness: false);
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -260,7 +255,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedPaperRow(db, "access:paid");
         SeedIntroAttempt(db, ListeningAttemptMode.Exam, withTechReadiness: false);
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var noReadiness = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
         Assert.Equal("rejected", noReadiness.Outcome);
@@ -269,7 +264,7 @@ public class ListeningAudioCheckGateTests
         await using var db2 = NewDb();
         SeedPaperRow(db2, "access:paid");
         SeedIntroAttempt(db2, ListeningAttemptMode.Exam);
-        var svc2 = NewSessionService(db2, new FixedClock(Now));
+        var svc2 = NewSessionService(db2, new FixedTimeProvider(Now));
 
         var noSoundCheck = await svc2.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
         Assert.Equal("rejected", noSoundCheck.Outcome);
@@ -288,7 +283,7 @@ public class ListeningAudioCheckGateTests
         await using var db = NewDb();
         SeedIntroAttempt(db, mode);
         SeedProfile(db, audioCheckPassedAt: null);
-        var svc = NewSessionService(db, new FixedClock(Now));
+        var svc = NewSessionService(db, new FixedTimeProvider(Now));
 
         var result = await svc.AdvanceAsync("att-1", UserId, AdvanceToFirstStrict(), CancellationToken.None);
 
@@ -301,17 +296,6 @@ public class ListeningAudioCheckGateTests
     // ─────────────────────────────────────────────────────────────────────
     // StartAttemptAsync — exam-mode start gate
     // ─────────────────────────────────────────────────────────────────────
-
-    private sealed class AllowAllContentEntitlementService : IContentEntitlementService
-    {
-        public Task<ContentEntitlementResult> AllowAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.FromResult(new ContentEntitlementResult(true, "test", "premium", null));
-
-        public Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal) => false;
-    }
 
     /// <summary>Seed a published relational Listening paper (+ owning user) with
     /// a primary audio asset so an exam-mode start can clear the audio-asset

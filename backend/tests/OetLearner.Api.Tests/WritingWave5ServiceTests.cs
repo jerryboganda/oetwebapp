@@ -6,6 +6,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
 using OetLearner.Api.Services.Writing.Events;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -357,13 +358,6 @@ public class WritingWave5ServiceTests
             }
             return new WritingSubmissionGradeOutcome(submissionId, gradeId, 32, "B", false);
         }
-    }
-
-    private sealed class NoopWritingEventBus : IWritingEventBus
-    {
-        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
-            where TEvent : WritingEvent
-            => Task.CompletedTask;
     }
 
     private sealed class FixedClock : TimeProvider

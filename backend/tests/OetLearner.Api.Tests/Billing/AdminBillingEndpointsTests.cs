@@ -434,19 +434,6 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
         return client;
     }
 
-    private sealed class DevAuthEnv : IDisposable
-    {
-        private const string Key = "Auth__UseDevelopmentAuth";
-        private readonly string? _previous;
-        private DevAuthEnv()
-        {
-            _previous = Environment.GetEnvironmentVariable(Key);
-            Environment.SetEnvironmentVariable(Key, "true");
-        }
-        public static DevAuthEnv Enable() => new();
-        public void Dispose() => Environment.SetEnvironmentVariable(Key, _previous);
-    }
-
     private sealed record AdminProductView(
         Guid Id,
         string Code,

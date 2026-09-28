@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant.Indexing;
 using OetLearner.Api.Services.Companion;
 using Xunit;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -235,15 +236,5 @@ public sealed class CompanionExtractionBudgetTests : IAsyncDisposable
         }
 
         await db.SaveChangesAsync();
-    }
-
-    /// <summary>SQLite has no pgvector, so the vector path must never be reached.</summary>
-    private sealed class UnusedEmbeddings : IEmbeddingService
-    {
-        public Task<float[]> EmbedAsync(string text, CancellationToken ct) =>
-            throw new InvalidOperationException("vector path must not run on SQLite");
-
-        public Task<List<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct) =>
-            throw new InvalidOperationException("vector path must not run on SQLite");
     }
 }

@@ -4,6 +4,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -20,17 +21,6 @@ namespace OetLearner.Api.Tests.Listening;
 /// </summary>
 public class ListeningAttemptEventLoggingTests
 {
-    private sealed class AllowAllContentEntitlementService : IContentEntitlementService
-    {
-        public Task<ContentEntitlementResult> AllowAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.FromResult(new ContentEntitlementResult(true, "test", "premium", null));
-
-        public Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal) => false;
-    }
-
     private static (LearnerDbContext db, ListeningLearnerService svc) Build()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()

@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -139,7 +140,7 @@ public class EmailLaneAndMailboxTests
             "unsubscribed via email",
             "auth@oetwithdrhesham.co.uk",
             now);
-        var service = new EmailDeliveryMailboxService(db, mailbox, new FixedClock(now));
+        var service = new EmailDeliveryMailboxService(db, mailbox, new FixedTimeProvider(now));
 
         var result = await service.UnblockAsync("admin-1", "Admin", "blocked@example.test", CancellationToken.None);
 
@@ -201,17 +202,12 @@ public class EmailLaneAndMailboxTests
             mobilePushDispatcher: null!,
             hubContext: null!,
             platformLinks: null!,
-            timeProvider: new FixedClock(now),
+            timeProvider: new FixedTimeProvider(now),
             webPushOptions: Options.Create(new WebPushOptions()),
             runtimeSettingsProvider: new TestRuntimeSettingsProvider(settings),
             notificationProofOptions: Options.Create(new NotificationProofHarnessOptions()),
             environment: null!,
             logger: NullLogger<NotificationService>.Instance);
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class FakeMailbox : IBrevoTransactionalMailbox

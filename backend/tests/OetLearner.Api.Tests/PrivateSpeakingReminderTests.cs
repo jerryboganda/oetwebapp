@@ -7,6 +7,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -213,16 +214,5 @@ public sealed class PrivateSpeakingReminderTests
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);
-    }
-
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    private sealed class ThrowingHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("HTTP client should not be used without a calendar connection.");
     }
 }

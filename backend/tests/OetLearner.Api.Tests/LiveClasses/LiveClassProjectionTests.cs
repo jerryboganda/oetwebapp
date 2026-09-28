@@ -6,6 +6,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.LiveClasses;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.LiveClasses;
 
@@ -307,42 +308,4 @@ public sealed class LiveClassProjectionTests
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .Select(p => p.Name)
             .ToArray();
-
-    private sealed class TestFileStorage : IFileStorage
-    {
-        public Task<long> WriteAsync(string key, Stream source, CancellationToken ct) => Task.FromResult(0L);
-        public Task<Stream> OpenReadAsync(string key, CancellationToken ct) => Task.FromResult<Stream>(new MemoryStream());
-        public Task<Stream> OpenWriteAsync(string key, CancellationToken ct) => Task.FromResult<Stream>(new MemoryStream());
-        public Task<bool> ExistsAsync(string key, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return Task.FromResult(true);
-        }
-
-        public Task<bool> DeleteAsync(string key, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return Task.FromResult(true);
-        }
-
-        public Task<long> LengthAsync(string key, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return Task.FromResult(0L);
-        }
-
-        public Task MoveAsync(string sourceKey, string destKey, bool overwrite, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
-        }
-
-        public Task<int> DeletePrefixAsync(string prefix, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return Task.FromResult(0);
-        }
-        public string? TryResolveLocalPath(string key) => null;
-        public Uri? ResolveReadUrl(string key, TimeSpan ttl) => new($"/test-media/{Uri.EscapeDataString(key)}", UriKind.Relative);
-    }
 }

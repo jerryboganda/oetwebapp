@@ -7,6 +7,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -90,7 +91,7 @@ public sealed class PrivateSpeakingRescheduleTests
         Assert.Equal(0, stripe.AdHocCallCount);
     }
 
-    // ── SAME-DAY penalty tier ───────────────────────────────────────────
+    // ── SAME-DAY reschedule is free ──────────────────────────────────────
 
     [Fact]
     public async Task Reschedule_SameCalendarDay_IsFreeAndConfirmed()
@@ -158,112 +159,6 @@ public sealed class PrivateSpeakingRescheduleTests
         var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
         Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
         Assert.Equal(0, stripe.AdHocCallCount);
-    }
-
-    // ── Webhook: penalty paid → finalize reschedule ─────────────────────
-
-    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
-    public async Task ConfirmBookingPayment_PenaltyReplacement_CancelsOriginal()
-    {
-        await using var db = CreateDb();
-        var stripe = new FakeStripeService();
-        var service = CreateService(db, stripe);
-
-        SeedTutorWithMondayAvailability(db);
-        SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 0);
-        SeedLearnerUser(db);
-        var original = SeedConfirmedBooking(db, Now.AddHours(2));
-        await db.SaveChangesAsync();
-
-        var result = await service.RescheduleBookingAsync(
-            original.Id, "learner-1", NewSlotUtc, "UTC", null, NewKey(), CancellationToken.None);
-        Assert.True(result.Success, result.Error);
-
-        var replacement = await db.PrivateSpeakingBookings.FindAsync(result.BookingId);
-
-        var confirmed = await service.ConfirmBookingPaymentAsync(
-            replacement!.StripeCheckoutSessionId!, "pi_x", CancellationToken.None);
-
-        Assert.True(confirmed);
-
-        var savedReplacement = await db.PrivateSpeakingBookings.FindAsync(replacement.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedReplacement!.Status);
-        Assert.Equal(PrivateSpeakingPaymentStatus.Succeeded, savedReplacement.PaymentStatus);
-
-        var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Cancelled, savedOriginal!.Status);
-        Assert.Equal("rescheduled", savedOriginal.CancellationReason);
-    }
-
-    // ── Webhook: checkout expired → abort reschedule ────────────────────
-
-    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
-    public async Task CheckoutExpired_PenaltyReplacement_RevertsReschedule()
-    {
-        await using var db = CreateDb();
-        var stripe = new FakeStripeService();
-        var service = CreateService(db, stripe);
-
-        SeedTutorWithMondayAvailability(db);
-        SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 0);
-        SeedLearnerUser(db);
-        var original = SeedConfirmedBooking(db, Now.AddHours(2));
-        await db.SaveChangesAsync();
-
-        var result = await service.RescheduleBookingAsync(
-            original.Id, "learner-1", NewSlotUtc, "UTC", null, NewKey(), CancellationToken.None);
-        Assert.True(result.Success, result.Error);
-
-        var replacement = await db.PrivateSpeakingBookings.FindAsync(result.BookingId);
-
-        await service.HandleCheckoutExpiredAsync(replacement!.StripeCheckoutSessionId!, CancellationToken.None);
-
-        var savedReplacement = await db.PrivateSpeakingBookings.FindAsync(replacement.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Expired, savedReplacement!.Status);
-
-        // Original is restored to a standalone Confirmed booking (slot kept).
-        var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
-        Assert.Null(savedOriginal.RescheduledToBookingId);
-    }
-
-    // ── Background sweep safety net: expired penalty reservation reverts too ──
-
-    [Fact(Skip = "The PDF policy removed the legacy same-day penalty payment workflow.")]
-    public async Task ExpireStaleReservations_PenaltyReplacement_RevertsAndNeutralizesEntitlement()
-    {
-        await using var db = CreateDb();
-        var stripe = new FakeStripeService();
-        var service = CreateService(db, stripe);
-
-        SeedTutorWithMondayAvailability(db);
-        SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 0);
-        SeedLearnerUser(db);
-        var original = SeedConfirmedBooking(db, Now.AddHours(2)); // same-day → penalty path
-        await db.SaveChangesAsync();
-
-        var result = await service.RescheduleBookingAsync(
-            original.Id, "learner-1", NewSlotUtc, "UTC", null, NewKey(), CancellationToken.None);
-        Assert.True(result.Success, result.Error);
-
-        // Simulate the Stripe webhook never arriving: force the reservation stale so the
-        // background sweep (not the webhook) is what expires the penalty replacement.
-        var replacement = await db.PrivateSpeakingBookings.FindAsync(result.BookingId);
-        replacement!.ReservationExpiresAt = Now.AddMinutes(-1);
-        await db.SaveChangesAsync();
-
-        await service.ExpireStaleReservationsAsync(CancellationToken.None);
-
-        // Replacement expired AND its inherited entitlement neutralized (no phantom credit).
-        var savedReplacement = await db.PrivateSpeakingBookings.FindAsync(replacement.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Expired, savedReplacement!.Status);
-        Assert.False(savedReplacement.EntitlementConsumed);
-        Assert.Null(savedReplacement.EntitlementSubscriptionId);
-
-        // Original restored to a standalone Confirmed booking (link cleared) — not stranded.
-        var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
-        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
-        Assert.Null(savedOriginal.RescheduledToBookingId);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
@@ -409,18 +304,6 @@ public sealed class PrivateSpeakingRescheduleTests
             platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);
-    }
-
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    // No calendar connection is ever seeded, so this factory must never be called.
-    private sealed class ThrowingHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("HTTP client should not be used without a calendar connection.");
     }
 
     private sealed class FakeStripeService : IStripeService

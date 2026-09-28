@@ -11,6 +11,7 @@ using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Rulebook;
 using Xunit;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -299,7 +300,7 @@ public sealed class ListeningExtractionOperationTests : IAsyncDisposable
             new DirectAiCallRecorder(
                 _provider.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<DirectAiCallRecorder>.Instance),
-            new FixedClock(Now),
+            new FixedTimeProvider(Now),
             NullLogger<ListeningPartBCExtractionService>.Instance);
 
     private const string SixAnswers =
@@ -380,10 +381,5 @@ public sealed class ListeningExtractionOperationTests : IAsyncDisposable
 
         public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
             => Task.FromResult<string?>("test-platform-key");
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

@@ -2,12 +2,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Asr;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
 public sealed class ConversationRealtimeElevenLabsLiveSmokeTests
 {
-    [Fact]
+    [RequiresEnvFact("ELEVENLABS_REALTIME_STT_LIVE_SMOKE")]
     public async Task ConnectivitySmoke_StartsAndCompletesRealtimeSession_WhenExplicitlyEnabled()
     {
         if (!string.Equals(Environment.GetEnvironmentVariable("ELEVENLABS_REALTIME_STT_LIVE_SMOKE"), "true", StringComparison.OrdinalIgnoreCase))

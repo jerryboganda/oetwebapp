@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
@@ -113,9 +114,4 @@ public sealed class PrivateSpeakingConfigDefaultsTests
             platformLinks: null!,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 06, 06, 12, 0, 0, TimeSpan.Zero)),
             logger: NullLogger<PrivateSpeakingService>.Instance);
-
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
 }
