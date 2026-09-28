@@ -217,6 +217,7 @@ export function validateQuestionPayload(
       if (type === 'MultipleChoiceFlexible' && (optionCount < 2 || optionCount > MCQ_LETTERS.length)) {
         errors.push(`Flexible MCQ must have between 2 and ${MCQ_LETTERS.length} options.`);
       }
+      errors.push(...validateMcqOptions(options.value));
       const correctVal = correct.value;
       if (typeof correctVal !== 'string') {
         errors.push('MCQ CorrectAnswerJson must be a single string letter.');

@@ -6,12 +6,10 @@ import {
   apiRequest,
   asArray,
   asRecord,
-  getHeaders,
   isApiError,
   isRetryable,
   maybe,
   normalizeBillingCode,
-  resolveApiUploadUrl,
   resolveApiUrl,
   resolveBrowserApiResourceUrl,
   toNullableString,
@@ -32,7 +30,6 @@ import {
   scoreToGrade as domainScoreToGrade,
   toExamFamilyCode,
 } from './domain/format';
-import { fetchWithTimeout } from './network/fetch-with-timeout';
 import type { CurrentUser } from './types/auth';
 import type {
   ExamFamilyCode,
@@ -221,25 +218,6 @@ export const apiClient = {
     return apiRequest<T>(path, { ...init, method: 'POST', body }, { json: false });
   },
 };
-
-async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
-  const response = await fetchWithTimeout(resolveApiUploadUrl(pathOrUrl), {
-    method: 'PUT',
-    headers: await getHeaders(pathOrUrl, { 'Content-Type': blob.type || 'audio/webm' }, { json: false }),
-    body: blob,
-  }, 90_000);
-
-  if (!response.ok) {
-    let message = `Upload failed: ${response.status}`;
-    try {
-      const error = await response.json();
-      message = error.message ?? error.title ?? message;
-    } catch (err) {
-      console.error('[API] uploadBinary: failed to parse error response:', err);
-    }
-    throw new Error(message);
-  }
-}
 
 // ═══════════════════ RULEBOOK / GROUNDED AI API ═══════════════════
 
