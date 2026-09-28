@@ -120,7 +120,7 @@ export default function StudyPlanDriftPage() {
                     <MotionItem key={s.subtestCode}>
                       <Card className="p-4">
                         <h4 className="font-medium capitalize text-sm">{s.subtestCode}</h4>
-                        <div className="h-2 rounded-full bg-muted mt-2 overflow-hidden">
+                        <div className="h-2 rounded-full bg-border mt-2 overflow-hidden">
                           <div className="h-full rounded-full bg-primary" style={{ width: `${s.completionRate}%` }} />
                         </div>
                         <div className="flex justify-between mt-1 text-xs text-muted">

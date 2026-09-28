@@ -209,7 +209,7 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
             : state === 'in-progress'
               ? 'bg-amber-100 text-amber-600'
               : state === 'locked'
-                ? 'bg-muted text-disabled'
+                ? 'bg-background-light text-disabled'
                 : 'bg-background-light text-muted/60';
         const Icon = SUBTEST_ICON[subtest];
         const label = `${SUBTEST_COLOR[subtest].label}: ${active ? (state ?? 'not started') : 'not included'}`;

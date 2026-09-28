@@ -97,7 +97,7 @@ export default function FluencyTimelinePage() {
                       </div>
                     </div>
                     <div className="flex-shrink-0 w-20">
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-2 rounded-full bg-border overflow-hidden">
                         <div className={`h-full rounded-full ${seg.fluencyRating === 'good' ? 'bg-success' : seg.fluencyRating === 'fair' ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.min(100, seg.wordsPerMinute / 2)}%` }} />
                       </div>
                     </div>

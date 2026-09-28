@@ -90,8 +90,8 @@ export function ContentScopePanel({
       <div className="mb-2 text-sm font-semibold text-admin-fg-strong">Content access scope</div>
       <p className="mb-3 text-xs text-muted">
         Controls which paid Listening / Reading / Writing / Speaking papers this plan unlocks via
-        <code className="mx-1 rounded bg-muted px-1 py-0.5 text-2xs">ContentEntitlementService</code>.
-        Free papers (tagged <code className="mx-1 rounded bg-muted px-1 py-0.5 text-2xs">access:free</code>) are accessible regardless.
+        <code className="mx-1 rounded bg-background-light px-1 py-0.5 text-2xs">ContentEntitlementService</code>.
+        Free papers (tagged <code className="mx-1 rounded bg-background-light px-1 py-0.5 text-2xs">access:free</code>) are accessible regardless.
       </p>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Select

@@ -373,7 +373,7 @@ export function VoiceNoteRecorder({
 
   if (collapsed) {
     return (
-      <details className="rounded-md border border-border bg-surface p-2 text-xs open:bg-muted">
+      <details className="rounded-md border border-border bg-surface p-2 text-xs open:bg-background-light">
         <summary className="cursor-pointer select-none text-xs font-semibold text-navy">
           <span className="inline-flex items-center gap-1">
             <Play className="h-3 w-3" aria-hidden="true" /> Voice note

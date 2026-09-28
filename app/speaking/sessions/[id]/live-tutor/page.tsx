@@ -251,7 +251,7 @@ export default function SpeakingSessionLiveTutorPage() {
               onEnd={() => void handleEnd()}
             />
           ) : (
-            <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
+            <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-background-light">
               <span className="inline-flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 {consentAccepted ? 'Starting the LiveKit recording...' : 'Waiting for consent...'}

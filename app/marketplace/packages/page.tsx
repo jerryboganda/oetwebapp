@@ -175,7 +175,7 @@ export default function PackagesPage() {
                         ) : (
                           <Badge
                             className={`mb-3 self-start text-3xs ${
-                              PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-muted'
+                              PACKAGE_TYPE_COLORS[pkg.packageType] ?? 'bg-background-light'
                             }`}
                           >
                             {PACKAGE_TYPE_LABELS[pkg.packageType] ?? pkg.packageType}
