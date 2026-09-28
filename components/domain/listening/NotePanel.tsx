@@ -171,9 +171,9 @@ export function NotePanel({
             type="button"
             onClick={onClose}
             aria-label="Close notes panel"
-            className="rounded-md p-1 text-muted hover:bg-background-light hover:text-navy"
+            className="rounded-md p-1 text-muted hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
 
@@ -241,12 +241,12 @@ export function NotePanel({
                       onClick={() => void handleDelete(note.id)}
                       disabled={deletingId === note.id}
                       aria-label="Delete note"
-                      className="rounded p-1 text-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 disabled:opacity-50"
+                      className="rounded p-1 text-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                     >
                       {deletingId === note.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                       ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       )}
                     </button>
                   </div>
