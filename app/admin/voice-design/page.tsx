@@ -423,7 +423,7 @@ export default function AdminVoiceDesignPage() {
       {/* Global Voice Indicator */}
       <div className="flex items-center gap-2 rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-2.5">
         <Lock className="h-4 w-4 text-[var(--admin-primary)]" />
-        <span className="text-xs font-bold text-admin-text-muted">ElevenLabs Voice:</span>
+        <span className="text-xs font-bold text-admin-fg-muted">ElevenLabs Voice:</span>
         <Badge variant="info" size="sm">{elevenSettings.voiceId || 'Not configured'}</Badge>
       </div>
 
@@ -440,7 +440,7 @@ export default function AdminVoiceDesignPage() {
             >
               <div className="space-y-4 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-admin-text-muted">Voices fetched live from your ElevenLabs account.</p>
+                  <p className="text-xs text-admin-fg-muted">Voices fetched live from your ElevenLabs account.</p>
                   <Button variant="secondary" size="sm" loading={probing} onClick={handleFetchVoices}>
                     <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                     Fetch Voices
@@ -452,12 +452,12 @@ export default function AdminVoiceDesignPage() {
                     {voices.map((voice) => (
                       <div
                         key={voice.voiceId}
-                        className={`relative rounded-xl border p-3 transition-colors ${elevenSettings.voiceId === voice.voiceId ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
+                        className={`relative rounded-xl border p-3 transition-colors ${elevenSettings.voiceId === voice.voiceId ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border bg-admin-bg-subtle hover:border-admin-border/80'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-admin-text">{voice.name}</p>
-                            <p className="mt-0.5 truncate text-xs text-admin-text-muted">{voice.voiceId}</p>
+                            <p className="truncate text-sm font-bold text-admin-fg-strong">{voice.name}</p>
+                            <p className="mt-0.5 truncate text-xs text-admin-fg-muted">{voice.voiceId}</p>
                           </div>
                           {playingVoiceId === voice.voiceId && (
                             <div className="ml-2 flex items-center gap-0.5">
@@ -501,7 +501,7 @@ export default function AdminVoiceDesignPage() {
                 )}
 
                 {!voices && !probing && (
-                  <p className="py-8 text-center text-sm text-admin-text-muted">
+                  <p className="py-8 text-center text-sm text-admin-fg-muted">
                     Click &quot;Fetch Voices&quot; to load your ElevenLabs voices. Selecting one sets the default voice — remember to Save below.
                   </p>
                 )}
@@ -523,16 +523,16 @@ export default function AdminVoiceDesignPage() {
               className="overflow-hidden"
             >
               <div className="space-y-4 p-4">
-                <p className="text-xs text-admin-text-muted">
-                  Hear your selected voice (<span className="font-bold text-admin-text">{elevenSettings.voiceId || 'not set'}</span>) speak realistic OET clinical lines. Add a custom line to test specific words — e.g. drug names like &ldquo;Amlodipine&rdquo; — then press Generate. Each clip has full playback controls (replay, seek, volume) and an optional star rating to compare voices.
+                <p className="text-xs text-admin-fg-muted">
+                  Hear your selected voice (<span className="font-bold text-admin-fg-strong">{elevenSettings.voiceId || 'not set'}</span>) speak realistic OET clinical lines. Add a custom line to test specific words — e.g. drug names like &ldquo;Amlodipine&rdquo; — then press Generate. Each clip has full playback controls (replay, seek, volume) and an optional star rating to compare voices.
                 </p>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-admin-text-muted">Custom Sample (optional)</label>
-                  <textarea
+                  <label htmlFor="voice-field-1" className="text-xs font-bold text-admin-fg-muted">Custom Sample (optional)</label>
+                  <textarea id="voice-field-1"
                     value={customSampleText}
                     onChange={(e) => setCustomSampleText(e.target.value)}
                     placeholder="Type a custom sentence to test (added to the OET samples)…"
-                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                    className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle p-3 text-sm text-admin-fg-strong placeholder:text-admin-fg-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     rows={2}
                   />
                 </div>
@@ -548,7 +548,7 @@ export default function AdminVoiceDesignPage() {
                     Generate Samples
                   </Button>
                   {generatingSamples && (
-                    <span className="text-xs font-bold text-admin-text-muted">
+                    <span className="text-xs font-bold text-admin-fg-muted">
                       Progress: {sampleProgress}/{OET_SAMPLES.length + (customSampleText.trim() ? 1 : 0)}
                     </span>
                   )}
@@ -557,15 +557,15 @@ export default function AdminVoiceDesignPage() {
                 {samples.length > 0 && (
                   <div className="space-y-3">
                     {samples.map((sample) => (
-                      <div key={sample.id} className="rounded-xl border border-admin-border bg-admin-surface-raised p-3">
-                        <p className="mb-2 text-xs text-admin-text">{sample.text}</p>
+                      <div key={sample.id} className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3">
+                        <p className="mb-2 text-xs text-admin-fg-strong">{sample.text}</p>
                         {sample.loading ? (
                           <div className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-primary)]" />
-                            <span className="text-xs text-admin-text-muted">Generating…</span>
+                            <span className="text-xs text-admin-fg-muted">Generating…</span>
                           </div>
                         ) : sample.error ? (
-                          <span className="text-xs text-red-400">{sample.error}</span>
+                          <span className="text-xs text-red-600 dark:text-red-400">{sample.error}</span>
                         ) : sample.audioUrl ? (
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                             {/* Native player: replay, pause, seek, volume, download — keyboard + screen-reader accessible. */}
@@ -591,7 +591,7 @@ export default function AdminVoiceDesignPage() {
                                   onClick={() => handleRateSample(sample.id, star)}
                                   className="p-0.5"
                                 >
-                                  <Star className={`h-4 w-4 ${star <= sample.rating ? 'fill-amber-400 text-amber-400' : 'text-admin-text-muted/30'}`} />
+                                  <Star className={`h-4 w-4 ${star <= sample.rating ? 'fill-amber-400 text-amber-400' : 'text-admin-fg-muted/30'}`} />
                                 </button>
                               ))}
                             </div>
@@ -627,70 +627,70 @@ export default function AdminVoiceDesignPage() {
                     {elevenSettings.dictionaryId && <Badge variant="info" size="sm">PLS linked</Badge>}
                   </div>
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-bold text-admin-text-muted">ElevenLabs API Key</span>
+                    <span className="text-xs font-bold text-admin-fg-muted">ElevenLabs API Key</span>
                     <input
                       type="password"
                       value={elevenSettings.apiKey}
                       onChange={(event) => updateElevenSettings('apiKey', event.target.value)}
                       placeholder={elevenSettings.apiKeyPresent ? 'Saved. Enter a new key to rotate.' : 'Paste API key'}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                      className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong placeholder:text-admin-fg-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-bold text-admin-text-muted">ElevenLabs API Base URL</span>
+                    <span className="text-xs font-bold text-admin-fg-muted">ElevenLabs API Base URL</span>
                     <input
                       type="url"
                       value={elevenSettings.baseUrl}
                       onChange={(event) => updateElevenSettings('baseUrl', event.target.value)}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                      className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">Default Voice ID</span>
+                      <span className="text-xs font-bold text-admin-fg-muted">Default Voice ID</span>
                       <input
                         type="text"
                         value={elevenSettings.voiceId}
                         onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                        className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
-                      <p className="text-2xs text-admin-text-muted">Used for all ElevenLabs generations (recalls, vocabulary, conversation, listening) when no override is set.</p>
+                      <p className="text-2xs text-admin-fg-muted">Used for all ElevenLabs generations (recalls, vocabulary, conversation, listening) when no override is set.</p>
                     </label>
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">Model</span>
+                      <span className="text-xs font-bold text-admin-fg-muted">Model</span>
                       <input
                         type="text"
                         value={elevenSettings.model}
                         onChange={(event) => updateElevenSettings('model', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                        className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">Output Format</span>
+                      <span className="text-xs font-bold text-admin-fg-muted">Output Format</span>
                       <input
                         type="text"
                         value={elevenSettings.outputFormat}
                         onChange={(event) => updateElevenSettings('outputFormat', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                        className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">Dictionary Version</span>
+                      <span className="text-xs font-bold text-admin-fg-muted">Dictionary Version</span>
                       <input
                         type="text"
                         value={elevenSettings.dictionaryVersionId}
                         onChange={(event) => updateElevenSettings('dictionaryVersionId', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                        className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                   </div>
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-bold text-admin-text-muted">Dictionary ID</span>
+                    <span className="text-xs font-bold text-admin-fg-muted">Dictionary ID</span>
                     <input
                       type="text"
                       value={elevenSettings.dictionaryId}
                       onChange={(event) => updateElevenSettings('dictionaryId', event.target.value)}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                      className="w-full rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                 </div>
@@ -703,8 +703,8 @@ export default function AdminVoiceDesignPage() {
                   ] as const).map(([key, label, value, min, max, step]) => (
                     <label key={key} className="block space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-admin-text-muted">{label}</span>
-                        <span className="text-sm font-bold text-admin-text">{value.toFixed(2)}</span>
+                        <span className="text-xs font-bold text-admin-fg-muted">{label}</span>
+                        <span className="text-sm font-bold text-admin-fg-strong">{value.toFixed(2)}</span>
                       </div>
                       <input
                         type="range"
@@ -717,23 +717,23 @@ export default function AdminVoiceDesignPage() {
                       />
                     </label>
                   ))}
-                  <label className="flex items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2">
+                  <label className="flex items-center gap-2 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2">
                     <input
                       type="checkbox"
                       checked={elevenSettings.useSpeakerBoost}
                       onChange={(event) => updateElevenSettings('useSpeakerBoost', event.target.checked)}
                       className="accent-[var(--admin-primary)]"
                     />
-                    <span className="text-sm text-admin-text">Use speaker boost</span>
+                    <span className="text-sm text-admin-fg-strong">Use speaker boost</span>
                   </label>
-                  <div className="space-y-2 rounded-lg border border-admin-border bg-admin-surface-raised p-3">
+                  <div className="space-y-2 rounded-lg border border-admin-border bg-admin-bg-subtle p-3">
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">PLS Pronunciation Dictionary</span>
+                      <span className="text-xs font-bold text-admin-fg-muted">PLS Pronunciation Dictionary</span>
                       <input
                         type="file"
                         accept=".pls,application/pls+xml,text/xml,application/xml"
                         onChange={(event) => setDictionaryFile(event.target.files?.[0] ?? null)}
-                        className="block w-full text-xs text-admin-text file:mr-3 file:rounded-md file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[var(--admin-primary-fg)]"
+                        className="block w-full text-xs text-admin-fg-strong file:mr-3 file:rounded-md file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[var(--admin-primary-fg)]"
                       />
                     </label>
                     <Button variant="secondary" size="sm" loading={uploadingDictionary} disabled={!dictionaryFile} onClick={handleUploadDictionary}>
@@ -763,7 +763,7 @@ export default function AdminVoiceDesignPage() {
             >
               <div className="space-y-6 p-4">
                 <fieldset className="space-y-2">
-                  <legend className="text-xs font-bold text-admin-text-muted">Audio Type (all generated via ElevenLabs)</legend>
+                  <legend className="text-xs font-bold text-admin-fg-muted">Audio Type (all generated via ElevenLabs)</legend>
                   <div className="space-y-1.5">
                     {([
                       ['recalls', 'Recall Words Only'],
@@ -771,7 +771,7 @@ export default function AdminVoiceDesignPage() {
                       ['listening', 'Listening Module Only'],
                       ['vocabulary', 'Vocabulary Module Only'],
                     ] as const).map(([value, label]) => (
-                      <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 hover:bg-admin-surface-raised/80">
+                      <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 hover:bg-admin-bg-subtle/80">
                         <input
                           type="radio"
                           name="audioType"
@@ -780,21 +780,21 @@ export default function AdminVoiceDesignPage() {
                           onChange={() => { setAudioType(value); setDryRunResult(null); }}
                           className="accent-[var(--admin-primary)]"
                         />
-                        <span className="text-sm text-admin-text">{label}</span>
+                        <span className="text-sm text-admin-fg-strong">{label}</span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
 
                 <fieldset className="space-y-2">
-                  <legend className="text-xs font-bold text-admin-text-muted">Scope</legend>
+                  <legend className="text-xs font-bold text-admin-fg-muted">Scope</legend>
                   <div className="space-y-1.5">
                     {([
                       ['all', 'All audio (full regeneration)'],
                       ['missing', 'Only items with missing audio'],
                       ['different-voice', 'Only items using a different voice'],
                     ] as const).map(([value, label]) => (
-                      <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 hover:bg-admin-surface-raised/80">
+                      <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2 hover:bg-admin-bg-subtle/80">
                         <input
                           type="radio"
                           name="scope"
@@ -803,7 +803,7 @@ export default function AdminVoiceDesignPage() {
                           onChange={() => { setScope(value); setDryRunResult(null); }}
                           className="accent-[var(--admin-primary)]"
                         />
-                        <span className="text-sm text-admin-text">{label}</span>
+                        <span className="text-sm text-admin-fg-strong">{label}</span>
                       </label>
                     ))}
                   </div>
@@ -811,7 +811,7 @@ export default function AdminVoiceDesignPage() {
 
                 {dryRunResult && (
                   <div className="rounded-xl border border-[var(--admin-primary)]/20 bg-[var(--admin-primary-tint)] p-4">
-                    <p className="text-sm text-admin-text">
+                    <p className="text-sm text-admin-fg-strong">
                       <span className="font-bold text-[var(--admin-primary)]">{dryRunResult.count.toLocaleString()}</span>{' '}
                       audio items will be regenerated
                     </p>
@@ -829,7 +829,7 @@ export default function AdminVoiceDesignPage() {
                 </div>
 
                 {!settingsReady && (
-                  <p className="text-xs text-amber-400">Save a valid ElevenLabs API key, voice, base URL and model before previewing or starting regeneration.</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Save a valid ElevenLabs API key, voice, base URL and model before previewing or starting regeneration.</p>
                 )}
               </div>
             </motion.div>
@@ -850,17 +850,17 @@ export default function AdminVoiceDesignPage() {
             >
               <div className="space-y-4 p-4">
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-3 text-center">
-                    <p className="text-lg font-bold text-admin-text">{todayCount.toLocaleString()}</p>
-                    <p className="text-xs text-admin-text-muted">Generated today</p>
+                  <div className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3 text-center">
+                    <p className="text-lg font-bold text-admin-fg-strong">{todayCount.toLocaleString()}</p>
+                    <p className="text-xs text-admin-fg-muted">Generated today</p>
                   </div>
-                  <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-3 text-center">
-                    <p className="text-lg font-bold text-admin-text">{successRate}%</p>
-                    <p className="text-xs text-admin-text-muted">Success rate</p>
+                  <div className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3 text-center">
+                    <p className="text-lg font-bold text-admin-fg-strong">{successRate}%</p>
+                    <p className="text-xs text-admin-fg-muted">Success rate</p>
                   </div>
-                  <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-3 text-center">
-                    <p className="text-lg font-bold text-admin-text">{activeBatches.length}</p>
-                    <p className="text-xs text-admin-text-muted">Active batches</p>
+                  <div className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3 text-center">
+                    <p className="text-lg font-bold text-admin-fg-strong">{activeBatches.length}</p>
+                    <p className="text-xs text-admin-fg-muted">Active batches</p>
                   </div>
                 </div>
 
@@ -869,12 +869,12 @@ export default function AdminVoiceDesignPage() {
                     <RefreshCw className="mr-1 h-3.5 w-3.5" />
                     Refresh
                   </Button>
-                  <span className="text-xs text-admin-text-muted">Auto-refreshes every 5s</span>
+                  <span className="text-xs text-admin-fg-muted">Auto-refreshes every 5s</span>
                 </div>
 
                 {activeBatches.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">Active</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-admin-fg-muted">Active</h4>
                     {activeBatches.map((batch) => (
                       <BatchCard key={batch.batchId} batch={batch} onCancel={handleCancelBatch} onRetry={handleRetryBatch} />
                     ))}
@@ -883,7 +883,7 @@ export default function AdminVoiceDesignPage() {
 
                 {completedBatches.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">History (last 10)</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-admin-fg-muted">History (last 10)</h4>
                     {completedBatches.map((batch) => (
                       <BatchCard key={batch.batchId} batch={batch} onRetry={handleRetryBatch} />
                     ))}
@@ -891,7 +891,7 @@ export default function AdminVoiceDesignPage() {
                 )}
 
                 {batches.length === 0 && (
-                  <p className="py-4 text-center text-sm text-admin-text-muted">No batches found.</p>
+                  <p className="py-4 text-center text-sm text-admin-fg-muted">No batches found.</p>
                 )}
               </div>
             </motion.div>
@@ -902,33 +902,33 @@ export default function AdminVoiceDesignPage() {
       {/* ─── Confirmation Modal ─── */}
       <Modal open={confirmModal} onClose={() => setConfirmModal(false)} title="Confirm Bulk Regeneration" size="md">
         <div className="space-y-4">
-          <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-4 space-y-2">
+          <div className="rounded-xl border border-admin-border bg-admin-bg-subtle p-4 space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-admin-text-muted">Voice:</span>
-              <span className="font-bold text-admin-text">{elevenSettings.voiceId}</span>
+              <span className="text-admin-fg-muted">Voice:</span>
+              <span className="font-bold text-admin-fg-strong">{elevenSettings.voiceId}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-admin-text-muted">Audio Type:</span>
-              <span className="font-bold text-admin-text">{audioType}</span>
+              <span className="text-admin-fg-muted">Audio Type:</span>
+              <span className="font-bold text-admin-fg-strong">{audioType}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-admin-text-muted">Scope:</span>
-              <span className="font-bold text-admin-text">{scope}</span>
+              <span className="text-admin-fg-muted">Scope:</span>
+              <span className="font-bold text-admin-fg-strong">{scope}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-admin-text-muted">Items:</span>
-              <span className="font-bold text-admin-text">{dryRunResult?.count.toLocaleString() ?? '-'}</span>
+              <span className="text-admin-fg-muted">Items:</span>
+              <span className="font-bold text-admin-fg-strong">{dryRunResult?.count.toLocaleString() ?? '-'}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-admin-text-muted">Est. time:</span>
-              <span className="font-bold text-admin-text">
+              <span className="text-admin-fg-muted">Est. time:</span>
+              <span className="font-bold text-admin-fg-strong">
                 {dryRunResult ? `~${Math.ceil(dryRunResult.count * 3 / 60)} min` : '-'}
               </span>
             </div>
           </div>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-            <p className="text-xs text-amber-400">
+            <p className="text-xs text-amber-700 dark:text-amber-400">
               This will regenerate audio for {dryRunResult?.count.toLocaleString() ?? 0} items. Existing audio will be overwritten. This action cannot be undone.
             </p>
           </div>
@@ -967,11 +967,11 @@ function SectionToggle({ label, open, onToggle }: { label: string; open: boolean
       className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
     >
       {open ? (
-        <ChevronDown className="h-4 w-4 text-admin-text-muted" />
+        <ChevronDown className="h-4 w-4 text-admin-fg-muted" />
       ) : (
-        <ChevronRight className="h-4 w-4 text-admin-text-muted" />
+        <ChevronRight className="h-4 w-4 text-admin-fg-muted" />
       )}
-      <span className="text-xs font-bold uppercase tracking-wider text-admin-text-muted">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-wider text-admin-fg-muted">{label}</span>
     </button>
   );
 }
@@ -988,10 +988,10 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
   }[batch.status];
 
   return (
-    <div className="rounded-xl border border-admin-border bg-admin-surface-raised p-3 space-y-2">
+    <div className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-admin-text-muted">{batch.batchId.slice(0, 8)}</span>
+          <span className="text-xs font-mono text-admin-fg-muted">{batch.batchId.slice(0, 8)}</span>
           <Badge variant={statusBadgeVariant} size="sm">{batch.status}</Badge>
           <Badge variant="muted" size="sm">{batch.audioType}</Badge>
         </div>
@@ -1012,19 +1012,19 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
       </div>
 
       <div className="space-y-1">
-        <div className="h-2 w-full overflow-hidden rounded-full bg-admin-surface">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-admin-bg-surface">
           <div
             className="h-full rounded-full bg-[var(--admin-primary)] transition-[width,background-color] duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-admin-text-muted">
+        <div className="flex justify-between text-xs text-admin-fg-muted">
           <span>{batch.completedItems}/{batch.totalItems}</span>
           <span>{progress}%</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-xs text-admin-text-muted">
+      <div className="flex flex-wrap gap-3 text-xs text-admin-fg-muted">
         <span>Voice: {batch.voiceId}</span>
         <span>Provider: {batch.providerName}</span>
         <span>Started: {new Date(batch.startedAt).toLocaleTimeString()}</span>
@@ -1032,7 +1032,7 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
           <button
             type="button"
             onClick={() => setShowErrors((v) => !v)}
-            className="text-red-400 hover:underline"
+            className="text-red-600 dark:text-red-400 hover:underline"
           >
             {batch.failedItems} failed
           </button>
@@ -1040,7 +1040,7 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
       </div>
 
       {showErrors && batch.failedItems > 0 && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-xs text-red-400">
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-xs text-red-600 dark:text-red-400">
           {batch.failedItems} items failed during generation. Check server logs for details.
         </div>
       )}

@@ -17,6 +17,7 @@ import { Beaker, Plus, Play, RefreshCcw, AlertCircle, CheckCircle2 } from 'lucid
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { apiClient } from '@/lib/api';
 
 interface CalibrationGradeDto {
@@ -214,32 +215,28 @@ export default function AdminWritingCalibrationPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Beaker className="mt-1 h-6 w-6 shrink-0 text-[var(--admin-primary)]" aria-hidden="true" />
-          <div>
-            <h1 className="text-2xl font-bold">Writing calibration harness</h1>
-            <p className="text-sm text-muted">
-              Benchmark evidence and the governed v1.1 candidate-release controls. The historical
-              raw-38 harness below never enables candidate scores by itself.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={load} disabled={busy === 'load'}>
-            <RefreshCcw className="mr-1 h-4 w-4" aria-hidden="true" /> Reload
-          </Button>
-          <Button onClick={() => setShowForm((s) => !s)}>
-            <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> {showForm ? 'Cancel' : 'Add letter'}
-          </Button>
-          <Button onClick={onRun} disabled={busy === 'run' || letters.length === 0}>
-            <Play className="mr-1 h-4 w-4" aria-hidden="true" /> {busy === 'run' ? 'Running…' : 'Run calibration'}
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Writing calibration harness"
+        description="Benchmark evidence and the governed v1.1 candidate-release controls. The historical raw-38 harness below never enables candidate scores by itself."
+        icon={<Beaker className="h-5 w-5" />}
+        actions={
+          <>
+            <Button variant="outline" onClick={load} disabled={busy === 'load'}>
+              <RefreshCcw className="mr-1 h-4 w-4" aria-hidden="true" /> Reload
+            </Button>
+            <Button onClick={() => setShowForm((s) => !s)}>
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> {showForm ? 'Cancel' : 'Add letter'}
+            </Button>
+            <Button onClick={onRun} disabled={busy === 'run' || letters.length === 0}>
+              <Play className="mr-1 h-4 w-4" aria-hidden="true" /> {busy === 'run' ? 'Running…' : 'Run calibration'}
+            </Button>
+          </>
+        }
+      />
 
       {error ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+        <div role="alert" className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-3 text-sm text-red-700 dark:text-red-300">
           {error}
         </div>
       ) : null}
@@ -457,7 +454,7 @@ export default function AdminWritingCalibrationPage() {
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold">Latest run</h2>
             {latestRun ? (
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${benchmarkPassed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${benchmarkPassed ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'}`}>
                 {benchmarkPassed ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
                 Historical benchmark: {within2Pct}% within ±2 raw
               </span>
@@ -499,13 +496,13 @@ export default function AdminWritingCalibrationPage() {
                   </thead>
                   <tbody>
                     {latestRun.results.map((r) => (
-                      <tr key={r.id} className={`border-t border-border ${r.absErrorRaw > 2 ? 'bg-amber-50' : ''}`}>
+                      <tr key={r.id} className={`border-t border-border ${r.absErrorRaw > 2 ? 'bg-amber-50 dark:bg-amber-500/10' : ''}`}>
                         <td className="px-2 py-1 font-mono text-xs">{r.calibrationLetterId.slice(0, 8)}…</td>
                         <td className="px-2 py-1">{r.reference.bandLabel} · {r.reference.rawTotal}</td>
                         <td className="px-2 py-1">
-                          {r.ai ? `${r.ai.bandLabel} · ${r.ai.rawTotal}` : <span className="text-red-700">{r.aiError ?? 'unavailable'}</span>}
+                          {r.ai ? `${r.ai.bandLabel} · ${r.ai.rawTotal}` : <span className="text-red-700 dark:text-red-300">{r.aiError ?? 'unavailable'}</span>}
                         </td>
-                        <td className={`px-2 py-1 text-right font-bold ${r.absErrorRaw > 2 ? 'text-amber-700' : 'text-emerald-700'}`}>{r.absErrorRaw}</td>
+                        <td className={`px-2 py-1 text-right font-bold ${r.absErrorRaw > 2 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{r.absErrorRaw}</td>
                         <td className="px-2 py-1 text-right">{r.bandMatch ? '✓' : '·'}</td>
                       </tr>
                     ))}

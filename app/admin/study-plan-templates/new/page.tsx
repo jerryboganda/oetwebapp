@@ -86,8 +86,8 @@ export default function NewStudyPlanTemplatePage() {
       <SettingsSection title="Identity">
         <div className="space-y-4">
           <div>
-            <label className={labelCls}>Name *</label>
-            <input
+            <label htmlFor="spt-new-1" className={labelCls}>Name *</label>
+            <input id="spt-new-1"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. 8-Week Standard for B-Band"
@@ -96,8 +96,8 @@ export default function NewStudyPlanTemplatePage() {
           </div>
 
           <div>
-            <label className={labelCls}>Slug * (lowercase, hyphenated)</label>
-            <input
+            <label htmlFor="spt-new-2" className={labelCls}>Slug * (lowercase, hyphenated)</label>
+            <input id="spt-new-2"
               value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
               placeholder="8-week-standard"
@@ -106,8 +106,8 @@ export default function NewStudyPlanTemplatePage() {
           </div>
 
           <div>
-            <label className={labelCls}>Description</label>
-            <textarea
+            <label htmlFor="spt-new-3" className={labelCls}>Description</label>
+            <textarea id="spt-new-3"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -120,8 +120,8 @@ export default function NewStudyPlanTemplatePage() {
       <SettingsSection title="Plan shape">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Min Weeks</label>
-            <input
+            <label htmlFor="spt-new-4" className={labelCls}>Min Weeks</label>
+            <input id="spt-new-4"
               type="number"
               min={1}
               value={minWeeks}
@@ -130,8 +130,8 @@ export default function NewStudyPlanTemplatePage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Max Weeks</label>
-            <input
+            <label htmlFor="spt-new-5" className={labelCls}>Max Weeks</label>
+            <input id="spt-new-5"
               type="number"
               min={1}
               value={maxWeeks}
@@ -140,8 +140,8 @@ export default function NewStudyPlanTemplatePage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Target Band (optional)</label>
-            <select
+            <label htmlFor="spt-new-6" className={labelCls}>Target Band (optional)</label>
+            <select id="spt-new-6"
               value={targetBand}
               onChange={(e) => setTargetBand(e.target.value)}
               className={inputCls}
@@ -154,8 +154,8 @@ export default function NewStudyPlanTemplatePage() {
             </select>
           </div>
           <div>
-            <label className={labelCls}>Profession (optional)</label>
-            <input
+            <label htmlFor="spt-new-7" className={labelCls}>Profession (optional)</label>
+            <input id="spt-new-7"
               value={professionId}
               onChange={(e) => setProfessionId(e.target.value)}
               placeholder="e.g. nurse, doctor"
@@ -163,8 +163,8 @@ export default function NewStudyPlanTemplatePage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Default Minutes per Day</label>
-            <input
+            <label htmlFor="spt-new-8" className={labelCls}>Default Minutes per Day</label>
+            <input id="spt-new-8"
               type="number"
               min={5}
               max={480}

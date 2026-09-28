@@ -99,7 +99,7 @@ export default function AdminTaxonomyPage() {
             </Button>
           ) : null}
           {row.status === 'archived' ? (
-            <Button variant="outline" size="sm" onClick={() => void forceDeleteNode(row)} className="text-red-600 border-red-300 hover:bg-red-50">
+            <Button variant="ghost" size="sm" onClick={() => void forceDeleteNode(row)} className="border-admin-danger/40 text-admin-danger">
               Force delete
             </Button>
           ) : null}

@@ -135,7 +135,7 @@ export default function AdminSignupCatalogPage() {
             {row.isActive ? 'Archive' : 'Activate'}
           </Button>
           {!row.isActive ? (
-            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteExamType(row)}>
+            <Button variant="ghost" size="sm" className="border-admin-danger/40 text-admin-danger" onClick={() => void forceDeleteExamType(row)}>
               Force delete
             </Button>
           ) : null}
@@ -185,7 +185,7 @@ export default function AdminSignupCatalogPage() {
             {row.isActive ? 'Archive' : 'Activate'}
           </Button>
           {!row.isActive ? (
-            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteProfession(row)}>
+            <Button variant="ghost" size="sm" className="border-admin-danger/40 text-admin-danger" onClick={() => void forceDeleteProfession(row)}>
               Force delete
             </Button>
           ) : null}

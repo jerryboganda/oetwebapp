@@ -519,7 +519,7 @@ export function WaveformCuePointEditor({
                   style={{ left: `${handlePositions.startPercent}%` }}
                   data-testid="cue-handle-start"
                 >
-                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-[#6d28d9]" />
+                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-primary-700" />
                 </button>
 
                 <button
@@ -541,7 +541,7 @@ export function WaveformCuePointEditor({
                   style={{ left: `${handlePositions.endPercent}%` }}
                   data-testid="cue-handle-end"
                 >
-                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-[#6d28d9]" />
+                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-primary-700" />
                 </button>
               </>
             ) : null}

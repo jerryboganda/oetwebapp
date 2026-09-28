@@ -5,6 +5,7 @@ import { Archive, RefreshCcw } from 'lucide-react';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { apiClient } from '@/lib/api';
 import type { WritingContentAuditEntryDto, WritingContentAuditListDto } from '@/lib/writing/types';
 
@@ -53,15 +54,17 @@ export default function AdminWritingAuditPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-navy"><Archive className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Audit</h1>
-          <p className="mt-1 text-sm text-muted">Review Writing content mutations, publish activity, and audit-log access events.</p>
-        </div>
-        <Button onClick={() => void load()} variant="outline" loading={busy}><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
-      </header>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Writing Audit"
+        description="Review Writing content mutations, publish activity, and audit-log access events."
+        icon={<Archive className="h-5 w-5" />}
+        actions={
+          <Button onClick={() => void load()} variant="outline" loading={busy}><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
+        }
+      />
 
-      {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
 
       <Card>
         <CardContent>
@@ -75,6 +78,7 @@ export default function AdminWritingAuditPage() {
 
       <Card>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Writing audit entries">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
@@ -98,6 +102,7 @@ export default function AdminWritingAuditPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>

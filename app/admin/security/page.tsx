@@ -236,12 +236,12 @@ export default function AdminSecurityPage() {
           </div>
           <ul className="mt-4 grid gap-2 text-sm text-admin-fg-muted md:grid-cols-2">
             <li>Two approved client identities per learner by default; a fresh identity must complete email OTP approval. Fewer than two → free-slot approval without replacement choice.</li>
-            <li>When the two slots are full, the third identity returns <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">replacement_required</code> with masked device choices, active/max counts, and a protected candidate challenge token.</li>
+            <li>When the two slots are full, the third identity returns <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-xs">replacement_required</code> with masked device choices, active/max counts, and a protected candidate challenge token.</li>
             <li>Learner must explicitly select one of the two registered identities to replace; only the selected device and its sessions are revoked.</li>
             <li>The signed-out client receives a clear reason explaining that a newer device was approved.</li>
-            <li>Admins can set a positive per-learner override from 1 to 5 approved identities (<code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">null</code> = default <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">2</code>).</li>
+            <li>Admins can set a positive per-learner override from 1 to 5 approved identities (<code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-xs">null</code> = default <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-xs">2</code>).</li>
             <li>Approvals, rejections, revocations, automatic sign-outs, and overrides are recorded in Security Events and Audit Logs.</li>
-            <li>The same stable identity contract (<code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">X-OET-Device-Id</code>) is used by browser, Android, iOS, Windows, and macOS clients. IP, country, tabs, and user-agent never create identity.</li>
+            <li>The same stable identity contract (<code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-xs">X-OET-Device-Id</code>) is used by browser, Android, iOS, Windows, and macOS clients. IP, country, tabs, and user-agent never create identity.</li>
           </ul>
           <div className="mt-4 rounded-admin border border-[var(--admin-primary)]/30 bg-[var(--admin-primary)]/5 p-3 text-sm">
             <p className="font-semibold text-admin-fg-strong">Exact rule used by the platform</p>
@@ -260,7 +260,7 @@ export default function AdminSecurityPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-border">
-                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Identity key</td><td className="py-2">Persisted <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-2xs">X-OET-Device-Id</code> (web: <code className="font-mono text-2xs">localStorage</code> + <code className="font-mono text-2xs">oet_device_binding</code> cookie; native/desktop: secure storage).</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Identity key</td><td className="py-2">Persisted <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-2xs">X-OET-Device-Id</code> (web: <code className="font-mono text-2xs">localStorage</code> + <code className="font-mono text-2xs">oet_device_binding</code> cookie; native/desktop: secure storage).</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Threshold</td><td className="py-2">Default <code className="font-mono text-2xs">2</code>; Admin override <code className="font-mono text-2xs">1-5</code> (<code className="font-mono text-2xs">null</code> = <code className="font-mono text-2xs">2</code>).</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Window</td><td className="py-2">Runtime <code className="font-mono text-2xs">DeviceChangeWindowDays</code>, default <code className="font-mono text-2xs">7</code>.</td></tr>
                   <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Limit</td><td className="py-2">Runtime <code className="font-mono text-2xs">DeviceChangeMaxPerWindow</code>, default <code className="font-mono text-2xs">3</code>.</td></tr>

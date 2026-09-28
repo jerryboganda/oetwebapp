@@ -5,6 +5,7 @@ import { ClipboardList, Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { apiClient } from '@/lib/api';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -149,21 +150,24 @@ export default function AdminWritingDrillsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-navy"><ClipboardList className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Drills</h1>
-          <p className="mt-1 text-sm text-muted">Manage sentence-level drill items for W1-W8 practice and canon reinforcement.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
-          {canWriteContent ? <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New drill</Button> : null}
-        </div>
-      </header>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        title="Writing Drills"
+        description="Manage sentence-level drill items for W1-W8 practice and canon reinforcement."
+        icon={<ClipboardList className="h-5 w-5" />}
+        actions={
+          <>
+            <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
+            {canWriteContent ? <Button onClick={() => setEditing({ ...EMPTY_FORM })}><Plus className="h-4 w-4" aria-hidden="true" /> New drill</Button> : null}
+          </>
+        }
+      />
 
-      {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-admin border border-admin-danger/30 bg-admin-danger/10 p-3 text-sm text-red-700 dark:text-red-300">{error}</p> : null}
 
       <Card>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Writing drills">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
@@ -194,6 +198,7 @@ export default function AdminWritingDrillsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -223,7 +228,7 @@ export default function AdminWritingDrillsPage() {
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Alternatives (one per line)<textarea rows={4} value={editing.alternatives} onChange={(event) => setEditing({ ...editing, alternatives: event.target.value })} className="rounded border border-border bg-background p-2 text-sm" /></label>
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Options (one per line)<textarea rows={4} value={editing.options} onChange={(event) => setEditing({ ...editing, options: event.target.value })} className="rounded border border-border bg-background p-2 text-sm" /></label>
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Status<select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value as DrillStatus })} className="min-h-9 rounded border border-border bg-background px-2 text-sm"><option value="draft">Draft</option>{canPublishContent || editing.status === 'published' ? <option value="published" disabled={!canPublishContent}>Published</option> : null}<option value="archived">Archived</option></select></label>
-            {publishLocked ? <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">Content publish permission is required to modify a published drill.</p> : null}
+            {publishLocked ? <p className="rounded-admin border border-admin-warning/40 bg-admin-warning/10 p-2 text-xs text-amber-900 dark:text-amber-200">Content publish permission is required to modify a published drill.</p> : null}
 
             <footer className="mt-auto flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>

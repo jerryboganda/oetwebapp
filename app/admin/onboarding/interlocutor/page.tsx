@@ -280,7 +280,7 @@ export default function AdminInterlocutorOnboardingPage() {
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-admin-border text-sm">
                   <thead>
-                    <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+                    <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
                       <th scope="col" className="py-3 pr-4">Trainee</th>
                       <th scope="col" className="px-4 py-3">Started</th>
                       <th scope="col" className="px-4 py-3 text-right">Role-plays</th>
@@ -295,16 +295,16 @@ export default function AdminInterlocutorOnboardingPage() {
                       return (
                         <tr key={trainee.traineeId}>
                           <td className="py-3 pr-4">
-                            <p className="font-semibold text-admin-text">{trainee.traineeName}</p>
-                            <p className="text-xs text-admin-text-muted">{trainee.traineeId}</p>
+                            <p className="font-semibold text-admin-fg-strong">{trainee.traineeName}</p>
+                            <p className="text-xs text-admin-fg-muted">{trainee.traineeId}</p>
                           </td>
-                          <td className="px-4 py-3 text-admin-text-muted">
+                          <td className="px-4 py-3 text-admin-fg-muted">
                             {formatDate(trainee.startedAt)}
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-admin-text">
+                          <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">
                             {trainee.rolePlaysCompleted}
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-text">
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums text-admin-fg-strong">
                             {formatSigma(trainee.calibrationSigma)}
                           </td>
                           <td className="px-4 py-3">{statusBadge(trainee.status)}</td>
@@ -366,7 +366,7 @@ export default function AdminInterlocutorOnboardingPage() {
 function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-admin-text-muted">
+      <p className="text-sm text-admin-fg-muted">
         No practice recordings are pending review. Submitted role-plays appear here once the
         practice-queue endpoint ships.
       </p>
@@ -376,7 +376,7 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
-          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
+          <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-fg-muted">
             <th scope="col" className="py-3 pr-4">Trainee</th>
             <th scope="col" className="px-4 py-3">Recording</th>
             <th scope="col" className="px-4 py-3">Submitted</th>
@@ -388,18 +388,18 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
           {rows.map((row) => (
             <tr key={row.recordingId}>
               <td className="py-3 pr-4">
-                <p className="font-semibold text-admin-text">{row.traineeName}</p>
-                <p className="text-xs text-admin-text-muted">{row.traineeId}</p>
+                <p className="font-semibold text-admin-fg-strong">{row.traineeName}</p>
+                <p className="text-xs text-admin-fg-muted">{row.traineeId}</p>
               </td>
-              <td className="px-4 py-3 text-admin-text-muted">
-                <code className="rounded bg-admin-surface-raised px-1.5 py-0.5 text-xs">
+              <td className="px-4 py-3 text-admin-fg-muted">
+                <code className="rounded bg-admin-bg-subtle px-1.5 py-0.5 text-xs">
                   {row.recordingId}
                 </code>
               </td>
-              <td className="px-4 py-3 text-admin-text-muted">
+              <td className="px-4 py-3 text-admin-fg-muted">
                 {row.submittedAt ? new Date(row.submittedAt).toLocaleDateString() : '-'}
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-admin-text">
+              <td className="px-4 py-3 text-right tabular-nums text-admin-fg-strong">
                 {Math.round(row.durationSeconds)}s
               </td>
               <td className="px-4 py-3">
