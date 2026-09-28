@@ -163,9 +163,15 @@ export default function WritingAiProviderPage() {
                 />
                 <KpiTile label="Fallback calls (7d)" value={fmt(status.fallbackCountWeek)} icon={<RefreshCw className="w-4 h-4" />} />
                 <KpiTile
+                  label="Claude API cost (7d)"
+                  value={fmtUsd(status.claudeApi?.costWeekUsd ?? 0)}
+                  hint="level 2 — pay-as-you-go"
+                  tone={(status.claudeApi?.costWeekUsd ?? 0) > 0 ? 'warning' : 'default'}
+                />
+                <KpiTile
                   label="Codex cost (7d)"
                   value={fmtUsd(status.codex.recordedCostWeekUsd)}
-                  hint="subscription — $0 marginal"
+                  hint="level 3 — subscription, $0 marginal"
                 />
               </KpiStrip>
 
@@ -174,9 +180,9 @@ export default function WritingAiProviderPage() {
                 <CardHeader>
                   <CardTitle>Provider control</CardTitle>
                   <p className="text-sm text-admin-fg-muted">
-                    Choose which subscription serves Writing AI. Automatic uses Claude Opus 5.5 High as primary and
-                    fails over to the Codex subscription at {status.failoverPct}% weekly utilisation or on a
-                    quota/rate-limit signal.
+                    Automatic runs the 3-level chain: Claude Opus 5.5 (5x subscription) — retried once — then Claude
+                    Opus 5.5 via the Anthropic API, then the Codex subscription. The weekly-cap failover engages at{' '}
+                    {status.failoverPct}% utilisation or on a quota/rate-limit signal.
                   </p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">

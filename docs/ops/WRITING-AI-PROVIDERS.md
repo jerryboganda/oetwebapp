@@ -1,7 +1,7 @@
 # Writing AI Provider Architecture — Runbook
 
 **Status:** authoritative operations runbook for the final Writing AI provider setup.
-**Owner directive:** 2026-09-29 — Claude Opus 5.5 (effort `high`) on the **dedicated Claude Max 5x subscription** is the primary Writing grader; the **Codex subscription** (`gpt-6-sol`, high thinking) is the automatic fallback. No further benchmark spend.
+**Owner directive:** 2026-09-29 (revised) — Writing grading uses a 3-level automatic failover chain: **Claude Opus 5.5 (high) on the dedicated Max 5x subscription** (primary, retried once on any transient failure) → **Claude Opus 5.5 via the Anthropic API** (pay-as-you-go key) → **Codex subscription** (`gpt-6-sol`, high). No further benchmark spend.
 
 ---
 
@@ -11,20 +11,20 @@
 writing.grade (+ coach / rewrite / ask / appeal / model-answer pregen)
         │
         ▼
-AiWritingSubscriptionSelector  (auto | claude | codex; warn 80% / failover 90%)
+WritingSubscriptionSelector  (auto | claude | codex; warn 80% / failover 90%)
         │
-   ┌────┴─────────────────────┐
-   ▼                           ▼
-oet-writing-claude :8080   oet-writing-codex :8080
-(claude CLI, Max 5x)       (codex CLI, ChatGPT)
-   │                           │
-   └─► via oet-agent-egress allowlist proxy ─► api.anthropic.com / chatgpt.com
+        ▼  failover chain (one AiOperation, one credit debit, one grade)
+  L1 oet-writing-claude :8080   (claude CLI, Max 5x subscription)
+     └─ retry once on transient failure
+  L2 anthropic API row           (pay-as-you-go Anthropic key)
+  L3 oet-writing-codex :8080    (codex CLI, ChatGPT subscription)
 ```
 
-Both sidecars are registered as ordinary `AiProvider` rows, so routing, usage
-logging, budgets, and the admin AI board all work unchanged. Failover happens
-**inside one coordinated `AiOperation`**, so a candidate is never double-graded
-or double-charged when Claude hits its limit.
+The two sidecars are registered as ordinary `AiProvider` rows (plus the existing
+`anthropic` API row for level 2), so routing, usage logging, budgets, and the
+admin AI board all work unchanged. Failover happens **inside one coordinated
+`AiOperation`**, so a candidate is never double-graded or double-charged when
+Claude hits its limit.
 
 ---
 
@@ -115,15 +115,19 @@ or double-charged when Claude hits its limit.
 
 ## 5. Failover semantics
 
-- **Auto mode** uses Claude until the weekly utilisation reaches the failover
-  threshold **or** Claude returns a quota/rate-limit signal, then routes new
-  requests to Codex. It returns to Claude automatically once the weekly window
-  resets and the Claude sidecar is healthy (hysteresis: utilisation must fall
-  below the warn threshold).
-- A candidate submission **never fails** solely because Claude is exhausted —
-  it transparently retries on Codex within the same operation.
+- **Per-request chain (auto mode):** the selector picks the primary. The pipeline
+  then walks **L1 Claude subscription → (retry once) → L2 Claude API → L3 Codex**,
+  escalating only on transient/provider errors (timeout, network, 5xx, rate-limit,
+  quota). Policy/quota/budget/duplicate refusals bubble up unchanged.
+- **Weekly cap (proactive):** when Claude 5x weekly utilisation reaches the
+  failover threshold (default 90%) **or** a quota signal is recorded, new requests
+  start at **L2 (Claude API)** until the weekly window resets and utilisation drops
+  below the warn threshold (hysteresis).
+- A candidate submission **never fails** solely because the subscription is
+  exhausted — it transparently escalates within the same operation.
 - Every call records provider, model, outcome, and `FailoverTrace` /
-  `failoverReason` in `AiUsageRecord`.
+  `failoverReason` in `AiUsageRecord`, so the admin can see exactly which level
+  produced each grade and why it fell back.
 
 ---
 

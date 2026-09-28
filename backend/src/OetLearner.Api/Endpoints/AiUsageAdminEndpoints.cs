@@ -228,10 +228,12 @@ public static class AiUsageAdminEndpoints
             var weekAgo = now.AddDays(-7);
 
             var claude = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Claude;
+            var claudeApi = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ClaudeApi;
             var codex = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex;
 
+            // Count the whole 3-level chain (subscription + Claude API + Codex).
             var usage = await db.AiUsageRecords.AsNoTracking()
-                .Where(r => r.ProviderId == claude || r.ProviderId == codex)
+                .Where(r => r.ProviderId == claude || r.ProviderId == claudeApi || r.ProviderId == codex)
                 .Where(r => r.CreatedAt >= weekAgo)
                 .GroupBy(r => r.ProviderId)
                 .Select(g => new
@@ -255,10 +257,11 @@ public static class AiUsageAdminEndpoints
                             && r.Outcome == AiCallOutcome.Success)
                 .CountAsync(ct);
             var fallbackCountWeek = await db.AiUsageRecords.AsNoTracking()
-                .Where(r => r.ProviderId == codex && r.CreatedAt >= weekAgo)
+                .Where(r => (r.ProviderId == codex || r.ProviderId == claudeApi) && r.CreatedAt >= weekAgo)
                 .CountAsync(ct);
 
             var claudeRow = usage.FirstOrDefault(u => u.provider == claude);
+            var claudeApiRow = usage.FirstOrDefault(u => u.provider == claudeApi);
             var codexRow = usage.FirstOrDefault(u => u.provider == codex);
 
             var mode = string.IsNullOrWhiteSpace(row.WritingAiProviderMode)
@@ -290,15 +293,22 @@ public static class AiUsageAdminEndpoints
                 failoverActive,
                 currentPrimary = new
                 {
-                    provider = failoverActive ? codex : claude,
-                    model = failoverActive
-                        ? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.CodexModel
-                        : OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ClaudeModel,
+                    // When the subscription is over its weekly cap, new requests start
+                    // at L2 (the Claude API), not Codex — Codex is the last resort.
+                    provider = failoverActive ? claudeApi : claude,
+                    model = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ClaudeModel,
                 },
                 gradedToday,
                 gradedWeek,
                 fallbackCountWeek,
                 claude = new { callsWeek = claudeRow?.callsWeek ?? 0, tokensWeek = claudeRow?.tokensWeek ?? 0L },
+                claudeApi = new
+                {
+                    callsWeek = claudeApiRow?.callsWeek ?? 0,
+                    tokensWeek = claudeApiRow?.tokensWeek ?? 0L,
+                    // Real pay-as-you-go spend on the Anthropic API (level 2).
+                    costWeekUsd = claudeApiRow?.costWeek ?? 0m,
+                },
                 codex = new
                 {
                     callsWeek = codexRow?.callsWeek ?? 0,

@@ -59,12 +59,14 @@ public sealed class WritingSubscriptionSelectorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task AutoMode_AtFailoverThreshold_RoutesCodex()
+    public async Task AutoMode_AtFailoverThreshold_RoutesClaudeApi()
     {
+        // Level 2: crossing the weekly failover threshold moves new requests to the
+        // Claude API (pay-as-you-go), NOT straight to Codex — Codex is level 3.
         var row = new RuntimeSettingsRow { Id = "default", WritingAiProviderMode = "auto", WritingAiFailoverPct = 90 };
         var selector = BuildSelector(row, Snapshot(92));
         var decision = await selector.DecideAsync(default);
-        Assert.Equal(WritingSubscriptionProviders.Codex, decision.ProviderCode);
+        Assert.Equal(WritingSubscriptionProviders.ClaudeApi, decision.ProviderCode);
         Assert.True(decision.IsFallback);
         Assert.Equal("auto_threshold_failover", decision.Reason);
     }
@@ -101,7 +103,7 @@ public sealed class WritingSubscriptionSelectorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task AutoMode_RecordedQuotaSignal_FailsOver_UntilMarkerClears()
+    public async Task AutoMode_RecordedQuotaSignal_FailsOverToClaudeApi_UntilMarkerClears()
     {
         var row = new RuntimeSettingsRow
         {
@@ -111,7 +113,7 @@ public sealed class WritingSubscriptionSelectorTests : IAsyncDisposable
         };
         var selector = BuildSelector(row, Snapshot(10)); // low estimate, but hard signal wins
         var decision = await selector.DecideAsync(default);
-        Assert.Equal(WritingSubscriptionProviders.Codex, decision.ProviderCode);
+        Assert.Equal(WritingSubscriptionProviders.ClaudeApi, decision.ProviderCode);
         Assert.Equal("auto_quota_signal", decision.Reason);
     }
 

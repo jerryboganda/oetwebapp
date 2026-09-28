@@ -337,6 +337,8 @@ export interface WritingAiProviderStatus {
   gradedWeek: number;
   fallbackCountWeek: number;
   claude: { callsWeek: number; tokensWeek: number };
+  /** Level 2 — pay-as-you-go Anthropic API (real $ spend). */
+  claudeApi: { callsWeek: number; tokensWeek: number; costWeekUsd: number };
   codex: { callsWeek: number; tokensWeek: number; recordedCostWeekUsd: number };
 }
 
