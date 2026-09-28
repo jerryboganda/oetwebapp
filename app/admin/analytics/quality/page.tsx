@@ -183,7 +183,7 @@ export default function QualityAnalyticsPage() {
           onRetry={() => setRetryNonce((current) => current + 1)}
           emptyContent={
             <EmptyState
-              icon={<BarChart3 className="h-10 w-10 text-admin-fg-muted" />}
+              icon={<BarChart3 />}
               title="No quality analytics are available for this filter set"
               description="Try a broader time range or clear the current subtest and profession filters."
             />
