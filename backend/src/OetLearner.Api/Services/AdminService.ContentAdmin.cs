@@ -2957,7 +2957,7 @@ public partial class AdminService
             ExampleWordsJson = request.ExampleWordsJson ?? "[]",
             MinimalPairsJson = request.MinimalPairsJson ?? "[]",
             SentencesJson = request.SentencesJson ?? "[]",
-            TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml),
+            TipsHtml = OetLearner.Api.Services.Content.HtmlSanitizerService.SanitizePassageHtml(request.TipsHtml),
             Difficulty = request.Difficulty ?? "medium",
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status!,
             OrderIndex = request.OrderIndex ?? 0,
@@ -2988,7 +2988,7 @@ public partial class AdminService
         if (request.ExampleWordsJson is not null) entity.ExampleWordsJson = request.ExampleWordsJson;
         if (request.MinimalPairsJson is not null) entity.MinimalPairsJson = request.MinimalPairsJson;
         if (request.SentencesJson is not null) entity.SentencesJson = request.SentencesJson;
-        if (request.TipsHtml is not null) entity.TipsHtml = SafeHtmlSanitizer.SanitizeLimitedHtml(request.TipsHtml);
+        if (request.TipsHtml is not null) entity.TipsHtml = OetLearner.Api.Services.Content.HtmlSanitizerService.SanitizePassageHtml(request.TipsHtml);
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
         if (request.Status is not null)
         {

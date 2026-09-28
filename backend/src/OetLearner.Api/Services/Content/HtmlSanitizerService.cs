@@ -29,13 +29,22 @@ public interface IHtmlSanitizer
 /// <summary>
 /// Default implementation. The <see cref="Ganss.Xss.HtmlSanitizer"/> instance is
 /// cached per process because rebuilding its allowlist per call is wasteful and
-/// the instance is thread-safe.
+/// the instance is thread-safe. <see cref="SanitizePassageHtml"/> exposes the same
+/// allowlist to callers that cannot take the DI service (e.g. <c>AdminService</c>).
 /// </summary>
 public sealed class HtmlSanitizerService : IHtmlSanitizer
 {
-    private readonly HtmlSanitizer _sanitizer;
+    private static readonly HtmlSanitizer Sanitizer = Build();
 
-    public HtmlSanitizerService()
+    public string SanitizePassage(string? input) => SanitizePassageHtml(input);
+
+    public static string SanitizePassageHtml(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        return Sanitizer.Sanitize(input);
+    }
+
+    private static HtmlSanitizer Build()
     {
         var s = new HtmlSanitizer();
 
@@ -101,13 +110,7 @@ public sealed class HtmlSanitizerService : IHtmlSanitizer
             }
         };
 
-        _sanitizer = s;
-    }
-
-    public string SanitizePassage(string? input)
-    {
-        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
-        return _sanitizer.Sanitize(input);
+        return s;
     }
 }
 
