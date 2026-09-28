@@ -8,7 +8,6 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
 import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
-import { CandidateFeedbackVideos } from '@/components/marketing/candidate-feedback-videos';
 import {
   fetchPublicCatalog,
   fetchAiPackages,
@@ -497,8 +496,6 @@ export function SubscriptionsCatalog() {
             <AppDownloadPromo variant="card" />
           </div>
 
-          {/* YouTube Candidate Feedback Videos & Social Proof */}
-          <CandidateFeedbackVideos className="pt-4" />
         </>
       )}
     </div>

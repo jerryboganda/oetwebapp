@@ -63,28 +63,30 @@ export default function ComparativeAnalyticsPage() {
             <LearnerSurfaceSectionHeader title="Per-Subtest Ranking" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {data.subtests.map(s => {
-                const tier = TIER_BADGE[s.tier] ?? TIER_BADGE.belowMedian;
+                // Backend reports percentile 50 / avg 0 when the 90-day cohort is empty — don't show those as real.
+                const hasCohort = s.cohortSize > 0;
+                const tier = hasCohort ? TIER_BADGE[s.tier] : undefined;
                 return (
                   <MotionItem key={s.subtestCode}>
                     <Card className="p-5">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold capitalize">{s.subtestCode}</h3>
-                        <Badge className={tier.color}>{tier.label}</Badge>
+                        {tier && <Badge className={tier.color}>{tier.label}</Badge>}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                         <div className="text-center"><p className="text-2xl font-bold text-primary">{s.yourScore}</p><p className="text-xs text-muted">Your Score</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{s.cohortAverage}</p><p className="text-xs text-muted">Cohort Avg</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{s.percentile}%</p><p className="text-xs text-muted">Percentile</p></div>
+                        <div className="text-center"><p className="text-2xl font-bold">{hasCohort ? s.cohortAverage : '—'}</p><p className="text-xs text-muted">Cohort Avg</p></div>
+                        <div className="text-center"><p className="text-2xl font-bold">{hasCohort ? `${s.percentile}%` : '—'}</p><p className="text-xs text-muted">Percentile</p></div>
                       </div>
 
                       {/* Percentile bar */}
-                      <div className="mb-3">
+                      {hasCohort && <div className="mb-3">
                         <div className="h-3 rounded-full bg-background-light overflow-hidden relative">
                           <div className="h-full rounded-full bg-gradient-to-r from-danger via-warning to-success" style={{ width: `${s.percentile}%` }} />
                         </div>
                         <div className="flex justify-between mt-1"><span className="text-3xs text-muted">0%</span><span className="text-3xs text-muted">50%</span><span className="text-3xs text-muted">100%</span></div>
-                      </div>
+                      </div>}
 
                       {s.targetScore && s.gapToTarget !== null && (
                         <div className="flex items-center gap-2 text-sm">
@@ -96,7 +98,7 @@ export default function ComparativeAnalyticsPage() {
                         </div>
                       )}
 
-                      <p className="text-xs text-muted mt-2">Based on {s.cohortSize} learners in the last 90 days</p>
+                      <p className="text-xs text-muted mt-2">{hasCohort ? `Based on ${s.cohortSize} scored evaluation${s.cohortSize === 1 ? '' : 's'} in the last 90 days` : 'Not enough cohort data in the last 90 days yet.'}</p>
                     </Card>
                   </MotionItem>
                 );

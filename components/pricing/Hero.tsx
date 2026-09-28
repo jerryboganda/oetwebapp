@@ -21,7 +21,7 @@ export interface PricingHeroProps {
 const DEFAULT_BADGES: PricingHeroBadge[] = [
   { label: 'W', tooltip: 'Writing letter assessment add-ons' },
   { label: 'S', tooltip: 'Extra private Speaking sessions' },
-  { label: 'TB GBP32', tooltip: 'Discounted GBP 32 Tutor Book add-on' },
+  { label: 'TB discount', tooltip: 'Discounted Tutor Book add-on for eligible courses' },
 ];
 
 export function Hero({

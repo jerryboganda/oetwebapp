@@ -91,9 +91,9 @@ function LearnerSessionLoadingState() {
                 title="Keep today&apos;s priorities and exam signals in view"
                 description="Decide your next action, check your readiness, and move forward with confidence."
                 highlights={[
-                  { icon: Calendar, label: 'Exam target', value: 'Set your exam date' },
-                  { icon: Star, label: 'Pending reviews', value: '0 in progress' },
-                  { icon: CheckCircle2, label: "Today's plan", value: 'No tasks scheduled' },
+                  { icon: Calendar, label: 'Exam target', value: 'Loading…' },
+                  { icon: Star, label: 'Pending reviews', value: 'Loading…' },
+                  { icon: CheckCircle2, label: "Today's plan", value: 'Loading…' },
                 ]}
                 footer={<div aria-hidden="true" className="min-h-[104px]" />}
               />

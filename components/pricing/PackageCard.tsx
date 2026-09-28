@@ -43,7 +43,7 @@ export function PackageCard({ plan, detailsHref }: PackageCardProps) {
         <Tag label={formatAccess(plan.accessDurationDays)} />
         {plan.writingAddonsEnabled ? <Tag label="W add-ons" gold /> : null}
         {plan.speakingAddonsEnabled ? <Tag label="S add-ons" gold /> : null}
-        {plan.tutorBookDiscountEnabled ? <Tag label="TB GBP32" gold /> : null}
+        {plan.tutorBookDiscountEnabled ? <Tag label="TB discount" gold /> : null}
       </div>
       {plan.description ? (
         <p className="mt-3 text-sm text-muted line-clamp-4">{plan.description}</p>

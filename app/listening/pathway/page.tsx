@@ -145,7 +145,7 @@ export default function ListeningPathwayPage() {
           eyebrow="Listening pathway"
           icon={CalendarDays}
           title="Your listening roadmap"
-          description="A personalised 12-week schedule of focus skills, accent practice, and mock tests."
+          description="A personalised schedule of focus skills, accent practice, and mock tests."
         />
 
         {pathway && (

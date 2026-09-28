@@ -70,7 +70,7 @@ describe('CatalogPage', () => {
     await waitFor(() => expect(mockFetchPublicCatalog).toHaveBeenCalledTimes(1));
     expect((await screen.findAllByText('Full Condensed Recorded OET Course - Medicine')).length).toBeGreaterThan(0);
     expect(screen.getByText('OET with Dr. Ahmed Hesham · 2026 Portfolio')).toBeInTheDocument();
-    expect(screen.getAllByText('Tutor Book £32').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tutor Book discount').length).toBeGreaterThan(0);
     expect(screen.getAllByText('£100').length).toBeGreaterThan(0);
     expect(screen.getAllByText('£32').length).toBeGreaterThan(0);
     expect(container.textContent).toContain('£45');

@@ -66,7 +66,7 @@ export default function TutorBookPage() {
           <BookOpen className="mx-auto h-12 w-12 text-muted opacity-50" aria-hidden="true" />
           <h1 className="mt-4 text-xl font-bold text-navy">The Tutor Book is locked</h1>
           <p className="mt-2 text-sm text-muted">
-            Purchase The Tutor Book (£45) or the £32 add-on alongside an eligible course to unlock the reader, audio scripts and updates.
+            Purchase The Tutor Book, or the discounted add-on alongside an eligible course, to unlock the reader, audio scripts and updates.
           </p>
           <a
             href="/marketplace/packages/tutor-book"

@@ -123,9 +123,10 @@ export default function ConversationResultsPage() {
 
   if (!evaluation) return null;
 
-  const grade: OetGrade = ((evaluation.overallGrade as OetGrade) ?? 'E');
-  const gradeColor = GRADE_COLORS[grade] ?? 'bg-muted';
-  const scaled = evaluation.scaledScore ?? 0;
+  // Never invent a grade/score: missing values render as unavailable, not "0/500 · Grade E".
+  const scaled = evaluation.scaledScore ?? null;
+  const grade: OetGrade | null = (evaluation.overallGrade as OetGrade | null | undefined) ?? (scaled != null ? gradeSpeaking(scaled).grade : null);
+  const gradeColor = (grade && GRADE_COLORS[grade]) || 'bg-muted';
   const criteria = evaluation.criteria ?? [];
   const strengths = evaluation.strengths ?? [];
   const improvements = evaluation.improvements ?? [];
@@ -133,7 +134,7 @@ export default function ConversationResultsPage() {
   const annotations = evaluation.turnAnnotations ?? [];
   const turns = evaluation.turns ?? [];
   const appliedRuleIds = evaluation.appliedRuleIds ?? [];
-  const passScaled = evaluation.passScaled ?? gradeSpeaking(scaled).requiredScaled;
+  const passScaled = evaluation.passScaled ?? gradeSpeaking(scaled ?? 0).requiredScaled;
 
   return (
     <LearnerDashboardShell>
@@ -147,13 +148,13 @@ export default function ConversationResultsPage() {
             OET Speaking practice · Scaled score
           </div>
           <div className={`mx-auto mb-3 inline-flex h-24 w-24 items-center justify-center rounded-full ${gradeColor} text-3xl font-bold text-white shadow-sm`}>
-            {grade}
+            {grade ?? '—'}
           </div>
           <div className="mb-1 text-3xl font-bold text-navy">
-            {formatScaledScore(scaled)} · {oetGradeLabel(grade)}
+            {scaled != null ? formatScaledScore(scaled) : 'Score unavailable'}{grade ? ` · ${oetGradeLabel(grade)}` : ''}
           </div>
           <div className="mb-3 flex items-center justify-center gap-2 text-sm">
-            {evaluation.passed ? (
+            {evaluation.passed == null ? null : evaluation.passed ? (
               <Badge variant="success">Above pass mark ({formatScaledScore(passScaled)})</Badge>
             ) : (
               <Badge variant="warning">Below pass mark ({formatScaledScore(passScaled)})</Badge>

@@ -109,8 +109,8 @@ export function AddonPurchaseModal({
           {status === 'ineligible' && quote && isTutorBook && quote.reason !== 'addon_already_owned' && (
             <div className="space-y-4">
               <div className="rounded-lg border border-border bg-background-light p-4 text-sm text-navy">
-                You&apos;ll pay £45 — the standard price. A £32 discount applies automatically once you&apos;re
-                enrolled on an eligible course.
+                You&apos;ll pay the standard price (shown at checkout). The discounted add-on price applies
+                automatically once you&apos;re enrolled on an eligible course.
               </div>
               <Button
                 type="button"
@@ -127,7 +127,7 @@ export function AddonPurchaseModal({
                   onClose();
                 }}
               >
-                <ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continue to checkout — £45
+                <ShoppingBag className="h-4 w-4" aria-hidden="true" /> Continue to checkout
               </Button>
             </div>
           )}

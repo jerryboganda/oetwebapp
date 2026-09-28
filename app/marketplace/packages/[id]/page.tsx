@@ -135,7 +135,7 @@ export default function PackageDetailPage() {
                 <HeroTag><Clock className="mr-1 h-3 w-3" /> {websitePackage?.access ?? `${formatAccess(plan.accessDurationDays)} access`}</HeroTag>
                 {plan.writingAddonsEnabled && <HeroTag gold>W add-ons</HeroTag>}
                 {plan.speakingAddonsEnabled && <HeroTag gold>S add-ons</HeroTag>}
-                {tutorBookAddon && <HeroTag gold>Tutor Book £32</HeroTag>}
+                {tutorBookAddon && <HeroTag gold>Tutor Book £{tutorBookAddon.price.toFixed(0)}</HeroTag>}
               </div>
             </div>
             <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-right">
@@ -164,7 +164,12 @@ export default function PackageDetailPage() {
               )}
               <p className="mt-2 text-3xs text-white/60">
                 {plan.code === 'tutor-book'
-                  ? 'We check your eligibility automatically — £32 if you have an eligible course, £45 otherwise.'
+                  ? (() => {
+                      const discounted = addOns.find((a) => a.eligibilityFlag === 'tutor_book_discount')?.price;
+                      return discounted != null
+                        ? `We check your eligibility automatically — £${discounted.toFixed(0)} if you have an eligible course, £${plan.price.toFixed(0)} otherwise.`
+                        : 'We check your eligibility automatically — a discounted price applies if you have an eligible course.';
+                    })()
                   : 'Charged in GBP. No auto-renewal.'}
               </p>
             </div>
@@ -249,7 +254,7 @@ export default function PackageDetailPage() {
             {tutorBookAddon && (
               <div className="mt-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-                  The Tutor Book (£32, discount for enrolled candidates)
+                  The Tutor Book (£{tutorBookAddon.price.toFixed(0)}, discount for enrolled candidates)
                 </h3>
                 <div className="mt-3 max-w-sm rounded-2xl border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">

@@ -74,7 +74,7 @@ export function FeatureMatrix({ plans, loading, error, emptyMessage }: FeatureMa
               <th scope="col" className="px-4 py-3">Access</th>
               <th scope="col" className="px-4 py-3 text-center">W</th>
               <th scope="col" className="px-4 py-3 text-center">S</th>
-              <th scope="col" className="px-4 py-3 text-center">TB GBP32</th>
+              <th scope="col" className="px-4 py-3 text-center">TB discount</th>
               <th scope="col" className="px-4 py-3 text-right">Price</th>
             </tr>
           </thead>

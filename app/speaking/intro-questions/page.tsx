@@ -46,9 +46,9 @@ export default function SpeakingIntroQuestionsPage() {
           icon={<MessageCircleQuestion />}
           accent="primary"
           title="Speaking Intro Questions"
-          description="12 common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
+          description={`${SPEAKING_INTRO_QUESTIONS.length} common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own.`}
           highlights={[
-            { icon: <MessageCircleQuestion />, label: 'Questions', value: '12 with sample answers' },
+            { icon: <MessageCircleQuestion />, label: 'Questions', value: `${SPEAKING_INTRO_QUESTIONS.length} with sample answers` },
             { icon: <Users />, label: 'Works for', value: 'Every profession' },
           ]}
         />

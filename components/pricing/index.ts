@@ -29,8 +29,5 @@ export type { ClassPackagesProps } from './ClassPackages';
 export { GuaranteeBanner } from './GuaranteeBanner';
 export type { GuaranteeBannerProps } from './GuaranteeBanner';
 
-export { Testimonials } from './Testimonials';
-export type { TestimonialsProps, Testimonial } from './Testimonials';
-
 export { FAQ } from './FAQ';
 export type { FAQProps, FaqItem } from './FAQ';

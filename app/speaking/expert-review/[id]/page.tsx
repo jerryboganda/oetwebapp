@@ -92,7 +92,7 @@ function ExpertReviewRequestContent() {
             </div>
             <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
             <p className="text-muted mb-10 leading-relaxed">
-              Your recording has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.
+              Your recording has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used{estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.
             </p>
             <Button size="lg" asChild>
 <Link href="/speaking">

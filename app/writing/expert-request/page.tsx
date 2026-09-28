@@ -111,7 +111,7 @@ function WritingExpertReviewContent() {
             <Card className="p-8 max-w-md w-full text-center">
               <div className="w-20 h-20 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" aria-hidden="true" /></div>
               <h1 className="text-2xl font-bold text-navy mb-2">Request Submitted!</h1>
-              <p className="text-muted mb-8">Your submission has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.</p>
+              <p className="text-muted mb-8">Your submission has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used{estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.</p>
               <div className="text-sm text-muted/60 motion-safe:animate-pulse">Redirecting to results…</div>
             </Card>
           </MotionPage>
