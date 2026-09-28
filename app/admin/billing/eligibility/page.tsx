@@ -22,6 +22,7 @@ import { Switch } from '@/components/admin/ui/switch';
 import { InlineAlert } from '@/components/ui/alert';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import { fetchEligibilityMatrix } from '@/lib/api';
+import { exportToCsv } from '@/lib/csv-export';
 import type { EligibilityMatrixResponse, EligibilityMatrixRow } from '@/lib/types/admin';
 import { useAuth } from '@/contexts/auth-context';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -86,29 +87,21 @@ export default function AdminEligibilityMatrixPage() {
 
   const handleExportCsv = () => {
     if (!data?.plans) return;
-    const header =
-      'code,name,profession,category,is_draft,is_visible,writing_addons,speaking_addons,tutor_book_discount,eligible_addons';
-    const rows = filteredRows.map((row) =>
-      [
-        csvEscape(row.code),
-        csvEscape(row.name),
-        csvEscape(row.profession),
-        csvEscape(row.productCategory),
-        row.isDraft ? 'true' : 'false',
-        row.isVisible ? 'true' : 'false',
-        row.writingAddonsEnabled ? 'true' : 'false',
-        row.speakingAddonsEnabled ? 'true' : 'false',
-        row.tutorBookDiscountEnabled ? 'true' : 'false',
-        csvEscape(row.eligibleAddOnCodes.join('|')),
-      ].join(','),
+    exportToCsv(
+      filteredRows.map((row) => ({
+        code: row.code,
+        name: row.name,
+        profession: row.profession,
+        category: row.productCategory,
+        is_draft: row.isDraft ? 'true' : 'false',
+        is_visible: row.isVisible ? 'true' : 'false',
+        writing_addons: row.writingAddonsEnabled ? 'true' : 'false',
+        speaking_addons: row.speakingAddonsEnabled ? 'true' : 'false',
+        tutor_book_discount: row.tutorBookDiscountEnabled ? 'true' : 'false',
+        eligible_addons: row.eligibleAddOnCodes.join('|'),
+      })),
+      `oet-2026-eligibility-matrix-${new Date().toISOString().slice(0, 10)}.csv`,
     );
-    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `oet-2026-eligibility-matrix-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   if (!user) return null;
@@ -294,11 +287,4 @@ function FlagDot({ enabled }: { enabled: boolean }) {
       }`}
     />
   );
-}
-
-function csvEscape(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
 }
