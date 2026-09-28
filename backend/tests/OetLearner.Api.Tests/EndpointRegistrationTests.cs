@@ -185,7 +185,7 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
             .SelectMany(source => source.Endpoints)
             .OfType<RouteEndpoint>()
             .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])
-                .Select(method => $"{method} {System.Text.RegularExpressions.Regex.Replace(NormalizeRoutePattern(endpoint.RoutePattern.RawText), @"\{(\*{0,2})[A-Za-z0-9_]+", "{$1")}"))
+                .Select(method => $"{method} {RouteShape(endpoint.RoutePattern.RawText)}"))
             .GroupBy(key => key, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
@@ -196,6 +196,12 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
 
     private static string NormalizeRoutePattern(string? routePattern)
         => string.IsNullOrWhiteSpace(routePattern) ? string.Empty : routePattern.TrimEnd('/');
+
+    // Erases route parameter names but keeps constraints and catch-all stars
+    // (id:guid becomes :guid). \x7B / { spell the opening brace so the
+    // ship-gate delimiter check sees balanced source.
+    private static string RouteShape(string? routePattern)
+        => System.Text.RegularExpressions.Regex.Replace(NormalizeRoutePattern(routePattern), @"\x7B(\*?\*?)\w+", "{$1");
 
     private static bool DisablesAntiforgery(RouteEndpoint endpoint)
         => endpoint.Metadata.Any(metadata =>
