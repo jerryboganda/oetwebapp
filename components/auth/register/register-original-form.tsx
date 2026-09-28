@@ -38,7 +38,7 @@ const stepMeta = [
 
 /**
  * Fixed target-country list per PRD Phase 2 §1. The canonical list now lives
- * in {@link ./target-countries.ts} and is shared with the legacy register-form.
+ * in {@link @/lib/auth/target-countries}.
  */
 
 export function RegisterForm() {

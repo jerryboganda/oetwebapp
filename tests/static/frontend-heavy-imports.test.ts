@@ -15,7 +15,7 @@ describe('frontend heavy import boundaries', () => {
     const selector = source('components/auth/country-code-select.tsx');
     const lazySelector = source('components/auth/lazy-country-code-select.tsx');
     const consumers = [
-      source('components/auth/register/register-personal-step.tsx'),
+      source('components/auth/register/register-placement-form.tsx'),
       source('components/auth/register/register-original-form.tsx'),
     ].join('\n');
 
@@ -49,9 +49,7 @@ describe('frontend heavy import boundaries', () => {
       'components/auth/auth-mode-switch.tsx',
       'components/auth/mfa-challenge-form.tsx',
       'components/auth/mfa-setup-card.tsx',
-      'components/auth/register-form.tsx',
       'components/auth/register/register-original-form.tsx',
-      'components/auth/register/register-security-step.tsx',
       'components/auth/sign-in-form.tsx',
       'components/auth/themed-password-input.tsx',
     ].map(source).join('\n');

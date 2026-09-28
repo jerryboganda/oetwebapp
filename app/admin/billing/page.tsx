@@ -1,6 +1,7 @@
 'use client';
 
-import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { InvoiceEvidenceDrawer, type InvoiceEvidenceTarget } from '@/components/admin/billing/invoice-evidence-drawer';
 import Link from 'next/link';
 import { Activity, AlertTriangle, CreditCard, DollarSign, Download, FileSearch, FileText, History as HistoryIcon, Package, Receipt, Search, Ticket, Trash2, Users } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
@@ -90,7 +91,6 @@ type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type CatalogHistoryKind = 'plan' | 'add_on' | 'coupon';
 type CatalogHistoryTarget = { kind: CatalogHistoryKind; id: string; name: string; code: string };
-type InvoiceEvidenceTarget = { id: string; userName: string; plan: string };
 type CatalogVersionMetadata = {
   activeVersionNumber?: number | null;
   latestVersionNumber?: number | null;
@@ -353,16 +353,6 @@ function formatDateTime(value: string | null | undefined): string {
   return formatSharedDateTime(value);
 }
 
-function evidenceGapLabel(value: string): string {
-  const labels: Record<string, string> = {
-    quote: 'Quote snapshot',
-    payment: 'Payment transaction',
-    couponRedemption: 'Coupon redemption',
-    events: 'Event timeline',
-    catalogAnchors: 'Catalog anchors',
-  };
-  return labels[value] ?? labelSummaryKey(value);
-}
 
 function paymentStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'default' | 'info' {
   if (status === 'completed') return 'success';
@@ -441,23 +431,7 @@ function renderLinkedLocalIds(signal: AdminBillingProviderLifecycleSignal) {
   );
 }
 
-function EvidenceSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="space-y-3 border-t border-border pt-4">
-      <h3 className="text-sm font-semibold text-admin-fg-strong">{title}</h3>
-      {children}
-    </section>
-  );
-}
 
-function EvidenceField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-lg bg-admin-bg-subtle px-3 py-2">
-      <dt className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-admin-fg-strong">{children || 'Not recorded'}</dd>
-    </div>
-  );
-}
 
 function labelSummaryKey(key: string): string {
   return key
@@ -3111,211 +3085,14 @@ export default function BillingPage() {
         ) : null}
       </Drawer>
 
-      <Drawer
-        open={invoiceEvidenceTarget !== null}
+      <InvoiceEvidenceDrawer
+        target={invoiceEvidenceTarget}
+        evidence={invoiceEvidence}
+        status={invoiceEvidenceStatus}
+        downloadingInvoiceId={downloadingInvoiceId}
         onClose={closeInvoiceEvidence}
-        title="Invoice Evidence"
-        className="sm:max-w-3xl"
-      >
-        {invoiceEvidenceTarget ? (
-          <div className="space-y-5">
-            <div className="border-b border-border pb-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="default">read only</Badge>
-                {invoiceEvidence ? (() => {
-                  const badge = invoiceStatusBadge(invoiceEvidence.invoice.status, invoiceEvidence.invoice.source);
-                  return <Badge variant={badge.variant}>{badge.label}</Badge>;
-                })() : null}
-                {invoiceEvidence?.payments.length ? <Badge variant="info">{invoiceEvidence.payments.length} payment {invoiceEvidence.payments.length === 1 ? 'record' : 'records'}</Badge> : null}
-                {invoiceEvidence?.notRecorded.length ? <Badge variant="default">partial local evidence</Badge> : null}
-              </div>
-              <h2 className="mt-3 text-lg font-semibold text-admin-fg-strong">{invoiceEvidence?.invoice.userName ?? invoiceEvidenceTarget.userName}</h2>
-              <p className="mt-1 break-words font-mono text-xs text-muted">{invoiceEvidenceTarget.id}</p>
-              <p className="mt-1 text-sm text-muted">{invoiceEvidence?.invoice.description ?? invoiceEvidenceTarget.plan}</p>
-              <Button
-                variant="primary"
-                size="sm"
-                className="mt-3 gap-2"
-                disabled={downloadingInvoiceId === invoiceEvidenceTarget.id}
-                onClick={() => handleDownloadInvoice(invoiceEvidenceTarget.id)}
-              >
-                <Download className="h-4 w-4" />
-                {downloadingInvoiceId === invoiceEvidenceTarget.id ? 'Downloading…' : 'Download invoice PDF'}
-              </Button>
-            </div>
-
-            {invoiceEvidenceStatus === 'loading' ? (
-              <div className="space-y-3" role="status" aria-live="polite">
-                {[0, 1, 2, 3].map((item) => (
-                  <div key={item} className="h-24 animate-pulse rounded-lg bg-admin-bg-subtle" />
-                ))}
-              </div>
-            ) : null}
-
-            {invoiceEvidenceStatus === 'error' ? (
-              <EmptyState
-                icon={<FileSearch className="h-10 w-10 text-muted" />}
-                title="Invoice evidence unavailable"
-                description="Refresh the page or try the selected invoice again."
-              />
-            ) : null}
-
-            {invoiceEvidenceStatus === 'success' && invoiceEvidence ? (
-              <div className="space-y-5">
-                {invoiceEvidence.notRecorded.length > 0 ? (
-                  <div className="rounded-lg border border-border bg-admin-bg-subtle px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Not recorded</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {invoiceEvidence.notRecorded.map((item) => <Badge key={item} variant="muted">{evidenceGapLabel(item)}</Badge>)}
-                    </div>
-                  </div>
-                ) : null}
-
-                {invoiceEvidence.integrityFlags.length > 0 ? (
-                  <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Integrity flags</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {invoiceEvidence.integrityFlags.map((item) => <Badge key={item} variant="warning">{labelSummaryKey(item)}</Badge>)}
-                    </div>
-                  </div>
-                ) : null}
-
-                <EvidenceSection title="Invoice">
-                  <dl className="grid gap-3 sm:grid-cols-2">
-                    <EvidenceField label="Invoice ID">{invoiceEvidence.invoice.id}</EvidenceField>
-                    <EvidenceField label="Learner">{invoiceEvidence.invoice.userName}</EvidenceField>
-                    <EvidenceField label="Issued">{formatDateTime(invoiceEvidence.invoice.issuedAt)}</EvidenceField>
-                    <EvidenceField label="Amount">{formatCurrency(invoiceEvidence.invoice.amount, invoiceEvidence.invoice.currency)}</EvidenceField>
-                    <EvidenceField label="Quote ID">
-                      {invoiceEvidence.invoice.quoteId ??
-                        (invoiceEvidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
-                    </EvidenceField>
-                    <EvidenceField label="Checkout Session">
-                      {invoiceEvidence.invoice.checkoutSessionId ??
-                        (invoiceEvidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
-                    </EvidenceField>
-                  </dl>
-                </EvidenceSection>
-
-                <EvidenceSection title="Quote Snapshot">
-                  {invoiceEvidence.quote ? (
-                    <div className="space-y-3">
-                      <dl className="grid gap-3 sm:grid-cols-2">
-                        <EvidenceField label="Quote ID">{invoiceEvidence.quote.id}</EvidenceField>
-                        <EvidenceField label="Status">{invoiceEvidence.quote.status}</EvidenceField>
-                        <EvidenceField label="Subtotal">{formatCurrency(invoiceEvidence.quote.subtotalAmount, invoiceEvidence.quote.currency)}</EvidenceField>
-                        <EvidenceField label="Discount">{formatCurrency(invoiceEvidence.quote.discountAmount, invoiceEvidence.quote.currency)}</EvidenceField>
-                        <EvidenceField label="Total">{formatCurrency(invoiceEvidence.quote.totalAmount, invoiceEvidence.quote.currency)}</EvidenceField>
-                        <EvidenceField label="Expires">{formatDateTime(invoiceEvidence.quote.expiresAt)}</EvidenceField>
-                      </dl>
-                      {invoiceEvidence.quote.items.length > 0 ? (
-                        <div className="space-y-2">
-                          {invoiceEvidence.quote.items.map((item) => (
-                            <div key={`${item.kind}-${item.code}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-admin-bg-subtle px-3 py-2 text-sm">
-                              <div className="min-w-0">
-                                <p className="font-medium text-admin-fg-strong">{item.name}</p>
-                                <p className="text-xs uppercase tracking-[0.12em] text-muted">{item.kind} - {item.code}</p>
-                              </div>
-                              <p className="font-medium text-admin-fg-strong">{formatCurrency(item.amount, item.currency)} x {item.quantity}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <p className="text-sm text-muted">Not recorded</p>}
-                    </div>
-                  ) : <p className="text-sm text-muted">Not recorded</p>}
-                </EvidenceSection>
-
-                <EvidenceSection title="Payment">
-                  {invoiceEvidence.payments.length > 0 ? (
-                    <div className="space-y-3">
-                      {invoiceEvidence.payments.map((payment) => (
-                        <dl key={payment.id} className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
-                          <EvidenceField label="Gateway">{payment.gateway}</EvidenceField>
-                          <EvidenceField label="Gateway Transaction">{payment.gatewayTransactionId}</EvidenceField>
-                          <EvidenceField label="Status">{payment.status}</EvidenceField>
-                          <EvidenceField label="Amount">{formatCurrency(payment.amount, payment.currency)}</EvidenceField>
-                          <EvidenceField label="Product">{payment.productType || 'Not recorded'} / {payment.productId || 'Not recorded'}</EvidenceField>
-                          <EvidenceField label="Updated">{formatDateTime(payment.updatedAt)}</EvidenceField>
-                        </dl>
-                      ))}
-                    </div>
-                  ) : <p className="text-sm text-muted">Not recorded</p>}
-                </EvidenceSection>
-
-                <EvidenceSection title="Coupon">
-                  {invoiceEvidence.redemptions.length > 0 ? (
-                    <div className="space-y-3">
-                      {invoiceEvidence.redemptions.map((redemption) => (
-                        <dl key={redemption.id} className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
-                          <EvidenceField label="Coupon">{redemption.couponCode}</EvidenceField>
-                          <EvidenceField label="Status">{redemption.status}</EvidenceField>
-                          <EvidenceField label="Discount">{formatCurrency(redemption.discountAmount, redemption.currency)}</EvidenceField>
-                          <EvidenceField label="Redeemed">{formatDateTime(redemption.redeemedAt)}</EvidenceField>
-                          <EvidenceField label="Coupon Version">{redemption.couponVersionId ?? 'Not recorded'}</EvidenceField>
-                          <EvidenceField label="Subscription">{redemption.subscriptionId ?? 'Not recorded'}</EvidenceField>
-                        </dl>
-                      ))}
-                    </div>
-                  ) : <p className="text-sm text-muted">Not recorded</p>}
-                </EvidenceSection>
-
-                <EvidenceSection title="Subscription Items">
-                  {invoiceEvidence.subscriptionItems.length > 0 ? (
-                    <div className="space-y-2">
-                      {invoiceEvidence.subscriptionItems.map((item) => (
-                        <div key={item.id} className="grid gap-2 rounded-lg bg-admin-bg-subtle px-3 py-2 text-sm sm:grid-cols-[1fr_auto]">
-                          <div className="min-w-0">
-                            <p className="font-medium text-admin-fg-strong">{item.itemCode}</p>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted">{item.itemType} - {item.addOnVersionId ?? 'Not recorded'}</p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            <Badge variant={item.status === 'active' ? 'success' : 'muted'}>{item.status}</Badge>
-                            <span className="text-muted">qty {item.quantity}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <p className="text-sm text-muted">Not recorded</p>}
-                </EvidenceSection>
-
-                <EvidenceSection title="Catalog Anchors">
-                  <dl className="grid gap-3 sm:grid-cols-2">
-                    <EvidenceField label="Source">{invoiceEvidence.catalogAnchors.source === 'not_recorded' ? 'Not recorded' : invoiceEvidence.catalogAnchors.source}</EvidenceField>
-                    <EvidenceField label="Plan Version">{invoiceEvidence.catalogAnchors.planVersionId ?? 'Not recorded'}</EvidenceField>
-                    <EvidenceField label="Coupon Version">{invoiceEvidence.catalogAnchors.couponVersionId ?? 'Not recorded'}</EvidenceField>
-                    <EvidenceField label="Add-on Versions">
-                      {Object.entries(invoiceEvidence.catalogAnchors.addOnVersionIds).length > 0
-                        ? Object.entries(invoiceEvidence.catalogAnchors.addOnVersionIds).map(([code, version]) => `${code}: ${version}`).join(', ')
-                        : 'Not recorded'}
-                    </EvidenceField>
-                  </dl>
-                </EvidenceSection>
-
-                <EvidenceSection title="Events">
-                  {invoiceEvidence.events.length > 0 ? (
-                    <div className="space-y-3">
-                      {invoiceEvidence.events.map((event) => (
-                        <div key={event.id} className="relative border-l border-border pl-4">
-                          <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-admin-bg-surface bg-admin-primary" aria-hidden="true" />
-                          <div className="rounded-lg bg-admin-bg-subtle px-3 py-2">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="break-words font-medium text-admin-fg-strong">{event.eventType}</p>
-                                <p className="break-words text-xs uppercase tracking-[0.12em] text-muted">{event.entityType} - {event.entityId || 'Not recorded'}</p>
-                              </div>
-                              <p className="text-xs text-muted">{formatDateTime(event.occurredAt)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <p className="text-sm text-muted">Not recorded</p>}
-                </EvidenceSection>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </Drawer>
+        onDownload={(invoiceId) => void handleDownloadInvoice(invoiceId)}
+      />
 
       <Modal
         open={isPlanModalOpen}

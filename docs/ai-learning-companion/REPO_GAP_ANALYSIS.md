@@ -276,7 +276,7 @@ The source places Speaking voice role-play at Stage 3 behind a feasibility gate.
 | F-147 | Optional annual billing | `PARTIAL` | Billing periods exist on plan versions; regional gateways are registered. | Verify annual SKUs in `oet-2026-catalog.json` before claiming support. | Stage 2 | Low |
 | F-148 | Upgrade/downgrade/cancel | `EXISTS` | `BillingSubscriptionEndpoints`, `SubscriptionStateMachine`, `RefundService`, `DisputeService`, dunning and retry. | None. | Shipped | Low |
 | F-149 | Fair-use/rate limits | `EXISTS` | Rate-limit policies `PerUser`, `PerUserWrite`, `AiInteractive`, `AiInteractiveDay`, `AiScoring`, `AiLiveSpeaking`, `HubConnect`; `DailySafetyCapPct`. | Companion endpoints must adopt `AiInteractive`. | Stage 1 | Low |
-| F-150 | Regional currency display | `PARTIAL` | `components/ui/price`, multi-gateway support (e.g. `easykash`), billing-country handling. | PPP bands and regional eligibility remain TV-023. | Stage 2 | Medium |
+| F-150 | Regional currency display | `PARTIAL` | `lib/money` formatMoney, multi-gateway support (e.g. `easykash`), billing-country handling. | PPP bands and regional eligibility remain TV-023. | Stage 2 | Medium |
 | F-151 | Cost ceiling alerts | `EXISTS` | `AiBudgetService` + `AiBudgetAlertService` with `AiBudgetPeriod`/`AiBudgetAlert`; ceilings are configurable. | Source per-tier ceilings depend on the new tiers (F-136..F-138), which are blocked. | Stage 1 | Medium |
 
 ### Trust & platform (F-152 ... F-167)

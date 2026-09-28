@@ -266,7 +266,7 @@ export function InvoiceEvidenceDrawer({
                     {evidence.events.map((event) => (
                       <div key={event.id} className="relative border-l border-border pl-4">
                         <span
-                          className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary"
+                          className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-admin-bg-surface bg-admin-primary"
                           aria-hidden="true"
                         />
                         <div className="rounded-lg bg-admin-bg-subtle px-3 py-2">
