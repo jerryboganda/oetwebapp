@@ -41,6 +41,7 @@ import {
   readSentryRelease,
   scrubPii,
 } from '@/lib/observability/sentry-shared';
+import { currentBrowserPathname, isOwnerAgentSentryEvent } from '@/lib/owner-agent/route-scope';
 
 const RuntimeConfigContext = createContext<RuntimeConfig>(buildFallbackRuntimeConfig());
 
@@ -72,7 +73,12 @@ async function maybeLazyInitSentryFromRuntime(dsn: string | null): Promise<void>
       // Privacy pins mirror sentry.client.config.ts — hard-coded so they cannot
       // be flipped by runtime config.
       sendDefaultPii: false,
-      beforeSend: scrubPii,
+      // Same owner-agent-console guard as the boot config: nothing from
+      // /admin/agent-console ever leaves the browser.
+      beforeSend: (event, hint) =>
+        isOwnerAgentSentryEvent(event, currentBrowserPathname()) ? null : scrubPii(event, hint),
+      beforeSendTransaction: (event) =>
+        isOwnerAgentSentryEvent(event, currentBrowserPathname()) ? null : event,
       // Performance/replay default to 0 — the runtime DSN path only enables
       // error capture; sampling stays opt-in via the existing build-time path.
       tracesSampleRate: 0,

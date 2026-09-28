@@ -305,6 +305,40 @@ export function uploadWritingReviewCriterionVoiceNote(
   return uploadReviewCriterionVoiceNote('writing', reviewRequestId, body);
 }
 
+// ── Review-level speaking voice notes (SpeakingReviewVoiceNoteEndpoints) ──
+// Same upload-then-JSON flow as the per-criterion recorder above: the backend
+// binds a JSON SpeakingReviewVoiceNoteCreateRequest, never multipart.
+export async function listSpeakingReviewVoiceNotes(reviewRequestId: string): Promise<unknown[]> {
+  const body = await apiRequest<{ items?: unknown[] } | unknown[] | undefined>(
+    `/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`,
+  );
+  const items = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
+  // The list projection carries mediaAssetId but no url; point playback at the media content route.
+  return items.map((item) => {
+    const r = item as Record<string, unknown> | null;
+    if (r && typeof r === 'object' && r.url == null && r.mediaUrl == null && typeof r.mediaAssetId === 'string') {
+      return { ...r, url: `/v1/media/${encodeURIComponent(r.mediaAssetId)}/content` };
+    }
+    return item;
+  });
+}
+
+export async function uploadSpeakingReviewVoiceNote(
+  reviewRequestId: string,
+  body: { file: File; durationSeconds: number },
+): Promise<{ id: string; mediaAssetId: string }> {
+  const uploaded = await uploadMedia(body.file);
+  const durationSeconds = Number.isFinite(body.durationSeconds) ? Math.max(0, Math.round(body.durationSeconds)) : 0;
+  return apiRequest(
+    `/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`,
+    { method: 'POST', body: JSON.stringify({ mediaAssetId: uploaded.id, durationSeconds }) },
+  );
+}
+
+export async function deleteSpeakingReviewVoiceNote(voiceNoteId: string): Promise<void> {
+  await apiRequest(`/v1/expert/speaking/voice-notes/${encodeURIComponent(voiceNoteId)}`, { method: 'DELETE' });
+}
+
 // ── Writing V2 marking voice note (System A, submission-keyed) ─────────────────
 // One overall tutor voice note per writing submission (mock + normal). Distinct
 // from uploadWritingReviewCriterionVoiceNote, which posts per-criterion notes to

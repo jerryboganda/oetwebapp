@@ -1,0 +1,75 @@
+name: Visual QA
+
+# Runs tests/e2e/shared/visual-qa.spec.ts (@visual) against the production-mode
+# Docker stack: no horizontal overflow at 360/768/1280/1920 on representative
+# routes per role, with full-page screenshots uploaded for review.
+# Separate from QA Smoke so layout checks never slow or redden the smoke gate.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'tests/e2e/shared/visual-qa.spec.ts'
+
+concurrency:
+  group: visual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual-qa:
+    name: Visual QA (chromium, 4 roles × 4 widths)
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build local stack
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose -f docker-compose.desktop.yml up -d --build; then
+              exit 0
+            fi
+            docker compose -f docker-compose.desktop.yml down -v || true
+            sleep $((attempt * 15))
+          done
+          docker compose -f docker-compose.desktop.yml up -d --build
+
+      - name: Verify stack readiness
+        run: node ./scripts/qa/assert-local-stack.mjs
+
+      - name: Run visual sweep
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: >
+          pnpm exec playwright test tests/e2e/shared/visual-qa.spec.ts
+          --project=chromium-unauth --project=chromium-learner
+          --project=chromium-expert --project=chromium-admin
+
+      - name: Upload screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-qa
+          path: |
+            output/playwright/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Shut down stack
+        if: always()
+        run: docker compose -f docker-compose.desktop.yml down -v
