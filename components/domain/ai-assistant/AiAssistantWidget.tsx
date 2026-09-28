@@ -20,7 +20,7 @@ export function AiAssistantWidget({ role, hasNotification = false }: AiAssistant
     <>
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
+        className="fixed right-4 bottom-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+0.75rem)] lg:right-6 lg:bottom-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
         aria-label="Toggle AI Assistant"
       >
         <MessageSquare className="h-6 w-6" />

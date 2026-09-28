@@ -53,6 +53,8 @@ export interface NavItem {
    * which always renders `label` and never this field.
    */
   sidebarLabel?: string;
+  /** Short label for the mobile bottom nav, where ~6 items share a phone width. Falls back to `label`. */
+  mobileLabel?: string;
   /**
    * Canonical PascalCase module key (see hooks/use-enabled-modules MODULE_KEYS). When set, the item
    * is hidden for learners whose plan has that admin-togglable module disabled. Fail-open otherwise.
