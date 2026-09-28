@@ -37,18 +37,6 @@ export function LearnerDashboardShell({
   navActions,
   ...shellProps
 }: LearnerDashboardShellProps) {
-  // Transitional: under app/(learner)/layout.tsx the layout already renders the
-  // shell, so a page-level shell passes through and there is only ever one.
-  const insideLearnerLayout = useContext(LearnerShellSlot) !== undefined;
-  if (insideLearnerLayout) {
-    return (
-      <>
-        {navActions ? <LearnerNavActions>{navActions}</LearnerNavActions> : null}
-        {children}
-      </>
-    );
-  }
-
   // Learner sidebar: Dashboard | Listening | Reading | Writing | Speaking |
   // Mocks | Recalls | Progress | Billing. The legacy Learn group
   // (Grammar/Classes/Lessons/Strategies/Conversation) is not surfaced in the
