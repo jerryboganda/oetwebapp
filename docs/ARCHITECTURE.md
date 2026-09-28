@@ -73,7 +73,7 @@ Production: push to `main` → `.github/workflows/deploy.yml` builds GHCR images
 
 - Android id `com.oetwithdrhesham.app` vs iOS `com.oetprep.learner`: frozen store identities.
 - `lib/mock-data.ts` holds real shared types; renaming it would touch hundreds of imports.
-- `docker-compose.vps.yml` and `staging.yml` are not deploy paths (see their headers).
+- `docker-compose.staging.yml` is not a deploy path; `deploy.yml` ships only `docker-compose.production.yml`.
 - Multi-exam scoring strategies (`Services/Scoring/`, `Services/ExamSession/`) compile and are
   unit-tested but are not wired into DI; OET scoring goes through `OetScoring` directly.
 - ~8 EF entities have no reads or writes in code; they back live tables and stay.

@@ -387,6 +387,18 @@ jobs:
           fi
           tail -30 "$log"
 
+      # App Store Connect rejects uploads without a privacy manifest. The file
+      # only ships if the Xcode project lists it in the App target's resources.
+      - name: Assert the privacy manifest ships in App.app
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app/PrivacyInfo.xcprivacy"
+          if [ ! -f "$manifest" ]; then
+            echo "::error::App.app has no PrivacyInfo.xcprivacy — add ios/App/App/PrivacyInfo.xcprivacy to the App target's Copy Bundle Resources." >&2
+            exit 1
+          fi
+          plutil -lint "$manifest"
+
       # Representative device classes across the lowest and highest iOS runtimes
       # the runner has. The bundle identifier is read from the built app: the iOS
       # bundle ID (com.oetprep.learner) and the Android applicationId
