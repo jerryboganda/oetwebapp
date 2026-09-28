@@ -75,8 +75,7 @@ echo "active slot: ${prev_slot:-none} -> deploying to: $target_slot"
 
 # --- persist image refs so any future manual compose op uses them too ---
 mkdir -p .deploy
-for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE" \
-  ${AGENT_GATEWAY_IMAGE:+""}; do
+for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE"; do
   key="${kv%%=*}"
   if grep -q "^${key}=" .env.production 2>/dev/null; then
     sed -i "s#^${key}=.*#${kv}#" .env.production
