@@ -1239,7 +1239,7 @@ public partial class LearnerService(
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[readiness] Compute failed for user={userId}: {ex.Message}");
+            logger?.LogWarning(ex, "[readiness] Compute failed for user {UserId}", userId);
         }
     }
 
@@ -1256,7 +1256,7 @@ public partial class LearnerService(
             catch (Exception ex)
             {
                 // XP award is non-critical — log only.
-                Console.Error.WriteLine($"[plan-complete] XP award failed for user={userId} item={item.Id}: {ex.Message}");
+                logger?.LogWarning(ex, "[plan-complete] XP award failed for user {UserId} item {ItemId}", userId, item.Id);
             }
         }
 
@@ -1270,7 +1270,7 @@ public partial class LearnerService(
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[plan-complete] SM-2 update failed for user={userId} review={item.LinkedReviewItemId}: {ex.Message}");
+                logger?.LogWarning(ex, "[plan-complete] SM-2 update failed for user {UserId} review {ReviewItemId}", userId, item.LinkedReviewItemId);
             }
         }
     }
@@ -14637,12 +14637,13 @@ public partial class LearnerService(
                 .OrderBy(s => s)
                 .ToList();
 
-            var percentile = allAverages.Count > 0
+            // No cohort in the window → no comparison. Null, never an invented median.
+            double? percentile = allAverages.Count > 0
                 ? Math.Round(allAverages.Count(s => s <= userScore) * 100.0 / allAverages.Count, 1)
-                : 50.0;
+                : null;
 
-            var cohortAvg = allAverages.Count > 0 ? Math.Round(allAverages.Average(), 1) : 0;
-            var cohortMedian = allAverages.Count > 0 ? allAverages[allAverages.Count / 2] : 0;
+            double? cohortAvg = allAverages.Count > 0 ? Math.Round(allAverages.Average(), 1) : null;
+            double? cohortMedian = allAverages.Count > 0 ? allAverages[allAverages.Count / 2] : null;
 
             // Score gap to target
             var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
@@ -14669,7 +14670,8 @@ public partial class LearnerService(
                 cohortSize = allAverages.Count,
                 targetScore,
                 gapToTarget = targetScore.HasValue ? Math.Round(targetScore.Value - userScore, 1) : (double?)null,
-                tier = percentile >= 90 ? "top10" : percentile >= 75 ? "top25" : percentile >= 50 ? "aboveMedian" : "belowMedian"
+                tier = percentile is null ? null
+                    : percentile >= 90 ? "top10" : percentile >= 75 ? "top25" : percentile >= 50 ? "aboveMedian" : "belowMedian"
             });
         }
 
