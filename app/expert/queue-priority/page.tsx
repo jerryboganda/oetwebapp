@@ -56,7 +56,7 @@ export default function QueuePriorityPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">Review Queue: Priority View</h1>
+          <h1 className="text-2xl font-bold text-navy">Review Queue: Priority View</h1>
           <p className="text-muted mt-1">See why each review is prioritized and triage accordingly.</p>
         </div>
 

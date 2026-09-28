@@ -242,7 +242,7 @@ export default function ExpertSpeakingExamPage() {
             <div className="mb-1 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted">
               Card {c.cardNumber === 1 ? 'A' : 'B'}
               {c.cardNumber === activeCard ? (
-                <span className="rounded-full bg-amber-500 px-2 py-0.5 text-3xs text-white">Current</span>
+                <span className="rounded-full bg-warning px-2 py-0.5 text-3xs text-white">Current</span>
               ) : null}
               {c.cardTypeName ? <span className="text-muted">· {c.cardTypeName}</span> : null}
             </div>

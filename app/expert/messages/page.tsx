@@ -71,8 +71,9 @@ export default function MessagesPage() {
           {threads.map((thread) => (
             <button
               key={thread.id}
+              type="button"
               onClick={() => router.push(`/expert/messages/${thread.id}`)}
-              className="w-full rounded-2xl border border-border bg-surface p-4 text-left shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
+              className="w-full rounded-2xl border border-border bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="font-semibold text-navy dark:text-foreground">{thread.title}</p>

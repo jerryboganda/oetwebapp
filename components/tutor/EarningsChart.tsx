@@ -3,6 +3,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from '@/components/charts/dynamic-recharts';
 
 import type { TutorEarningsLine } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 
 export interface EarningsChartProps {
   lines: TutorEarningsLine[];
@@ -59,7 +60,7 @@ export function EarningsChart({ lines }: EarningsChartProps) {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+    <Card padding="none" className="p-4">
       <div style={{ width: '100%', height: 280 }}>
         <ResponsiveContainer>
           <BarChart data={data} margin={{ top: 8, right: 12, bottom: 8, left: 8 }}>
@@ -75,6 +76,6 @@ export function EarningsChart({ lines }: EarningsChartProps) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Card>
   );
 }

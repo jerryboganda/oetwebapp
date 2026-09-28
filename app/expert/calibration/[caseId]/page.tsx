@@ -308,7 +308,7 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Submission"
                     title="Your calibration"
                     description={isReadOnly ? 'Submitted scores and notes from your completed benchmark attempt.' : 'Enter criterion-level scores using the benchmark rubric as your comparison anchor.'}
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <GraduationCap className="h-5 w-5 text-muted" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success" /> : <GraduationCap className="h-5 w-5 text-muted" />}
                   />
                   <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
@@ -358,7 +358,7 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Alignment Evidence"
                     title="How you compare"
                     description="Use the benchmark workspace to inspect how your criterion judgments compare with the reference position."
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <MessageSquare className="h-5 w-5 text-muted" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success" /> : <MessageSquare className="h-5 w-5 text-muted" />}
                   />
                   <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
@@ -393,9 +393,9 @@ export default function CalibrationCaseWorkspacePage() {
                                   <div className="flex items-center justify-between gap-3">
                                     <p className="text-sm font-semibold text-navy">{toCriterionLabel(entry.criterion)}</p>
                                     <div className="flex items-center gap-2 text-xs">
-                                      <span className="rounded-full bg-background-light px-2 py-1 text-muted">Benchmark {entry.benchmarkScore}</span>
-                                      <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">You {submitted ?? '-'}</span>
-                                      {gap !== null ? <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">Gap {gap}</span> : null}
+                                      <span className="rounded-full bg-background-light px-2 py-1 tabular-nums text-muted">Benchmark {entry.benchmarkScore}</span>
+                                      <span className="rounded-full bg-info/10 px-2 py-1 tabular-nums text-info">You {submitted ?? '-'}</span>
+                                      {gap !== null ? <span className="rounded-full bg-amber-50 px-2 py-1 tabular-nums text-amber-700 dark:bg-amber-950 dark:text-amber-300">Gap {gap}</span> : null}
                                     </div>
                                   </div>
                                 </div>
@@ -404,7 +404,7 @@ export default function CalibrationCaseWorkspacePage() {
                           </div>
                         </>
                       ) : isDraft ? (
-                        <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 p-5 text-sm text-blue-700">
+                        <div className="rounded-2xl border border-dashed border-info/30 bg-info/5 p-5 text-sm text-info">
                           Draft saved. Submit the completed rubric to unlock alignment evidence, benchmark delta summaries, and your recorded final notes for this case.
                         </div>
                       ) : (

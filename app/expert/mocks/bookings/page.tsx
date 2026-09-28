@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, ClipboardList, Sparkles, Video } from 'lucide-react';
 import {
@@ -9,6 +9,7 @@ import {
   ExpertRouteWorkspace,
 } from '@/components/domain/expert-route-surface';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchExpertMockBookings } from '@/lib/api';
@@ -23,12 +24,18 @@ export default function ExpertMockBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError('');
     fetchExpertMockBookings()
       .then(setItems)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load mock bookings.'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const { scheduledCount, completedCount, nextSessionLabel } = useMemo(() => {
     const open = items.filter(isOpenBooking);
@@ -72,7 +79,14 @@ export default function ExpertMockBookingsPage() {
             action={<CalendarClock className="h-5 w-5 text-muted" aria-hidden="true" />}
           />
 
-          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {error ? (
+            <InlineAlert
+              variant="error"
+              action={<Button type="button" variant="outline" size="sm" onClick={load}>Retry</Button>}
+            >
+              {error}
+            </InlineAlert>
+          ) : null}
           {loading ? <Skeleton className="h-48 rounded-2xl" /> : null}
 
           {!loading ? (
@@ -92,19 +106,18 @@ export default function ExpertMockBookingsPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {booking.tutorProfileId ? (
-                          <Link
-                            href={`/expert/speaking-room/${encodeURIComponent(booking.id)}`}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
-                          >
-                            <Video className="h-4 w-4" aria-hidden /> Open LiveKit room
-                          </Link>
+                          <Button asChild size="sm">
+                            <Link href={`/expert/speaking-room/${encodeURIComponent(booking.id)}`}>
+                              <Video className="h-4 w-4" aria-hidden /> Open LiveKit room
+                            </Link>
+                          </Button>
                         ) : null}
                       </div>
                     </div>
                   </article>
                 );
               })}
-              {items.length === 0 ? <InlineAlert variant="info">No scheduled mock sessions are assigned yet.</InlineAlert> : null}
+              {items.length === 0 && !error ? <InlineAlert variant="info">No scheduled mock sessions are assigned yet.</InlineAlert> : null}
             </div>
           ) : null}
         </section>

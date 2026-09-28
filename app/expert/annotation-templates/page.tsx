@@ -209,8 +209,9 @@ export default function AnnotationTemplatesPage() {
               <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g., Cohesion Issue" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-navy mb-1">Template Text</label>
+              <label htmlFor="annotation-template-text" className="block text-sm font-medium text-navy mb-1">Template Text</label>
               <textarea
+                id="annotation-template-text"
                 className="w-full rounded-lg border border-border bg-surface p-3 text-sm text-navy min-h-[100px] focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={form.templateText}
                 onChange={(e) => setForm({ ...form, templateText: e.target.value })}
