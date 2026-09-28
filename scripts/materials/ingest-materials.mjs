@@ -91,7 +91,7 @@ const DRY_RUN = !APPLY;
 const SUBTESTS = new Set(['reading', 'listening', 'speaking', 'writing']);
 
 // Discipline folder names, verbatim from the seeded ProfessionReference.Label
-// (SeedData.ReferenceData.cs SeedReferenceData). Informational only — the server matches by name;
+// (SeedData.cs SeedReferenceData). Informational only — the server matches by name;
 // the script just reports the mapping so the owner can eyeball it before applying.
 const DISCIPLINE_LABELS = new Set([
   'Nursing', 'Medicine', 'Dentistry', 'Pharmacy', 'Physiotherapy', 'Radiography',
