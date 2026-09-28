@@ -232,40 +232,6 @@ public partial class LearnerService
         return await BuildMockSessionResponseAsync(session, mockSet, cancellationToken);
     }
 
-    public async Task<object> FinishBridgeAsync(
-        string userId,
-        string sessionId,
-        CancellationToken cancellationToken)
-    {
-        await EnsureUserAsync(userId, cancellationToken);
-        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-
-        var session = await db.SpeakingMockSessions
-            .FirstOrDefaultAsync(x => x.Id == sessionId && x.UserId == userId, cancellationToken)
-            ?? throw ApiException.NotFound("speaking_mock_session_not_found", "That mock session does not exist.");
-
-        if (!string.Equals(session.OrchestratorState, SpeakingMockOrchestratorStates.Bridge, StringComparison.Ordinal))
-        {
-            throw ApiException.Conflict(
-                "speaking_mock_bridge_invalid_state",
-                $"Cannot finish the bridge from state '{session.OrchestratorState}'. Start the bridge first.");
-        }
-
-        session.OrchestratorState = SpeakingMockOrchestratorStates.Prep2;
-        await RecordEventAsync(userId, "speaking_mock_bridge_finished", new
-        {
-            mockSessionId = session.Id,
-            mockSetId = session.MockSetId,
-            bridgeDurationSeconds = session.BridgeStartedAt is null
-                ? (double?)null
-                : (DateTimeOffset.UtcNow - session.BridgeStartedAt.Value).TotalSeconds,
-        }, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-
-        var mockSet = await db.SpeakingMockSets.FirstAsync(x => x.Id == session.MockSetId, cancellationToken);
-        return await BuildMockSessionResponseAsync(session, mockSet, cancellationToken);
-    }
-
     /// <summary>
     /// P5 - When both halves have a completed AI assessment, project the
     /// combined readiness band and persist a snapshot. Called by
