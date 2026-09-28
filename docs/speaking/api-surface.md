@@ -57,7 +57,7 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | GET/POST/PUT/DELETE | `/v1/admin/speaking/cards/*` | Card CRUD + publish |
 | PUT | `/v1/admin/speaking/scripts/{cardId}` | Upsert interlocutor script |
 | POST | `/v1/admin/speaking/cards/ai-draft` | AI-draft a card |
-| POST | `/v1/admin/speaking/cards/batch` | Batch generation request |
+| POST | `/v1/admin/speaking/cards/batch` | Not implemented (no endpoint is mapped) |
 | GET/POST | `/v1/admin/speaking/drills/*` | Drill CRUD + AI-draft |
 | GET/POST | `/v1/admin/speaking/mock-sets/*` | Mock set CRUD + auto-pair |
 | GET/POST | `/v1/admin/speaking/shared-resources/*` | Warm-up + criteria PDFs |

@@ -8,13 +8,11 @@
 | `speaking-e2e.yml` | Nightly 03:00 UTC + manual | Speaking team |
 | `speaking-a11y.yml` | Nightly 03:30 UTC + manual | Speaking + a11y team |
 | `speaking-load.yml` | Weekly Mon 04:00 UTC + manual | Speaking + ops |
-| `speaking-content-batch.yml` | Manual only | Content team |
 
 ## Required secrets
 
 - `STAGING_BASE_URL` — Speaking E2E target (https://staging.example.com)
-- `STAGING_API_URL` — Speaking load + content batch (https://staging-api.example.com)
-- `STAGING_ADMIN_TOKEN` — admin JWT for content batch
+- `STAGING_API_URL` — Speaking load (https://staging-api.example.com)
 - `OET_LOAD_LEARNER_EMAIL` / `OET_LOAD_LEARNER_PASSWORD` — load-test learner creds
 - `GITLEAKS_LICENSE` (optional) — paid plan
 
