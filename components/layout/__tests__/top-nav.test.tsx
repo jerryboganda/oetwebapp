@@ -1,6 +1,6 @@
 import { createContext } from 'react';
-import { screen } from '@testing-library/react';
-import { renderWithRouter } from '@/tests/test-utils';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { NextRouterProvider, renderWithRouter } from '@/tests/test-utils';
 
 // Root-cause regression guard for the Issue-01 header/safe-area fix: the
 // header used to combine a FIXED height (h-14/h-24) with padding-top from
@@ -36,7 +36,9 @@ vi.mock('@/components/layout/notification-center', () => ({ NotificationCenter: 
 vi.mock('@/components/layout/learner-streak-badges', () => ({ LearnerStreakBadges: () => null }));
 vi.mock('@/components/ui/theme-toggle', () => ({ ThemeToggle: () => <div data-testid="theme-toggle" /> }));
 vi.mock('@/components/onboarding/tour-launcher', () => ({ TourLauncher: () => null }));
-vi.mock('@/components/onboarding/help-center-drawer', () => ({ HelpCenterDrawer: () => null }));
+vi.mock('@/components/onboarding/help-center-drawer', () => ({
+  HelpCenterDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="help-center-drawer" /> : null),
+}));
 
 import { TopNav } from '../top-nav';
 
@@ -79,5 +81,51 @@ describe('TopNav header safe-area box model', () => {
     const contentRow = menuButton.closest('.h-11');
     expect(contentRow).not.toBeNull();
     expect(contentRow).not.toBe(header);
+  });
+});
+
+// The admin/expert shells (and soon the learner shell) keep TopNav mounted
+// across navigations, so its overlays must close when the pathname changes.
+describe('TopNav overlays close on route change', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { avatarUrl: null }, signOut: mockSignOut });
+  });
+
+  it('closes the mobile menu when the pathname changes', () => {
+    const at = (pathname: string) => (
+      <NextRouterProvider pathname={pathname}>
+        <TopNav userSummary={{ displayName: 'Admin', email: 'a@example.com' }} />
+      </NextRouterProvider>
+    );
+    const { rerender } = render(at('/admin'));
+
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    expect(screen.getByRole('navigation', { name: /mobile menu/i })).toBeInTheDocument();
+
+    rerender(at('/admin/users'));
+    expect(screen.queryByRole('navigation', { name: /mobile menu/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open menu/i })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('closes the profile menu and the help drawer when the pathname changes', () => {
+    const at = (pathname: string) => (
+      <NextRouterProvider pathname={pathname}>
+        <TopNav showBrand userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />
+      </NextRouterProvider>
+    );
+    const { rerender } = render(at('/'));
+
+    const trigger = screen.getByRole('button', { name: /learner/i });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('menuitem', { name: /help & guided tours/i }));
+    expect(screen.getByTestId('help-center-drawer')).toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    rerender(at('/reading'));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('help-center-drawer')).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });

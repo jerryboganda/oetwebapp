@@ -105,6 +105,14 @@ export function TopNav({
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname() ?? '/';
+  // Close the menu when the route changes under a shell that stays mounted
+  // (admin/expert today; the Android back button only calls history.back()).
+  // Adjusted during render rather than in an effect.
+  const [openedAt, setOpenedAt] = useState(pathname);
+  if (openedAt !== pathname) {
+    setOpenedAt(pathname);
+    setMobileMenuOpen(false);
+  }
   const router = useRouter();
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const displayName = userSummary?.displayName?.trim() || 'User';
