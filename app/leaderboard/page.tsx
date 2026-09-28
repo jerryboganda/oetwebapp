@@ -8,6 +8,8 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { AuthContext } from '@/contexts/auth-context';
 import { fetchLeaderboard, fetchMyLeaderboardPosition, setLeaderboardOptIn } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -16,7 +18,7 @@ import { queryKeys } from '@/lib/query/hooks';
 type LeaderboardEntry = { rank: number; displayName: string; totalXp: number; level: number; isCurrentUser?: boolean };
 type MyPosition = { rank: number | null; totalXp: number; level: number; optedIn: boolean };
 
-const MEDAL_COLORS = ['text-yellow-500', 'text-muted', 'text-orange-600'];
+const MEDAL_COLORS = ['text-gold', 'text-muted', 'text-orange-600'];
 const LEADERBOARD_ROW_CAP = 50;
 const ANIMATED_ROW_CAP = 20;
 
@@ -130,7 +132,19 @@ export default function LeaderboardPage() {
         icon={Trophy}
       />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && (
+        <InlineAlert
+          variant="warning"
+          className="mb-4"
+          action={!mutationError ? (
+            <Button size="sm" variant="outline" onClick={() => { void leaderboardQuery.refetch(); void positionQuery.refetch(); }}>
+              Retry
+            </Button>
+          ) : undefined}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 mb-6">
@@ -138,8 +152,10 @@ export default function LeaderboardPage() {
           {(['weekly', 'monthly', 'alltime'] as const).map(p => (
             <button
               key={p}
+              type="button"
               onClick={() => setPeriod(p)}
-              className={`px-4 py-2 text-sm font-medium capitalize ${period === p ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted hover:bg-background-light'}`}
+              aria-pressed={period === p}
+              className={`min-h-11 px-4 py-2 text-sm font-medium capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${period === p ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted hover:bg-background-light'}`}
             >
               {p === 'alltime' ? 'All Time' : p}
             </button>
@@ -148,7 +164,8 @@ export default function LeaderboardPage() {
         <select
           value={examType}
           onChange={e => setExamType(e.target.value)}
-          className="px-3 py-2 text-sm border border-border rounded-lg bg-surface text-navy"
+          aria-label="Exam type"
+          className="min-h-11 px-3 py-2 text-sm border border-border rounded-lg bg-surface text-navy"
         >
           <option value="oet">OET</option>
         </select>
@@ -156,7 +173,7 @@ export default function LeaderboardPage() {
 
       {/* My position */}
       {myPos && (
-        <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 mb-6 flex items-center justify-between">
+        <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm font-medium text-primary">Your Position</div>
             <div className="text-2xl font-bold text-primary">
@@ -164,13 +181,14 @@ export default function LeaderboardPage() {
             </div>
             <div className="text-sm text-primary">{myPos.totalXp.toLocaleString()} XP · Level {myPos.level}</div>
           </div>
-          <button
+          <Button
             onClick={toggleOptIn}
-            disabled={optInMutation.isPending}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,transform] duration-200 ${myPos.optedIn ? 'bg-surface text-navy border border-border-hover' : 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600'}`}
+            loading={optInMutation.isPending}
+            variant={myPos.optedIn ? 'outline' : 'primary'}
+            className={myPos.optedIn ? 'shrink-0 bg-surface' : 'shrink-0'}
           >
             {myPos.optedIn ? 'Opt Out' : 'Join Rankings'}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -180,7 +198,12 @@ export default function LeaderboardPage() {
           {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-12 text-muted/60">No leaderboard data yet for this period.</div>
+        <LearnerEmptyState
+          icon={Trophy}
+          title="No leaderboard data yet for this period."
+          description="Complete practice to earn XP and appear in the rankings."
+          primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+        />
       ) : (
         <div className="bg-surface rounded-2xl border border-border overflow-hidden">
           {entries.map((entry, i) => (

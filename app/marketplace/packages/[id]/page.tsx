@@ -8,6 +8,7 @@ import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
 import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
+import { buttonClassName } from '@/components/ui/button';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
@@ -113,7 +114,7 @@ export default function PackageDetailPage() {
   return (
     <div className="min-h-screen bg-background-light text-navy">
       {/* Hero */}
-      <section className="bg-navy px-4 py-16 text-white">
+      <section className="bg-oet-navy px-4 py-16 text-white">
         <div className="mx-auto max-w-5xl">
           <Link href="/catalog" className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white">
             <ArrowLeft className="h-3 w-3" /> All packages
@@ -270,9 +271,9 @@ export default function PackageDetailPage() {
                   <button
                     type="button"
                     onClick={() => setModalAddOn(tutorBookAddon)}
-                    className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background-light px-3 py-2 text-xs font-medium text-navy transition-colors hover:bg-surface"
+                    className={buttonClassName({ variant: 'outline', size: 'sm', fullWidth: true, className: 'mt-4 bg-background-light' })}
                   >
-                    <TagIcon className="h-3 w-3" /> Add to order
+                    <TagIcon className="h-3 w-3" aria-hidden="true" /> Add to order
                   </button>
                   <p className="mt-2 text-[10px] text-muted">After payment, contact us on WhatsApp for manual delivery. No platform access is unlocked.</p>
                 </div>
@@ -334,10 +335,10 @@ function AddonGroup({
             <button
               type="button"
               onClick={() => onSelect(addon)}
-              className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background-light px-3 py-2 text-xs font-medium text-navy transition-colors hover:bg-surface"
+              className={buttonClassName({ variant: 'outline', size: 'sm', fullWidth: true, className: 'mt-4 bg-background-light' })}
               data-addon-code={addon.code}
             >
-              <TagIcon className="h-3 w-3" /> Add to order
+              <TagIcon className="h-3 w-3" aria-hidden="true" /> Add to order
             </button>
           </div>
           );

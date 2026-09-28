@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { CatalogStorefront } from '@/components/domain/catalog';
 import { CartNavButton } from '@/components/cart';
+import { Button } from '@/components/ui/button';
 
 export default function CatalogPage() {
   return (
@@ -14,18 +15,12 @@ export default function CatalogPage() {
           </Link>
           <div className="flex items-center gap-2">
             <CartNavButton />
-            <Link
-              href="/sign-in"
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              className="rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-            >
-              Create account
-            </Link>
+            <Button asChild variant="ghost" size="sm" className="text-sm font-semibold">
+              <Link href="/sign-in">Log in</Link>
+            </Button>
+            <Button asChild size="sm" className="text-sm font-semibold">
+              <Link href="/register">Create account</Link>
+            </Button>
           </div>
         </div>
       </header>

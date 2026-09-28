@@ -80,8 +80,8 @@ export default function ComparativeAnalyticsPage() {
 
                       {/* Percentile bar */}
                       <div className="mb-3">
-                        <div className="h-3 rounded-full bg-muted overflow-hidden relative">
-                          <div className="h-full rounded-full bg-gradient-to-r from-red-400 via-amber-400 to-emerald-400" style={{ width: `${s.percentile}%` }} />
+                        <div className="h-3 rounded-full bg-background-light overflow-hidden relative">
+                          <div className="h-full rounded-full bg-gradient-to-r from-danger via-warning to-success" style={{ width: `${s.percentile}%` }} />
                         </div>
                         <div className="flex justify-between mt-1"><span className="text-[10px] text-muted">0%</span><span className="text-[10px] text-muted">50%</span><span className="text-[10px] text-muted">100%</span></div>
                       </div>

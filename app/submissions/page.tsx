@@ -22,7 +22,8 @@ import React from 'react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClassName } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { fetchSubmissions, fetchMyAttemptHistory, type LearnerAttemptHistoryItem } from '@/lib/api';
 import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -30,10 +31,10 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }> = {
-  Reading:   { icon: FileText,   badge: 'bg-blue-100 text-blue-700' },
-  Listening: { icon: Headphones, badge: 'bg-indigo-100 text-indigo-700' },
-  Writing:   { icon: PenTool,    badge: 'bg-rose-100 text-rose-700' },
-  Speaking:  { icon: Mic,        badge: 'bg-purple-100 text-purple-700' },
+  Reading:   { icon: FileText,   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+  Listening: { icon: Headphones, badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
+  Writing:   { icon: PenTool,    badge: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
+  Speaking:  { icon: Mic,        badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' },
 };
 
 function formatSubmissionAttemptDate(value: string) {
@@ -61,19 +62,19 @@ function formatSubmissionAttemptDate(value: string) {
 
 function ReviewBadge({ status }: { status: ReviewStatus }) {
   if (status === 'reviewed') return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
-      <CheckCircle2 className="w-3.5 h-3.5" /> Reviewed
-    </span>
+    <Badge variant="success" className="gap-1.5 px-2.5 py-1">
+      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Reviewed
+    </Badge>
   );
   if (status === 'pending') return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
-      <Clock className="w-3.5 h-3.5" /> Pending
-    </span>
+    <Badge variant="warning" className="gap-1.5 px-2.5 py-1">
+      <Clock className="w-3.5 h-3.5" aria-hidden="true" /> Pending
+    </Badge>
   );
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-background-light text-muted">
-      <AlertCircle className="w-3.5 h-3.5" /> Not Requested
-    </span>
+    <Badge variant="slate" className="gap-1.5 px-2.5 py-1">
+      <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" /> Not Requested
+    </Badge>
   );
 }
 
@@ -187,7 +188,7 @@ function SubmissionHistoryInner() {
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.badge}`}>
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-4 w-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-navy">
@@ -198,7 +199,7 @@ function SubmissionHistoryInner() {
                           <span className="capitalize">{attempt.subtest}</span>
                           {' · '}started {formatSubmissionAttemptDate(attempt.startedAt)}
                           {' · '}
-                          <span className={attempt.status === 'in_progress' ? 'font-bold text-amber-600' : 'font-bold text-green-700'}>
+                          <span className={attempt.status === 'in_progress' ? 'font-bold text-warning' : 'font-bold text-success'}>
                             {attempt.status === 'in_progress' ? 'In progress' : 'Completed'}
                           </span>
                           {attempt.balanceSource || attempt.creditsUsed > 0 ? (
@@ -219,9 +220,9 @@ function SubmissionHistoryInner() {
                     </div>
                     <Link
                       href={attempt.route}
-                      className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-border bg-background-light px-3 py-1.5 text-xs font-bold text-navy transition-colors hover:border-primary hover:text-primary sm:self-center"
+                      className={buttonClassName({ variant: 'outline', size: 'sm', className: 'shrink-0 self-start rounded-full bg-background-light font-bold sm:self-center' })}
                     >
-                      <Play className="h-3.5 w-3.5" />
+                      <Play className="h-3.5 w-3.5" aria-hidden="true" />
                       {attempt.status === 'in_progress' ? 'Resume' : 'Review'}
                     </Link>
                   </li>
@@ -270,14 +271,14 @@ function SubmissionHistoryInner() {
                   <MotionItem
                     key={sub.id}
                     delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border transition-colors"
+                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
                   >
                     <div className="flex-1 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-3 mb-2">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-widest ${meta.badge}`}>
-                              <Icon className="w-4 h-4" />
+                              <Icon className="w-4 h-4" aria-hidden="true" />
                               {sub.subTest}
                             </span>
                             <span className="text-sm text-muted font-medium">{formatSubmissionAttemptDate(sub.attemptDate)}</span>
@@ -304,7 +305,7 @@ function SubmissionHistoryInner() {
                         onClick={() => sub.actions.reopenFeedbackRoute && router.push(sub.actions.reopenFeedbackRoute)}
                         disabled={!sub.actions.reopenFeedbackRoute}
                       >
-                        <MessageSquare className="w-4 h-4" />
+                        <MessageSquare className="w-4 h-4" aria-hidden="true" />
                         Reopen Feedback
                       </Button>
                       <Button
@@ -313,7 +314,7 @@ function SubmissionHistoryInner() {
                         onClick={() => sub.actions.compareRoute && router.push(sub.actions.compareRoute)}
                         disabled={!sub.actions.compareRoute}
                       >
-                        <GitCompare className="w-4 h-4" />
+                        <GitCompare className="w-4 h-4" aria-hidden="true" />
                         Compare Attempts
                       </Button>
                       <Button
@@ -322,7 +323,7 @@ function SubmissionHistoryInner() {
                         onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
                         disabled={!canRequest || !sub.actions.requestReviewRoute}
                       >
-                        <Send className="w-4 h-4" />
+                        <Send className="w-4 h-4" aria-hidden="true" />
                         Request Tutor Review
                       </Button>
                     </div>

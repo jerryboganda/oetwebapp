@@ -44,9 +44,9 @@ export function VideoCard({
     Date.now() - new Date(video.publishedAt as string).getTime() < NEW_BADGE_WINDOW_MS;
 
   return (
-    <Link href={`/videos/${video.id}`} className="group block h-full">
+    <Link href={`/videos/${video.id}`} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
       <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
-        <div className="relative flex h-40 items-center justify-center bg-navy">
+        <div className="relative flex h-40 items-center justify-center bg-background-dark">
           {video.thumbnailUrl ? (
             <Image
               src={video.thumbnailUrl}
@@ -57,11 +57,11 @@ export function VideoCard({
               className="object-cover"
             />
           ) : (
-            <PlayCircle className="h-14 w-14 text-white/70 transition-colors group-hover:text-white" />
+            <PlayCircle className="h-14 w-14 text-white/70 transition-colors group-hover:text-white" aria-hidden="true" />
           )}
           <div className="absolute left-3 top-3 flex flex-wrap gap-2">
             {locked ? (
-              <Badge variant="warning"><LockKeyhole className="mr-1 h-3 w-3" /> Premium</Badge>
+              <Badge variant="warning"><LockKeyhole className="mr-1 h-3 w-3" aria-hidden="true" /> Premium</Badge>
             ) : video.progress?.completed ? (
               <Badge variant="success">Completed</Badge>
             ) : video.accessTier === 'free' ? (
@@ -69,7 +69,7 @@ export function VideoCard({
             ) : null}
             {isNew && <Badge variant="info">New</Badge>}
             {video.isFeatured && (
-              <Badge variant="muted"><Star className="mr-1 h-3 w-3" /> Featured</Badge>
+              <Badge variant="muted"><Star className="mr-1 h-3 w-3" aria-hidden="true" /> Featured</Badge>
             )}
           </div>
           {onToggleBookmark && (
@@ -82,13 +82,13 @@ export function VideoCard({
                 event.stopPropagation();
                 onToggleBookmark(video.id);
               }}
-              className="absolute right-3 top-3 rounded-full bg-navy/70 p-2 text-white transition-colors hover:bg-navy"
+              className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-background-dark/70 text-white transition-colors hover:bg-background-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-red-400 text-red-400' : ''}`} />
+              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger' : ''}`} aria-hidden="true" />
             </button>
           )}
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-navy/70 px-2 py-1 text-xs text-white">
-            <Clock className="h-3 w-3" />
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-background-dark/70 px-2 py-1 text-xs text-white">
+            <Clock className="h-3 w-3" aria-hidden="true" />
             {formatDuration(video.durationSeconds)}
           </div>
         </div>
@@ -116,7 +116,7 @@ export function VideoCard({
               <span className="text-muted">{progress}% complete</span>
               <span className="inline-flex items-center gap-1 text-primary">
                 {locked ? 'View details' : videoHasProgress(video) ? 'Resume' : 'Watch'}
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
             </div>
           </div>

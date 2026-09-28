@@ -134,6 +134,7 @@ export default function StudyCommitmentPage() {
                 key={m}
                 type="button"
                 onClick={() => setSelectedMinutes(m)}
+                aria-pressed={selectedMinutes === m}
                 className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                   selectedMinutes === m
                     ? 'bg-primary text-white dark:bg-violet-700 border-primary'

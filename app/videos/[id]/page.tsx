@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchVideo, toggleVideoBookmark } from '@/lib/api/videos';
@@ -147,7 +148,16 @@ export default function VideoDetailPage() {
   if (!video) {
     return (
       <LearnerDashboardShell>
-        <InlineAlert variant="warning">{error ?? 'Video not found.'}</InlineAlert>
+        <InlineAlert
+          variant="warning"
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/videos">Back to library</Link>
+            </Button>
+          }
+        >
+          {error ?? 'Video not found.'}
+        </InlineAlert>
       </LearnerDashboardShell>
     );
   }
@@ -163,7 +173,7 @@ export default function VideoDetailPage() {
             <Link
               href="/videos"
               aria-label="Back to video library"
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-navy"
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Library
@@ -173,9 +183,9 @@ export default function VideoDetailPage() {
               onClick={handleToggleBookmark}
               aria-label={video.bookmarked ? 'Remove from saved videos' : 'Save video'}
               aria-pressed={video.bookmarked}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-red-500 text-red-500' : ''}`} aria-hidden="true" />
+              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger' : ''}`} aria-hidden="true" />
             </button>
           </div>
           <h1 className="text-xl font-bold leading-snug text-navy sm:text-2xl">{video.title}</h1>
@@ -219,13 +229,12 @@ export default function VideoDetailPage() {
                       lesson, handout and workshop opens up.
                     </p>
                   </div>
-                  <Link
-                    href="/subscriptions"
-                    className="mt-1 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-colors hover:bg-primary-dark"
-                  >
-                    View plans &amp; packages
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
+                  <Button asChild className="mt-1 font-semibold shadow-lg shadow-primary/30">
+                    <Link href="/subscriptions">
+                      View plans &amp; packages
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -279,22 +288,16 @@ export default function VideoDetailPage() {
           <aside className="space-y-4">
             <Card className="p-5 shadow-sm">
               <h2 className="mb-1 flex items-center gap-2 font-semibold text-navy">
-                <BookOpen className="h-4 w-4 text-primary" />
+                <BookOpen className="h-4 w-4 text-primary" aria-hidden="true" />
                 Video details
               </h2>
               <dl className="divide-y divide-border/60 text-sm">
                 <div className="flex items-center justify-between gap-3 py-2.5">
                   <dt className="text-muted">Access</dt>
                   <dd>
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                        video.accessTier === 'free'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100'
-                          : 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100'
-                      }`}
-                    >
+                    <Badge variant={video.accessTier === 'free' ? 'success' : 'warning'}>
                       {video.accessTier === 'free' ? 'Free' : 'Premium'}
-                    </span>
+                    </Badge>
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-2.5">
@@ -364,7 +367,7 @@ export default function VideoDetailPage() {
                       className="flex items-center justify-between gap-3 rounded-xl border border-border px-3.5 py-2.5 text-sm font-medium text-navy transition-colors hover:border-primary/40 hover:text-primary"
                     >
                       <span>{attachment.title}</span>
-                      <Download className="h-4 w-4" />
+                      <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
                     </a>
                   ))}
                 </div>
@@ -375,32 +378,27 @@ export default function VideoDetailPage() {
               <h2 className="mb-3 font-semibold text-navy">Keep watching</h2>
               <div className="grid gap-2">
                 {video.nextVideoId ? (
-                  <Link
-                    href={`/videos/${video.nextVideoId}`}
-                    className="inline-flex items-center justify-between gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-primary/25 transition-colors hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-                  >
-                    <span>Next video</span>
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
+                  <Button asChild fullWidth className="justify-between font-semibold">
+                    <Link href={`/videos/${video.nextVideoId}`}>
+                      <span>Next video</span>
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
                 ) : (
-                  <Link
-                    href="/videos"
-                    className="inline-flex items-center justify-between gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-primary/25 transition-colors hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-                  >
-                    <span>Back to library</span>
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
+                  <Button asChild fullWidth className="justify-between font-semibold">
+                    <Link href="/videos">
+                      <span>Back to library</span>
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
                 )}
                 {video.previousVideoId && (
-                  <Link
-                    href={`/videos/${video.previousVideoId}`}
-                    className="inline-flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-primary/40 hover:text-navy"
-                  >
-                    <span className="inline-flex items-center gap-2">
+                  <Button asChild variant="outline" fullWidth className="justify-start bg-surface font-semibold">
+                    <Link href={`/videos/${video.previousVideoId}`}>
                       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                       Previous video
-                    </span>
-                  </Link>
+                    </Link>
+                  </Button>
                 )}
               </div>
             </Card>
@@ -408,7 +406,7 @@ export default function VideoDetailPage() {
             {video.progress?.completed && (
               <InlineAlert variant="success" className="text-sm">
                 <span className="inline-flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" />
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                   Completed videos count as learning activity.
                 </span>
               </InlineAlert>
