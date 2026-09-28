@@ -72,7 +72,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                 <div className={cn('relative z-10 rounded-full p-1 transition-colors [&_svg]:h-[18px] [&_svg]:w-[18px]', active ? 'bg-white/15' : 'bg-transparent')}>
                   {item.icon}
                 </div>
-                <span className="relative z-10">{item.label}</span>
+                <span className="relative z-10 block max-w-full truncate">{item.mobileLabel ?? item.label}</span>
               </Link>
             </li>
           );

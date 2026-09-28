@@ -441,14 +441,21 @@ export const adminNavGroups: AdminNavGroup[] = [
 
 export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => group.items);
 
-export const adminMobileNavItems: AdminNavItem[] = [
-  adminNavItems.find((item) => item.href === '/admin')!,
-  adminNavItems.find((item) => item.href === '/admin/content')!,
-  adminNavItems.find((item) => item.href === '/admin/review-ops')!,
-  adminNavItems.find((item) => item.href === '/admin/users')!,
-  adminNavItems.find((item) => item.href === '/admin/ai-usage')!,
-  adminNavItems.find((item) => item.href === '/admin/billing')!,
+// Short bottom-nav labels: six items share a phone-width bar, so the full
+// sidebar labels ("AI/API Usage & Billing") clipped and wrapped at 360px.
+const ADMIN_MOBILE_NAV: ReadonlyArray<[href: string, mobileLabel: string]> = [
+  ['/admin', 'Ops'],
+  ['/admin/content', 'Content'],
+  ['/admin/review-ops', 'Reviews'],
+  ['/admin/users', 'Users'],
+  ['/admin/ai-usage', 'AI usage'],
+  ['/admin/billing', 'Billing'],
 ];
+
+export const adminMobileNavItems: AdminNavItem[] = ADMIN_MOBILE_NAV.map(([href, mobileLabel]) => ({
+  ...adminNavItems.find((item) => item.href === href)!,
+  mobileLabel,
+}));
 
 export const adminMobileMenuSections: MobileMenuSection[] = adminNavGroups.map((group) => ({
   label: group.label,
