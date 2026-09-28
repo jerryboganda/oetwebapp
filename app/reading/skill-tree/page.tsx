@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,7 @@ const SKILLS: SkillDef[] = [
 function ScoreBar({ score, max = 10 }: { score: number; max?: number }) {
   const pct = Math.min(100, (score / max) * 100);
   const color =
-    pct >= 70 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-400' : 'bg-rose-500';
+    pct >= 70 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-danger';
 
   return (
     <div className="space-y-1">
@@ -74,7 +75,7 @@ function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
   const isComplete = lesson?.progress?.completedAt != null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow-md">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical">
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary dark:bg-primary-900/30 dark:text-primary-400">
@@ -145,23 +146,24 @@ export default function SkillTreePage() {
   return (
     <LearnerDashboardShell pageTitle="Skill Tree">
       <div className="space-y-5 sm:space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Reading Skill Tree</h1>
-          <p className="mt-1 text-sm text-muted">
-            8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness.
-          </p>
-        </div>
+        <LearnerPageHero
+          eyebrow="Reading"
+          icon={BookOpen}
+          accent="blue"
+          title="Reading Skill Tree"
+          description="8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness."
+        />
 
         {error ? (
           <InlineAlert variant="error">{error}</InlineAlert>
         ) : loading ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
             {Array.from({ length: 8 }, (_, i) => (
               <Skeleton key={i} className="h-52 w-full rounded-2xl" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
             {SKILLS.map((skill) => {
               const radarSkill = radar?.skills.find((s) => s.code === skill.code) ?? null;
               const lesson = lessons.find((l) => l.lesson.skillCode === skill.code) ?? null;

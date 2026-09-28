@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardHero } from '@/components/reading/DashboardHero';
 import { SkillRadarChart } from '@/components/reading/SkillRadarChart';
 import { ActivityHeatmap } from '@/components/reading/ActivityHeatmap';
@@ -66,15 +68,18 @@ export default function ReadingStatsPage() {
           Back to Reading
         </Link>
 
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Reading Analytics</h1>
-          <p className="mt-1 text-sm text-muted">Track your progress, activity, and skill development.</p>
-        </div>
+        <LearnerPageHero
+          eyebrow="Reading"
+          icon={TrendingUp}
+          accent="blue"
+          title="Reading Analytics"
+          description="Track your progress, activity, and skill development."
+        />
 
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl bg-border/80 dark:bg-border/50" />
+              <Skeleton key={i} className="h-24 rounded-xl" />
             ))}
           </div>
         ) : (
@@ -90,7 +95,7 @@ export default function ReadingStatsPage() {
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {/* Skill Radar */}
-              <div className="rounded-xl border border-border bg-surface p-5">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold text-navy">Skill Radar</h2>
                 {skillRadar ? (
                   <SkillRadarChart data={skillRadar} />
@@ -100,7 +105,7 @@ export default function ReadingStatsPage() {
               </div>
 
               {/* Score History */}
-              <div className="rounded-xl border border-border bg-surface p-5">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-navy">
                   <TrendingUp className="h-4 w-4" aria-hidden />
                   Score History
@@ -125,7 +130,7 @@ export default function ReadingStatsPage() {
               </div>
 
               {/* Activity Heatmap */}
-              <div className="rounded-xl border border-border bg-surface p-5 md:col-span-2">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm md:col-span-2">
                 <h2 className="mb-4 text-sm font-semibold text-navy">Activity (last 90 days)</h2>
                 {activityCalendar?.days.length ? (
                   <ActivityHeatmap days={activityCalendar.days} />
@@ -136,7 +141,7 @@ export default function ReadingStatsPage() {
 
               {/* Vocab Summary */}
               {vocabStats ? (
-                <div className="rounded-xl border border-border bg-surface p-5">
+                <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                   <h2 className="mb-4 text-sm font-semibold text-navy">Vocabulary Summary</h2>
                   <div className="grid grid-cols-3 gap-3">
                     {[
@@ -144,7 +149,7 @@ export default function ReadingStatsPage() {
                       { label: 'Mastered', value: vocabStats.mastered },
                       { label: 'Due Today', value: vocabStats.dueToday },
                     ].map(({ label, value }) => (
-                      <div key={label} className="rounded-lg bg-background-light dark:bg-background-dark px-3 py-3 text-center">
+                      <div key={label} className="rounded-lg bg-background-light px-3 py-3 text-center">
                         <p className="text-lg font-bold text-navy tabular-nums">{value}</p>
                         <p className="text-xs text-muted">{label}</p>
                       </div>

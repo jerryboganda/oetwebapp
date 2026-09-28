@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import ReadingPlayer, {
   type ReadingPassageDto,
@@ -97,13 +98,9 @@ export default function PracticeSessionPage() {
       <LearnerDashboardShell pageTitle="Practice">
         <div className="space-y-4">
           <InlineAlert variant="error">{error}</InlineAlert>
-          <button
-            type="button"
-            onClick={() => router.push('/reading')}
-            className="text-sm font-medium text-primary hover:underline"
-          >
+          <Button variant="ghost" size="sm" onClick={() => router.push('/reading')} className="text-primary">
             ← Back to Reading
-          </button>
+          </Button>
         </div>
       </LearnerDashboardShell>
     );
@@ -124,7 +121,7 @@ export default function PracticeSessionPage() {
   if (completing) {
     return (
       <LearnerDashboardShell pageTitle="Practice">
-        <div className="flex h-64 flex-col items-center justify-center gap-4">
+        <div className="flex h-64 flex-col items-center justify-center gap-4" role="status">
           <div className="h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden />
           <p className="text-sm text-muted">Saving your answers…</p>
         </div>
