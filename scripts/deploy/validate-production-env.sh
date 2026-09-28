@@ -538,6 +538,16 @@ if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" 
   require_min_length TYPESAFE__APIKEY 16
 fi
 
+# Tutor Book buyer-signature key: WARNING only. When empty the API still boots
+# and only the Tutor Book PDF download fails closed (503
+# tutor_book_signing_unconfigured). Generate with `openssl rand -hex 32`.
+tutor_book_secret=$(read_env_value TUTORBOOK_SIGNATURE_SECRET || true)
+if [ -z "$tutor_book_secret" ]; then
+  echo "[env] WARNING: TUTORBOOK_SIGNATURE_SECRET is empty; Tutor Book PDF downloads will return 503" >&2
+elif [ "${#tutor_book_secret}" -lt 32 ]; then
+  echo "[env] WARNING: TUTORBOOK_SIGNATURE_SECRET should be at least 32 characters (openssl rand -hex 32)" >&2
+fi
+
 # Owner Agent Console (owner directive 2026-09-27) is OPTIONAL. When enabled, the
 # API slots and the oet-agent-console stack share these secrets. They must be
 # HEX (`openssl rand -hex 32` for the tokens, `openssl rand -hex 24` for the DB
