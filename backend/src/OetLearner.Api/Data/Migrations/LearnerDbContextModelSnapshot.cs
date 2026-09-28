@@ -22626,6 +22626,19 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("WhopWebhookSecretEncrypted")
                         .HasColumnType("text");
 
+                    b.Property<string>("WritingAiClaudeQuotaExceededUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("WritingAiFailoverPct")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("WritingAiProviderMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<double?>("WritingAiWarnPct")
+                        .HasColumnType("double precision");
+
                     b.Property<bool?>("WritingAppealsEnabled")
                         .HasColumnType("boolean");
 
