@@ -7,4 +7,5 @@ export { LearnerWorkspaceContainer } from './learner-workspace-container';
 export { NotificationCenter } from './notification-center';
 export { NotificationPreferencesPanel } from './notification-preferences-panel';
 export { TopNav, type MobileMenuSection } from './top-nav';
-export { Sidebar, BottomNav, mainNavItems, mobileNavItems, type NavItem, type NavGroup } from './sidebar';
+export { Sidebar, mainNavItems, mobileNavItems, type NavItem, type NavGroup } from './sidebar';
+export { BottomNav } from './bottom-nav';
