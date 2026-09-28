@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { apiClient } from '@/lib/api';
 
 interface RedeemResponse {
   userId: string;
@@ -36,12 +37,8 @@ export default function UpdateCardPage() {
     }
     (async () => {
       try {
-        const res = await fetch(`/api/backend/v1/billing/update-card/${encodeURIComponent(token)}`);
-        if (!res.ok) {
-          setState('invalid');
-          return;
-        }
-        setDetails(await res.json());
+        // AllowAnonymous endpoint: apiClient omits the bearer when signed out.
+        setDetails(await apiClient.get<RedeemResponse>(`/v1/billing/update-card/${encodeURIComponent(token)}`));
         setState('success');
       } catch {
         setState('invalid');

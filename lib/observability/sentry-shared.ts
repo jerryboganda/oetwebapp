@@ -33,7 +33,8 @@ export const SENSITIVE_HEADER_NAMES = [
  */
 export function readSentryDsn(): string | null {
   const dsn =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SENTRY_DSN) ||
+    // Non-optional access so the bundler inlines the value into client code.
+    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SENTRY_DSN) ||
     (typeof process !== 'undefined' && process.env?.SENTRY_DSN) ||
     '';
   return dsn.trim().length > 0 ? dsn.trim() : null;
