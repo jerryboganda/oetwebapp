@@ -37,32 +37,32 @@ public static class RulebookEndpoints
         group.MapGet("/writing/{profession}", (string profession, IRulebookLoader loader) =>
         {
             if (!RulebookProfessionParser.TryParse(profession, out var p))
-                return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
+                return new ApiErrorResult(400, "rulebook_profession_unknown", $"Unknown profession '{profession}'.");
             try { return Results.Ok(loader.Load(RuleKind.Writing, p)); }
-            catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
+            catch (RulebookNotFoundException) { return new ApiErrorResult(404, "rulebook_not_registered", "Rulebook not registered."); }
         }).RequireAuthorization("TeachingStaffOnly");
 
         group.MapGet("/speaking/{profession}", (string profession, IRulebookLoader loader) =>
         {
             if (!RulebookProfessionParser.TryParse(profession, out var p))
-                return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
+                return new ApiErrorResult(400, "rulebook_profession_unknown", $"Unknown profession '{profession}'.");
             try { return Results.Ok(loader.Load(RuleKind.Speaking, p)); }
-            catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
+            catch (RulebookNotFoundException) { return new ApiErrorResult(404, "rulebook_not_registered", "Rulebook not registered."); }
         });
 
         group.MapGet("/conversation/{profession}", (string profession, IRulebookLoader loader) =>
         {
             if (!RulebookProfessionParser.TryParse(profession, out var p))
-                return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
+                return new ApiErrorResult(400, "rulebook_profession_unknown", $"Unknown profession '{profession}'.");
             try { return Results.Ok(loader.Load(RuleKind.Conversation, p)); }
-            catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
+            catch (RulebookNotFoundException) { return new ApiErrorResult(404, "rulebook_not_registered", "Rulebook not registered."); }
         });
 
         group.MapGet("/writing/{profession}/rule/{ruleId}",
             (string profession, string ruleId, IRulebookLoader loader) =>
             {
                 if (!RulebookProfessionParser.TryParse(profession, out var p))
-                    return Results.BadRequest(new { error = "Unknown profession." });
+                    return new ApiErrorResult(400, "rulebook_profession_unknown", "Unknown profession.");
                 var rule = loader.FindRule(RuleKind.Writing, p, ruleId);
                 return rule is null ? Results.NotFound() : Results.Ok(rule);
             }).RequireAuthorization("TeachingStaffOnly");
@@ -71,7 +71,7 @@ public static class RulebookEndpoints
             (string profession, string ruleId, IRulebookLoader loader) =>
             {
                 if (!RulebookProfessionParser.TryParse(profession, out var p))
-                    return Results.BadRequest(new { error = "Unknown profession." });
+                    return new ApiErrorResult(400, "rulebook_profession_unknown", "Unknown profession.");
                 var rule = loader.FindRule(RuleKind.Speaking, p, ruleId);
                 return rule is null ? Results.NotFound() : Results.Ok(rule);
             });
@@ -79,7 +79,7 @@ public static class RulebookEndpoints
         group.MapGet("/assessment/{kind}", (string kind, IRulebookLoader loader) =>
         {
             if (!Enum.TryParse<RuleKind>(kind, ignoreCase: true, out var k))
-                return Results.BadRequest(new { error = "Unknown rulebook kind." });
+                return new ApiErrorResult(400, "rulebook_kind_unknown", "Unknown rulebook kind.");
             return Results.Ok(loader.GetAssessmentCriteria(k));
         });
 
@@ -161,7 +161,7 @@ public static class RulebookEndpoints
             CancellationToken ct) =>
         {
             if (!Enum.TryParse<RuleKind>(body.Kind ?? "writing", ignoreCase: true, out var kind))
-                return Results.BadRequest(new { error = "Unknown rulebook kind." });
+                return new ApiErrorResult(400, "rulebook_kind_unknown", "Unknown rulebook kind.");
             if (!RulebookProfessionParser.TryParse(body.Profession ?? "medicine", out var prof))
                 prof = ExamProfession.Medicine;
             if (!Enum.TryParse<AiTaskMode>(body.Task ?? "score", ignoreCase: true, out var task))
@@ -249,11 +249,10 @@ public static class RulebookEndpoints
             {
                 // 429 is the right code for rate/quota denials. The UI maps
                 // errorCode to an upgrade CTA; see docs/AI-USAGE-POLICY.md §4.
-                return Results.Json(new
-                {
-                    errorCode = qex.ErrorCode,
-                    error = qex.Message,
-                }, statusCode: StatusCodes.Status429TooManyRequests);
+                return new ApiErrorResult(
+                    StatusCodes.Status429TooManyRequests,
+                    qex.ErrorCode,
+                    ApiErrorResult.SafeMessage(qex, "AI usage limit reached.")) { Exception = qex };
             }
         }).RequireAuthorization("AiCaller");
     }
@@ -325,7 +324,7 @@ public static class RulebookEndpoints
 
             if (attemptSource is null)
             {
-                return (null, Results.NotFound(new { error = "Writing attempt not found." }));
+                return (null, new ApiErrorResult(404, "writing_attempt_not_found", "Writing attempt not found."));
             }
 
             return (BuildWritingLintSource(
@@ -353,7 +352,7 @@ public static class RulebookEndpoints
 
             if (contentSource is null)
             {
-                return (null, Results.NotFound(new { error = "Writing content not found." }));
+                return (null, new ApiErrorResult(404, "writing_content_not_found", "Writing content not found."));
             }
 
             return (BuildWritingLintSource(

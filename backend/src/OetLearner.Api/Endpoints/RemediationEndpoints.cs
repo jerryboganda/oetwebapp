@@ -44,11 +44,11 @@ public static class RemediationEndpoints
                 var ok = await svc.MarkTaskAsync(ResolveUserId(http), taskId, body.Status, ct);
                 return ok
                     ? Results.Ok(new { taskId, status = body.Status })
-                    : Results.NotFound(new { error = $"Remediation task '{taskId}' not found for this learner." });
+                    : new ApiErrorResult(404, "remediation_task_not_found", $"Remediation task '{taskId}' not found for this learner.");
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "remediation_status_invalid", ApiErrorResult.SafeMessage(ex, "The remediation status is invalid.")) { Exception = ex };
             }
         });
 

@@ -173,10 +173,11 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_paper_clone_rejected", ApiErrorResult.SafeMessage(ex, "The Reading paper could not be cloned.")) { Exception = ex };
             }
         });
 
+        // LegacyErrorAlias: components/domain/ReadingStructureEditor.tsx:220 reads detail.error; remove after the frontend reads detail.message
         group.MapPost("/manifest", async (
             string paperId,
             ReadingStructureManifestImportDto dto,
@@ -196,11 +197,11 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_manifest_invalid", ApiErrorResult.SafeMessage(ex, "The Reading manifest could not be imported."), LegacyErrorAlias: true) { Exception = ex };
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
-                return Results.Conflict(new { error = "Reading structure import could not be applied because existing learner data depends on this structure." });
+                return new ApiErrorResult(409, "reading_manifest_import_failed", "Reading structure import could not be applied because existing learner data depends on this structure.", LegacyErrorAlias: true) { Exception = ex };
             }
         });
 
@@ -218,7 +219,7 @@ public static class ReadingAuthoringAdminEndpoints
             IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
             if (!Enum.TryParse<ReadingPartCode>(partCode, ignoreCase: true, out var code))
-                return Results.BadRequest(new { error = "Invalid part code." });
+                return new ApiErrorResult(400, "reading_part_code_invalid", "Invalid part code.");
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var part = await svc.UpsertPartAsync(new ReadingPartUpsert(
                 paperId, code, dto.TimeLimitMinutes, dto.Instructions), adminId, ct);
@@ -232,7 +233,7 @@ public static class ReadingAuthoringAdminEndpoints
             var partMatchesRoute = await db.ReadingParts.AsNoTracking()
                 .AnyAsync(p => p.Id == dto.ReadingPartId && p.PaperId == paperId, ct);
             if (!partMatchesRoute)
-                return Results.BadRequest(new { error = "Reading part does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_part_paper_mismatch", "Reading part does not belong to this paper.");
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -244,7 +245,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_text_rejected", ApiErrorResult.SafeMessage(ex, "The Reading text could not be saved.")) { Exception = ex };
             }
         });
 
@@ -256,6 +257,7 @@ public static class ReadingAuthoringAdminEndpoints
             return removed ? Results.NoContent() : Results.NotFound();
         });
 
+        // LegacyErrorAlias: components/domain/ReadingStructureEditor.tsx:140 reads detail.error; remove after the frontend reads detail.message
         group.MapPost("/questions", async (
             string paperId, ReadingQuestionUpsertDto dto,
             IReadingStructureService svc, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
@@ -263,7 +265,7 @@ public static class ReadingAuthoringAdminEndpoints
             var partMatchesRoute = await db.ReadingParts.AsNoTracking()
                 .AnyAsync(p => p.Id == dto.ReadingPartId && p.PaperId == paperId, ct);
             if (!partMatchesRoute)
-                return Results.BadRequest(new { error = "Reading part does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_part_paper_mismatch", "Reading part does not belong to this paper.", LegacyErrorAlias: true);
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -280,7 +282,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_question_rejected", ApiErrorResult.SafeMessage(ex, "The Reading question could not be saved."), LegacyErrorAlias: true) { Exception = ex };
             }
         });
 
@@ -300,7 +302,7 @@ public static class ReadingAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(ct);
             if (match is null) return Results.NotFound();
             if (!string.Equals(match, paperId, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_question_paper_mismatch", "Question does not belong to this paper.");
 
             var events = await db.AuditEvents.AsNoTracking()
                 .Where(e => e.ResourceType == "ReadingAuthoring"
@@ -375,7 +377,7 @@ public static class ReadingAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(ct);
             if (match is null) return Results.NotFound();
             if (!string.Equals(match, paperId, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_question_paper_mismatch", "Question does not belong to this paper.");
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
@@ -385,7 +387,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_distractors_rejected", ApiErrorResult.SafeMessage(ex, "The distractors could not be saved.")) { Exception = ex };
             }
         });
 
@@ -400,7 +402,7 @@ public static class ReadingAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(ct);
             if (match is null) return Results.NotFound();
             if (!string.Equals(match, paperId, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_question_paper_mismatch", "Question does not belong to this paper.");
 
             var history = await reviewSvc.GetHistoryAsync(questionId, ct);
             return Results.Ok(history);
@@ -420,7 +422,7 @@ public static class ReadingAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(ct);
             if (match is null) return Results.NotFound();
             if (!string.Equals(match, paperId, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+                return new ApiErrorResult(400, "reading_question_paper_mismatch", "Question does not belong to this paper.");
 
             var permissionError = EnforceReviewTransitionPermission(
                 http,
@@ -443,7 +445,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_review_transition_rejected", ApiErrorResult.SafeMessage(ex, "The review transition was rejected.")) { Exception = ex };
             }
         });
 
@@ -471,7 +473,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_extraction_rejected", ApiErrorResult.SafeMessage(ex, "The extraction could not be started.")) { Exception = ex };
             }
         });
 
@@ -505,7 +507,11 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                // ReadingExtractionService appends JsonException text to this one message; drop that tail.
+                var message = ex.Message.StartsWith("Draft manifest is not valid JSON", StringComparison.Ordinal)
+                    ? "Draft manifest is not valid JSON."
+                    : ApiErrorResult.SafeMessage(ex, "The extraction draft could not be approved.");
+                return new ApiErrorResult(400, "reading_extraction_approve_rejected", message) { Exception = ex };
             }
         });
 
@@ -524,7 +530,7 @@ public static class ReadingAuthoringAdminEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                return new ApiErrorResult(400, "reading_extraction_reject_rejected", ApiErrorResult.SafeMessage(ex, "The extraction draft could not be rejected.")) { Exception = ex };
             }
         });
 

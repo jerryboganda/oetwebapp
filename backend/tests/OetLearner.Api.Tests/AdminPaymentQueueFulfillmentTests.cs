@@ -623,7 +623,7 @@ public static class BillingExpansionEndpointsAccessor
         return (Ok<List<PendingFulfilmentDto>>)await (Task<Ok<List<PendingFulfilmentDto>>>)method!.Invoke(null, new object[] { db, ct })!;
     }
 
-    public static async Task<Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>> InvokeMarkSubscriptionFulfilled(
+    public static async Task<Results<Ok<PendingFulfilmentDto>, NotFound, ApiErrorResult>> InvokeMarkSubscriptionFulfilled(
         string id,
         HttpContext http,
         ApproveRejectRequest request,
@@ -641,6 +641,6 @@ public static class BillingExpansionEndpointsAccessor
         // learnerService is only touched by the best-effort invoice-minting call at the
         // tail of MarkSubscriptionFulfilled, which is wrapped in a try/catch that must
         // never fail the fulfilment itself — null is safe here and gets swallowed.
-        return (Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>)await (Task<Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>>)method!.Invoke(null, new object?[] { id, http, request, db, aiPackageCredits, manualPayments, learnerService, ct })!;
+        return (Results<Ok<PendingFulfilmentDto>, NotFound, ApiErrorResult>)await (Task<Results<Ok<PendingFulfilmentDto>, NotFound, ApiErrorResult>>)method!.Invoke(null, new object?[] { id, http, request, db, aiPackageCredits, manualPayments, learnerService, ct })!;
     }
 }

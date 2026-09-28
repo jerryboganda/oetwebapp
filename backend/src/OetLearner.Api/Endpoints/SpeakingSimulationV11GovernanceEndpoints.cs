@@ -82,15 +82,15 @@ public static class SpeakingSimulationV11GovernanceEndpoints
         {
             if (!string.Equals(request.SpecVersion?.Trim(), SpeakingSimulationV11Contracts.SpecVersion,
                     StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_spec_version_must_match_contract" });
+                return new ApiErrorResult(400, "speaking_v11_spec_version_must_match_contract", "Spec version must match the Speaking v1.1 contract.");
             if (string.IsNullOrWhiteSpace(request.ReleaseVersion))
-                return Results.BadRequest(new { error = "speaking_v11_release_version_required" });
+                return new ApiErrorResult(400, "speaking_v11_release_version_required", "Release version is required.");
 
             var version = request.ReleaseVersion.Trim();
             if (await db.SpeakingSimulationV11SpecReleases.AnyAsync(
                     x => x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion
                         && x.ReleaseVersion == version, ct))
-                return Results.Conflict(new { error = "speaking_v11_spec_release_exists" });
+                return new ApiErrorResult(409, "speaking_v11_spec_release_exists", "A spec release with this version already exists.");
 
             var now = DateTimeOffset.UtcNow;
             var row = new SpeakingSimulationV11SpecRelease
@@ -119,9 +119,9 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             var row = await db.SpeakingSimulationV11SpecReleases.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             if (row.Status != SpeakingSimulationV11ReleaseStatus.Draft)
-                return Results.Conflict(new { error = "speaking_v11_spec_release_not_draft" });
+                return new ApiErrorResult(409, "speaking_v11_spec_release_not_draft", "Only draft spec releases can be approved.");
             if (!string.Equals(row.SpecVersion, SpeakingSimulationV11Contracts.SpecVersion, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_spec_version_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_spec_version_invalid", "Spec release version does not match the Speaking v1.1 contract.");
             var now = DateTimeOffset.UtcNow;
             var peers = await db.SpeakingSimulationV11SpecReleases
                 .Where(x => x.Id != id && x.Status == SpeakingSimulationV11ReleaseStatus.Approved)
@@ -150,14 +150,14 @@ public static class SpeakingSimulationV11GovernanceEndpoints
                 || !string.Equals(request.CalibrationVersion?.Trim(), SpeakingSimulationV11Contracts.CalibrationVersion,
                     StringComparison.Ordinal)
                 || !SpeakingSimulationV11Contracts.IsValidRubric(request.Criteria))
-                return Results.BadRequest(new { error = "speaking_v11_rubric_definition_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_rubric_definition_invalid", "Rubric definition is invalid.");
             if (request.Criteria.Any(c => c.EnabledRuleIds.Any(IsRule55)))
-                return Results.BadRequest(new { error = "speaking_v11_rule55_not_in_scope" });
+                return new ApiErrorResult(400, "speaking_v11_rule55_not_in_scope", "Rule 55 is not in scope for Speaking v1.1 rubrics.");
 
             var version = request.RubricVersion.Trim();
             if (await db.SpeakingSimulationV11RubricReleases.AnyAsync(
                     x => x.RubricVersion == version, ct))
-                return Results.Conflict(new { error = "speaking_v11_rubric_release_exists" });
+                return new ApiErrorResult(409, "speaking_v11_rubric_release_exists", "A rubric release with this version already exists.");
 
             var now = DateTimeOffset.UtcNow;
             var row = new SpeakingSimulationV11RubricRelease
@@ -187,10 +187,10 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             var row = await db.SpeakingSimulationV11RubricReleases.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             if (row.Status != SpeakingSimulationV11ReleaseStatus.Draft)
-                return Results.Conflict(new { error = "speaking_v11_rubric_release_not_draft" });
+                return new ApiErrorResult(409, "speaking_v11_rubric_release_not_draft", "Only draft rubric releases can be approved.");
             if (!string.Equals(row.RubricVersion, SpeakingSimulationV11Contracts.RubricVersion, StringComparison.Ordinal)
                 || !string.Equals(row.CalibrationVersion, SpeakingSimulationV11Contracts.CalibrationVersion, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_rubric_version_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_rubric_version_invalid", "Rubric or calibration version does not match the Speaking v1.1 contract.");
             SpeakingSimulationV11RubricCriterion[]? criteria;
             try
             {
@@ -202,7 +202,7 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             }
             if (!SpeakingSimulationV11Contracts.IsValidRubric(criteria)
                 || criteria!.Any(c => c.EnabledRuleIds.Any(IsRule55)))
-                return Results.BadRequest(new { error = "speaking_v11_rubric_definition_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_rubric_definition_invalid", "Rubric definition is invalid.");
 
             var now = DateTimeOffset.UtcNow;
             var peers = await db.SpeakingSimulationV11RubricReleases
@@ -230,29 +230,29 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             var key = request.ApprovalKey?.Trim() ?? string.Empty;
             var scope = string.IsNullOrWhiteSpace(request.ScopeKey) ? "global" : request.ScopeKey.Trim();
             if (!FlagKeys.Contains(key) && !NumericKeys.Contains(key))
-                return Results.BadRequest(new { error = "speaking_v11_approval_key_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_approval_key_invalid", "Approval key is not recognised.");
             if (string.IsNullOrWhiteSpace(request.SpecVersion) || string.IsNullOrWhiteSpace(request.RubricVersion))
-                return Results.BadRequest(new { error = "speaking_v11_approval_versions_required" });
+                return new ApiErrorResult(400, "speaking_v11_approval_versions_required", "Spec version and rubric version are required.");
             if (!string.Equals(request.SpecVersion.Trim(), SpeakingSimulationV11Contracts.SpecVersion,
                     StringComparison.Ordinal)
                 || !string.Equals(request.RubricVersion.Trim(), SpeakingSimulationV11Contracts.RubricVersion,
                     StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_approval_spec_version_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_approval_spec_version_invalid", "Spec or rubric version does not match the Speaking v1.1 contract.");
             if (!await db.SpeakingSimulationV11SpecReleases.AnyAsync(
                     x => x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion
                         && x.Status == SpeakingSimulationV11ReleaseStatus.Approved, ct))
-                return Results.BadRequest(new { error = "speaking_v11_approval_spec_release_not_approved" });
+                return new ApiErrorResult(400, "speaking_v11_approval_spec_release_not_approved", "No approved spec release exists for this version.");
             if (!await db.SpeakingSimulationV11RubricReleases.AnyAsync(
                     x => x.RubricVersion == SpeakingSimulationV11Contracts.RubricVersion
                         && x.Status == SpeakingSimulationV11ReleaseStatus.Approved, ct))
-                return Results.BadRequest(new { error = "speaking_v11_approval_rubric_release_not_approved" });
+                return new ApiErrorResult(400, "speaking_v11_approval_rubric_release_not_approved", "No approved rubric release exists for this version.");
             if (NumericKeys.Contains(key) && request.NumericValue is not > 0)
-                return Results.BadRequest(new { error = "speaking_v11_numeric_approval_must_be_positive" });
+                return new ApiErrorResult(400, "speaking_v11_numeric_approval_must_be_positive", "Numeric approvals require a positive value.");
             if (!string.IsNullOrWhiteSpace(request.EvidenceJson) && !IsJsonObjectOrArray(request.EvidenceJson))
-                return Results.BadRequest(new { error = "speaking_v11_approval_evidence_invalid_json" });
+                return new ApiErrorResult(400, "speaking_v11_approval_evidence_invalid_json", "Approval evidence must be a JSON object or array.");
             if (key == "audio_assessment_approval"
                 && !HasApprovedAudioProviderEvidence(request.EvidenceJson))
-                return Results.BadRequest(new { error = "speaking_v11_audio_provider_evidence_required" });
+                return new ApiErrorResult(400, "speaking_v11_audio_provider_evidence_required", "Audio assessment approval requires approved audio provider evidence.");
 
             var now = DateTimeOffset.UtcNow;
             var row = new SpeakingSimulationV11OwnerApproval
@@ -286,15 +286,15 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             var row = await db.SpeakingSimulationV11OwnerApprovals.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             if (row.Status != SpeakingSimulationV11ApprovalStatus.Pending)
-                return Results.Conflict(new { error = "speaking_v11_approval_not_pending" });
+                return new ApiErrorResult(409, "speaking_v11_approval_not_pending", "Only pending approvals can be approved or rejected.");
             if (!string.Equals(row.SpecVersion, SpeakingSimulationV11Contracts.SpecVersion, StringComparison.Ordinal)
                 || !string.Equals(row.RubricVersion, SpeakingSimulationV11Contracts.RubricVersion, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_approval_versions_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_approval_versions_invalid", "Approval versions do not match the Speaking v1.1 contract.");
             if (row.NumericValue is not > 0 && NumericKeys.Contains(row.ApprovalKey))
-                return Results.BadRequest(new { error = "speaking_v11_numeric_approval_must_be_positive" });
+                return new ApiErrorResult(400, "speaking_v11_numeric_approval_must_be_positive", "Numeric approvals require a positive value.");
             if (row.ApprovalKey == "audio_assessment_approval"
                 && !HasApprovedAudioProviderEvidence(row.EvidenceJson))
-                return Results.BadRequest(new { error = "speaking_v11_audio_provider_evidence_required" });
+                return new ApiErrorResult(400, "speaking_v11_audio_provider_evidence_required", "Audio assessment approval requires approved audio provider evidence.");
             var now = DateTimeOffset.UtcNow;
             row.Status = SpeakingSimulationV11ApprovalStatus.Approved;
             row.ApprovedByUserId = ActorId(http);
@@ -316,10 +316,10 @@ public static class SpeakingSimulationV11GovernanceEndpoints
             var row = await db.SpeakingSimulationV11OwnerApprovals.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (row is null) return Results.NotFound();
             if (row.Status != SpeakingSimulationV11ApprovalStatus.Pending)
-                return Results.Conflict(new { error = "speaking_v11_approval_not_pending" });
+                return new ApiErrorResult(409, "speaking_v11_approval_not_pending", "Only pending approvals can be approved or rejected.");
             if (!string.Equals(row.SpecVersion, SpeakingSimulationV11Contracts.SpecVersion, StringComparison.Ordinal)
                 || !string.Equals(row.RubricVersion, SpeakingSimulationV11Contracts.RubricVersion, StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "speaking_v11_approval_versions_invalid" });
+                return new ApiErrorResult(400, "speaking_v11_approval_versions_invalid", "Approval versions do not match the Speaking v1.1 contract.");
             row.Status = SpeakingSimulationV11ApprovalStatus.Rejected;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             AddAudit(db, http, "speaking_v11.owner_approval.rejected", row.Id,

@@ -113,7 +113,7 @@ public static class Oet2026CatalogEndpoints
 
     private sealed record ReseedResponse(int PlansCreated, int PlansUpdated, int AddOnsCreated, int AddOnsUpdated, int PackagesCreated, int PackagesUpdated);
 
-    private static async Task<Results<Ok<ReseedResponse>, BadRequest<string>>> AdminReseedOet2026Catalog(
+    private static async Task<Results<Ok<ReseedResponse>, ApiErrorResult>> AdminReseedOet2026Catalog(
         Oet2026CatalogSeeder seeder,
         CancellationToken ct)
     {
@@ -130,7 +130,7 @@ public static class Oet2026CatalogEndpoints
         }
         catch (Exception ex)
         {
-            return TypedResults.BadRequest($"Seed failed: {ex.Message}");
+            return new ApiErrorResult(400, "catalog_seed_failed", ApiErrorResult.SafeMessage(ex, "Catalog seed failed.")) { Exception = ex };
         }
     }
 

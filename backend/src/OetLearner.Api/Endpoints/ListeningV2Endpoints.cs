@@ -132,7 +132,7 @@ public static class ListeningV2Endpoints
             catch (ArgumentException) { return Results.BadRequest(); }
             catch (InvalidOperationException ex)
             {
-                return Results.UnprocessableEntity(new { reason = "attempt-not-in-progress", detail = ex.Message });
+                return new ApiErrorResult(422, "attempt_not_in_progress", ApiErrorResult.SafeMessage(ex, "The attempt cannot accept readiness updates.")) { Exception = ex };
             }
             catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (UnauthorizedAccessException) { return Results.Forbid(); }
@@ -158,12 +158,6 @@ public static class ListeningV2Endpoints
                 await session.SaveAnnotationsAsync(
                     attemptId, http.UserId(), req?.AnnotationsJson, ct);
                 return Results.NoContent();
-            }
-            catch (ApiException ex)
-            {
-                return Results.Json(
-                    new { errorCode = ex.ErrorCode, message = ex.Message },
-                    statusCode: (int)ex.StatusCode);
             }
             catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (UnauthorizedAccessException) { return Results.Forbid(); }
@@ -234,7 +228,7 @@ public static class ListeningV2Endpoints
             if (attempt.UserId != userId) return Results.Forbid();
 
             if (req.Text is null || req.Text.Length > 4096)
-                return Results.BadRequest(new { error = "Text must be between 1 and 4096 characters." });
+                return new ApiErrorResult(400, "listening_note_text_invalid", "Text must be between 1 and 4096 characters.");
 
             var now = DateTimeOffset.UtcNow;
             var note = new Domain.ListeningAttemptNote
@@ -294,7 +288,7 @@ public static class ListeningV2Endpoints
             if (attempt.UserId != userId) return Results.Forbid();
 
             if (req.Text is null || req.Text.Length > 4096)
-                return Results.BadRequest(new { error = "Text must be between 1 and 4096 characters." });
+                return new ApiErrorResult(400, "listening_note_text_invalid", "Text must be between 1 and 4096 characters.");
 
             var note = await db.ListeningAttemptNotes
                 .FirstOrDefaultAsync(n => n.Id == noteId && n.ListeningAttemptId == attemptId, ct);

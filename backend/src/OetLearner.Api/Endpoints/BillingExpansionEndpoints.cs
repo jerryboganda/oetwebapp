@@ -78,7 +78,7 @@ public static class BillingExpansionEndpoints
 
     // ── Manual payments ────────────────────────────────────────────
 
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> SubmitManualPayment(
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> SubmitManualPayment(
         HttpContext http,
         ManualPaymentSubmitRequestDto request,
         IManualPaymentService service,
@@ -86,7 +86,7 @@ public static class BillingExpansionEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.ProofBase64))
         {
-            return TypedResults.BadRequest("proofBase64 is required.");
+            return new ApiErrorResult(400, "manual_payment_proof_required", "proofBase64 is required.");
         }
 
         byte[] proofBytes;
@@ -96,7 +96,7 @@ public static class BillingExpansionEndpoints
         }
         catch (FormatException)
         {
-            return TypedResults.BadRequest("proofBase64 is not valid base64.");
+            return new ApiErrorResult(400, "manual_payment_proof_invalid_base64", "proofBase64 is not valid base64.");
         }
 
         var userId = http.UserId();
@@ -119,7 +119,7 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_submit_failed", ApiErrorResult.SafeMessage(ex, "The payment proof could not be submitted.")) { Exception = ex };
         }
     }
 
@@ -189,7 +189,7 @@ public static class BillingExpansionEndpoints
             ? value
             : null;
 
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> ApproveManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> ApproveManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
     {
         try
         {
@@ -197,11 +197,11 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_approve_failed", ApiErrorResult.SafeMessage(ex, "The payment could not be approved.")) { Exception = ex };
         }
     }
 
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> RejectManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> RejectManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
     {
         try
         {
@@ -209,11 +209,11 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_reject_failed", ApiErrorResult.SafeMessage(ex, "The payment could not be rejected.")) { Exception = ex };
         }
     }
 
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> SetManualPaymentStatus(string id, HttpContext http, ManualPaymentStatusRequest request, IManualPaymentService service, CancellationToken ct)
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> SetManualPaymentStatus(string id, HttpContext http, ManualPaymentStatusRequest request, IManualPaymentService service, CancellationToken ct)
     {
         try
         {
@@ -221,13 +221,13 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_status_update_failed", ApiErrorResult.SafeMessage(ex, "The payment status could not be updated.")) { Exception = ex };
         }
     }
 
     /// <summary>Release a pending offline order whose payment was confirmed out-of-band
     /// (owner saw the transfer land) without waiting for the learner to upload a file.</summary>
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> WaiveManualPaymentProof(string id, HttpContext http, ManualPaymentWaiveProofRequest request, IManualPaymentService service, CancellationToken ct)
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> WaiveManualPaymentProof(string id, HttpContext http, ManualPaymentWaiveProofRequest request, IManualPaymentService service, CancellationToken ct)
     {
         try
         {
@@ -236,12 +236,12 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_waive_proof_failed", ApiErrorResult.SafeMessage(ex, "The payment proof requirement could not be waived.")) { Exception = ex };
         }
     }
 
     /// <summary>Undo a mis-clicked Reject: rejected → pending.</summary>
-    private static async Task<Results<Ok<ManualPaymentDto>, BadRequest<string>>> ReopenManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
+    private static async Task<Results<Ok<ManualPaymentDto>, ApiErrorResult>> ReopenManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
     {
         try
         {
@@ -250,7 +250,7 @@ public static class BillingExpansionEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "manual_payment_reopen_failed", ApiErrorResult.SafeMessage(ex, "The payment could not be re-opened.")) { Exception = ex };
         }
     }
 
@@ -403,7 +403,7 @@ public static class BillingExpansionEndpoints
         return TypedResults.Ok(items);
     }
 
-    private static async Task<Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>> MarkSubscriptionFulfilled(
+    private static async Task<Results<Ok<PendingFulfilmentDto>, NotFound, ApiErrorResult>> MarkSubscriptionFulfilled(
         string id,
         HttpContext http,
         ApproveRejectRequest request,
@@ -435,9 +435,9 @@ public static class BillingExpansionEndpoints
             && subscription.FulfilmentStatus != FulfilmentStatuses.PendingVerification
             && !staleProcessing)
         {
-            return TypedResults.BadRequest(subscription.FulfilmentStatus == FulfilmentStatuses.Processing
-                ? "This order is currently being processed. Wait a minute, refresh, and try again — a stuck order can also be reopened from the payment proofs tab."
-                : "Only an order awaiting fulfilment can be marked fulfilled.");
+            return subscription.FulfilmentStatus == FulfilmentStatuses.Processing
+                ? new ApiErrorResult(400, "fulfilment_in_progress", "This order is currently being processed. Wait a minute, refresh, and try again — a stuck order can also be reopened from the payment proofs tab.")
+                : new ApiErrorResult(400, "fulfilment_not_pending", "Only an order awaiting fulfilment can be marked fulfilled.");
         }
 
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
@@ -448,7 +448,7 @@ public static class BillingExpansionEndpoints
                 .FirstOrDefaultAsync(v => v.Id == subscription.PlanVersionId, ct);
             if (purchasedVersion is null)
             {
-                return TypedResults.BadRequest("The purchased plan version is missing. Delivery was not marked and no access was released.");
+                return new ApiErrorResult(400, "fulfilment_plan_version_missing", "The purchased plan version is missing. Delivery was not marked and no access was released.");
             }
         }
         if (db.Database.IsRelational())
@@ -475,7 +475,7 @@ public static class BillingExpansionEndpoints
                         webAccessReleased: current.Status == SubscriptionStatus.Active,
                         ct: ct));
                 }
-                return TypedResults.BadRequest("This order is already being fulfilled.");
+                return new ApiErrorResult(400, "fulfilment_in_progress", "This order is already being fulfilled.");
             }
 
             // The claim above is a raw ExecuteUpdateAsync — it bypasses the change
@@ -541,7 +541,7 @@ public static class BillingExpansionEndpoints
             }
             catch (ApiException ex)
             {
-                return TypedResults.BadRequest(ex.Message);
+                return new ApiErrorResult(400, ex.ErrorCode, ex.Message);
             }
         }
         subscription.FulfilmentStatus = FulfilmentStatuses.Fulfilled;
@@ -1032,14 +1032,14 @@ public static class BillingExpansionEndpoints
         return TypedResults.Ok(rows);
     }
 
-    private static async Task<Results<Ok<Affiliate>, BadRequest<string>>> CreateAffiliate(AffiliateUpsertRequest request, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<Affiliate>, ApiErrorResult>> CreateAffiliate(AffiliateUpsertRequest request, LearnerDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.OwnerName))
         {
-            return TypedResults.BadRequest("Code and ownerName are required.");
+            return new ApiErrorResult(400, "affiliate_code_owner_required", "Code and ownerName are required.");
         }
         var dup = await db.Affiliates.AnyAsync(a => a.Code == request.Code, ct);
-        if (dup) return TypedResults.BadRequest("Affiliate code already in use.");
+        if (dup) return new ApiErrorResult(400, "affiliate_code_in_use", "Affiliate code already in use.");
 
         var now = DateTimeOffset.UtcNow;
         var affiliate = new Affiliate

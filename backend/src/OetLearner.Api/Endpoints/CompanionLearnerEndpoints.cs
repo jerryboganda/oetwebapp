@@ -261,12 +261,12 @@ public static class CompanionLearnerEndpoints
 
         if (!Enum.TryParse<CompanionTeachingStyle>(request.TeachingStyle, ignoreCase: true, out var style))
         {
-            return Results.BadRequest(new { error = "unknown_teaching_style", value = request.TeachingStyle });
+            return Results.BadRequest(new { code = "unknown_teaching_style", message = "Teaching style is not recognised.", value = request.TeachingStyle });
         }
 
         if (!Enum.TryParse<CompanionExplanationDepth>(request.Depth, ignoreCase: true, out var depth))
         {
-            return Results.BadRequest(new { error = "unknown_depth", value = request.Depth });
+            return Results.BadRequest(new { code = "unknown_depth", message = "Explanation depth is not recognised.", value = request.Depth });
         }
 
         var row = await db.CompanionPreferences.FirstOrDefaultAsync(p => p.UserId == userId, ct);

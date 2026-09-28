@@ -87,10 +87,10 @@ public static class PronunciationEndpoints
         // Back-compat alias: POST /drills/{id}/attempt  { audioUrl } — now rejects
         // with a clear upgrade notice rather than pretending to score.
         pron.MapPost("/drills/{drillId}/attempt", (string drillId) =>
-            Results.Problem(
-                title: "Use /attempt/init + /attempt/{attemptId}/audio",
-                detail: "The legacy JSON-body attempt endpoint has been retired. Call POST /attempt/init then upload the audio blob to /attempt/{attemptId}/audio.",
-                statusCode: StatusCodes.Status410Gone));
+            new ApiErrorResult(
+                StatusCodes.Status410Gone,
+                "pronunciation_legacy_attempt_retired",
+                "The legacy JSON-body attempt endpoint has been retired. Call POST /attempt/init then upload the audio blob to /attempt/{attemptId}/audio."));
 
         pron.MapGet("/assessment/{assessmentId}", async (
             string assessmentId, HttpContext http, PronunciationService svc, CancellationToken ct) =>

@@ -101,7 +101,7 @@ public static class ReadingPathwayEndpoints
                 ?? throw new InvalidOperationException("auth required");
 
             if (request.SessionType is not ("drill" or "wrong_review" or "mock"))
-                return Results.BadRequest(new { code = "invalid_session_type", error = "Unsupported Reading practice session type.", message = "Unsupported Reading practice session type." });
+                return new ApiErrorResult(400, "invalid_session_type", "Unsupported Reading practice session type.");
 
             // Estimate question count from target minutes (~1.2 q/min, minimum 5).
             int targetCount = Math.Max(5, (int)Math.Round(request.TargetMinutes * 1.2));
@@ -113,13 +113,13 @@ public static class ReadingPathwayEndpoints
             {
                 var ids = await selection.SelectMockQuestionsAsync(userId, request.MockTemplateId.Value, ct);
                 if (ids.Count == 0)
-                    return Results.BadRequest(new { code = "mock_template_unavailable", error = "Mock template is not available.", message = "Mock template is not available." });
+                    return new ApiErrorResult(400, "mock_template_unavailable", "Mock template is not available.");
                 questionIdsJson = JsonSerializer.Serialize(ids);
                 questionCount = ids.Count;
             }
             else if (request.SessionType == "mock")
             {
-                return Results.BadRequest(new { code = "mock_template_required", error = "mockTemplateId required", message = "mockTemplateId required" });
+                return new ApiErrorResult(400, "mock_template_required", "mockTemplateId required");
             }
             else if (request.SessionType == "wrong_review")
             {
@@ -169,13 +169,13 @@ public static class ReadingPathwayEndpoints
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
             if (session is null) return Results.NotFound();
             if (session.SessionType is "diagnostic" or "mock")
-                return Results.BadRequest(new { code = "session_answers_locked", error = "This session type does not reveal per-question correctness.", message = "This session type does not reveal per-question correctness." });
+                return new ApiErrorResult(400, "session_answers_locked", "This session type does not reveal per-question correctness.");
             if (session.CompletedAt is not null)
-                return Results.BadRequest(new { code = "session_already_submitted", error = "Session already submitted.", message = "Session already submitted." });
+                return new ApiErrorResult(400, "session_already_submitted", "Session already submitted.");
 
             var sessionQuestionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson) ?? [];
             if (sessionQuestionIds.Count > 0 && !sessionQuestionIds.Contains(request.QuestionId, StringComparer.OrdinalIgnoreCase))
-                return Results.BadRequest(new { code = "question_not_in_session", error = "Question is not part of this session.", message = "Question is not part of this session." });
+                return new ApiErrorResult(400, "question_not_in_session", "Question is not part of this session.");
 
             // ReadingQuestion.Id is a string PK in the canonical authoring schema.
             var questionStringId = request.QuestionId;
@@ -195,7 +195,7 @@ public static class ReadingPathwayEndpoints
             if (existing is not null)
             {
                 if (!string.Equals(existing.SelectedOption, request.SelectedOption, StringComparison.Ordinal))
-                    return Results.Conflict(new { code = "answer_already_submitted", error = "Answer already submitted for this question.", message = "Answer already submitted for this question." });
+                    return new ApiErrorResult(409, "answer_already_submitted", "Answer already submitted for this question.");
 
                 return Results.Ok(new AnswerResultResponse(existing.IsCorrect, Explanation: null));
             }
@@ -272,7 +272,7 @@ public static class ReadingPathwayEndpoints
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
             if (session is null) return Results.NotFound();
             if (session.SessionType is "diagnostic" or "mock")
-                return Results.BadRequest(new { code = "session_projection_unavailable", error = "Use the dedicated player for this session type.", message = "Use the dedicated player for this session type." });
+                return new ApiErrorResult(400, "session_projection_unavailable", "Use the dedicated player for this session type.");
 
             var questionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson) ?? [];
             if (questionIds.Count == 0)
@@ -361,9 +361,7 @@ public static class ReadingPathwayEndpoints
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             _ = (userId, questionId, wrongOption, language, explanationSvc, ct);
-            return Results.Json(
-                new { code = "explanation_route_disabled", error = "Explanations are available only through submitted attempt review.", message = "Explanations are available only through submitted attempt review." },
-                statusCode: StatusCodes.Status410Gone);
+            return new ApiErrorResult(410, "explanation_route_disabled", "Explanations are available only through submitted attempt review.");
         });
 
         // ── §23.4 Mocks ───────────────────────────────────────────────────────
@@ -385,12 +383,12 @@ public static class ReadingPathwayEndpoints
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             if (!request.MockTemplateId.HasValue)
-                return Results.BadRequest(new { code = "mock_template_required", error = "mockTemplateId required", message = "mockTemplateId required" });
+                return new ApiErrorResult(400, "mock_template_required", "mockTemplateId required");
 
             // Returns List<Guid> (ReadingMockTemplate question IDs)
             var questionIds = await selection.SelectMockQuestionsAsync(userId, request.MockTemplateId.Value, ct);
             if (questionIds.Count == 0)
-                return Results.BadRequest(new { code = "mock_template_unavailable", error = "Mock template is not available.", message = "Mock template is not available." });
+                return new ApiErrorResult(400, "mock_template_unavailable", "Mock template is not available.");
             var scoreConversionAtStart = await scoreConversion.ResolveAsync(
                 "reading",
                 rawScore: 0,
@@ -732,13 +730,7 @@ public static class ReadingPathwayEndpoints
             }
             catch (VocabularyGenerationUnavailableException ex)
             {
-                return Results.Json(new
-                {
-                    code = "vocabulary_generation_unavailable",
-                    status = "unavailable",
-                    error = ex.Message,
-                    message = "A vocabulary definition is unavailable. No stub card was stored. Try again later.",
-                }, statusCode: StatusCodes.Status503ServiceUnavailable);
+                return new ApiErrorResult(503, "vocabulary_generation_unavailable", "A vocabulary definition is unavailable. No stub card was stored. Try again later.") { Exception = ex };
             }
         });
 
@@ -873,7 +865,7 @@ public static class ReadingPathwayEndpoints
             string questionId, LearnerDbContext db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(questionId))
-                return Results.BadRequest(new { code = "invalid_question_id", error = "questionId is required.", message = "questionId is required." });
+                return new ApiErrorResult(400, "invalid_question_id", "questionId is required.");
 
             var questionGuid = StableGuidFromQuestionId(questionId);
 
@@ -905,12 +897,12 @@ public static class ReadingPathwayEndpoints
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             if (string.IsNullOrWhiteSpace(questionId))
-                return Results.BadRequest(new { code = "invalid_question_id", error = "questionId is required.", message = "questionId is required." });
+                return new ApiErrorResult(400, "invalid_question_id", "questionId is required.");
             var body = request.Body?.Trim() ?? "";
             if (body.Length == 0)
-                return Results.BadRequest(new { code = "empty_comment", error = "Comment body is required.", message = "Comment body is required." });
+                return new ApiErrorResult(400, "empty_comment", "Comment body is required.");
             if (body.Length > 2000)
-                return Results.BadRequest(new { code = "comment_too_long", error = "Comment body must be 2000 characters or fewer.", message = "Comment body must be 2000 characters or fewer." });
+                return new ApiErrorResult(400, "comment_too_long", "Comment body must be 2000 characters or fewer.");
 
             var questionGuid = StableGuidFromQuestionId(questionId);
 
@@ -940,7 +932,7 @@ public static class ReadingPathwayEndpoints
             string questionId, Guid commentId, LearnerDbContext db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(questionId))
-                return Results.BadRequest(new { code = "invalid_question_id", error = "questionId is required.", message = "questionId is required." });
+                return new ApiErrorResult(400, "invalid_question_id", "questionId is required.");
 
             var questionGuid = StableGuidFromQuestionId(questionId);
             var comment = await db.ReadingQuestionDiscussionComments
@@ -964,27 +956,17 @@ public static class ReadingPathwayEndpoints
             {
                 return Results.Ok(await qnaService.AskAsync(userId, request, ct));
             }
-            catch (ReadingPassageQnaUnavailableException ex)
+            catch (ReadingPassageQnaUnavailableException)
             {
-                return Results.Conflict(new
-                {
-                    code = "grounded_passage_qna_unavailable",
-                    error = ex.Message,
-                    message = "A grounded passage answer is unavailable; the submitted result and marks are unchanged.",
-                });
+                return new ApiErrorResult(409, "grounded_passage_qna_unavailable", "A grounded passage answer is unavailable; the submitted result and marks are unchanged.");
             }
-            catch (ReadingPassageQnaSessionLimitException ex)
+            catch (ReadingPassageQnaSessionLimitException)
             {
-                return Results.Json(new
-                {
-                    code = "passage_qna_session_limit",
-                    error = ex.Message,
-                    message = "This passage Q&A session has reached its turn limit.",
-                }, statusCode: StatusCodes.Status429TooManyRequests);
+                return new ApiErrorResult(429, "passage_qna_session_limit", "This passage Q&A session has reached its turn limit.");
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { code = "invalid_passage_qna_request", error = ex.Message });
+                return new ApiErrorResult(400, "invalid_passage_qna_request", ApiErrorResult.SafeMessage(ex, "The passage Q&A request is invalid.")) { Exception = ex };
             }
         })
         .RequireRateLimiting("AiInteractive");

@@ -22,7 +22,7 @@ public static class BillingCheckoutEndpoints
         return app;
     }
 
-    private static async Task<Results<Ok<PayPalCartOrderDto>, BadRequest<string>>> CreatePayPalCartOrder(
+    private static async Task<Results<Ok<PayPalCartOrderDto>, ApiErrorResult>> CreatePayPalCartOrder(
         HttpContext http,
         CreatePayPalCartOrderRequest request,
         ICheckoutService checkoutService,
@@ -37,11 +37,11 @@ public static class BillingCheckoutEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "checkout_paypal_order_failed", ApiErrorResult.SafeMessage(ex, "The PayPal order could not be created.")) { Exception = ex };
         }
     }
 
-    private static async Task<Results<Ok<CheckoutSessionDto>, BadRequest<string>>> CreateCheckoutSession(
+    private static async Task<Results<Ok<CheckoutSessionDto>, ApiErrorResult>> CreateCheckoutSession(
         HttpContext http,
         CreateCheckoutRequest request,
         ICheckoutService checkoutService,
@@ -56,7 +56,7 @@ public static class BillingCheckoutEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, "checkout_session_failed", ApiErrorResult.SafeMessage(ex, "The checkout session could not be created.")) { Exception = ex };
         }
     }
 

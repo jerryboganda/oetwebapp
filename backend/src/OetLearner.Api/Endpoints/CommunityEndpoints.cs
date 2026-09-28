@@ -62,7 +62,7 @@ public static class CommunityEndpoints
         community.MapGet("/threads/{threadId}", async (string threadId, LearnerDbContext db, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
-            if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
+            if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
             thread.ViewCount++;
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = thread.Id, categoryId = thread.CategoryId, authorUserId = thread.AuthorUserId, authorDisplayName = thread.AuthorDisplayName, authorRole = thread.AuthorRole, title = thread.Title, body = thread.Body, isPinned = thread.IsPinned, isLocked = thread.IsLocked, replyCount = thread.ReplyCount, viewCount = thread.ViewCount, likeCount = thread.LikeCount, createdAt = thread.CreatedAt, lastActivityAt = thread.LastActivityAt });
@@ -108,8 +108,8 @@ public static class CommunityEndpoints
         community.MapPost("/threads/{threadId}/replies", async (HttpContext http, string threadId, CreateReplyRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
-            if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
-            if (thread.IsLocked) return Results.Json(new { error = "THREAD_LOCKED" }, statusCode: 403);
+            if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
+            if (thread.IsLocked) return new ApiErrorResult(403, "THREAD_LOCKED", "This thread is locked.");
             ValidateForumText(req.Body, MaxForumBodyLength, "body");
 
             var user = await db.Users.FindAsync([http.UserId()], ct);
@@ -177,8 +177,8 @@ public static class CommunityEndpoints
         community.MapPost("/study-groups/{groupId}/join", async (HttpContext http, string groupId, LearnerDbContext db, CancellationToken ct) =>
         {
             var group = await db.StudyGroups.FindAsync([groupId], ct);
-            if (group == null) return Results.NotFound(new { error = "GROUP_NOT_FOUND" });
-            if (group.MemberCount >= group.MaxMembers) return Results.BadRequest(new { error = "GROUP_FULL" });
+            if (group == null) return new ApiErrorResult(404, "GROUP_NOT_FOUND", "Study group not found.");
+            if (group.MemberCount >= group.MaxMembers) return new ApiErrorResult(400, "GROUP_FULL", "This study group is full.");
 
             var already = await db.StudyGroupMembers.AnyAsync(m => m.GroupId == groupId && m.UserId == http.UserId(), ct);
             if (!already)

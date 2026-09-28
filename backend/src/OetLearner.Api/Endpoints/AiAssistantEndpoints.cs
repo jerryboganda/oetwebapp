@@ -70,7 +70,7 @@ public static class AiAssistantEndpoints
 
             var title = (req?.Title ?? string.Empty).Trim();
             if (title.Length == 0 || title.Length > 256)
-                return Results.BadRequest(new { error = "Title must be 1–256 characters." });
+                return new ApiErrorResult(400, "ai_thread_title_invalid", "Title must be 1–256 characters.");
 
             var renamed = await orchestrator.RenameThreadAsync(threadId, userId, title, ct);
             return renamed ? Results.NoContent() : Results.NotFound();
@@ -91,7 +91,7 @@ public static class AiAssistantEndpoints
 
             var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
             if (model is not null && !AssistantModelCatalog.IsSelectable(model))
-                return Results.BadRequest(new { error = "Unknown assistant model." });
+                return new ApiErrorResult(400, "ai_assistant_model_unknown", "Unknown assistant model.");
 
             var saved = await orchestrator.SetThreadModelAsync(threadId, userId, model, ct);
             return saved ? Results.NoContent() : Results.NotFound();
@@ -547,7 +547,7 @@ public static class AiAssistantEndpoints
         {
             if (request?.Roles is null || request.Roles.Count == 0)
             {
-                return Results.BadRequest(new { error = "At least one role configuration is required." });
+                return new ApiErrorResult(400, "ai_assistant_roles_required", "At least one role configuration is required.");
             }
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
@@ -559,7 +559,7 @@ public static class AiAssistantEndpoints
                 var role = (roleConfig.Role ?? string.Empty).Trim().ToLowerInvariant();
                 if (!AssistantRoles.Contains(role))
                 {
-                    return Results.BadRequest(new { error = $"Unknown assistant role '{roleConfig.Role}'." });
+                    return new ApiErrorResult(400, "ai_assistant_role_unknown", $"Unknown assistant role '{roleConfig.Role}'.");
                 }
 
                 var featureCode = AssistantFeatureCodeForRole(role);
@@ -574,7 +574,7 @@ public static class AiAssistantEndpoints
                     // rejection, silently breaking the role's assistant.
                     if (!AssistantModelCatalog.IsSelectable(roleConfig.Model.Trim()))
                     {
-                        return Results.BadRequest(new { error = $"Unknown assistant model '{roleConfig.Model}' for role '{role}'." });
+                        return new ApiErrorResult(400, "ai_assistant_model_unknown", $"Unknown assistant model '{roleConfig.Model}' for role '{role}'.");
                     }
 
                     var route = await db.AiFeatureRoutes

@@ -41,7 +41,7 @@ public static class LearningContentEndpoints
                 // by accident. docs/ai-learning-companion/.
                 "ai_learning_companion" or "ai-learning-companion" =>
                     Results.Ok(new LearnerFeatureFlagResponse("ai_learning_companion", await companionFlags.IsEnabledAsync(ct))),
-                _ => Results.NotFound(new { code = "NOT_FOUND", message = "Feature flag is not exposed to learners." })
+                _ => new ApiErrorResult(404, "NOT_FOUND", "Feature flag is not exposed to learners.")
             };
         })
         .WithName("GetLearnerFeatureFlag")
@@ -101,7 +101,7 @@ public static class LearningContentEndpoints
         grammar.MapGet("/lessons/{lessonId}", async (HttpContext http, string lessonId, LearnerDbContext db, CancellationToken ct) =>
         {
             var lesson = await db.GrammarLessons.FindAsync([lessonId], ct);
-            if (lesson == null || lesson.Status != "active") return Results.NotFound(new { error = "NOT_FOUND" });
+            if (lesson == null || lesson.Status != "active") return new ApiErrorResult(404, "NOT_FOUND", "Grammar lesson not found.");
 
             var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
             return Results.Ok(new
@@ -116,7 +116,7 @@ public static class LearningContentEndpoints
         grammar.MapPost("/lessons/{lessonId}/start", async (HttpContext http, string lessonId, LearnerDbContext db, CancellationToken ct) =>
         {
             var lesson = await db.GrammarLessons.FindAsync([lessonId], ct);
-            if (lesson == null) return Results.NotFound(new { error = "NOT_FOUND" });
+            if (lesson == null) return new ApiErrorResult(404, "NOT_FOUND", "Grammar lesson not found.");
 
             var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
             if (progress == null)
@@ -148,7 +148,7 @@ public static class LearningContentEndpoints
             CancellationToken ct) =>
         {
             var lesson = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct);
-            if (lesson == null || lesson.Status != "active") return Results.NotFound(new { error = "NOT_FOUND" });
+            if (lesson == null || lesson.Status != "active") return new ApiErrorResult(404, "NOT_FOUND", "Grammar lesson not found.");
 
             var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
             var wasCompleted = progress?.Status == "completed";
@@ -162,8 +162,8 @@ public static class LearningContentEndpoints
                 {
                     return Results.Json(new
                     {
-                        errorCode = "grammar_quota_exceeded",
-                        error = entitlementCheck.Reason,
+                        code = "grammar_quota_exceeded",
+                        message = entitlementCheck.Reason,
                         tier = entitlementCheck.Tier,
                         remaining = entitlementCheck.Remaining,
                         limitPerWindow = entitlementCheck.LimitPerWindow,
@@ -234,7 +234,7 @@ public static class LearningContentEndpoints
         grammar.MapPost("/lessons/{lessonId}/complete", async (HttpContext http, string lessonId, GrammarCompletionRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
             var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
-            if (progress == null) return Results.NotFound(new { error = "NOT_STARTED" });
+            if (progress == null) return new ApiErrorResult(404, "NOT_STARTED", "Grammar lesson has not been started.");
 
             progress.Status = "completed";
             progress.ExerciseScore = req.Score;
@@ -249,7 +249,7 @@ public static class LearningContentEndpoints
         // a successor pointer so stale clients get a deterministic signal.
         // The VideoLessons/LearnerVideoProgress tables are intentionally kept.
         var lessons = v1.MapGroup("/lessons");
-        static IResult FeatureDisabled(string featureName) => Results.NotFound(new { code = "FEATURE_DISABLED", message = $"{featureName} are not enabled." });
+        static IResult FeatureDisabled(string featureName) => new ApiErrorResult(404, "FEATURE_DISABLED", $"{featureName} are not enabled.");
         static IResult FeatureRetired() => Results.Json(new
         {
             code = "feature_retired",
@@ -300,7 +300,7 @@ public static class LearningContentEndpoints
             }
 
             var guide = await service.GetGuideAsync(http.UserId(), guideId, ct);
-            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+            return guide is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(guide);
         })
         .WithName("GetStrategyGuide")
         .WithSummary("Gets a strategy guide with progress, related guides, and navigation hints.");
@@ -318,7 +318,7 @@ public static class LearningContentEndpoints
             }
 
             var progress = await service.UpdateProgressAsync(http.UserId(), guideId, req.ReadPercent, ct);
-            return progress is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(progress);
+            return progress is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(progress);
         })
         .WithName("UpdateStrategyGuideProgress")
         .WithSummary("Updates learner read progress for a strategy guide.");
@@ -336,7 +336,7 @@ public static class LearningContentEndpoints
             }
 
             var progress = await service.SetBookmarkAsync(http.UserId(), guideId, req.Bookmarked, ct);
-            return progress is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(progress);
+            return progress is null ? new ApiErrorResult(404, "NOT_FOUND", "Strategy guide not found.") : Results.Ok(progress);
         })
         .WithName("SetStrategyGuideBookmark")
         .WithSummary("Sets or clears a learner strategy guide bookmark.");

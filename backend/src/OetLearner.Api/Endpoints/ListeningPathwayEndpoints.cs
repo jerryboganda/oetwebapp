@@ -65,12 +65,7 @@ public static class ListeningPathwayEndpoints
             {
                 // Onboarding hasn't happened yet — the frontend renders the
                 // intake form rather than a profile card.
-                return Results.NotFound(new
-                {
-                    code = "listening_profile_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("listening_profile_not_found", ex);
             }
         })
         .WithName("ListeningGetProfile");
@@ -88,7 +83,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_audio_check", ex.Message);
+                return BadRequest("invalid_audio_check", ex);
             }
         })
         .WithName("ListeningSubmitAudioCheck")
@@ -115,7 +110,7 @@ public static class ListeningPathwayEndpoints
             var userId = RequireUserId(http);
             var lesson = await svc.GetBySlugAsync(userId, slug, ct);
             return lesson is null
-                ? Results.NotFound(new { code = "listening_lesson_not_found", message = "Listening lesson not found." })
+                ? new ApiErrorResult(404, "listening_lesson_not_found", "Listening lesson not found.")
                 : Results.Ok(lesson);
         })
         .WithName("ListeningGetLesson");
@@ -134,11 +129,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.NotFound(new { code = "listening_lesson_not_found", message = ex.Message });
+                return NotFound("listening_lesson_not_found", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_lesson_progress", ex.Message);
+                return BadRequest("invalid_lesson_progress", ex);
             }
         })
         .WithName("ListeningUpdateLessonProgress")
@@ -164,7 +159,7 @@ public static class ListeningPathwayEndpoints
             var userId = RequireUserId(http);
             var strategy = await svc.GetBySlugAsync(userId, slug, ct);
             return strategy is null
-                ? Results.NotFound(new { code = "listening_strategy_not_found", message = "Listening strategy not found." })
+                ? new ApiErrorResult(404, "listening_strategy_not_found", "Listening strategy not found.")
                 : Results.Ok(strategy);
         })
         .WithName("ListeningGetStrategy");
@@ -182,11 +177,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.NotFound(new { code = "listening_strategy_not_found", message = ex.Message });
+                return NotFound("listening_strategy_not_found", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_strategy_progress", ex.Message);
+                return BadRequest("invalid_strategy_progress", ex);
             }
         })
         .WithName("ListeningMarkStrategyRead")
@@ -205,11 +200,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.NotFound(new { code = "listening_strategy_not_found", message = ex.Message });
+                return NotFound("listening_strategy_not_found", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_strategy_progress", ex.Message);
+                return BadRequest("invalid_strategy_progress", ex);
             }
         })
         .WithName("ListeningToggleStrategyFavorite")
@@ -228,11 +223,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new { code = "listening_mock_results_not_found", message = ex.Message });
+                return NotFound("listening_mock_results_not_found", ex);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest("listening_mock_results_unavailable", ex.Message);
+                return BadRequest("listening_mock_results_unavailable", ex);
             }
         })
         .WithName("ListeningGetMockResults");
@@ -260,16 +255,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "practice_session_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("practice_session_not_found", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_notes_request", ex.Message);
+                return BadRequest("invalid_notes_request", ex);
             }
         })
         .WithName("ListeningSaveSessionNotes");
@@ -291,12 +281,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex) || IsNoPathwayYet(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "listening_pathway_not_generated",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("listening_pathway_not_generated", ex);
             }
         })
         .WithName("ListeningGetPathway");
@@ -395,7 +380,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_dictation_request", ex.Message);
+                return BadRequest("invalid_dictation_request", ex);
             }
         })
         .WithName("ListeningStartDictationSession");
@@ -417,16 +402,11 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "dictation_drill_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("dictation_drill_not_found", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_dictation_submission", ex.Message);
+                return BadRequest("invalid_dictation_submission", ex);
             }
         })
         .WithName("ListeningSubmitDictation");
@@ -479,7 +459,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_pronunciation_request", ex.Message);
+                return BadRequest("invalid_pronunciation_request", ex);
             }
         })
         .WithName("ListeningAddPronunciationCard");
@@ -514,20 +494,15 @@ public static class ListeningPathwayEndpoints
             }
             catch (KeyNotFoundException ex)
             {
-                return Results.NotFound(new
-                {
-                    code = "pronunciation_card_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("pronunciation_card_not_found", ex);
             }
             catch (ArgumentOutOfRangeException ex)
             {
-                return BadRequest("invalid_pronunciation_quality", ex.Message);
+                return BadRequest("invalid_pronunciation_quality", ex);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest("invalid_pronunciation_review", ex.Message);
+                return BadRequest("invalid_pronunciation_review", ex);
             }
         })
         .WithName("ListeningSubmitPronunciationReview");
@@ -599,12 +574,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "listening_plan_item_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("listening_plan_item_not_found", ex);
             }
         })
         .WithName("ListeningStartPlanItem");
@@ -623,12 +593,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "listening_plan_item_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("listening_plan_item_not_found", ex);
             }
         })
         .WithName("ListeningCompletePlanItem");
@@ -648,12 +613,7 @@ public static class ListeningPathwayEndpoints
             }
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
-                return Results.NotFound(new
-                {
-                    code = "listening_plan_item_not_found",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return NotFound("listening_plan_item_not_found", ex);
             }
         })
         .WithName("ListeningSkipPlanItem");
@@ -800,8 +760,13 @@ public static class ListeningPathwayEndpoints
             || message.Contains("complete the diagnostic", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IResult BadRequest(string code, string message)
-        => Results.BadRequest(new { code, error = message, message });
+    // Service messages are crafted literals; SafeMessage drops framework text
+    // (e.g. ArgumentException.ThrowIfNullOrWhiteSpace) that shares these catches.
+    private static ApiErrorResult BadRequest(string code, Exception ex)
+        => new(400, code, ApiErrorResult.SafeMessage(ex, "The request is invalid.")) { Exception = ex };
+
+    private static ApiErrorResult NotFound(string code, Exception ex)
+        => new(404, code, ApiErrorResult.SafeMessage(ex, "The requested Listening item was not found.")) { Exception = ex };
 
     private static string ResolveSkillLabel(string code)
         => SkillLabels.TryGetValue(code, out var label) ? label : code;

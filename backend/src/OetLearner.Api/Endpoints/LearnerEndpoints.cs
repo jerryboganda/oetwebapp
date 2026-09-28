@@ -194,11 +194,7 @@ public static class LearnerEndpoints
         // the underlying LearnerService.*BridgeAsync methods are retained only
         // for reading legacy mock sessions. The student-facing path is the new
         // exam flow (see SpeakingExamEndpoints).
-        static IResult BridgeGone() => Results.Json(new
-        {
-            errorCode = "speaking_bridge_removed",
-            message = "The mock bridge step has been removed. Speaking exams now run as two auto-advancing cards (Card A → Card B). Start a Speaking exam instead.",
-        }, statusCode: StatusCodes.Status410Gone);
+        static IResult BridgeGone() => new ApiErrorResult(410, "speaking_bridge_removed", "The mock bridge step has been removed. Speaking exams now run as two auto-advancing cards (Card A → Card B). Start a Speaking exam instead.");
         speaking.MapPost("/mock-sessions/{sessionId}/bridge/start", (string sessionId) => BridgeGone());
         speaking.MapPost("/mock-sessions/{sessionId}/bridge/finish", (string sessionId) => BridgeGone());
         // P5 - explicit aggregate trigger for the results page. Returns the
@@ -210,7 +206,7 @@ public static class LearnerEndpoints
         // Speaking AI sessions must use the typed native realtime voice flow.
         speaking.MapPost("/tasks/{contentId}/self-practice", (string contentId) => Results.Json(new
         {
-            errorCode = "live_voice_required",
+            code = "live_voice_required",
             message = "Speaking AI practice now uses the native realtime live voice role-play.",
             redirectPath = $"/speaking/roleplay/{Uri.EscapeDataString(contentId)}",
         }, statusCode: StatusCodes.Status410Gone));

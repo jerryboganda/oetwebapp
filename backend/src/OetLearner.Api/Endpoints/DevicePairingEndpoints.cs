@@ -47,12 +47,12 @@ public static class DevicePairingEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.Code))
             {
-                return Results.BadRequest(new { error = "code_required" });
+                return new ApiErrorResult(400, "code_required", "Pairing code is required.");
             }
 
             if (string.IsNullOrWhiteSpace(request.DeviceChallenge))
             {
-                return Results.BadRequest(new { error = "device_challenge_required" });
+                return new ApiErrorResult(400, "device_challenge_required", "Device challenge is required.");
             }
 
             return service.Redeem(request.Code, request.DeviceChallenge) switch
@@ -62,10 +62,10 @@ public static class DevicePairingEndpoints
                 DevicePairingRedeemResult.Expired =>
                     Results.StatusCode(StatusCodes.Status410Gone),
                 DevicePairingRedeemResult.AlreadyRedeemed =>
-                    Results.Conflict(new { error = "already_redeemed" }),
+                    new ApiErrorResult(409, "already_redeemed", "This pairing code has already been used."),
                 DevicePairingRedeemResult.InvalidDeviceChallenge =>
-                    Results.BadRequest(new { error = "invalid_device_challenge" }),
-                _ => Results.NotFound(new { error = "not_found" }),
+                    new ApiErrorResult(400, "invalid_device_challenge", "The device challenge is invalid."),
+                _ => new ApiErrorResult(404, "not_found", "Pairing code not found."),
             };
         })
         .AllowAnonymous()
@@ -79,12 +79,12 @@ public static class DevicePairingEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.HandoffToken))
             {
-                return Results.BadRequest(new { error = "handoff_token_required" });
+                return new ApiErrorResult(400, "handoff_token_required", "Handoff token is required.");
             }
 
             if (string.IsNullOrWhiteSpace(request.DeviceChallenge))
             {
-                return Results.BadRequest(new { error = "device_challenge_required" });
+                return new ApiErrorResult(400, "device_challenge_required", "Device challenge is required.");
             }
 
             return pairingService.Exchange(request.HandoffToken, request.DeviceChallenge) switch
@@ -94,10 +94,10 @@ public static class DevicePairingEndpoints
                 DevicePairingExchangeResult.Expired =>
                     Results.StatusCode(StatusCodes.Status410Gone),
                 DevicePairingExchangeResult.AlreadyConsumed =>
-                    Results.Conflict(new { error = "already_consumed" }),
+                    new ApiErrorResult(409, "already_consumed", "This handoff token has already been used."),
                 DevicePairingExchangeResult.ChallengeMismatch =>
                     Results.Forbid(),
-                _ => Results.NotFound(new { error = "not_found" }),
+                _ => new ApiErrorResult(404, "not_found", "Handoff token not found."),
             };
         })
         .AllowAnonymous()

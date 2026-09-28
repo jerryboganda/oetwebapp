@@ -145,7 +145,7 @@ public static class AdminBillingEndpoints
         }
         catch (KeyNotFoundException)
         {
-            return Results.NotFound(new { error = "unknown_gateway", message = $"Unknown payment gateway '{name}'." });
+            return new ApiErrorResult(404, "unknown_gateway", $"Unknown payment gateway '{name}'.");
         }
     }
 
@@ -233,7 +233,7 @@ public static class AdminBillingEndpoints
             return Results.Ok(new { ok = false, status = 0, reason = "timeout" });
         }
 
-        return Results.BadRequest(new { error = "unsupported_gateway", message = "Ping is available for Whop and Fawaterak." });
+        return new ApiErrorResult(400, "unsupported_gateway", "Ping is available for Whop and Fawaterak.");
     }
 
     private static async Task<(bool Ok, int Status, string Reason)> ProbeWhopAdapterAsync(
@@ -517,7 +517,7 @@ public static class AdminBillingEndpoints
 
     // ─────────────────────── Refunds ───────────────────────
 
-    private static async Task<Results<Ok<RefundResponse>, ProblemHttpResult>> IssueRefund(
+    private static async Task<Results<Ok<RefundResponse>, ApiErrorResult>> IssueRefund(
         [FromBody] IssueRefundRequest request,
         RefundService refundService,
         ClaimsPrincipal user,
@@ -525,11 +525,11 @@ public static class AdminBillingEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.CheckoutSessionId))
         {
-            return TypedResults.Problem(statusCode: 400, title: "checkoutSessionId is required.");
+            return new ApiErrorResult(400, "refund_checkout_session_required", "checkoutSessionId is required.");
         }
         if (request.AmountCents <= 0)
         {
-            return TypedResults.Problem(statusCode: 400, title: "amountCents must be positive.");
+            return new ApiErrorResult(400, "refund_amount_invalid", "amountCents must be positive.");
         }
 
         var amount = decimal.Divide(request.AmountCents, 100m);
@@ -549,7 +549,7 @@ public static class AdminBillingEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            return TypedResults.Problem(statusCode: 400, title: ex.Message);
+            return new ApiErrorResult(400, "refund_rejected", ApiErrorResult.SafeMessage(ex, "The refund could not be issued.")) { Exception = ex };
         }
     }
 
@@ -614,23 +614,23 @@ public static class AdminBillingEndpoints
         return TypedResults.Ok<IReadOnlyList<AdminProductDto>>(rows.Select(MapProduct).ToList());
     }
 
-    private static async Task<Results<Created<AdminProductDto>, Conflict<string>, ProblemHttpResult>> CreateProduct(
+    private static async Task<Results<Created<AdminProductDto>, ApiErrorResult>> CreateProduct(
         [FromBody] AdminCreateProductRequest request,
         LearnerDbContext db,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            return TypedResults.Problem(statusCode: 400, title: "code is required.");
+            return new ApiErrorResult(400, "product_code_required", "code is required.");
         }
         if (string.IsNullOrWhiteSpace(request.Name))
         {
-            return TypedResults.Problem(statusCode: 400, title: "name is required.");
+            return new ApiErrorResult(400, "product_name_required", "name is required.");
         }
         var existing = await db.BillingProducts.FirstOrDefaultAsync(p => p.Code == request.Code, ct);
         if (existing is not null)
         {
-            return TypedResults.Conflict($"Product '{request.Code}' already exists.");
+            return new ApiErrorResult(409, "product_exists", $"Product '{request.Code}' already exists.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -745,31 +745,31 @@ public static class AdminBillingEndpoints
         return TypedResults.Ok<IReadOnlyList<AdminCouponDto>>(rows.Select(MapCoupon).ToList());
     }
 
-    private static async Task<Results<Created<AdminCouponDto>, Conflict<string>, ProblemHttpResult>> CreateCoupon(
+    private static async Task<Results<Created<AdminCouponDto>, ApiErrorResult>> CreateCoupon(
         [FromBody] AdminCreateCouponRequest request,
         LearnerDbContext db,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            return TypedResults.Problem(statusCode: 400, title: "code is required.");
+            return new ApiErrorResult(400, "coupon_code_required", "code is required.");
         }
         if (request.DiscountValue < 0)
         {
-            return TypedResults.Problem(statusCode: 400, title: "discountValue must be non-negative.");
+            return new ApiErrorResult(400, "coupon_discount_value_invalid", "discountValue must be non-negative.");
         }
         if (!TryParseEnum(request.DiscountType, BillingDiscountType.Percentage, out BillingDiscountType discountType))
         {
-            return TypedResults.Problem(statusCode: 400, title: $"discountType '{request.DiscountType}' is not a valid BillingDiscountType.");
+            return new ApiErrorResult(400, "coupon_discount_type_invalid", $"discountType '{request.DiscountType}' is not a valid BillingDiscountType.");
         }
         if (!TryParseEnum(request.Status, BillingCouponStatus.Active, out BillingCouponStatus status))
         {
-            return TypedResults.Problem(statusCode: 400, title: $"status '{request.Status}' is not a valid BillingCouponStatus.");
+            return new ApiErrorResult(400, "coupon_status_invalid", $"status '{request.Status}' is not a valid BillingCouponStatus.");
         }
         var exists = await db.BillingCoupons.AnyAsync(c => c.Code == request.Code, ct);
         if (exists)
         {
-            return TypedResults.Conflict($"Coupon '{request.Code}' already exists.");
+            return new ApiErrorResult(409, "coupon_exists", $"Coupon '{request.Code}' already exists.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -804,7 +804,7 @@ public static class AdminBillingEndpoints
         return TypedResults.Created($"/v1/admin/coupons/{coupon.Code}", MapCoupon(coupon));
     }
 
-    private static async Task<Results<Ok<AdminCouponDto>, NotFound, ProblemHttpResult>> PatchCoupon(
+    private static async Task<Results<Ok<AdminCouponDto>, NotFound, ApiErrorResult>> PatchCoupon(
         string code,
         [FromBody] AdminPatchCouponRequest request,
         LearnerDbContext db,
@@ -819,7 +819,7 @@ public static class AdminBillingEndpoints
         {
             if (!TryParseEnum(request.DiscountType, coupon.DiscountType, out BillingDiscountType dt))
             {
-                return TypedResults.Problem(statusCode: 400, title: $"discountType '{request.DiscountType}' is invalid.");
+                return new ApiErrorResult(400, "coupon_discount_type_invalid", $"discountType '{request.DiscountType}' is invalid.");
             }
             coupon.DiscountType = dt;
         }
@@ -829,7 +829,7 @@ public static class AdminBillingEndpoints
         {
             if (!TryParseEnum(request.Status, coupon.Status, out BillingCouponStatus st))
             {
-                return TypedResults.Problem(statusCode: 400, title: $"status '{request.Status}' is invalid.");
+                return new ApiErrorResult(400, "coupon_status_invalid", $"status '{request.Status}' is invalid.");
             }
             coupon.Status = st;
         }
@@ -894,7 +894,7 @@ public static class AdminBillingEndpoints
 
     // ─────────────────────── Stripe Tax ───────────────────────
 
-    private static async Task<Results<Ok<TaxRegistrationListResponse>, ProblemHttpResult>> ListTaxRegistrations(
+    private static async Task<Results<Ok<TaxRegistrationListResponse>, ApiErrorResult>> ListTaxRegistrations(
         [FromQuery] string? status,
         IRuntimeSettingsProvider runtimeSettings,
         ILogger<TaxRegistrationsLogTag> logger,
@@ -931,11 +931,11 @@ public static class AdminBillingEndpoints
         catch (Stripe.StripeException ex)
         {
             logger.LogWarning(ex, "Stripe Tax list failed.");
-            return TypedResults.Problem(statusCode: 502, title: "Stripe Tax list failed.", detail: ex.Message);
+            return new ApiErrorResult(502, "stripe_tax_list_failed", "Stripe Tax list failed.") { Exception = ex };
         }
     }
 
-    private static async Task<Results<Created<TaxRegistrationDto>, ProblemHttpResult, StatusCodeHttpResult>> CreateTaxRegistration(
+    private static async Task<Results<Created<TaxRegistrationDto>, ApiErrorResult, StatusCodeHttpResult>> CreateTaxRegistration(
         [FromBody] CreateTaxRegistrationRequest request,
         IOptions<BillingOptions> billingOptions,
         ILogger<TaxRegistrationsLogTag> logger,

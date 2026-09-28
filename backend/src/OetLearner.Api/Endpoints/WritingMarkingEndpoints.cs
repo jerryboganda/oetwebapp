@@ -240,7 +240,7 @@ public static class WritingMarkingEndpoints
 
         if (body is null || string.IsNullOrWhiteSpace(body.HighlightedText) || string.IsNullOrWhiteSpace(body.FeedbackText))
         {
-            return Results.BadRequest(new { error = "highlightedText and feedbackText are required." });
+            return new ApiErrorResult(400, "writing_annotation_fields_required", "highlightedText and feedbackText are required.");
         }
 
         var submissionExists = await db.WritingSubmissions
@@ -334,7 +334,7 @@ public static class WritingMarkingEndpoints
 
         if (body is null || string.IsNullOrWhiteSpace(body.MediaAssetId))
         {
-            return Results.BadRequest(new { error = "mediaAssetId is required." });
+            return new ApiErrorResult(400, "writing_voice_note_media_required", "mediaAssetId is required.");
         }
 
         var submissionExists = await db.WritingSubmissions
@@ -440,7 +440,7 @@ public static class WritingMarkingEndpoints
 
         if (body?.FinalScore is null)
         {
-            return Results.BadRequest(new { error = "finalScore is required." });
+            return new ApiErrorResult(400, "writing_moderation_final_score_required", "finalScore is required.");
         }
 
         var row = await moderation.FinalizeAsync(

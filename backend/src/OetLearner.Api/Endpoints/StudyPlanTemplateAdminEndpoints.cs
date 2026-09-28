@@ -140,7 +140,7 @@ public static class StudyPlanTemplateAdminEndpoints
 
     // ── Create / Update / Delete ───────────────────────────────────────────
 
-    private static async Task<Results<Created<StudyPlanTemplateDetailDto>, BadRequest<string>>> CreateTemplate(
+    private static async Task<Results<Created<StudyPlanTemplateDetailDto>, ApiErrorResult>> CreateTemplate(
         HttpContext http,
         StudyPlanTemplateUpsertRequest request,
         LearnerDbContext db,
@@ -148,15 +148,15 @@ public static class StudyPlanTemplateAdminEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.Slug) || string.IsNullOrWhiteSpace(request.Name))
         {
-            return TypedResults.BadRequest("slug and name are required.");
+            return new ApiErrorResult(400, "study_plan_template_fields_required", "slug and name are required.");
         }
 
         var slugTaken = await db.StudyPlanTemplates.AnyAsync(t => t.Slug == request.Slug, ct);
-        if (slugTaken) return TypedResults.BadRequest($"slug '{request.Slug}' already exists.");
+        if (slugTaken) return new ApiErrorResult(400, "study_plan_template_slug_taken", $"slug '{request.Slug}' already exists.");
 
         var body = request.Body ?? new StudyPlanTemplateBody();
         var (ok, errors) = ValidateTemplateBody(body);
-        if (!ok) return TypedResults.BadRequest($"template body invalid: {string.Join("; ", errors)}");
+        if (!ok) return new ApiErrorResult(400, "study_plan_template_body_invalid", $"template body invalid: {string.Join("; ", errors)}");
 
         var now = DateTimeOffset.UtcNow;
         var adminId = ResolveAdminId(http);
@@ -208,7 +208,7 @@ public static class StudyPlanTemplateAdminEndpoints
                 template.UpdatedAt, body));
     }
 
-    private static async Task<Results<Ok<StudyPlanTemplateDetailDto>, NotFound, BadRequest<string>>> UpdateTemplate(
+    private static async Task<Results<Ok<StudyPlanTemplateDetailDto>, NotFound, ApiErrorResult>> UpdateTemplate(
         string id,
         HttpContext http,
         StudyPlanTemplateUpsertRequest request,
@@ -220,7 +220,7 @@ public static class StudyPlanTemplateAdminEndpoints
 
         var body = request.Body ?? new StudyPlanTemplateBody();
         var (ok, errors) = ValidateTemplateBody(body);
-        if (!ok) return TypedResults.BadRequest($"template body invalid: {string.Join("; ", errors)}");
+        if (!ok) return new ApiErrorResult(400, "study_plan_template_body_invalid", $"template body invalid: {string.Join("; ", errors)}");
 
         template.Name = request.Name.Trim();
         template.Description = request.Description;
@@ -413,7 +413,7 @@ public static class StudyPlanTemplateAdminEndpoints
         return TypedResults.Ok(new StudyPlanTemplatePreviewDto(template.Id, template.Slug, dayPreviews));
     }
 
-    private static async Task<Results<Ok<StudyPlanTemplateBulkResultDto>, BadRequest<string>>> BulkAction(
+    private static async Task<Results<Ok<StudyPlanTemplateBulkResultDto>, ApiErrorResult>> BulkAction(
         HttpContext http,
         StudyPlanTemplateBulkRequest request,
         LearnerDbContext db,
@@ -421,12 +421,12 @@ public static class StudyPlanTemplateAdminEndpoints
     {
         if (request.TemplateIds is null || request.TemplateIds.Count == 0)
         {
-            return TypedResults.BadRequest("templateIds is required.");
+            return new ApiErrorResult(400, "study_plan_template_bulk_ids_required", "templateIds is required.");
         }
         var validActions = new[] { "activate", "deactivate", "duplicate", "soft-delete" };
         if (!validActions.Contains(request.Action, StringComparer.OrdinalIgnoreCase))
         {
-            return TypedResults.BadRequest($"action must be one of: {string.Join(",", validActions)}");
+            return new ApiErrorResult(400, "study_plan_template_bulk_action_invalid", $"action must be one of: {string.Join(",", validActions)}");
         }
 
         var ids = request.TemplateIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -590,7 +590,7 @@ public static class StudyPlanTemplateAdminEndpoints
         });
     }
 
-    private static async Task<Results<Ok<object>, BadRequest<string>>> ForceRegenerate(
+    private static async Task<Results<Ok<object>, ApiErrorResult>> ForceRegenerate(
         string userId,
         HttpContext http,
         LearnerDbContext db,

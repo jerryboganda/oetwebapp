@@ -61,7 +61,7 @@ public static class BillingRegionEndpoints
             DetectionSource: detection.Source));
     }
 
-    private static async Task<Results<Ok<BillingProfileResponse>, BadRequest<string>>> UpdateProfile(
+    private static async Task<Results<Ok<BillingProfileResponse>, ApiErrorResult>> UpdateProfile(
         HttpContext http,
         BillingProfileUpdateRequest request,
         LearnerDbContext db,
@@ -70,22 +70,22 @@ public static class BillingRegionEndpoints
     {
         if (request.Country is not null && request.Country.Length != 2)
         {
-            return TypedResults.BadRequest("country must be ISO 3166-1 alpha-2 (2 letters).");
+            return new ApiErrorResult(400, "billing_profile_country_invalid", "country must be ISO 3166-1 alpha-2 (2 letters).");
         }
         if (request.PreferredCurrency is not null && request.PreferredCurrency.Length != 3)
         {
-            return TypedResults.BadRequest("preferredCurrency must be ISO 4217 (3 letters).");
+            return new ApiErrorResult(400, "billing_profile_currency_invalid", "preferredCurrency must be ISO 4217 (3 letters).");
         }
         if (request.PreferredRegion is not null && !BillingRegions.All.Contains(request.PreferredRegion.ToUpperInvariant()))
         {
-            return TypedResults.BadRequest($"preferredRegion must be one of: {string.Join(",", BillingRegions.All)}.");
+            return new ApiErrorResult(400, "billing_profile_region_invalid", $"preferredRegion must be one of: {string.Join(",", BillingRegions.All)}.");
         }
 
         var userId = http.UserId();
         var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (account is null)
         {
-            return TypedResults.BadRequest("User not found.");
+            return new ApiErrorResult(400, "billing_profile_user_not_found", "User not found.");
         }
 
         if (request.Country is not null) account.Country = request.Country.ToUpperInvariant();
@@ -128,15 +128,15 @@ public static class BillingRegionEndpoints
         return TypedResults.Ok(rows);
     }
 
-    private static async Task<Results<Ok<RegionPricingDto>, BadRequest<string>>> UpsertRegionPricing(HttpContext http, RegionPricingUpsertRequest request, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<RegionPricingDto>, ApiErrorResult>> UpsertRegionPricing(HttpContext http, RegionPricingUpsertRequest request, LearnerDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.TargetType) || string.IsNullOrWhiteSpace(request.TargetId) || string.IsNullOrWhiteSpace(request.Region) || string.IsNullOrWhiteSpace(request.Currency))
         {
-            return TypedResults.BadRequest("targetType, targetId, region, currency are required.");
+            return new ApiErrorResult(400, "region_pricing_fields_required", "targetType, targetId, region, currency are required.");
         }
         if (request.PriceAmount < 0)
         {
-            return TypedResults.BadRequest("priceAmount must be non-negative.");
+            return new ApiErrorResult(400, "region_pricing_amount_invalid", "priceAmount must be non-negative.");
         }
 
         var region = request.Region.ToUpperInvariant();
@@ -194,11 +194,11 @@ public static class BillingRegionEndpoints
         return TypedResults.Ok(rows);
     }
 
-    private static async Task<Results<Ok<GatewayRouteDto>, BadRequest<string>>> UpsertGatewayRoute(HttpContext http, GatewayRouteUpsertRequest request, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<GatewayRouteDto>, ApiErrorResult>> UpsertGatewayRoute(HttpContext http, GatewayRouteUpsertRequest request, LearnerDbContext db, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Region) || string.IsNullOrWhiteSpace(request.Currency) || string.IsNullOrWhiteSpace(request.ProductType) || string.IsNullOrWhiteSpace(request.GatewayName))
         {
-            return TypedResults.BadRequest("region, currency, productType, gatewayName are required.");
+            return new ApiErrorResult(400, "gateway_route_fields_required", "region, currency, productType, gatewayName are required.");
         }
 
         var region = request.Region.ToUpperInvariant();

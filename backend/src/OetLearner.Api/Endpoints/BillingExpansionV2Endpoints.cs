@@ -57,11 +57,11 @@ public static class BillingExpansionV2Endpoints
 
     // ── Pause / Resume ────────────────────────────────────────────
 
-    private static async Task<Results<Ok<Subscription>, BadRequest<string>>> PauseSubscription(HttpContext http, PauseRequest request, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<Subscription>, ApiErrorResult>> PauseSubscription(HttpContext http, PauseRequest request, LearnerDbContext db, CancellationToken ct)
     {
         var userId = http.UserId();
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId, ct);
-        if (sub is null) return TypedResults.BadRequest("No subscription found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "No subscription found.");
 
         DateTimeOffset? until = request.Days is > 0 ? DateTimeOffset.UtcNow.AddDays(request.Days.Value) : null;
         try
@@ -72,15 +72,15 @@ public static class BillingExpansionV2Endpoints
         }
         catch (Exception ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, (ex as OetLearner.Api.Services.ApiException)?.ErrorCode ?? "subscription_pause_failed", ApiErrorResult.SafeMessage(ex, "The subscription could not be paused.")) { Exception = ex };
         }
     }
 
-    private static async Task<Results<Ok<Subscription>, BadRequest<string>>> ResumeSubscription(HttpContext http, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<Subscription>, ApiErrorResult>> ResumeSubscription(HttpContext http, LearnerDbContext db, CancellationToken ct)
     {
         var userId = http.UserId();
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId, ct);
-        if (sub is null) return TypedResults.BadRequest("No subscription found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "No subscription found.");
         try
         {
             SubscriptionStateMachine.Resume(sub, "learner_requested_resume");
@@ -89,7 +89,7 @@ public static class BillingExpansionV2Endpoints
         }
         catch (Exception ex)
         {
-            return TypedResults.BadRequest(ex.Message);
+            return new ApiErrorResult(400, (ex as OetLearner.Api.Services.ApiException)?.ErrorCode ?? "subscription_resume_failed", ApiErrorResult.SafeMessage(ex, "The subscription could not be resumed.")) { Exception = ex };
         }
     }
 
@@ -138,16 +138,16 @@ public static class BillingExpansionV2Endpoints
         return TypedResults.Ok(new CancellationIntentResponse(intent.Id, intent.Status, offeredCoupon));
     }
 
-    private static async Task<Results<Ok<Subscription>, BadRequest<string>>> ConfirmCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<Subscription>, ApiErrorResult>> ConfirmCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
     {
         // Object-level authorization: scope the intent (and its subscription) to the
         // caller so a learner can only confirm-cancel their OWN intent. Without this,
         // any authenticated user could cancel another user's subscription by id.
         var userId = http.UserId();
         var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId, ct);
-        if (intent is null) return TypedResults.BadRequest("Intent not found.");
+        if (intent is null) return new ApiErrorResult(400, "cancel_intent_not_found", "Intent not found.");
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == intent.SubscriptionId && s.UserId == userId, ct);
-        if (sub is null) return TypedResults.BadRequest("Subscription not found.");
+        if (sub is null) return new ApiErrorResult(400, "subscription_not_found", "Subscription not found.");
 
         SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "learner_confirmed_cancel");
         intent.Status = "confirmed_cancel";
@@ -157,12 +157,12 @@ public static class BillingExpansionV2Endpoints
         return TypedResults.Ok(sub);
     }
 
-    private static async Task<Results<Ok<CancellationIntent>, BadRequest<string>>> RetainCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<CancellationIntent>, ApiErrorResult>> RetainCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
     {
         // Object-level authorization: only the owner may retain their own intent.
         var userId = http.UserId();
         var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId, ct);
-        if (intent is null) return TypedResults.BadRequest("Intent not found.");
+        if (intent is null) return new ApiErrorResult(400, "cancel_intent_not_found", "Intent not found.");
         intent.Status = "retained";
         intent.ResolvedAt = DateTimeOffset.UtcNow;
         intent.UpdatedAt = intent.ResolvedAt.Value;
@@ -399,7 +399,7 @@ public static class BillingExpansionV2Endpoints
     {
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
         {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
         return value;
     }

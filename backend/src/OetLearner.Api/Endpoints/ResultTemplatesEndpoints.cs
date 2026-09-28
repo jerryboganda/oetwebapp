@@ -69,18 +69,18 @@ public static class ResultTemplatesEndpoints
             CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "file required" });
-            if (file.Length > MaxImageBytes) return Results.BadRequest(new { error = $"file too large (max {MaxImageBytes} bytes)" });
+            if (file is null || file.Length == 0) return new ApiErrorResult(400, "upload_file_required", "file required");
+            if (file.Length > MaxImageBytes) return new ApiErrorResult(400, "upload_file_too_large", $"file too large (max {MaxImageBytes} bytes)");
             if (string.IsNullOrWhiteSpace(templateKey) || templateKey.Length > 128)
-                return Results.BadRequest(new { error = "templateKey required (max 128 chars)" });
+                return new ApiErrorResult(400, "result_template_key_invalid", "templateKey required (max 128 chars)");
             if (string.IsNullOrWhiteSpace(title) || title.Length > 200)
-                return Results.BadRequest(new { error = "title required (max 200 chars)" });
+                return new ApiErrorResult(400, "result_template_title_invalid", "title required (max 200 chars)");
 
             var originalFileName = Path.GetFileName(file.FileName ?? "result-template.jpg");
             if (string.IsNullOrWhiteSpace(originalFileName)) originalFileName = "result-template.jpg";
             var ext = (Path.GetExtension(originalFileName)?.TrimStart('.') ?? "").ToLowerInvariant();
             if (!AllowedExtensions.Contains(ext))
-                return Results.BadRequest(new { error = "only jpg / jpeg / png / webp accepted" });
+                return new ApiErrorResult(400, "upload_file_type_invalid", "only jpg / jpeg / png / webp accepted");
 
             await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxImageBytes));
             await file.CopyToAsync(buffer, ct);
@@ -93,22 +93,14 @@ public static class ResultTemplatesEndpoints
                 || !validation.DetectedMime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
                 || !AllowedExtensions.Contains(validation.DetectedExtension))
             {
-                return Results.BadRequest(new
-                {
-                    code = "invalid_file_content",
-                    message = validation.Reason ?? "The uploaded file content does not match a supported image type.",
-                });
+                return new ApiErrorResult(400, "invalid_file_content", validation.Reason ?? "The uploaded file content does not match a supported image type.");
             }
 
             buffer.Position = 0;
             var scanResult = await scanner.ScanAsync(buffer, originalFileName, ct);
             if (!scanResult.clean)
             {
-                return Results.BadRequest(new
-                {
-                    code = "file_failed_security_scan",
-                    message = scanResult.reason ?? "The uploaded file failed security scanning.",
-                });
+                return new ApiErrorResult(400, "file_failed_security_scan", scanResult.reason ?? "The uploaded file failed security scanning.");
             }
 
             var detectedExt = validation.DetectedExtension.TrimStart('.').ToLowerInvariant();
@@ -117,7 +109,7 @@ public static class ResultTemplatesEndpoints
             // Unique templateKey check
             var normalizedKey = templateKey.Trim();
             var keyExists = await db.ResultTemplateAssets.AnyAsync(x => x.TemplateKey == normalizedKey, ct);
-            if (keyExists) return Results.Conflict(new { error = "templateKey already used" });
+            if (keyExists) return new ApiErrorResult(409, "result_template_key_taken", "templateKey already used");
 
             var stagingKey = $"staging/result-template/{adminId}/{Guid.NewGuid():N}.{detectedExt}";
             long bytes;

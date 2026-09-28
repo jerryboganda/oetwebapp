@@ -386,12 +386,7 @@ public static class ListeningLearnerEndpoints
             }
             catch (ListeningGroundedExplanationUnavailableException ex)
             {
-                return Results.Conflict(new
-                {
-                    code = "grounded_ai_unavailable",
-                    error = ex.Message,
-                    message = "A grounded explanation is unavailable until effective author-approved evidence exists.",
-                });
+                return new ApiErrorResult(409, "grounded_ai_unavailable", "A grounded explanation is unavailable until effective author-approved evidence exists.") { Exception = ex };
             }
             catch (KeyNotFoundException)
             {
@@ -399,12 +394,7 @@ public static class ListeningLearnerEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new
-                {
-                    code = "grounded_ai_not_ready",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return new ApiErrorResult(400, "grounded_ai_not_ready", ApiErrorResult.SafeMessage(ex, "Grounded AI is available only after submission.")) { Exception = ex };
             }
         }).RequireRateLimiting("PerUser");
 
@@ -427,12 +417,7 @@ public static class ListeningLearnerEndpoints
             }
             catch (ListeningQuestionQnaUnavailableException ex)
             {
-                return Results.Conflict(new
-                {
-                    code = "grounded_ai_unavailable",
-                    error = ex.Message,
-                    message = "Grounded Listening Q&A is unavailable until the submitted evidence and AI pathway are ready.",
-                });
+                return new ApiErrorResult(409, "grounded_ai_unavailable", "Grounded Listening Q&A is unavailable until the submitted evidence and AI pathway are ready.") { Exception = ex };
             }
             catch (KeyNotFoundException)
             {
@@ -440,16 +425,11 @@ public static class ListeningLearnerEndpoints
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new
-                {
-                    code = "grounded_ai_not_ready",
-                    error = ex.Message,
-                    message = ex.Message,
-                });
+                return new ApiErrorResult(400, "grounded_ai_not_ready", ApiErrorResult.SafeMessage(ex, "Grounded AI is available only after submission.")) { Exception = ex };
             }
             catch (ArgumentException ex)
             {
-                return Results.BadRequest(new { code = "invalid_request", error = ex.Message });
+                return new ApiErrorResult(400, "invalid_request", ApiErrorResult.SafeMessage(ex, "The question request is invalid.")) { Exception = ex };
             }
         })
             .RequireRateLimiting("AiInteractive")

@@ -39,7 +39,7 @@ public static class ReadingAnalyticsAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(paperId))
-                return Results.BadRequest(new { error = "paperId is required." });
+                return new ApiErrorResult(400, "paper_id_required", "paperId is required.");
             var ids = ParseUserIds(userIds);
             return Results.Ok(await analytics.GetCohortAnalyticsAsync(paperId, ids, ct));
         }).WithAdminRead("AdminQualityAnalytics");
@@ -57,7 +57,7 @@ public static class ReadingAnalyticsAdminEndpoints
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(paperId))
-                return Results.BadRequest(new { error = "paperId is required." });
+                return new ApiErrorResult(400, "paper_id_required", "paperId is required.");
             var expertUserId = CurrentUserId(http);
             var expert = await db.ExpertUsers.AsNoTracking()
                 .FirstOrDefaultAsync(expert => expert.Id == expertUserId, ct);
