@@ -37,12 +37,9 @@ export default function Error({
           <Button onClick={reset} variant="primary" aria-label="Retry loading referral program">
             Try again
           </Button>
-          <Link
-            href="/billing"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-4 py-2 text-sm font-bold text-navy transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Back to billing
-          </Link>
+          <Button asChild variant="outline">
+            <Link href="/billing">Back to billing</Link>
+          </Button>
         </div>
       </div>
     </LearnerDashboardShell>
