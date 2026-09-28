@@ -72,11 +72,17 @@ consumers work unchanged. Verified by
   reachability probe.
 - **DevTools** are disabled in release (the `devtools` Cargo feature is not on).
 - **ACL:** the remote page is semi-trusted. `capabilities/app-remote.json` grants
-  it only `core:default` + `allow-runtime-info`. The privileged commands (keyring
-  secrets, offline cache, speaking-audio temp files, dropped-file probe,
-  notifications, open-external) stay registered (`build.rs` declares them) but are
-  **not** granted to the remote origin. `capabilities/dev-localhost.json` grants
-  the same minimal set to the dev server.
+  it `core:default` plus seven commands: `runtime_info`, `sign_video_challenge`,
+  `updater_check`, `updater_install`, `app_relaunch`, `hard_reload` and
+  `set_capture_protection`. Each one is justified in that file's description.
+  `capabilities/app-remote-macos.json` adds `core:window:allow-set-fullscreen` on
+  macOS only. The 16 privileged commands (keyring secrets, offline cache,
+  speaking-audio temp files, dropped-file probe, notifications, open-external)
+  stay registered (`build.rs` declares them) but are **not** granted to the
+  remote origin or to any other capability. `capabilities/dev-localhost.json`
+  grants only `runtime_info` and `sign_video_challenge` to the dev server. The
+  plan to harden and grant them lives in
+  [desktop/NATIVE-CAPABILITIES-PLAN.md](desktop/NATIVE-CAPABILITIES-PLAN.md).
 
 ## Dev & build
 
@@ -93,7 +99,7 @@ pnpm run desktop:dist         # = node scripts/tauri-dist.cjs build  → NSIS + 
 
 `tauri 2.11.3` · `tauri-build 2.6.3` · `@tauri-apps/cli 2.11.3` · plugins:
 `single-instance 2.4.2`, `deep-link 2.4.9`, `notification 2.3.3`, `opener 2.5.4`,
-`dialog 2.7.1`, `updater 2.10.1`. The frontend uses the injected raw-JS bridge,
+`updater 2.10.1` (no dialog plugin; see `src-tauri/Cargo.toml`). The frontend uses the injected raw-JS bridge,
 not `@tauri-apps/api`.
 
 ## Updater
