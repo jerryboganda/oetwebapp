@@ -71,8 +71,8 @@ export default function SpeakingExamLauncherPage() {
         second card appears automatically when the first finishes.
       </p>
 
-      <div className="mt-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-        <FileText className="mt-0.5 h-4 w-4 flex-shrink-0" />
+      <div className="mt-5 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-navy">
+        <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" aria-hidden="true" />
         <span>
           Have a <strong>blank sheet of paper and a pen</strong> ready for rough notes during
           preparation.
@@ -92,7 +92,7 @@ export default function SpeakingExamLauncherPage() {
           </div>
         </div>
         {error ? (
-          <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+          <p className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
             {error}
           </p>
         ) : null}

@@ -649,11 +649,11 @@ function MockReportContent() {
           delayIndex={6}
           className="pt-4"
         >
-          <div className="bg-navy rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
+          <div className="bg-navy dark:bg-surface dark:border dark:border-border rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.1),_transparent)]" />
             <div className="relative z-10">
               <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
-                <RefreshCw className="w-8 h-8 text-white" />
+                <RefreshCw className="w-8 h-8 text-white" aria-hidden="true" />
               </div>
               <h2 className="text-xl font-black mb-2">Update Your Study Plan</h2>
               {report.weakestCriterion ? (
@@ -665,12 +665,9 @@ function MockReportContent() {
                   Based on this report, review your detailed sub-test breakdown to update your focus areas.
                 </p>
               )}
-              <Link
-                href="/study-plan"
-                className="bg-white text-navy px-8 py-4 rounded-xl font-black hover:bg-background-light transition-colors inline-flex items-center justify-center gap-2"
-              >
-                Update Study Plan
-              </Link>
+              <Button size="lg" asChild>
+                <Link href="/study-plan">Update Study Plan</Link>
+              </Button>
             </div>
           </div>
         </MotionSection>

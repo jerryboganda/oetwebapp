@@ -69,8 +69,8 @@ export default function InterleavedPracticePage() {
             />
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
               <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-sm font-semibold text-navy">Duration (minutes)</label>
-                <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:max-w-xs">
+                <label htmlFor="interleaved-duration" className="mb-1 block text-sm font-semibold text-navy">Duration (minutes)</label>
+                <select id="interleaved-duration" value={duration} onChange={e => setDuration(Number(e.target.value))} className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:max-w-xs">
                   <option value={10}>10 min</option><option value={15}>15 min</option><option value={20}>20 min</option><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option>
                 </select>
               </div>

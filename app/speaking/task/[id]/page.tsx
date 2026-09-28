@@ -875,7 +875,7 @@ function LiveSpeakingTaskContent() {
               className={`px-8 sm:px-14 py-6 sm:py-7 rounded-[1.25rem] font-black text-sm sm:text-lg transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-300 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
                 recordingState === 'idle' 
                   ? 'bg-muted/10 text-muted pointer-events-none' 
-                  : 'bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white shadow-xl shadow-primary/25 hover:shadow-primary/40 hoverable:-translate-y-0.5'
+                  : 'bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 text-white shadow-xl shadow-primary/25 hover:shadow-primary/40 hoverable:-translate-y-0.5'
               }`}
               ref={submitTriggerRef}
             >

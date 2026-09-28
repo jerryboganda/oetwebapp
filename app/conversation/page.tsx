@@ -113,7 +113,7 @@ export default function ConversationPage() {
           title="Rehearse a real OET roleplay before exam day"
           description="Speak with an AI patient partner. Every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
           icon={MessageSquare}
-          accent="purple"
+          accent="primary"
           highlights={heroHighlights}
         />
 
@@ -144,7 +144,7 @@ export default function ConversationPage() {
 
           {loading && !catalog ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-[24px]" />))}
+              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-surface" />))}
             </div>
           ) : catalog && catalog.taskTypes.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -155,19 +155,19 @@ export default function ConversationPage() {
                 return (
                   <MotionItem key={task.code} delayIndex={i}>
                     <button onClick={() => handleStart(task.code)} disabled={disabled}
-                      className="group w-full rounded-[24px] border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50">
+                      className="group w-full rounded-surface border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50">
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                          <Icon className="w-5 h-5" />
+                          <Icon className="w-5 h-5" aria-hidden="true" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">
                             {task.label}
                           </h3>
                           <p className="mt-1 text-xs text-muted">{task.description}</p>
-                          {isCreatingThis && (<p className="mt-2 text-xs text-primary">Creating session…</p>)}
+                          {isCreatingThis && (<p className="mt-2 text-xs text-primary" role="status">Creating session…</p>)}
                         </div>
-                        <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" />
+                        <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" aria-hidden="true" />
                       </div>
                     </button>
                   </MotionItem>
@@ -195,7 +195,7 @@ export default function ConversationPage() {
 
           {loading ? (
             <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-[24px]" />))}
+              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-surface" />))}
             </div>
           ) : history.length === 0 ? (
             <LearnerEmptyState
@@ -215,11 +215,11 @@ export default function ConversationPage() {
                   return (
                     <MotionItem key={session.id} delayIndex={i}>
                       <Link href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
-                        className="block rounded-[24px] border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical">
+                        className="block rounded-surface border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                              <MessageSquare className="h-4 w-4" />
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                              <MessageSquare className="h-4 w-4" aria-hidden="true" />
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 mb-0.5">
@@ -243,7 +243,7 @@ export default function ConversationPage() {
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-2">
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateInfo.color}`}>
                               {stateInfo.label}
                             </span>

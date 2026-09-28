@@ -107,7 +107,7 @@ export function ReviewMistakesList({ refreshToken = 0 }: ReviewMistakesListProps
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-red-600">
+        <p role="alert" className="mt-3 text-xs text-danger">
           {error}
         </p>
       )}

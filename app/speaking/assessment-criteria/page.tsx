@@ -44,7 +44,7 @@ export default function SpeakingAssessmentCriteriaPage() {
         <LearnerPageHero
           eyebrow="Speaking reference · All professions"
           icon={<ClipboardList />}
-          accent="purple"
+          accent="primary"
           title="Speaking Assessment Criteria"
           description="Use the same page for all professions."
           highlights={[
@@ -61,7 +61,7 @@ export default function SpeakingAssessmentCriteriaPage() {
           <div className="mt-4 overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[420px] border-collapse text-left text-sm">
               <thead>
-                <tr className="bg-purple-50 text-purple-900 dark:bg-white/5 dark:text-white">
+                <tr className="bg-lavender/60 text-navy">
                   <th scope="col" className="w-14 px-4 py-3 text-xs font-black uppercase tracking-wider">
                     No.
                   </th>
@@ -76,7 +76,7 @@ export default function SpeakingAssessmentCriteriaPage() {
               <tbody className="divide-y divide-border">
                 {overviewRows.map((criterion, index) => (
                   <tr key={criterion.id} className="bg-surface">
-                    <td className="px-4 py-2.5 font-bold text-purple-800 dark:text-purple-200">{index + 1}</td>
+                    <td className="px-4 py-2.5 font-bold text-primary">{index + 1}</td>
                     <td className="px-4 py-2.5 font-medium text-navy">{criterion.name}</td>
                     <td className="px-4 py-2.5 text-right text-muted">{criterion.scale}</td>
                   </tr>
@@ -106,7 +106,7 @@ export default function SpeakingAssessmentCriteriaPage() {
                   {criterion.bands.map((band) => (
                     <div key={band.band} className="rounded-xl border border-border bg-surface p-3">
                       <p className="text-2xs font-black uppercase tracking-wider text-muted">Band {band.band}</p>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-navy/90 dark:text-white/90">
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-navy/90">
                         {band.descriptors.map((descriptor) => (
                           <li key={`${criterion.id}-${band.band}-${descriptor}`}>{descriptor}</li>
                         ))}
@@ -140,10 +140,10 @@ export default function SpeakingAssessmentCriteriaPage() {
                     </Badge>
                   ))}
                 </div>
-                <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-navy/85 dark:text-white/85">
+                <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-navy/85">
                   {criterion.indicators.map((indicator) => (
                     <li key={indicator.code}>
-                      <span className="font-bold text-purple-800 dark:text-purple-200">{indicator.code}</span>{' '}
+                      <span className="font-bold text-primary">{indicator.code}</span>{' '}
                       {indicator.text}
                     </li>
                   ))}

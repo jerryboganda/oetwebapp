@@ -144,7 +144,7 @@ const SUBTEST_COLOR: Record<SubtestCode, { fg: string; bg: string; label: string
   listening: { fg: 'text-indigo-600', bg: 'bg-indigo-100', label: 'Listening' },
   reading: { fg: 'text-blue-600', bg: 'bg-blue-100', label: 'Reading' },
   writing: { fg: 'text-rose-600', bg: 'bg-rose-100', label: 'Writing' },
-  speaking: { fg: 'text-purple-600', bg: 'bg-purple-100', label: 'Speaking' },
+  speaking: { fg: 'text-primary-600', bg: 'bg-primary-100', label: 'Speaking' },
 };
 
 const FULL_MOCK_ORDER: readonly SubtestCode[] = ['listening', 'reading', 'writing', 'speaking'] as const;
@@ -598,7 +598,7 @@ function MockCenterInner() {
           <MotionSection>
             <div
               role="alert"
-              className="rounded-[24px] border border-danger/20 bg-danger/5 p-6 shadow-sm"
+              className="rounded-surface border border-danger/20 bg-danger/5 p-6 shadow-sm"
             >
               <InlineAlert variant="error" title="We couldn't load the Mock Center right now">
                 {error} If this keeps happening, the mock service may be warming up &mdash; try again
@@ -615,7 +615,7 @@ function MockCenterInner() {
                 </Button>
                 <a
                   href="mailto:support@oetwithdrhesham.co.uk"
-                  className="pressable inline-flex items-center justify-center gap-2 rounded-[16px] px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
+                  className="pressable inline-flex items-center justify-center gap-2 rounded-card px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
                 >
                   Contact support
                 </a>
@@ -704,7 +704,7 @@ function MockCenterInner() {
                           onClick={() => setProfessionFilter(null)}
                           className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                             professionFilter === null
-                              ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                              ? 'border-primary bg-primary text-white dark:bg-primary-700'
                               : 'border-border bg-surface text-navy hover:border-border'
                           }`}
                         >
@@ -719,7 +719,7 @@ function MockCenterInner() {
                             onClick={() => setProfessionFilter(p.id)}
                             className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                               professionFilter === p.id
-                                ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                                ? 'border-primary bg-primary text-white dark:bg-primary-700'
                                 : 'border-border bg-surface text-navy hover:border-border'
                             }`}
                           >
@@ -748,7 +748,7 @@ function MockCenterInner() {
                     />
                     {scopedSubTestMocks.length === 0 ? (
                       scope?.kind === 'subtest' ? (
-                        <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
+                        <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
                           {!scopedSubtestHasAny ? (
                             <>
                               <p className="font-semibold text-navy">
@@ -761,7 +761,7 @@ function MockCenterInner() {
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <Link
                                   href={SUBTEST_HUB[scope.subtest]}
-                                  className="pressable inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700"
+                                  className="pressable inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700"
                                 >
                                   Practise {SUBTEST_COLOR[scope.subtest].label} part-by-part
                                 </Link>
@@ -778,7 +778,7 @@ function MockCenterInner() {
                           )}
                         </div>
                       ) : (
-                        <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
+                        <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
                           {subTestMocks.length === 0
                             ? 'No published sub-test mock bundles are available yet.'
                             : 'No sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
@@ -796,7 +796,7 @@ function MockCenterInner() {
                             <MotionItem key={mock.id} delayIndex={idx}>
                               <Link
                                 href={href}
-                                className="group flex items-center gap-4 rounded-[24px] border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border hover:shadow-md"
+                                className="group flex items-center gap-4 rounded-surface border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border hover:shadow-md"
                               >
                                 <div
                                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg} transition-transform group-hoverable:scale-105`}
@@ -831,7 +831,7 @@ function MockCenterInner() {
                       className="mb-4"
                     />
                     {scopedFullMocks.length === 0 ? (
-                      <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
+                      <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
                         {fullMocks.length === 0
                           ? 'No full mock bundles are published yet. Once an admin publishes a bundle, it will appear here with its real section order.'
                           : scope?.kind === 'subtest'
@@ -839,7 +839,7 @@ function MockCenterInner() {
                             : 'No full mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
                       </div>
                     ) : (
-                      <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
+                      <div className="overflow-hidden rounded-surface border border-border bg-surface shadow-sm">
                         <div className="divide-y divide-border">
                           {scopedFullMocks.map((mock, idx) => {
                             const locked = mock.status === 'locked';
@@ -956,7 +956,7 @@ function MockCenterInner() {
                         No reports yet. Complete a mock to see your results here.
                       </div>
                     ) : (
-                      <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
+                      <div className="overflow-hidden rounded-surface border border-border bg-surface shadow-sm">
                         <div className="divide-y divide-border">
                           {reports.slice(0, 4).map((report, idx) => (
                             <MotionItem key={report.id} delayIndex={idx}>

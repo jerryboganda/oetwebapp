@@ -7,6 +7,9 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { Button } from '@/components/ui/button';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { Input, Select } from '@/components/ui/form-controls';
 import { fetchExamBookings, createExamBooking, deleteExamBooking } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -15,6 +18,14 @@ type ExamBooking = {
   testCenter: string | null; bookingReference: string | null; externalUrl: string | null;
   createdAt: string;
 };
+
+const EXAM_TYPE_OPTIONS = [
+  { value: 'oet', label: 'OET' },
+  { value: 'ielts', label: 'IELTS' },
+  { value: 'pte', label: 'PTE' },
+  { value: 'cambridge', label: 'Cambridge' },
+  { value: 'toefl', label: 'TOEFL' },
+];
 
 const STATUS_COLORS: Record<string, string> = {
   planned: 'bg-info/10 text-info',
@@ -34,6 +45,7 @@ export default function ExamBookingPage() {
   const [bookings, setBookings] = useState<ExamBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -45,15 +57,21 @@ export default function ExamBookingPage() {
     externalUrl: '',
   });
 
-  useEffect(() => {
-    analytics.track('exam_booking_page_viewed');
+  function loadBookings() {
+    setLoading(true);
+    setLoadFailed(false);
     fetchExamBookings().then(data => {
       setBookings(data as ExamBooking[]);
       setLoading(false);
     }).catch(() => {
-      setError('Could not load bookings.');
+      setLoadFailed(true);
       setLoading(false);
     });
+  }
+
+  useEffect(() => {
+    analytics.track('exam_booking_page_viewed');
+    loadBookings();
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
@@ -92,45 +110,38 @@ export default function ExamBookingPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <LearnerPageHero
           title="Exam Bookings"
           description="Track your upcoming English exam dates"
           icon={CalendarDays}
+          aside={
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4" aria-hidden="true" /> Add Booking
+            </Button>
+          }
         />
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-[color,background-color,transform] duration-200"
-        >
-          <Plus className="w-4 h-4" /> Add Booking
-        </button>
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
       {/* Create form */}
       {showCreate && (
-        <MotionSection className="bg-surface rounded-xl border border-primary/30 p-5 mb-6">
-          <h3 className="font-semibold text-navy mb-4">Add Exam Booking</h3>
+        <MotionSection className="mb-6 rounded-2xl border border-primary/30 bg-surface p-5 shadow-sm">
+          <h2 className="mb-4 font-semibold text-navy">Add Exam Booking</h2>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select value={form.examTypeCode} onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-                <option value="oet">OET</option>
-                <option value="ielts">IELTS</option>
-                <option value="pte">PTE</option>
-                <option value="cambridge">Cambridge</option>
-                <option value="toefl">TOEFL</option>
-              </select>
-              <input type="date" value={form.examDate} onChange={e => setForm(p => ({ ...p, examDate: e.target.value }))} required className="px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
+              <Select id="exam-booking-type" label="Exam" options={EXAM_TYPE_OPTIONS} value={form.examTypeCode} onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))} />
+              <Input id="exam-booking-date" label="Exam date" type="date" value={form.examDate} onChange={e => setForm(p => ({ ...p, examDate: e.target.value }))} required />
             </div>
-            <input type="text" placeholder="Test center (optional)" value={form.testCenter} onChange={e => setForm(p => ({ ...p, testCenter: e.target.value }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
-            <input type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
-            <input type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
-            <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={creating} className="px-5 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+            <Input id="exam-booking-center" label="Test center" type="text" placeholder="Test center (optional)" value={form.testCenter} onChange={e => setForm(p => ({ ...p, testCenter: e.target.value }))} />
+            <Input id="exam-booking-reference" label="Booking reference" type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} />
+            <Input id="exam-booking-url" label="External booking URL" type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} />
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button type="submit" loading={creating}>
                 {creating ? 'Saving...' : 'Save Booking'}
-              </button>
-              <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2 border border-border-hover rounded-lg text-sm text-muted">Cancel</button>
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
           </form>
         </MotionSection>
@@ -138,11 +149,15 @@ export default function ExamBookingPage() {
 
       {loading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      ) : loadFailed ? (
+        <ErrorState title="Could not load bookings" message="Check your connection and try again." onRetry={loadBookings} />
       ) : bookings.length === 0 ? (
-        <div className="text-center py-12 text-muted/60">
-          <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>No exam bookings yet. Add your upcoming exam date to count down!</p>
-        </div>
+        <EmptyState
+          icon={<CalendarDays className="h-7 w-7" aria-hidden="true" />}
+          title="No exam bookings yet"
+          description="Add your upcoming exam date to count down!"
+          action={{ label: 'Add Booking', onClick: () => setShowCreate(true) }}
+        />
       ) : (
         <>
           {upcoming.length > 0 && (
@@ -153,14 +168,14 @@ export default function ExamBookingPage() {
                   const days = daysUntil(booking.examDate);
                   return (
                     <MotionItem key={booking.id} delayIndex={i}
-                      className="bg-surface rounded-xl border border-border p-4 flex items-center gap-4"
+                      className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:gap-4"
                     >
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-danger' : days <= 30 ? 'bg-warning' : 'bg-primary dark:bg-violet-700'}`}>
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-danger' : days <= 30 ? 'bg-warning' : 'bg-primary dark:bg-primary-700'}`}>
                         <div className="text-2xl font-bold leading-none">{days > 0 ? days : 'N/A'}</div>
                         <div>days</div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <div className="mb-0.5 flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-navy">{booking.examTypeCode.toUpperCase()}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>{booking.status}</span>
                         </div>
@@ -168,14 +183,14 @@ export default function ExamBookingPage() {
                         {booking.testCenter && <div className="text-xs text-muted/60">{booking.testCenter}</div>}
                         {booking.bookingReference && <div className="text-xs text-muted/60">Ref: {booking.bookingReference}</div>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center">
                         {booking.externalUrl && (
-                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 -m-1 text-muted/60 hover:text-primary transition-colors">
-                            <ExternalLink className="w-4 h-4" />
+                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${booking.examTypeCode.toUpperCase()} booking page`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                            <ExternalLink className="w-4 h-4" aria-hidden="true" />
                           </a>
                         )}
-                        <button onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} className="p-2.5 -m-1 text-muted/60 hover:text-danger transition-colors disabled:opacity-40">
-                          <Trash2 className="w-4 h-4" />
+                        <button type="button" onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} aria-label={`Remove ${booking.examTypeCode.toUpperCase()} booking`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </MotionItem>
@@ -192,7 +207,7 @@ export default function ExamBookingPage() {
                 {past.map((booking, _i) => (
                   <div key={booking.id} className="bg-background-light rounded-xl border border-border px-4 py-3 flex items-center gap-3 opacity-70">
                     <span className="font-medium text-navy text-sm">{booking.examTypeCode.toUpperCase()}</span>
-                    <span className="text-sm text-muted/60">{booking.examDate}</span>
+                    <span className="text-sm text-muted">{booking.examDate}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full capitalize ml-auto ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>{booking.status}</span>
                   </div>
                 ))}

@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   fetchPronunciationDueDrills,
   fetchPronunciationEntitlement,
@@ -76,14 +78,18 @@ export default function PronunciationPage() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-32 rounded-xl" />)}
           </div>
-        ) : drills.length === 0 ? (
-          <Card className="mt-3 p-6 text-sm text-muted">
-            No pronunciation drills are due. Check back after your next speaking practice.
-          </Card>
+        ) : error ? null : drills.length === 0 ? (
+          <EmptyState
+            className="mt-3"
+            icon={<Mic className="h-7 w-7" aria-hidden="true" />}
+            title="No pronunciation drills are due"
+            description="Check back after your next speaking practice."
+          />
         ) : (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {drills.map((drill) => (
-              <Card key={drill.id} className="flex flex-col gap-4 p-4">
+            {drills.map((drill, i) => (
+              <MotionItem key={drill.id} delayIndex={i}>
+              <Card className="flex h-full flex-col gap-4 p-4">
                 <div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{drill.difficulty}</Badge>
@@ -92,10 +98,11 @@ export default function PronunciationPage() {
                   <p className="text-sm font-bold text-navy">{drill.label}</p>
                   <p className="mt-1 text-xs text-muted">{drill.targetPhoneme} · {drill.profession}</p>
                 </div>
-                <Button size="sm" asChild>
-<Link href={`/pronunciation/${encodeURIComponent(drill.id)}`} className="self-start">Open drill</Link>
-</Button>
+                <Button size="sm" asChild className="self-start">
+                  <Link href={`/pronunciation/${encodeURIComponent(drill.id)}`}>Open drill</Link>
+                </Button>
               </Card>
+              </MotionItem>
             ))}
           </div>
         )}

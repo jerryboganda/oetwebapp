@@ -23,8 +23,8 @@ export default function GrammarError({
       <div className="mx-auto max-w-xl">
         <Card className="text-center">
           <div className="flex flex-col items-center gap-4 py-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-              <AlertTriangle className="h-7 w-7" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger/10 text-danger">
+              <AlertTriangle className="h-7 w-7" aria-hidden="true" />
             </div>
             <div className="space-y-2">
               <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">Grammar error</p>

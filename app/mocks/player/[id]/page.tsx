@@ -246,7 +246,7 @@ export default function MockPlayerPage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
+            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-surface" />)}
           </div>
         ) : null}
 

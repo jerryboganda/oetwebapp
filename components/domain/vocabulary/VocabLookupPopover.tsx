@@ -175,7 +175,7 @@ export function VocabLookupPopover({
         )}
 
         {error && (
-          <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+          <div role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>
         )}
 
         {!loading && lookup?.found && lookup.term && (
@@ -188,14 +188,14 @@ export function VocabLookupPopover({
             canPlayAudio
             onPlayAudio={() => void playAudio(lookup.term!.id)}
             cta={added ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Saved
               </span>
             ) : (
               <button
                 onClick={() => handleAdd(lookup.term!.id)}
                 disabled={adding}
-                className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add to my list
               </button>

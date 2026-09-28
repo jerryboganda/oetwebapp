@@ -14,6 +14,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { EmptyState } from '@/components/ui/empty-error';
 import {
   fetchVocabularyTerms,
   addToMyVocabulary,
@@ -155,7 +156,7 @@ export default function BrowseVocabularyPage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" aria-label="Back to vocabulary" className="text-muted transition-colors hover:text-navy">
+        <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <LearnerPageHero title="Browse Vocabulary" description="Explore OET medical vocabulary terms" icon={BookOpen} />
@@ -238,7 +239,11 @@ export default function BrowseVocabularyPage() {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
       ) : terms.length === 0 ? (
-        <Card className="border-border bg-surface px-4 sm:px-8 py-6 sm:py-12 text-center text-muted">No terms found. Try a different search.</Card>
+        <EmptyState
+          icon={<Search className="h-7 w-7" aria-hidden="true" />}
+          title="No terms found"
+          description="Try a different search or clear the filters."
+        />
       ) : (
         <>
           <div className="space-y-3 mb-6">
@@ -307,7 +312,7 @@ export default function BrowseVocabularyPage() {
                       )}
                       <button
                         onClick={() => void playAudio(term.id)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         aria-label={`Play pronunciation of ${term.term}`}
                       >
                         <Volume2 className="h-3.5 w-3.5" />
@@ -322,7 +327,7 @@ export default function BrowseVocabularyPage() {
                   <button
                     onClick={() => handleAdd(term.id)}
                     disabled={adding.has(term.id) || added.has(term.id)}
-                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'}`}
+                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-success/10 text-success border border-success/20' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                     title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
                     aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                   >
@@ -335,9 +340,9 @@ export default function BrowseVocabularyPage() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Prev</button>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
               <span className="text-sm text-muted">{page} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Next</button>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
             </div>
           )}
         </>
@@ -364,13 +369,11 @@ export default function BrowseVocabularyPage() {
             <Button variant="secondary" onClick={() => setShowLockedModal(false)}>
               Not now
             </Button>
-            <Link
-              href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
-              onClick={() => setShowLockedModal(false)}
-            >
-              View upgrade options
-            </Link>
+            <Button asChild>
+              <Link href="/catalog" onClick={() => setShowLockedModal(false)}>
+                View upgrade options
+              </Link>
+            </Button>
           </div>
         </div>
       </Modal>

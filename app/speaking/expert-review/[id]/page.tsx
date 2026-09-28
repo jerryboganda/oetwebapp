@@ -159,15 +159,16 @@ function ExpertReviewRequestContent() {
                 <button
                   key={area.id}
                   type="button"
+                  aria-pressed={selectedFocus.includes(area.id)}
                   onClick={() => toggleFocus(area.id)}
-                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-left ${
+                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-left ${
                     selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
                     selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-border-hover'
                   }`}>
-                    {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                    {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" aria-hidden="true" />}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-navy">{area.label}</h3>
@@ -185,6 +186,7 @@ function ExpertReviewRequestContent() {
               <h2 className="text-lg font-black text-navy">Reviewer Notes</h2>
             </div>
             <textarea
+              aria-label="Reviewer notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="E.g., 'I struggled with the transition to the physical exam explanation. Please check my empathy during the patient's interruption.'"
@@ -204,8 +206,9 @@ function ExpertReviewRequestContent() {
                 <button
                   key={opt.id}
                   type="button"
+                  aria-pressed={turnaroundId === opt.id}
                   onClick={() => setTurnaroundId(opt.id)}
-                  className={`p-6 rounded-2xl border-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-center ${
+                  className={`p-6 rounded-2xl border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-center ${
                     turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >

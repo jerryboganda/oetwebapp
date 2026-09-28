@@ -84,10 +84,10 @@ export default function PracticePage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {PRACTICE_MODES.map((mode, i) => (
               <MotionItem key={mode.href} delayIndex={i}>
-                <Link href={mode.href}>
-                  <Card className="group flex items-start gap-3 p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical">
+                <Link href={mode.href} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                  <Card className="group flex h-full items-start gap-3 p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                      <mode.icon className="h-5 w-5" />
+                      <mode.icon className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">{mode.title}</h3>
