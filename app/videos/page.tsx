@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { fetchVideoLibraryHome, toggleVideoBookmark } from '@/lib/api/videos';
 import { analytics } from '@/lib/analytics';
 import { VideoCard, videoHasProgress } from '@/components/videos/video-card';
@@ -197,14 +198,10 @@ export default function VideoLibraryPage() {
       <p className="text-sm font-semibold text-navy">{title}</p>
       <p className="mt-2 text-sm text-muted">{hint}</p>
       {reset && (
-        <button
-          type="button"
-          onClick={reset}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:border-primary hover:text-primary"
-        >
-          <RotateCcw className="h-4 w-4" />
+        <Button variant="outline" onClick={reset} className="mt-4">
+          <RotateCcw className="h-4 w-4" aria-hidden="true" />
           Back to library
-        </button>
+        </Button>
       )}
     </Card>
   );
@@ -451,7 +448,7 @@ export default function VideoLibraryPage() {
                         setCategoryId(null);
                       }}
                       aria-pressed={language === key}
-                      className={`px-3 py-2 transition-colors ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                      className={`min-h-11 px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
                     >
                       {label}
                     </button>
@@ -470,7 +467,7 @@ export default function VideoLibraryPage() {
                     type="button"
                     onClick={() => switchView(key)}
                     aria-pressed={view === key && !searchQuery}
-                    className={`px-3 py-2 transition-colors ${view === key && !searchQuery ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                    className={`min-h-11 px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === key && !searchQuery ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
                   >
                     {label}
                   </button>
@@ -499,15 +496,11 @@ function Breadcrumb({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={onRoot}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy shadow-sm transition-colors hover:border-primary hover:text-primary"
-      >
+      <Button variant="outline" size="sm" onClick={onRoot} className="bg-surface font-semibold">
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         All subtests
-      </button>
-      <nav className="flex flex-wrap items-center gap-1.5 text-sm">
+      </Button>
+      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm">
         <button type="button" onClick={onRoot} className="font-medium text-muted transition-colors hover:text-primary">
           Videos
         </button>

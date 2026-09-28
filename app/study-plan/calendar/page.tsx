@@ -176,14 +176,18 @@ export default function StudyPlanCalendarPage() {
 
           <div className="flex rounded-lg border border-border">
             <button
+              type="button"
+              aria-pressed={view === 'week'}
               onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === 'week' ? 'bg-primary text-primary-foreground' : 'text-muted hover:text-navy'}`}
+              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'week' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
             >
               Week
             </button>
             <button
+              type="button"
+              aria-pressed={view === 'month'}
               onClick={() => setView('month')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${view === 'month' ? 'bg-primary text-primary-foreground' : 'text-muted hover:text-navy'}`}
+              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'month' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
             >
               Month
             </button>
@@ -226,7 +230,7 @@ export default function StudyPlanCalendarPage() {
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
                         isToday
-                          ? 'bg-primary text-primary-foreground'
+                          ? 'bg-primary text-primary-foreground dark:bg-violet-700'
                           : isCurrentMonth || view === 'week'
                             ? 'text-navy'
                             : 'text-muted'

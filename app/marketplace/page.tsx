@@ -6,6 +6,8 @@ import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headph
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
@@ -149,11 +151,11 @@ export default function MarketplacePage() {
           { key: 'submit' as const, label: 'Submit Content', icon: Upload },
           { key: 'my' as const, label: 'My Submissions', icon: BookOpen },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+          <button key={t.key} type="button" onClick={() => setTab(t.key)} aria-pressed={tab === t.key}
+            className={`flex-1 flex min-h-11 items-center justify-center gap-2 px-2 py-2.5 rounded-lg text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               tab === t.key ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'
             }`}>
-            <t.icon className="w-4 h-4" /> {t.label}
+            <t.icon className="w-4 h-4 shrink-0" aria-hidden="true" /> {t.label}
           </button>
         ))}
       </div>
@@ -161,15 +163,15 @@ export default function MarketplacePage() {
       {/* Browse Tab */}
       {tab === 'browse' && (
         <section>
-          <div className="flex gap-3 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted/60" />
-              <input type="text" placeholder="Search content..." value={searchQ}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="relative min-w-[12rem] flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted/60" aria-hidden="true" />
+              <input type="text" placeholder="Search content..." aria-label="Search marketplace content" value={searchQ}
                 onChange={e => setSearchQ(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && loadBrowse()}
                 className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none" />
             </div>
-            <select value={filterSubtest} onChange={e => { setFilterSubtest(e.target.value); }}
+            <select value={filterSubtest} aria-label="Filter by subtest" onChange={e => { setFilterSubtest(e.target.value); }}
               className="px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none">
               <option value="">All Subtests</option>
               <option value="writing">Writing</option>
@@ -177,19 +179,20 @@ export default function MarketplacePage() {
               <option value="reading">Reading</option>
               <option value="listening">Listening</option>
             </select>
-            <button onClick={loadBrowse} className="px-4 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
-              <Filter className="w-4 h-4" /> Filter
-            </button>
+            <Button onClick={loadBrowse}>
+              <Filter className="w-4 h-4" aria-hidden="true" /> Filter
+            </Button>
           </div>
 
           {loading ? (
             <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
           ) : browseItems.length === 0 ? (
-            <div className="text-center py-16 rounded-2xl border border-border bg-surface shadow-sm">
-              <Store className="w-10 h-10 text-muted/40 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-muted">No marketplace content yet</p>
-              <p className="text-xs text-muted/60 mt-1">Be the first to submit practice content!</p>
-            </div>
+            <LearnerEmptyState
+              icon={Store}
+              title="No marketplace content yet"
+              description="Be the first to submit practice content!"
+              primaryAction={{ label: 'Submit Content', onClick: () => setTab('submit') }}
+            />
           ) : (
             <AnimatePresence>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -236,14 +239,14 @@ export default function MarketplacePage() {
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-navy mb-1">Title *</label>
-              <input type="text" required value={submitForm.title} onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
+              <label htmlFor="mp-title" className="block text-sm font-semibold text-navy mb-1">Title *</label>
+              <input id="mp-title" type="text" required value={submitForm.title} onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
                 className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-navy mb-1">Subtest *</label>
-                <select value={submitForm.subtestCode} onChange={e => setSubmitForm(f => ({ ...f, subtestCode: e.target.value }))}
+                <label htmlFor="mp-subtest" className="block text-sm font-semibold text-navy mb-1">Subtest *</label>
+                <select id="mp-subtest" value={submitForm.subtestCode} onChange={e => setSubmitForm(f => ({ ...f, subtestCode: e.target.value }))}
                   className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none">
                   <option value="writing">Writing</option>
                   <option value="speaking">Speaking</option>
@@ -252,8 +255,8 @@ export default function MarketplacePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-navy mb-1">Difficulty</label>
-                <select value={submitForm.difficulty} onChange={e => setSubmitForm(f => ({ ...f, difficulty: e.target.value }))}
+                <label htmlFor="mp-difficulty" className="block text-sm font-semibold text-navy mb-1">Difficulty</label>
+                <select id="mp-difficulty" value={submitForm.difficulty} onChange={e => setSubmitForm(f => ({ ...f, difficulty: e.target.value }))}
                   className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
@@ -262,26 +265,25 @@ export default function MarketplacePage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-1">Description</label>
-              <textarea rows={3} value={submitForm.description} onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
+              <label htmlFor="mp-description" className="block text-sm font-semibold text-navy mb-1">Description</label>
+              <textarea id="mp-description" rows={3} value={submitForm.description} onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
                 className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none resize-none" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-1">Content (JSON)</label>
-              <textarea rows={6} value={submitForm.contentPayloadJson} onChange={e => setSubmitForm(f => ({ ...f, contentPayloadJson: e.target.value }))}
+              <label htmlFor="mp-content" className="block text-sm font-semibold text-navy mb-1">Content (JSON)</label>
+              <textarea id="mp-content" rows={6} value={submitForm.contentPayloadJson} onChange={e => setSubmitForm(f => ({ ...f, contentPayloadJson: e.target.value }))}
                 placeholder='{"caseNotes": "...", "instructions": "..."}'
                 className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy font-mono focus:ring-2 focus:ring-primary outline-none resize-none" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-navy mb-1">Tags (comma-separated)</label>
-              <input type="text" value={submitForm.tags} onChange={e => setSubmitForm(f => ({ ...f, tags: e.target.value }))}
+              <label htmlFor="mp-tags" className="block text-sm font-semibold text-navy mb-1">Tags (comma-separated)</label>
+              <input id="mp-tags" type="text" value={submitForm.tags} onChange={e => setSubmitForm(f => ({ ...f, tags: e.target.value }))}
                 placeholder="nursing, referral, cardiology"
                 className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none" />
             </div>
-            <button type="submit" disabled={submitting || !submitForm.title.trim()}
-              className="w-full py-3 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-[color,background-color,transform] duration-200">
-              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit for Review</>}
-            </button>
+            <Button type="submit" size="lg" fullWidth loading={submitting} disabled={!submitForm.title.trim()}>
+              {submitting ? 'Submitting...' : <><Upload className="w-4 h-4" aria-hidden="true" /> Submit for Review</>}
+            </Button>
           </form>
         </section>
       )}
@@ -306,11 +308,12 @@ export default function MarketplacePage() {
           )}
 
           {myItems.length === 0 ? (
-            <div className="text-center py-12 rounded-2xl border border-border bg-surface shadow-sm">
-              <Upload className="w-10 h-10 text-muted/40 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-muted">No submissions yet</p>
-              <p className="text-xs text-muted/60 mt-1">Switch to the Submit tab to contribute content</p>
-            </div>
+            <LearnerEmptyState
+              icon={Upload}
+              title="No submissions yet"
+              description="Switch to the Submit tab to contribute content"
+              primaryAction={{ label: 'Submit Content', onClick: () => setTab('submit') }}
+            />
           ) : (
             <div className="space-y-3">
               {myItems.map((item, i) => {

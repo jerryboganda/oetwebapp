@@ -458,7 +458,7 @@ export default function ThreadPage() {
               size="sm"
               onClick={handleAdminDeleteThread}
               disabled={moderating}
-              className="bg-danger text-white hover:bg-danger/90"
+              variant="destructive"
             >
               {moderating ? 'Deleting…' : 'Delete Thread'}
             </Button>
@@ -481,7 +481,7 @@ export default function ThreadPage() {
               size="sm"
               onClick={handleAdminDeleteReply}
               disabled={moderating}
-              className="bg-danger text-white hover:bg-danger/90"
+              variant="destructive"
             >
               {moderating ? 'Deleting…' : 'Delete Reply'}
             </Button>

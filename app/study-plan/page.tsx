@@ -37,10 +37,10 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
 
 // Subtest accents — DESIGN palette tier-2 tints.
 const SUBTEST_COLORS: Record<SubTest, string> = {
-  Reading: 'bg-blue-100 text-blue-700 border-blue-200',
-  Listening: 'bg-purple-100 text-purple-700 border-purple-200',
-  Writing: 'bg-amber-100 text-amber-700 border-amber-200',
-  Speaking: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  Reading: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
+  Listening: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800',
+  Writing: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
+  Speaking: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
 };
 
 type SectionType = 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';

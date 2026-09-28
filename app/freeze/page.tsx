@@ -6,6 +6,7 @@ import { CalendarClock, CheckCircle2, Shield, Timer } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { Input } from '@/components/ui/form-controls';
+import { buttonClassName } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -242,7 +243,7 @@ export default function FreezePage() {
                 </Button>
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-lg border border-border-hover px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-background-light"
+                  className={buttonClassName({ variant: 'outline', className: 'border-border-hover' })}
                 >
                   Back to dashboard
                 </Link>

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { InlineAlert } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import Link from 'next/link';
@@ -139,11 +140,13 @@ export default function PeerReviewPage() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+              aria-pressed={activeTab === tab.key}
+              className={`min-h-11 px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
                 activeTab === tab.key
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  : 'border-transparent text-muted hover:text-navy'
               }`}
             >
               {tab.label}
@@ -152,9 +155,14 @@ export default function PeerReviewPage() {
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-300">
+          <InlineAlert
+            variant="error"
+            action={activeTab !== 'submit'
+              ? <Button size="sm" variant="outline" onClick={() => void loadTab(activeTab)}>Retry</Button>
+              : undefined}
+          >
             {error}
-          </div>
+          </InlineAlert>
         )}
 
         {/* Submit Tab */}
@@ -162,39 +170,32 @@ export default function PeerReviewPage() {
           <Card className="p-6 space-y-4">
             <LearnerSurfaceSectionHeader title="Submit Your Work for Peer Review" />
 
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-foreground">
+            <div className="space-y-3" role="group" aria-labelledby="peer-review-subtest-label">
+              <p id="peer-review-subtest-label" className="block text-sm font-medium text-navy">
                 Subtest
-              </label>
+              </p>
               <div className="flex gap-3">
-                <button
-                  onClick={() => setSubtestCode('writing')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    subtestCode === 'writing'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-primary hover:text-white'
-                  }`}
-                >
-                  Writing
-                </button>
-                <button
-                  onClick={() => setSubtestCode('speaking')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    subtestCode === 'speaking'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-primary hover:text-white'
-                  }`}
-                >
-                  Speaking
-                </button>
+                {(['writing', 'speaking'] as const).map((code) => (
+                  <Button
+                    key={code}
+                    size="sm"
+                    variant={subtestCode === code ? 'primary' : 'outline'}
+                    aria-pressed={subtestCode === code}
+                    onClick={() => setSubtestCode(code)}
+                    className="text-sm"
+                  >
+                    {code === 'writing' ? 'Writing' : 'Speaking'}
+                  </Button>
+                ))}
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">
+              <label htmlFor="peer-review-submission" className="block text-sm font-medium text-navy">
                 Your Submission
               </label>
               <textarea
+                id="peer-review-submission"
                 value={submissionText}
                 onChange={(e) => setSubmissionText(e.target.value)}
                 placeholder={subtestCode === 'writing'
@@ -205,8 +206,8 @@ export default function PeerReviewPage() {
             </div>
 
             {submitSuccess && (
-              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
-                <CheckCircle className="w-4 h-4" />
+              <div role="status" className="flex items-center gap-2 text-sm text-success">
+                <CheckCircle className="w-4 h-4" aria-hidden="true" />
                 Submitted successfully! You will be notified when feedback is available.
               </div>
             )}
@@ -214,7 +215,8 @@ export default function PeerReviewPage() {
             <Button
               variant="primary"
               onClick={handleSubmit}
-              disabled={submitting || !submissionText.trim()}
+              loading={submitting}
+              disabled={!submissionText.trim()}
             >
               {submitting ? 'Submitting...' : 'Submit for Peer Review'}
             </Button>
@@ -245,13 +247,13 @@ export default function PeerReviewPage() {
                             {item.subtestCode}
                           </Badge>
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
+                            <Clock className="w-3 h-3" aria-hidden="true" />
                             {new Date(item.createdAt).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
                       <Button size="sm" variant="primary" onClick={() => handleClaim(item.id)}>
-                        Claim <ArrowRight className="w-3 h-3 ml-1" />
+                        Claim <ArrowRight className="w-3 h-3" aria-hidden="true" />
                       </Button>
                     </Card>
                   </MotionItem>
@@ -273,12 +275,13 @@ export default function PeerReviewPage() {
               <EmptyState
                 title="No submissions yet"
                 description="Submit your writing or speaking practice to get peer feedback."
+                action={{ label: 'Submit for Review', onClick: () => setActiveTab('submit') }}
               />
             ) : (
               <MotionSection className="space-y-3">
                 {mySubmissions.map((item) => (
                   <MotionItem key={item.id}>
-                    <Link href={`/community/peer-review/${item.id}`}>
+                    <Link href={`/community/peer-review/${item.id}`} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                       <Card className="p-4 hover:shadow-clinical transition-shadow duration-200">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -294,7 +297,7 @@ export default function PeerReviewPage() {
                         {item.feedback && (
                           <div className="mt-3 pt-3 border-t border-border">
                             <div className="flex items-center gap-1 text-sm">
-                              <Star className="w-4 h-4 text-yellow-500" />
+                              <Star className="w-4 h-4 fill-warning text-warning" aria-hidden="true" />
                               <span className="font-medium">{item.feedback.rating}/5</span>
                               <span className="text-muted-foreground ml-2 truncate">
                                 {item.feedback.comments}
@@ -323,12 +326,13 @@ export default function PeerReviewPage() {
               <EmptyState
                 title="No reviews yet"
                 description="Claim available reviews to help peers and build your review reputation."
+                action={{ label: 'Browse Available Reviews', onClick: () => setActiveTab('available') }}
               />
             ) : (
               <MotionSection className="space-y-3">
                 {myReviews.map((item) => (
                   <MotionItem key={item.id}>
-                    <Link href={`/community/peer-review/${item.id}`}>
+                    <Link href={`/community/peer-review/${item.id}`} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                       <Card className="p-4 hover:shadow-clinical transition-shadow duration-200">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">

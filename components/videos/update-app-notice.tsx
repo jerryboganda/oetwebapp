@@ -2,6 +2,7 @@
 
 import { Download, RefreshCcw } from 'lucide-react';
 import { openAppStore } from '@/lib/mobile/forced-update';
+import { Button } from '@/components/ui/button';
 
 /**
  * Shown inside a NATIVE shell whose build predates the video attestation
@@ -10,7 +11,7 @@ import { openAppStore } from '@/lib/mobile/forced-update';
  */
 export function UpdateAppNotice({ platform }: { platform: 'desktop' | 'capacitor-native' }) {
   return (
-    <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-4 bg-navy px-6 py-10 text-center">
+    <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-4 bg-background-dark px-6 py-10 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10">
         <RefreshCcw className="h-8 w-8 text-white" aria-hidden="true" />
       </span>
@@ -23,16 +24,15 @@ export function UpdateAppNotice({ platform }: { platform: 'desktop' | 'capacitor
         </p>
       </div>
       {platform === 'capacitor-native' && (
-        <button
-          type="button"
+        <Button
+          className="font-semibold"
           onClick={() => {
             void openAppStore();
           }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
         >
           <Download className="h-4 w-4" aria-hidden="true" />
           Open store to update
-        </button>
+        </Button>
       )}
     </div>
   );

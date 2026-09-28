@@ -147,7 +147,7 @@ export default function ReadinessCenter() {
                 onClick={() => setSimulatorOpen(true)}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
               >
-                <Sliders className="w-3.5 h-3.5" /> Run scenario
+                <Sliders className="w-3.5 h-3.5" aria-hidden="true" /> Run scenario
               </button>
             </div>
             <ReadinessForecastGauge
@@ -181,7 +181,7 @@ export default function ReadinessCenter() {
                 disabled={refreshing}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline disabled:opacity-50"
               >
-                <RefreshCcw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCcw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 {refreshing ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
@@ -265,9 +265,10 @@ export default function ReadinessCenter() {
                   key={opt.value}
                   type="button"
                   onClick={() => setTrendSeries(opt.value)}
+                  aria-pressed={trendSeries === opt.value}
                   className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
                     trendSeries === opt.value
-                      ? 'bg-primary text-primary-foreground border-primary'
+                      ? 'bg-primary text-primary-foreground border-primary dark:bg-violet-700'
                       : 'bg-surface text-navy border-border hover:bg-background-light'
                   }`}
                 >

@@ -8,6 +8,7 @@ import { AiAssistantInput, AiAssistantMessages } from '@/components/domain/ai-as
 import { CompanionMemoryPanel } from '@/components/domain/companion/CompanionMemoryPanel';
 import { CompanionPreferencesPanel } from '@/components/domain/companion/CompanionPreferencesPanel';
 import { LearnerDashboardShell } from '@/components/layout';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -164,7 +165,7 @@ export default function CompanionPage() {
                 <span
                   data-testid="companion-connection-state"
                   data-state={connectionState}
-                  className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500'}`}
+                  className={`h-2 w-2 rounded-full ${isConnected ? 'bg-success' : 'bg-warning'}`}
                   aria-hidden="true"
                 />
                 <span aria-live="polite" className="text-xs text-muted">
@@ -176,11 +177,11 @@ export default function CompanionPage() {
                 <div
                   role="alert"
                   data-testid="companion-error"
-                  className="flex items-start gap-2 border-b border-border bg-red-50 px-4 py-2 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200"
+                  className="flex items-start gap-2 border-b border-border bg-danger/10 px-4 py-2 text-xs text-navy"
                 >
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-hidden="true" />
                   <span className="flex-1">{error}</span>
-                  <button type="button" onClick={clearError} className="underline">
+                  <button type="button" onClick={clearError} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
                     {t('companion.error.dismiss')}
                   </button>
                 </div>
@@ -240,12 +241,11 @@ export default function CompanionPage() {
                 <li>· {t('companion.paywall.benefit.actions')}</li>
               </ul>
               {data.access.upgradeUrl && (
-                <Link
-                  href={data.access.upgradeUrl}
-                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                >
-                  {t('companion.paywall.cta')}
-                </Link>
+                <Button asChild className="mt-5">
+                  <Link href={data.access.upgradeUrl}>
+                    {t('companion.paywall.cta')}
+                  </Link>
+                </Button>
               )}
             </Card>
           )}

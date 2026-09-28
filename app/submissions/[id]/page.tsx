@@ -143,7 +143,7 @@ export default function SubmissionEvidencePage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-2xl border border-warning/30 bg-amber-50/60 p-4">
+                  <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
                     <p className="text-xs font-black uppercase tracking-widest text-warning">Needs Attention</p>
                     <ul className="mt-3 space-y-2 text-sm text-warning">
                       {(detail.issues.length ? detail.issues : ['No issue summary is available for this attempt yet.']).map((item) => (
