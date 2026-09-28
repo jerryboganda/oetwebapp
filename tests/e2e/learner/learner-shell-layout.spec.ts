@@ -119,6 +119,9 @@ test.describe('Learner shell layout @learner @smoke', () => {
     test.setTimeout(180_000);
 
     await openAsLearner(page, request, '/dashboard');
+    // The AuthGuard placeholder renders the same h1, so wait for the real
+    // workspace (it only mounts once the session guard has cleared).
+    await expect(page.locator(`#main-content ${WORKSPACE}`)).toBeVisible({ timeout: 90_000 });
     await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible({ timeout: 90_000 });
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
     const blocking = results.violations.filter((violation) => ['critical', 'serious'].includes(violation.impact ?? ''));
