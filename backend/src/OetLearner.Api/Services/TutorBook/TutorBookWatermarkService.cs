@@ -22,12 +22,24 @@ public interface ITutorBookWatermarkService
     Task<(byte[] PdfBytes, string Filename)> GetWatermarkedAsync(string buyerName, string buyerEmail, DateTimeOffset purchasedAt, CancellationToken ct);
 
     /// <summary>Stable signature included in the watermark — lets admins
-    /// fingerprint a leaked copy back to a buyer.</summary>
+    /// fingerprint a leaked copy back to a buyer. Signs with
+    /// <c>TutorBook:SignatureSecret</c>; in Production without it, throws 503
+    /// <c>tutor_book_signing_unconfigured</c> rather than using the public dev key.</summary>
     string ComputeBuyerSignature(string buyerEmail);
+
+    /// <summary>Leak tracing: checks a signature printed on a PDF against the
+    /// buyer's email. Accepts the configured secret and the legacy dev key (every
+    /// PDF issued before the secret was set). Returns <c>"configured"</c> or
+    /// <c>"legacy"</c> for the key that matched, or null when neither does.</summary>
+    string? VerifyBuyerSignature(string buyerEmail, string signature);
 }
 
 public sealed class TutorBookWatermarkService(IConfiguration configuration, IHostEnvironment env) : ITutorBookWatermarkService
 {
+    // Signed every PDF issued before TutorBook:SignatureSecret was configured in
+    // production. Never signs in Production; kept only so those copies stay traceable.
+    private const string LegacySigningKey = "dev-tutor-book-signing-key";
+
     public async Task<(byte[] PdfBytes, string Filename)> GetWatermarkedAsync(string buyerName, string buyerEmail, DateTimeOffset purchasedAt, CancellationToken ct)
     {
         await Task.Yield(); // QuestPDF generation is synchronous; yield to keep API async
@@ -89,7 +101,41 @@ public sealed class TutorBookWatermarkService(IConfiguration configuration, IHos
 
     public string ComputeBuyerSignature(string buyerEmail)
     {
-        var key = configuration["TutorBook:SignatureSecret"] ?? "dev-tutor-book-signing-key";
+        var secret = ConfiguredSecret();
+        if (secret is null)
+        {
+            // Fail closed at the download only — never at startup, so no other
+            // feature is affected. Not retryable: a retry cannot fix missing config.
+            if (env.IsProduction())
+                throw ApiException.ServiceUnavailable(
+                    "tutor_book_signing_unconfigured",
+                    "Tutor Book downloads are temporarily unavailable. Please contact support.",
+                    retryable: false);
+            secret = LegacySigningKey;
+        }
+        return Sign(secret, buyerEmail);
+    }
+
+    public string? VerifyBuyerSignature(string buyerEmail, string signature)
+    {
+        var provided = Encoding.ASCII.GetBytes(signature.Trim().ToUpperInvariant());
+        var secret = ConfiguredSecret();
+        if (secret is not null && Matches(Sign(secret, buyerEmail), provided)) return "configured";
+        return Matches(Sign(LegacySigningKey, buyerEmail), provided) ? "legacy" : null;
+    }
+
+    // A secret equal to the public legacy key counts as unconfigured.
+    private string? ConfiguredSecret()
+    {
+        var secret = configuration["TutorBook:SignatureSecret"];
+        return string.IsNullOrWhiteSpace(secret) || secret == LegacySigningKey ? null : secret;
+    }
+
+    private static bool Matches(string expected, byte[] provided)
+        => CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(expected), provided);
+
+    private static string Sign(string key, string buyerEmail)
+    {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(buyerEmail.Trim().ToLowerInvariant()));
         return Convert.ToHexString(hash, 0, 8); // 16-char fingerprint — enough to disambiguate while keeping the footer compact
