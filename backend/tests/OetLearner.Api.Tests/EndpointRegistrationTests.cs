@@ -194,6 +194,26 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         Assert.Empty(duplicates);
     }
 
+    // There is no FallbackPolicy, so an endpoint with no auth metadata is
+    // silently public. Every route must say which it is: RequireAuthorization
+    // (IAuthorizeData / AuthorizationPolicy) or an explicit AllowAnonymous.
+    [Fact]
+    public void Routes_DeclareAuthorizationOrAllowAnonymous()
+    {
+        using var client = _factory.CreateClient();
+        var unannotated = _factory.Services.GetRequiredService<IEnumerable<EndpointDataSource>>()
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.Metadata.GetMetadata<IAllowAnonymous>() is null
+                && endpoint.Metadata.GetMetadata<IAuthorizeData>() is null
+                && endpoint.Metadata.GetMetadata<AuthorizationPolicy>() is null)
+            .Select(endpoint => $"{string.Join(",", endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["*"])} {endpoint.RoutePattern.RawText}")
+            .OrderBy(route => route, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(unannotated);
+    }
+
     private static string NormalizeRoutePattern(string? routePattern)
         => string.IsNullOrWhiteSpace(routePattern) ? string.Empty : routePattern.TrimEnd('/');
 

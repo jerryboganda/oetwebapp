@@ -40,7 +40,7 @@ public static class NotificationEndpoints
                 enabled = enabled && !string.IsNullOrWhiteSpace(publicKey),
                 publicKey = publicKey ?? string.Empty
             });
-        });
+        }).AllowAnonymous(); // VAPID public key: needed before sign-in.
 
         var notifications = app.MapGroup("/v1/notifications")
             .RequireAuthorization()
