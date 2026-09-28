@@ -84,13 +84,6 @@
   --color-oet-navy: #0e2841;
   --color-oet-teal: #156082;
 
-  /* FE-042: stacking scale. overlay < modal < drawer < popover < toast. */
-  --z-overlay: 40;
-  --z-modal: 50;
-  --z-drawer: 60;
-  --z-popover: 70;
-  --z-toast: 80;
-  
   /* Brand ramp — static (does not flip in dark mode). `primary` itself is the
      themed role colour; use the ramp for tints, charts and fixed fills
      (e.g. bg-primary-50, text-primary-700). One violet across learner,
@@ -131,9 +124,9 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-/* Motion — the single source for CSS timing. `static` so the vars are always
-   emitted (components read them via var() in plain CSS). lib/motion.ts
-   mirrors the same values for motion/react. Utilities: ease-standard,
+/* Motion + stacking — the single source for CSS timing and z-index. `static`
+   so the vars are always emitted (read via var(), e.g. z-[var(--z-modal)]).
+   lib/motion.ts mirrors the timing for motion/react. Utilities: ease-standard,
    ease-enter, ease-exit; use duration-[var(--duration-fast)] sparingly. */
 @theme static {
   --duration-instant: 120ms;
@@ -144,6 +137,12 @@
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /* FE-042: stacking scale. overlay < modal < drawer < popover < toast. */
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-drawer: 60;
+  --z-popover: 70;
+  --z-toast: 80;
 }
 
 /* ----------------------------------------------------------------------
