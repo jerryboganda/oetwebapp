@@ -10,7 +10,9 @@ name: Regenerate lockfiles (one-off)
 #   - generate package-lock.json for agent-console, egress and dockerproxy
 # then commits those files and pushes them back to the same branch.
 # Loop guard: the paths filter (the bot commit never touches this file), the
-# [lockfile-bot] check below, and GITHUB_TOKEN pushes never trigger workflows.
+# bot-marker check below, and GITHUB_TOKEN pushes never trigger workflows.
+# Human commits that touch this file must NOT contain the bot marker in their
+# message, or the job skips itself.
 
 on:
   push:
