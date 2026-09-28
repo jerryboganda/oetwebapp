@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerDashboardShell } from '@/components/layout';
-import { Badge, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
+import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
 import { fetchStrategyGuides, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -153,7 +153,7 @@ function GuideSection({
 function LoadingState() {
   return (
     <div className="space-y-5">
-      <Skeleton className="h-36 rounded-[24px]" />
+      <Skeleton className="h-36 rounded-surface" />
       <div className="grid gap-4 lg:grid-cols-3">
         {[0, 1, 2].map((item) => (
           <Skeleton key={item} className="h-64 rounded-2xl" />
@@ -182,10 +182,12 @@ function DisabledState() {
             <h2 className="text-lg font-bold text-navy">Use practice modules while this opens</h2>
             <p className="mt-1 text-sm leading-6 text-muted">Recommended strategies will appear here once the release flag is enabled.</p>
           </div>
-          <Link href="/dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
-            Back to dashboard
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          <Button asChild>
+            <Link href="/dashboard">
+              Back to dashboard
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
       </Card>
     </LearnerDashboardShell>

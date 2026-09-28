@@ -7,6 +7,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { ProgressBar } from '@/components/ui/progress';
 import { analytics } from '@/lib/analytics';
 
 interface ChecklistItem {
@@ -74,17 +75,12 @@ export default function TestDayPrepPage() {
       <MotionSection>
         <Card className="p-5">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-navy">Preparation Progress</h3>
+            <h2 className="text-sm font-semibold text-navy">Preparation Progress</h2>
             <span className="text-sm font-medium text-primary">{completedItems}/{totalItems}</span>
           </div>
-          <div className="w-full bg-background-light rounded-full h-3">
-            <div
-              className="bg-primary h-3 rounded-full transition-[width,background-color] duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
+          <ProgressBar value={progressPct} size="md" ariaLabel="Test-day preparation progress" />
           {progressPct === 100 && (
-            <p className="mt-2 text-sm text-success font-medium">
+            <p className="mt-2 text-sm text-success font-medium" role="status">
               All done! You&apos;re ready for test day.
             </p>
           )}
@@ -105,19 +101,20 @@ export default function TestDayPrepPage() {
                   <MotionItem key={item.id}>
                     <button
                       type="button"
+                      aria-pressed={isChecked}
                       onClick={() => toggleItem(item.id)}
-                      className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-colors text-left ${
+                      className={`w-full flex items-start gap-3 p-3 rounded-xl border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isChecked
                           ? 'bg-success/10 border-success/30'
                           : 'bg-surface border-border hover:border-primary/30'
                       }`}
                     >
                       {isChecked
-                        ? <CheckCircle2 className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
-                        : <Circle className="w-5 h-5 text-muted/60 mt-0.5 flex-shrink-0" />
+                        ? <CheckCircle2 className="w-5 h-5 text-success mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        : <Circle className="w-5 h-5 text-muted/60 mt-0.5 flex-shrink-0" aria-hidden="true" />
                       }
                       <div>
-                        <p className={`text-sm font-medium ${isChecked ? 'line-through text-muted/60' : 'text-navy'}`}>
+                        <p className={`text-sm font-medium ${isChecked ? 'line-through text-muted' : 'text-navy'}`}>
                           {item.label}
                         </p>
                         <p className="text-xs text-muted mt-0.5">{item.description}</p>
@@ -139,8 +136,8 @@ export default function TestDayPrepPage() {
           description="Subtest-specific pacing, scanning, and rapport techniques used by high-scorers."
         />
         <MotionItem>
-          <Link href="/strategies" className="block mt-3">
-            <Card className="p-4 bg-amber-50/60 border-warning/30 hover:bg-amber-50 transition-colors">
+          <Link href="/strategies" className="mt-3 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+            <Card className="p-4 bg-warning/5 border-warning/30 hover:bg-warning/10 transition-colors">
               <p className="text-sm font-semibold text-warning">View detailed strategies →</p>
               <p className="text-xs text-muted mt-1">Listening, Reading, Writing, and Speaking tactical guides.</p>
             </Card>
