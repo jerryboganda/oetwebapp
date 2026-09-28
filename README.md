@@ -149,7 +149,8 @@ pnpm run test:e2e:report
 
 ## Key Docs
 
-Start with [AGENTS.md](./AGENTS.md), then the docs index: [docs/README.md](docs/README.md)
+Start with [AGENTS.md](./AGENTS.md), the repository map [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+then the docs index: [docs/README.md](docs/README.md)
 (scoring, rulebooks, AI policy, module specs, deploy, release and incident runbooks).
 
 ## Working Model

@@ -6,6 +6,7 @@ a module sub-doc, or a dated record; check its date before trusting it.
 ## Start here
 
 - [AGENTS.md](../AGENTS.md) — rules for agents: compute runs on GitHub Actions only, the ship/deploy loop, domain invariants.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — repository map: where each concern lives and where new code goes.
 - [README.md](../README.md) — stack, local URLs, desktop shell notes.
 - [CONTEXT.md](../CONTEXT.md) — domain glossary: canonical terms and the words to avoid.
 - [adr/](adr/) — decisions: hand-authored EF migrations (0001), scoring via canonical helpers (0002), AI via the grounded gateway (0003), media via `IFileStorage` (0004).
