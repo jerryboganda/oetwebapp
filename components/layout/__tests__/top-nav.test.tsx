@@ -31,7 +31,13 @@ vi.mock('@/lib/mobile/haptics', () => ({
 // theme toggle, tour launcher, help drawer) each carry their own data
 // fetching / heavier subtrees that are irrelevant to the header box model
 // under test — stub them so this test stays focused and fast.
-vi.mock('@/components/layout/global-search', () => ({ GlobalSearch: () => <div data-testid="global-search" /> }));
+vi.mock('@/components/layout/global-search', () => ({
+  SearchTrigger: ({ onClick, className }: { onClick: () => void; className?: string }) => (
+    <button type="button" data-testid="search-trigger" className={className} onClick={onClick}>
+      Search anything
+    </button>
+  ),
+}));
 vi.mock('@/components/layout/notification-center', () => ({ NotificationCenter: () => <div data-testid="notification-center" /> }));
 vi.mock('@/components/layout/learner-streak-badges', () => ({ LearnerStreakBadges: () => null }));
 vi.mock('@/components/ui/theme-toggle', () => ({ ThemeToggle: () => <div data-testid="theme-toggle" /> }));
@@ -127,5 +133,39 @@ describe('TopNav overlays close on route change', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.queryByTestId('help-center-drawer')).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+// The palette itself is mounted once by AppShell; TopNav only renders triggers,
+// and only when AppShell hands it an opener.
+describe('TopNav search triggers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { avatarUrl: null }, signOut: mockSignOut });
+  });
+
+  it('renders no trigger without onOpenSearch', () => {
+    renderWithRouter(<TopNav showBrand userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />, { pathname: '/' });
+
+    expect(screen.queryByTestId('search-trigger')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    expect(screen.queryByTestId('search-trigger')).not.toBeInTheDocument();
+  });
+
+  it('puts the bar in the learner header and a mobile entry in the menu that opens the palette', () => {
+    const onOpenSearch = vi.fn();
+    renderWithRouter(
+      <TopNav showBrand onOpenSearch={onOpenSearch} userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />,
+      { pathname: '/' },
+    );
+    expect(screen.getAllByTestId('search-trigger')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    const menuTrigger = screen.getAllByTestId('search-trigger')[1];
+    expect(menuTrigger).toHaveClass('md:hidden');
+
+    fireEvent.click(menuTrigger);
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('navigation', { name: /mobile menu/i })).not.toBeInTheDocument();
   });
 });

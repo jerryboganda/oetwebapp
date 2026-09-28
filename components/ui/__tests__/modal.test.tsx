@@ -51,6 +51,19 @@ describe('Modal', () => {
     });
   });
 
+  it('names an untitled dialog with ariaLabel and merges bodyClassName over the body padding', async () => {
+    render(
+      <Modal open onClose={() => {}} ariaLabel="Search" bodyClassName="p-0 sm:p-0">
+        <p>Palette body</p>
+      </Modal>,
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument();
+    const body = screen.getByText('Palette body').parentElement;
+    expect(body).toHaveClass('p-0', 'sm:p-0');
+    expect(body).not.toHaveClass('px-4');
+  });
+
   it('restores focus to the trigger after the drawer closes', async () => {
     render(<DrawerHarness />);
 

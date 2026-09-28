@@ -11,7 +11,7 @@ import { HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { type ReactNode, useContext, useMemo, useState } from 'react';
-import { GlobalSearch } from './global-search';
+import { SearchTrigger } from './global-search';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 import { getWorkspaceSettingsHref, mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
@@ -37,10 +37,13 @@ interface TopNavProps {
   sectionedItems?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
-  /** Renders the brand lockup + global search. Set when the header spans the
-   *  full viewport width (learner workspace) rather than sitting beside the
-   *  sidebar, which owns the logo in the other workspaces. */
+  /** Renders the brand lockup. Set when the header spans the full viewport
+   *  width (learner workspace) rather than sitting beside the sidebar, which
+   *  owns the logo in the other workspaces. */
   showBrand?: boolean;
+  /** Opens the Ctrl/⌘K palette AppShell mounts. Search triggers render only
+   *  when set (signed in, not distraction-free, not an exam/live route). */
+  onOpenSearch?: () => void;
   /** Desktop sidebar collapse. Supplying this reveals the menu button at lg+,
    *  where it would otherwise be a mobile-only control. */
   onToggleSidebar?: () => void;
@@ -102,6 +105,7 @@ export function TopNav({
   showBrand = false,
   onToggleSidebar,
   sidebarCollapsed = false,
+  onOpenSearch,
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname() ?? '/';
@@ -284,9 +288,9 @@ export function TopNav({
             </AnimatePresence>
           </div>
 
-          {showBrand ? (
+          {showBrand && onOpenSearch ? (
             <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex lg:px-8">
-              <GlobalSearch className="max-w-2xl" />
+              <SearchTrigger className="max-w-2xl" onClick={onOpenSearch} />
             </div>
           ) : null}
 
@@ -352,6 +356,17 @@ export function TopNav({
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-3 py-3">
+                  {/* Below md the learner header has no room for a search control
+                      (360px with a page action is already full), so it lives here. */}
+                  {showBrand && onOpenSearch ? (
+                    <SearchTrigger
+                      className="mb-3 md:hidden"
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenSearch();
+                      }}
+                    />
+                  ) : null}
                   {hasSectionedMenu ? (
                     <div className="space-y-4">
                       {visibleSectionedItems?.map((section) => (
