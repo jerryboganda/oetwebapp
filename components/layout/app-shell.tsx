@@ -1,16 +1,17 @@
 'use client';
 
 import { Suspense, type ReactNode, useContext, useEffect, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { EmailVerificationBanner } from '@/components/domain/email-verification-banner';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
-import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
+import { GlobalSearch } from './global-search';
+import { isExamOrLiveRoute } from './learner-dashboard-route-policy';
 import { TopNav, type MobileMenuSection } from './top-nav';
 import { TourAutoTrigger } from '@/components/onboarding/tour-auto-trigger';
 
@@ -71,11 +72,31 @@ export function AppShell({
   const authContext = useContext(AuthContext);
   const hasAuthProvider = authContext !== null;
   const pathname = usePathname() ?? 'root';
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const routeMotionProps = getSurfaceMotion('route', reducedMotion);
+  // Route entrance only after a client navigation, never on first paint
+  // (adjust-state-on-prop-change; false on server and client, so no hydration diff).
+  const [firstPath] = useState(pathname);
+  const [navigated, setNavigated] = useState(false);
+  if (!navigated && pathname !== firstPath) setNavigated(true);
   const isAdminWorkspace = workspaceRole === 'admin' || requiredRole === 'admin';
   const isLearnerWorkspace = (workspaceRole ?? requiredRole) === 'learner' && !isAdminWorkspace;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Ctrl/⌘K palette: one per shell (staff shells render two TopNavs), signed-in
+  // only (public pages render this shell too), never on exam/live routes.
+  const searchRole = workspaceRole ?? requiredRole;
+  const searchEnabled = Boolean(authContext?.isAuthenticated)
+    && Boolean(searchRole)
+    && !distractionFree
+    && !isExamOrLiveRoute(pathname);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Close it when the route changes under a shell that stays mounted.
+  const [searchPath, setSearchPath] = useState(pathname);
+  if (searchPath !== pathname) {
+    setSearchPath(pathname);
+    setSearchOpen(false);
+  }
+  const openSearch = searchEnabled ? () => setSearchOpen(true) : undefined;
+  const searchSections = navGroups?.length ? navGroups : mobileMenuSections?.length ? mobileMenuSections : [{ label: 'Go to', items: navItems ?? [] }];
 
   const shellBackdrop = isAdminWorkspace ? null : (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -102,23 +123,17 @@ export function AppShell({
         userSummary={userSummary}
         workspaceRole={workspaceRole}
       />
-      <AnimatePresence initial={false} mode="popLayout">
-        {/* Keep the first meaningful dashboard paint free of an entrance
-            transform on mobile WebKit. Exits and navigation motion remain
-            active after the initial render. */}
-        <motion.main
-          id="main-content"
-          tabIndex={-1}
-          key={pathname}
-          layout="position"
-          className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
-          {...routeMotionProps}
-          initial={false}
-        >
-          <ScrollReset />
-          {children}
-        </motion.main>
-      </AnimatePresence>
+      {/* No route animation here: exam players and focus workspaces (DESIGN.md §5). */}
+      <motion.main
+        id="main-content"
+        tabIndex={-1}
+        key={pathname}
+        layout="position"
+        className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
+      >
+        <ScrollReset />
+        {children}
+      </motion.main>
     </div>
   ) : isLearnerWorkspace ? (
     // Learner workspace: one full-width header across the top, sidebar beneath
@@ -139,6 +154,7 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        onOpenSearch={openSearch}
         onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
         sidebarCollapsed={sidebarCollapsed}
       />
@@ -152,21 +168,18 @@ export function AppShell({
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
-          <AnimatePresence initial={false} mode="popLayout">
-            <motion.main
-              id="main-content"
-              tabIndex={-1}
-              key={pathname}
-              layout="position"
-              className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
-              {...routeMotionProps}
-              initial={false}
-            >
-              <ScrollReset />
-              <EmailVerificationBanner />
-              {children}
-            </motion.main>
-          </AnimatePresence>
+          {/* No .page-enter for learners: their pages already animate in via MotionItem/MotionSection. */}
+          <motion.main
+            id="main-content"
+            tabIndex={-1}
+            key={pathname}
+            layout="position"
+            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
+          >
+            <ScrollReset />
+            <EmailVerificationBanner />
+            {children}
+          </motion.main>
         </div>
       </div>
       <BottomNav items={mobileNavItems} />
@@ -188,6 +201,7 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        onOpenSearch={openSearch}
       />
       <Sidebar items={navItems} groups={navGroups} userSummary={userSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
@@ -198,35 +212,39 @@ export function AppShell({
           items={navItems}
           userSummary={userSummary}
           workspaceRole={workspaceRole}
+          onOpenSearch={openSearch}
         />
-        <AnimatePresence initial={false} mode="popLayout">
-          <motion.main
-            id="main-content"
-            tabIndex={-1}
-            key={pathname}
-            layout="position"
-            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
-            {...routeMotionProps}
-            initial={false}
-          >
-            <ScrollReset />
-            <EmailVerificationBanner />
-            {children}
-          </motion.main>
-        </AnimatePresence>
+        {/* Enter-only CSS entrance; never an exit animation, which kept the old
+            <main> mounted against the new route and rendered the page twice. */}
+        <motion.main
+          id="main-content"
+          tabIndex={-1}
+          key={pathname}
+          layout="position"
+          className={cn(
+            'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6',
+            navigated && !isExamOrLiveRoute(pathname) && 'page-enter',
+            className,
+          )}
+        >
+          <ScrollReset />
+          <EmailVerificationBanner />
+          {children}
+        </motion.main>
       </div>
       <BottomNav items={mobileNavItems} />
     </div>
   );
 
-  const shellWithTour = requireAuth
-    ? (
-      <>
-        {shell}
-        <TourAutoTrigger workspaceRole={workspaceRole} />
-      </>
-    )
-    : shell;
+  const shellWithTour = (
+    <>
+      {shell}
+      {searchEnabled && searchRole ? (
+        <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} sections={searchSections} workspaceRole={searchRole} />
+      ) : null}
+      {requireAuth ? <TourAutoTrigger workspaceRole={workspaceRole} /> : null}
+    </>
+  );
 
   const content = requireAuth ? (
     <Suspense fallback={<ShellFallback />}>

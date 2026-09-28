@@ -1,0 +1,59 @@
+name: Listening Backend Tests
+
+# Focused backend run for the Listening audio-integrity branch (owner-approved 2026-09-22): builds the API once and runs
+# only the Listening test classes (publish validator, learner session/runtime, authoring, start governance).
+# Trigger: bump scripts/listening/backend-test-trigger.txt on this branch, or run manually.
+
+on:
+  push:
+    branches: [fix/listening-audio-integrity-2026-09-22]
+    paths:
+      - scripts/listening/backend-test-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  listening-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: oet_provider_tests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oet_provider_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_provider_tests;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the vector extension
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d oet_provider_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/OetLearner.sln
+      - run: dotnet build backend/OetLearner.sln --configuration Release --no-restore --nologo
+      - name: Test (Listening classes)
+        run: |
+          mkdir -p test-results
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+            --configuration Release --no-build --nologo --verbosity normal \
+            --filter "FullyQualifiedName~ListeningStructureServiceTests|FullyQualifiedName~ListeningRelationalRuntimeTests|FullyQualifiedName~ListeningAudioCheckGateTests|FullyQualifiedName~ListeningStartGovernanceTests|FullyQualifiedName~ListeningSessionNotesBodyTests|FullyQualifiedName~ListeningAuthoring" \
+            --logger "console;verbosity=normal" --logger "trx;LogFileName=results.trx" --results-directory test-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: listening-backend-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14

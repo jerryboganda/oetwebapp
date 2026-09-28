@@ -7,10 +7,14 @@ import { test, expect } from '@playwright/test';
 
 const DEVICE_ID = 'acceptance-test-device-fixed-001';
 const EMAIL = process.env.SPEAKING_VERIFY_EMAIL!;
-const PASSWORD = 'AcceptTest!2026';
+const PASSWORD = process.env.SPEAKING_VERIFY_PASSWORD!;
 const ATTEMPTS = 3;
 
 test('P0: real record -> submit -> grade journey x3', async ({ page }) => {
+  test.skip(
+    !EMAIL || !PASSWORD,
+    'Live-provider verification requires SPEAKING_VERIFY_EMAIL and SPEAKING_VERIFY_PASSWORD.',
+  );
   await page.addInitScript((deviceId) => {
     window.localStorage.setItem('oet_device_id', deviceId);
   }, DEVICE_ID);

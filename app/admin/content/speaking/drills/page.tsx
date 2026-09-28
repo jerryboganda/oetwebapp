@@ -19,7 +19,6 @@ import { Skeleton } from '@/components/admin/ui/skeleton';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Button as LegacyButton } from '@/components/ui/button';
 import { type Column } from '@/components/ui/data-table';
 import {
   AdminManagedTable,
@@ -160,14 +159,14 @@ export default function AdminSpeakingDrillsPage() {
       header: '',
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
-          <Link
-            href={`/admin/content/speaking/drills/${encodeURIComponent(row.drillId)}`}
-            aria-label={`Edit ${row.title}`}
-          >
-            <LegacyButton variant="ghost" size="sm">
-              <ArrowRight className="h-4 w-4" />
-            </LegacyButton>
-          </Link>
+          <Button asChild variant="ghost" size="icon">
+            <Link
+              href={`/admin/content/speaking/drills/${encodeURIComponent(row.drillId)}`}
+              aria-label={`Edit ${row.title}`}
+            >
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </Button>
         </div>
       ),
     },

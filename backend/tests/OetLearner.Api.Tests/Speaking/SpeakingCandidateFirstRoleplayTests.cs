@@ -163,6 +163,23 @@ public sealed class SpeakingCandidateFirstRoleplayTests
         Assert.False(segment.Interrupted);
     }
 
+    [Fact]
+    public void SilencePromptGuard_BlocksPatientPromptUntilCandidateHasSpokenInRoleplay()
+    {
+        var beforeCandidate = new List<ConversationHub.SpeakingTurnSegment>
+        {
+            new("patient", 0, 0, "Warm-up only.", 1.0, Phase: "warmup"),
+            new("patient", 12_000, 12_000, "This must not make the patient open the role-play.", 1.0),
+        };
+
+        Assert.False(ConversationHub.HasCandidateRoleplayTurn(beforeCandidate));
+
+        beforeCandidate.Add(new ConversationHub.SpeakingTurnSegment(
+            "candidate", 13_000, 16_000, "Good morning, I am Dr Ahmed.", 0.95));
+
+        Assert.True(ConversationHub.HasCandidateRoleplayTurn(beforeCandidate));
+    }
+
     // ── Grader interaction signals ────────────────────────────────────────
 
     [Fact]

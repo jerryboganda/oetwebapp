@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/admin/ui/select';
 import { Label } from '@/components/admin/ui/label';
-import { toast } from '@/components/admin/ui/toaster';
+import { toast } from '@/components/ui/toaster';
 import { InlineAlert } from '@/components/ui/alert';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import { useAuth } from '@/contexts/auth-context';

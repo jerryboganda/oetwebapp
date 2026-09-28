@@ -8,6 +8,7 @@ import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
  *
  * Asserts the layout contract from DESIGN.md §7 (no horizontal page scroll)
  * and attaches a full-page screenshot per route × width for human review.
+ * Shell routes scroll inside #main-content, so theirs show the viewport only.
  * Console/network diagnostics are attached but not asserted — QA Smoke owns
  * that gate; this sweep owns layout. No pixel baselines on purpose: content
  * is data-driven, so snapshots would be flaky.
@@ -18,8 +19,11 @@ const WIDTHS = [360, 768, 1280, 1920] as const;
 type Role = 'unauth' | 'learner' | 'expert' | 'admin';
 
 const ROUTES_BY_ROLE: Record<Role, string[]> = {
-  unauth: ['/sign-in', '/register', '/pricing'],
-  learner: ['/dashboard', '/listening', '/reading', '/writing', '/speaking', '/mocks', '/progress', '/billing', '/settings'],
+  unauth: ['/sign-in', '/register', '/pricing', '/speaking/assessment-criteria'],
+  learner: [
+    '/dashboard', '/listening', '/reading', '/writing', '/speaking', '/mocks', '/progress', '/billing', '/settings',
+    '/subscriptions', '/onboarding',
+  ],
   expert: ['/expert'],
   admin: ['/admin', '/admin/users', '/admin/billing', '/admin/content'],
 };
@@ -32,10 +36,28 @@ function roleForProject(projectName: string): Role | null {
   return null; // one engine is enough for a layout sweep
 }
 
+/**
+ * Worst horizontal overflow and where it happened. The AppShell root is
+ * overflow-hidden and #main-content scrolls itself, so in-shell overflow never
+ * reaches the document: measure main and the header row as elements too.
+ */
 async function horizontalOverflow(page: Page) {
-  return page.evaluate(() => {
-    const root = document.scrollingElement ?? document.documentElement;
-    return root.scrollWidth - root.clientWidth;
+  return page.evaluate((): [string, number] => {
+    const doc = document.scrollingElement ?? document.documentElement;
+    const main = document.getElementById('main-content');
+    // Staff shells render two TopNavs and hide one per breakpoint.
+    const header = Array.from(document.querySelectorAll('header')).find((h) => h.getClientRects().length > 0);
+    const rights = header
+      ? Array.from(header.querySelectorAll('*'), (el) => el.getBoundingClientRect())
+          .filter((r) => r.width > 0 && r.height > 0)
+          .map((r) => r.right)
+      : [];
+    const sources: [string, number][] = [
+      ['document', doc.scrollWidth - doc.clientWidth],
+      ['main-content', main ? main.scrollWidth - main.clientWidth : 0],
+      ['header', Math.round(Math.max(0, ...rights) - window.innerWidth)],
+    ];
+    return sources.sort((a, b) => b[1] - a[1])[0];
   });
 }
 
@@ -70,9 +92,9 @@ test.describe('Visual QA sweep @visual', () => {
         // screenshot shows the real layout. Only affects the seeded CI user.
         await page.locator('.driver-popover-close-btn').click({ timeout: 2_000 }).catch(() => undefined);
 
-        const overflow = await horizontalOverflow(page);
+        const [source, overflow] = await horizontalOverflow(page);
         // 1px tolerance for sub-pixel rounding.
-        if (overflow > 1) failures.push(`${route} overflows by ${overflow}px at ${width}px`);
+        if (overflow > 1) failures.push(`${route} overflows (${source}) by ${overflow}px at ${width}px`);
 
         await testInfo.attach(`${role}${route.replace(/\//g, '_')}@${width}.png`, {
           body: await page.screenshot({ fullPage: true }),

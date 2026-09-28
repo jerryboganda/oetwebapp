@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
+  EXAM_LIVE_ROUTE_PATTERNS,
   NON_ROUTABLE_LEARNER_PATHS,
   isRoutableLearnerPath,
   shouldShowLearnerBreadcrumbs,
 } from '../learner-dashboard-route-policy';
+import { LEARNER_ACCOUNT_DESTINATIONS } from '../global-search';
 
 // Matches the filesystem-walking convention in lib/__tests__/admin-contract.test.ts.
 const APP_DIR = path.join(process.cwd(), 'app');
@@ -80,5 +82,24 @@ describe('learner breadcrumb routability', () => {
     expect(isRoutableLearnerPath('/speaking/selection')).toBe(true);
     expect(isRoutableLearnerPath('/listening')).toBe(true);
     expect(isRoutableLearnerPath('/writing')).toBe(true);
+  });
+});
+
+describe('exam/live route routability', () => {
+  it('lists only URL patterns that map to a real page', () => {
+    // Patterns use the real dynamic segment names, so a renamed or moved page
+    // fails here instead of silently re-enabling animation on a live attempt.
+    const routes = new Set<string>();
+    collectRoutes(APP_DIR, '', routes);
+    expect(EXAM_LIVE_ROUTE_PATTERNS.filter((pattern) => !routes.has(pattern))).toEqual([]);
+  });
+});
+
+describe('command palette account destinations', () => {
+  it('only lists learner pages that exist', () => {
+    // The palette must never offer a fabricated destination (owner rule).
+    const routes = new Set<string>();
+    collectRoutes(APP_DIR, '', routes);
+    expect(LEARNER_ACCOUNT_DESTINATIONS.map((destination) => destination.href).filter((href) => !routes.has(href))).toEqual([]);
   });
 });

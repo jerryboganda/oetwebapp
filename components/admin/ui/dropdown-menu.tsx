@@ -57,7 +57,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-[var(--admin-z-dropdown)] min-w-[8rem] overflow-hidden p-1',
+      'z-[var(--z-popover)] min-w-[8rem] overflow-hidden p-1',
       'rounded-[var(--admin-radius-md)] border border-[var(--admin-border-default)]',
       'bg-[var(--admin-bg-elevated)] text-[var(--admin-fg-default)]',
       'shadow-[var(--admin-shadow-md)] font-[var(--admin-font-body)]',
@@ -84,7 +84,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-[var(--admin-z-dropdown)] min-w-[8rem] overflow-hidden p-1',
+        'z-[var(--z-popover)] min-w-[8rem] overflow-hidden p-1',
         'rounded-[var(--admin-radius-md)] border border-[var(--admin-border-default)]',
         'bg-[var(--admin-bg-elevated)] text-[var(--admin-fg-default)]',
         'shadow-[var(--admin-shadow-md)] font-[var(--admin-font-body)]',

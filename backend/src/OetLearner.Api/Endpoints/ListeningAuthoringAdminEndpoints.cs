@@ -998,6 +998,12 @@ public static class ListeningAuthoringAdminEndpoints
             {
                 return new ApiErrorResult(502, "listening_qa_transcribe_failed", ApiErrorResult.SafeMessage(ex, "Speech-to-text transcription failed.")) { Exception = ex };
             }
+            finally
+            {
+                // The window is scratch audio: never leave it behind (1,071 files / 1.9 GB piled up in production storage).
+                try { await storage.DeleteAsync(key, CancellationToken.None); }
+                catch { /* best effort; a failed delete must not change the transcription result */ }
+            }
         })
         .RequireAuthorization("AdminContentWrite")
         .RequireRateLimiting("PerUserWrite")

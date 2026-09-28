@@ -5,15 +5,16 @@ import { useTheme } from 'next-themes';
 import { Toaster as SonnerToaster, toast } from 'sonner';
 
 /* ─────────────────────────────────────────────────────────────────────
- * Toaster — sonner-backed transient feedback wrapper for the OET admin DS.
+ * Toaster — sonner-backed global transient feedback, mounted once in
+ * app/providers.tsx for every surface (learner, expert, admin).
  *
  * Anchors to top-right, follows the active theme (light/dark) via
  * next-themes, and uses admin design tokens for surface, border, text,
  * shadow, and radius. Provides Sonner's rich color severity + close button
  * out of the box.
  *
- * Re-exports `toast` so callers stay within the admin barrel:
- *   import { toast } from '@/components/admin/ui/toaster';
+ * Re-exports `toast` so callers import one module:
+ *   import { toast } from '@/components/ui/toaster';
  * ───────────────────────────────────────────────────────────────────── */
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;

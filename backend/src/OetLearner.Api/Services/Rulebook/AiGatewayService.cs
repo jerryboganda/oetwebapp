@@ -1756,6 +1756,13 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("{ \"text\": \"...\", \"emotionHint\": \"neutral|worried|calm\", \"shouldEnd\": false, \"appliedRuleIds\": [\"C01.1\"] }");
                 sb.AppendLine("```");
                 break;
+            case AiTaskMode.PlanConversationReply:
+                sb.AppendLine("Return a SINGLE JSON object that selects only server-approved response components from the supplied safe scenario projection. Do not write spoken text and do not invent facts, IDs, or statement variants.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{ \"FactSelections\": [ { \"FactId\": \"approved.fact.id\", \"StatementVariantId\": \"default\" } ], \"NonFactualResponseKind\": \"Acknowledgement|ClarificationRequest|NeutralPause|Closing|null\" }");
+                sb.AppendLine("```");
+                sb.AppendLine("Select at most one fact. The server, not the model, renders the final spoken words.");
+                break;
             case AiTaskMode.EvaluateConversation:
                 sb.AppendLine("Return a SINGLE JSON object evaluating the learner against the 4-criterion OET Speaking rubric. Each score 0-6. Every turnAnnotation MUST cite a conversation rule ID. Advisory only.");
                 sb.AppendLine("```json");
@@ -1957,6 +1964,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             {
                 AiTaskMode.GenerateConversationOpening => "Task: deliver the AI partner's first spoken utterance in role, grounded in the scenario above. Stay in character.",
                 AiTaskMode.GenerateConversationReply => "Task: deliver the AI partner's next in-role reply, grounded in scenario + transcript.",
+                AiTaskMode.PlanConversationReply => "Task: select the next approved interlocutor response components from the safe scenario projection. Never author spoken text.",
                 AiTaskMode.EvaluateConversation => "Task: evaluate the completed transcript against the 4-criterion OET Speaking rubric. Rule-cited findings. Do not invent rules.",
                 AiTaskMode.GenerateConversationScenario => "Task: author one new OET role-play or handover scenario grounded in the conversation rulebook.",
                 _ => "Task: respond according to the reply format above."
@@ -1997,7 +2005,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, AnswerListeningQuestion, GenerateReadingStructure, GenerateReadingExplanation, AnswerReadingPassageQuestion }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, PlanConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, AnswerListeningQuestion, GenerateReadingStructure, GenerateReadingExplanation, AnswerReadingPassageQuestion }
 
 public sealed class AiGroundingContext
 {

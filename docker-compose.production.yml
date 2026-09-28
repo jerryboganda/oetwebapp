@@ -356,6 +356,9 @@ services:
       OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
       OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
       OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+      # Tutor Book buyer-signature HMAC key (API slots only; ai-worker never signs).
+      # Empty => Tutor Book PDF download returns 503 tutor_book_signing_unconfigured.
+      TutorBook__SignatureSecret: ${TUTORBOOK_SIGNATURE_SECRET:-}
     networks:
       - internal
       - oet_agent_ctl
@@ -369,6 +372,9 @@ services:
       OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
       OwnerAgent__InternalToken: ${OWNER_AGENT__INTERNALTOKEN:-}
       OwnerAgent__OwnerAccountIds: ${OWNER_AGENT__OWNERACCOUNTIDS:-}
+      # Tutor Book buyer-signature HMAC key (API slots only; ai-worker never signs).
+      # Empty => Tutor Book PDF download returns 503 tutor_book_signing_unconfigured.
+      TutorBook__SignatureSecret: ${TUTORBOOK_SIGNATURE_SECRET:-}
     networks:
       - internal
       - oet_agent_ctl

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 const { useAdminAlertsMock } = vi.hoisted(() => ({
   useAdminAlertsMock: vi.fn(),
 }));
@@ -43,7 +43,7 @@ vi.mock('../notification-preferences-panel', () => ({
 }));
 
 import { NotificationCenter } from '../notification-center';
-import { renderWithRouter } from '@/tests/test-utils';
+import { NextRouterProvider, renderWithRouter } from '@/tests/test-utils';
 
 describe('NotificationCenter', () => {
   let originalLocation: Location;
@@ -126,5 +126,25 @@ describe('NotificationCenter', () => {
 
     expect(window.location.assign).toHaveBeenCalledWith('/admin/billing/manual-payments?tab=fulfilment');
     expect(mockNotificationContext.markRead).not.toHaveBeenCalled();
+  });
+
+  it('closes the desktop popover and the mobile drawer when the pathname changes', () => {
+    const at = (pathname: string) => (
+      <NextRouterProvider pathname={pathname}>
+        <NotificationCenter />
+      </NextRouterProvider>
+    );
+    const { rerender } = render(at('/admin'));
+    const [desktopBell, mobileBell] = screen.getAllByRole('button', { name: /notifications/i });
+
+    fireEvent.click(desktopBell);
+    expect(screen.getByText(/no notifications yet/i)).toBeInTheDocument();
+    rerender(at('/admin/users'));
+    expect(screen.queryByText(/no notifications yet/i)).not.toBeInTheDocument();
+
+    fireEvent.click(mobileBell);
+    expect(screen.getByText(/no notifications yet/i)).toBeInTheDocument();
+    rerender(at('/admin/billing'));
+    expect(screen.queryByText(/no notifications yet/i)).not.toBeInTheDocument();
   });
 });

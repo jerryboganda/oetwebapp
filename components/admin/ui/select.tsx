@@ -115,7 +115,7 @@ const SelectContent = React.forwardRef<
       position={position}
       className={cn(
         // floating menu
-        'relative z-50 max-h-72 min-w-[8rem] overflow-hidden',
+        'relative z-[var(--z-popover)] max-h-72 min-w-[8rem] overflow-hidden',
         'rounded-[var(--admin-radius-lg)]',
         'bg-[var(--admin-bg-elevated)] text-[var(--admin-fg-default)]',
         'font-[var(--admin-font-body)]',

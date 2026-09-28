@@ -66,7 +66,7 @@ jobs:
     # No Postgres service: [PostgreSqlFact] tests self-skip without
     # OET_TEST_POSTGRES_CONNECTION.
     env:
-      DOTNET_FILTER: ${{ inputs.dotnet_filter || 'FullyQualifiedName~OetLearner.Api.Tests.Rulebook.|FullyQualifiedName~OetLearner.Api.Tests.Writing.' }}
+      DOTNET_FILTER: ${{ inputs.dotnet_filter || 'FullyQualifiedName~OetLearner.Api.Tests.Rulebook.|FullyQualifiedName~OetLearner.Api.Tests.Writing.|FullyQualifiedName~OetLearner.Api.Tests.WritingCoachServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingLearnerVisibilityTests' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

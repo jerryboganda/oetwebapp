@@ -13,7 +13,6 @@ import {
   type BulkResult,
 } from '@/components/admin/managed-table/admin-managed-table';
 import { Badge } from '@/components/ui/badge';
-import { Button as LegacyButton } from '@/components/ui/button';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
@@ -151,11 +150,11 @@ export default function AdminReadingPapersPage() {
       header: '',
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
-          <Link href={`/admin/content/reading/${row.id}`} aria-label={`Edit ${row.title}`}>
-            <LegacyButton variant="ghost" size="sm">
-              <ArrowRight className="h-4 w-4" />
-            </LegacyButton>
-          </Link>
+          <Button asChild variant="ghost" size="icon">
+            <Link href={`/admin/content/reading/${row.id}`} aria-label={`Edit ${row.title}`}>
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </Button>
         </div>
       ),
     },

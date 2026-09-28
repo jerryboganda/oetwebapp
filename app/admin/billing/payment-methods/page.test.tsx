@@ -22,7 +22,7 @@ vi.mock('@/lib/api', () => ({
   uploadPaymentMethodQr: mockUploadPaymentMethodQr,
 }));
 
-vi.mock('@/components/admin/ui/toaster', () => ({
+vi.mock('@/components/ui/toaster', () => ({
   toast: mockToast,
   Toaster: () => null,
 }));

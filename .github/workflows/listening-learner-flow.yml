@@ -1,0 +1,77 @@
+name: Listening Learner Flow (prod)
+
+# Real-browser acceptance check against production (owner-approved 2026-09-22): auto-start, distinct audio per
+# section, one-way navigation, no replay, correct next section — at desktop/tablet/mobile viewports, using a
+# dedicated test-only learner account. Audio CONTENT correctness is verified separately by the ASR pipeline;
+# this only checks player mechanics, which only a real browser against real production can confirm.
+# Trigger: bump scripts/listening/learner-flow-trigger.txt on this branch (its "papers:" line is the JSON array
+# LISTENING_TARGET_PAPERS_JSON), or run manually with the papers input.
+
+on:
+  push:
+    branches: [fix/listening-audio-integrity-2026-09-22]
+    paths:
+      - scripts/listening/learner-flow-trigger.txt
+  workflow_dispatch:
+    inputs:
+      papers:
+        description: 'JSON array of {paperId,label} to test'
+        required: false
+      grep:
+        description: 'Optional Playwright --grep pattern, e.g. to run just one viewport while diagnosing'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  PROD_LEARNER_EMAIL: ${{ secrets.LISTENING_TEST_LEARNER_EMAIL }}
+  PROD_LEARNER_PASSWORD: ${{ secrets.LISTENING_TEST_LEARNER_PASSWORD }}
+  # Must be an ALREADY-TRUSTED device id for this account (one-time bootstrap done manually when the account
+  # was created); a brand-new id here would hit the OTP/device-verification gate instead of signing straight in.
+  LISTENING_TEST_DEVICE_ID: ${{ secrets.LISTENING_TEST_LEARNER_DEVICE_ID }}
+
+jobs:
+  learner-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Resolve target papers
+        id: papers
+        env:
+          PAPERS_INPUT: ${{ inputs.papers }}
+        run: |
+          if [ -n "$PAPERS_INPUT" ]; then
+            LINE="$PAPERS_INPUT"
+          else
+            LINE=$(grep -E '^papers:' scripts/listening/learner-flow-trigger.txt | head -1 | cut -d: -f2-)
+          fi
+          {
+            echo "json<<PAPERS_EOF"
+            echo "$LINE"
+            echo "PAPERS_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run learner-flow spec
+        env:
+          LISTENING_TARGET_PAPERS_JSON: ${{ steps.papers.outputs.json }}
+          GREP_INPUT: ${{ inputs.grep }}
+        run: |
+          if [ -n "$GREP_INPUT" ]; then
+            pnpm exec playwright test -c playwright.listening-audit.config.ts --project=chromium-unauth --workers=1 --grep "$GREP_INPUT"
+          else
+            pnpm exec playwright test -c playwright.listening-audit.config.ts --project=chromium-unauth --workers=1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: listening-learner-flow-report
+          path: output/playwright/listening-audit-report/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,44 @@
+[
+  {
+    "assetId": "210cb330dae2454da188cb661b93c474",
+    "file": "atlas-st8-A1.mp3",
+    "dbDur": 366,
+    "section": "A1",
+    "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0"
+  },
+  {
+    "assetId": "ead0ab8d6f914769b7fe00ab3fbc6885",
+    "file": "atlas-st8-A2.mp3",
+    "dbDur": 280,
+    "section": "A2",
+    "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0"
+  },
+  {
+    "assetId": "f0c44adb3c4f4cadb9b8841a4a616eaa",
+    "file": "atlas-st8-C1.mp3",
+    "dbDur": 475,
+    "section": "C1",
+    "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0"
+  },
+  {
+    "assetId": "fb76d4ca3de847a6a977ae3b16f22365",
+    "file": "atlas-st8-C2.mp3",
+    "dbDur": 578,
+    "section": "C2",
+    "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0"
+  },
+  {
+    "assetId": "0304a99aa8c24136bf23cb1170c40d49",
+    "file": "atlas-st9-A1.mp3",
+    "dbDur": 247,
+    "section": "A1",
+    "paperId": "346bd9d66cbe4c8bb657cb674565925c"
+  },
+  {
+    "assetId": "b39f85c1190a43fcb55d61c292ac476d",
+    "file": "atlas-st9-A2.mp3",
+    "dbDur": 300,
+    "section": "A2",
+    "paperId": "346bd9d66cbe4c8bb657cb674565925c"
+  }
+]

@@ -11,6 +11,7 @@
 
 | Recording type | Window | Source |
 |----------------|--------|--------|
+| v1.1 private AI learner replay | 30 d by default; governed `retention_days` approval may override | `SpeakingSimulationV11AudioCaptureService` |
 | Self-practice (no tutor review) | `RetentionDaysDefault` (90 d) | `SpeakingComplianceOptions` |
 | Tutor-reviewed | `RetentionDaysWhenTutorReviewed` (365 d) | same |
 | Audit events | `AuditLogRetentionDays` (7 y) | same |
