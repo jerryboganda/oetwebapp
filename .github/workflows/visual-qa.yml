@@ -3,7 +3,8 @@ name: Visual QA
 # Runs tests/e2e/shared/visual-qa.spec.ts (@visual) against the production-mode
 # Docker stack: no horizontal overflow at 360/768/1280/1920 on representative
 # routes per role, with full-page screenshots uploaded for review. Also runs
-# tests/e2e/shared/route-transition.spec.ts (staff client-navigation entrance).
+# tests/e2e/shared/route-transition.spec.ts (staff client-navigation entrance)
+# and tests/e2e/shared/command-palette.spec.ts (Ctrl/⌘K palette per role).
 # Separate from QA Smoke so layout checks never slow or redden the smoke gate.
 on:
   workflow_dispatch:
@@ -13,6 +14,7 @@ on:
       - 'components/**'
       - 'tests/e2e/shared/visual-qa.spec.ts'
       - 'tests/e2e/shared/route-transition.spec.ts'
+      - 'tests/e2e/shared/command-palette.spec.ts'
 
 concurrency:
   group: visual-qa-${{ github.ref }}
@@ -59,6 +61,7 @@ jobs:
         run: >
           pnpm exec playwright test tests/e2e/shared/visual-qa.spec.ts
           tests/e2e/shared/route-transition.spec.ts
+          tests/e2e/shared/command-palette.spec.ts
           --project=chromium-unauth --project=chromium-learner
           --project=chromium-expert --project=chromium-admin
 

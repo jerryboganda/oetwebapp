@@ -7,6 +7,7 @@ import {
   isRoutableLearnerPath,
   shouldShowLearnerBreadcrumbs,
 } from '../learner-dashboard-route-policy';
+import { LEARNER_ACCOUNT_DESTINATIONS } from '../global-search';
 
 // Matches the filesystem-walking convention in lib/__tests__/admin-contract.test.ts.
 const APP_DIR = path.join(process.cwd(), 'app');
@@ -91,5 +92,14 @@ describe('exam/live route routability', () => {
     const routes = new Set<string>();
     collectRoutes(APP_DIR, '', routes);
     expect(EXAM_LIVE_ROUTE_PATTERNS.filter((pattern) => !routes.has(pattern))).toEqual([]);
+  });
+});
+
+describe('command palette account destinations', () => {
+  it('only lists learner pages that exist', () => {
+    // The palette must never offer a fabricated destination (owner rule).
+    const routes = new Set<string>();
+    collectRoutes(APP_DIR, '', routes);
+    expect(LEARNER_ACCOUNT_DESTINATIONS.map((destination) => destination.href).filter((href) => !routes.has(href))).toEqual([]);
   });
 });
