@@ -2,7 +2,7 @@
  * Listening EXAM player section model.
  *
  * Used by the restructured one-way computer exam player at
- * `app/listening/paper/[paperId]` (including mock sections). Like the
+ * `app/(learner)/listening/paper/[paperId]` (including mock sections). Like the
  * legacy diagnostic player (`lib/listening-sections.ts`), it rolls Part B's six
  * questions into a SINGLE "B" section that plays one shared audio straight
  * through, giving five forward-only sub-sections in order:

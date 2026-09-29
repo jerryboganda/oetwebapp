@@ -4,8 +4,8 @@
  * SkillRadarChart — Listening L1..L8 sub-skill radar (§6.4, §27).
  *
  * Consumed by:
- *   - app/listening/results — diagnostic results page.
- *   - app/listening/dashboard — pathway dashboard skill snapshot.
+ *   - app/(learner)/listening/results — diagnostic results page.
+ *   - app/(learner)/listening/dashboard — pathway dashboard skill snapshot.
  *
  * Mirrors components/reading/SkillRadarChart.tsx: lazy-loads the recharts
  * surface via `next/dynamic` with `ssr: false` to avoid pulling recharts into

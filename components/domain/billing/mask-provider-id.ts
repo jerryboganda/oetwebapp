@@ -6,7 +6,7 @@
  * Provider IDs leak the gateway's internal namespace, so we never show
  * them in full on the learner surfaces. Admin / expert console keep the
  * raw IDs because they may need to reconcile with the dashboard, but
- * `app/billing/**` always passes them through `maskProviderId` first.
+ * `app/(learner)/billing/**` always passes them through `maskProviderId` first.
  *
  * Examples:
  *   "cus_NfFq2HxLkTjuPo"        → "cus_***juPo"

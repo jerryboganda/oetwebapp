@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
 // Listening V2 R10 — in strict modes (`exam` and `home`), the Start
-// button on `app/listening/player/[id]/page.tsx` must be disabled until
+// button on `app/(learner)/listening/player/[id]/page.tsx` must be disabled until
 // the audio sound check has reported success. Without it, the FSM cannot
 // legally advance out of `intro` to `a1_preview` (the first strict state).
 // Device, resolution, display-scale, VPN, and similar real-exam checks are

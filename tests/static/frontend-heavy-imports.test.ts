@@ -41,7 +41,7 @@ describe('frontend heavy import boundaries', () => {
   });
 
   it('keeps the progress route and auth surfaces off their former heavy static imports', () => {
-    const progressPage = source('app/progress/page.tsx');
+    const progressPage = source('app/(learner)/progress/page.tsx');
     const authFiles = [
       'app/(auth)/mfa/recovery/page.tsx',
       'app/(auth)/register/success/page.tsx',

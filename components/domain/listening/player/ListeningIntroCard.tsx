@@ -3,7 +3,7 @@
 // Listening V2 — pre-start intro card. Renders mode-specific guidance,
 // extract metadata, and the
 // readiness gate + Start CTA. Extracted from the monolithic
-// `app/listening/player/[id]/page.tsx` so the surface can be Storybook'd
+// `app/(learner)/listening/player/[id]/page.tsx` so the surface can be Storybook'd
 // and tested in isolation without booting the full Suspense + FSM tree.
 
 import { motion, useReducedMotion } from 'motion/react';

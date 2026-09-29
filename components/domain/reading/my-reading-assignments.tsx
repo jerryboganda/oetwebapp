@@ -15,7 +15,7 @@ import {
  * tutor / expert / admin. Self-hides when the learner has no active
  * assignments, so it is safe to drop into the reading hub.
  *
- * NOTE (mount point TODO): the reading hub (`app/reading/page.tsx`) is
+ * NOTE (mount point TODO): the reading hub (`app/(learner)/reading/page.tsx`) is
  * intentionally constrained to exactly four candidate-facing entries per the
  * 2026-05-27 sample-test alignment directive, and the learner player/results
  * are owned by another lane. To avoid colliding with that directive this

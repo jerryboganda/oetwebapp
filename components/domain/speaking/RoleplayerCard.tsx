@@ -16,7 +16,7 @@
  *
  * ⚠️ MISSION CRITICAL — TUTOR / ADMIN / AI ONLY ⚠️
  * The student must NEVER see this card. Do NOT import this component from any
- * route under `app/speaking/**` that a learner can reach. It belongs only to
+ * route under `app/(learner)/speaking/**` that a learner can reach. It belongs only to
  * `app/expert/**`, `app/admin/**`, and previews behind admin auth. The data it
  * renders comes from the hidden `InterlocutorScript` and is never serialized to
  * learner endpoints (pinned by SpeakingExamLeakageTests).

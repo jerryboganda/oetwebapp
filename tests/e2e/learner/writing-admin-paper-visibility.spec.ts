@@ -64,7 +64,7 @@ test.describe('Writing — admin paper visibility (RW-006)', () => {
       page.getByRole('heading', { name: /model answer explainer/i }),
     ).toBeVisible();
 
-    // Gated copy comes from `app/writing/model/page.tsx` when the backend
+    // Gated copy comes from `app/(learner)/writing/model/page.tsx` when the backend
     // returns ApiException.Forbidden("writing_model_answer_locked", …).
     // We accept either the locked copy or the generic 404 fallback (paper
     // unavailable in this environment) — both prove the model-answer

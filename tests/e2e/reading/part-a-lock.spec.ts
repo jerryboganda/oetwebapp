@@ -6,7 +6,7 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../f
  *
  * The backend at `ReadingAttemptService.cs:411-417` rejects answer writes to
  * Part A after the 15-minute deadline. The UI at
- * `app/reading/paper/[paperId]/page.tsx:863` renders a "Part A locked" warning
+ * `app/(learner)/reading/paper/[paperId]/page.tsx:863` renders a "Part A locked" warning
  * badge when `partALocked` is true.
  *
  * This spec is the learner-page surface check: confirms the Part A paper
