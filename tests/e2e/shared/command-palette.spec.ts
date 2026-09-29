@@ -62,7 +62,7 @@ async function openFromTrigger(page: Page) {
   const trigger = searchTrigger(page);
   const menu = page.getByRole('button', { name: /open menu/i }).filter({ visible: true }).first();
   // Wait for the header to render one of them rather than counting once.
-  await expect(trigger.or(menu)).toBeVisible({ timeout: 30_000 });
+  await expect(trigger.or(menu).first()).toBeVisible({ timeout: 30_000 });
   if (!(await trigger.isVisible())) await menu.click();
   await trigger.click();
 }
