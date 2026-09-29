@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Cpu, KeyRound, Shield, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,7 +98,7 @@ export default function AiSettingsPage() {
   };
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="relative min-h-[calc(100dvh-4rem)] bg-background-light">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
         
@@ -328,6 +327,6 @@ export default function AiSettingsPage() {
           </Modal>
         </main>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

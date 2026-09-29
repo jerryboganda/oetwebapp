@@ -75,10 +75,9 @@ describe('Conversation page', () => {
     mockCreateConversation.mockResolvedValue({ id: 'sess-new' });
   });
 
-  it('renders through the shared learner dashboard shell', async () => {
+  it('renders the page', async () => {
     renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
     expect(await screen.findByRole('heading', { level: 1, name: /OET roleplay/i })).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('tracks conversation_page_viewed analytics on mount', async () => {

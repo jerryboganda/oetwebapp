@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CalendarDays, PlayCircle, Video } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -48,7 +47,7 @@ export default function MyPastClassesPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           title="My Past Classes"
@@ -157,6 +156,6 @@ export default function MyPastClassesPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

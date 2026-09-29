@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sparkles, AlertTriangle, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -54,7 +53,7 @@ export default function LearnerAiUsagePage() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={<Sparkles className="h-6 w-6" />}
         eyebrow="Insights"
@@ -175,7 +174,7 @@ export default function LearnerAiUsagePage() {
           </section>
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }
 

@@ -4,7 +4,6 @@ import { useContext, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Trophy, Medal, Crown } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -125,7 +124,7 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Leaderboard"
         description="See how you rank against other learners"
@@ -211,6 +210,6 @@ export default function LeaderboardPage() {
           ))}
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

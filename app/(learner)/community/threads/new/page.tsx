@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { PenLine, ArrowLeft } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -73,7 +72,7 @@ export default function NewThreadPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="New Thread">
+    <>
       <LearnerPageHero
         title="Start a Discussion"
         description="Share your question or insight with the community."
@@ -132,6 +131,6 @@ export default function NewThreadPage() {
           </form>
         </Card>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

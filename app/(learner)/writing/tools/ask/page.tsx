@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Send, FileText } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -96,7 +95,7 @@ export default function WritingAskToolPage() {
   const scenarioPreview = useMemo(() => scenarios.find((s) => s.id === selectedScenarioId)?.title ?? null, [scenarios, selectedScenarioId]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.tools.ask.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.tools.ask.eyebrow')}
@@ -184,6 +183,6 @@ export default function WritingAskToolPage() {
           </CardContent>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

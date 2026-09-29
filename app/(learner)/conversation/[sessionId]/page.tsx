@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -738,17 +737,17 @@ export default function ConversationSessionPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="max-w-4xl mx-auto space-y-4">
           <Skeleton className="h-40 rounded-2xl" />
           <Skeleton className="h-[340px] rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="max-w-4xl mx-auto">
         {error && (
           <InlineAlert variant="warning" className="mb-4">
@@ -809,6 +808,6 @@ export default function ConversationSessionPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -14,7 +14,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Users, MessageSquare, CalendarCheck, X, Loader2, RefreshCcw } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -177,7 +176,7 @@ export default function WritingBuddyPage() {
   }, [messages]);
 
   return (
-    <LearnerDashboardShell pageTitle="Buddy System">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Community"
@@ -346,6 +345,6 @@ export default function WritingBuddyPage() {
           </div>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

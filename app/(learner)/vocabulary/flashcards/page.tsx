@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Layers, CheckCircle2, RotateCcw, ArrowLeft, Volume2 } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { RecallTierBadge } from '@/components/ui/badge';
@@ -116,7 +115,7 @@ export default function FlashcardsPage() {
   }, [card, flipped, done]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6 flex items-center gap-3">
         <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -242,6 +241,6 @@ export default function FlashcardsPage() {
           )}
         </div>
       ) : null}
-    </LearnerDashboardShell>
+    </>
   );
 }

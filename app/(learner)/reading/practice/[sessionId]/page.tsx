@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -95,42 +94,42 @@ export default function PracticeSessionPage() {
 
   if (error) {
     return (
-      <LearnerDashboardShell pageTitle="Practice">
+      <>
         <div className="space-y-4">
           <InlineAlert variant="error">{error}</InlineAlert>
           <Button variant="ghost" size="sm" onClick={() => router.push('/reading')} className="text-primary">
             ← Back to Reading
           </Button>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!session) {
     return (
-      <LearnerDashboardShell pageTitle="Practice">
+      <>
         <div className="space-y-4">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-96 w-full" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (completing) {
     return (
-      <LearnerDashboardShell pageTitle="Practice">
+      <>
         <div className="flex h-64 flex-col items-center justify-center gap-4" role="status">
           <div className="h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden />
           <p className="text-sm text-muted">Saving your answers…</p>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Practice">
+    <>
       <div className="flex h-[calc(100vh-8rem)] flex-col">
         <ReadingPlayer
           mode={session.mode ?? 'drill'}
@@ -142,6 +141,6 @@ export default function PracticeSessionPage() {
           timeLimitSeconds={session.timeLimitSeconds}
         />
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

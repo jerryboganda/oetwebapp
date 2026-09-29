@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -27,7 +26,7 @@ export default function PrivateSpeakingSuccessPage() {
   }, [router]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
       <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center">
         <CheckCircle2 className="w-8 h-8 text-success" />
@@ -46,6 +45,6 @@ export default function PrivateSpeakingSuccessPage() {
         Back to Private Speaking ({countdown}s)
       </Button>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

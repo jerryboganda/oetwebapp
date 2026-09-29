@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Target, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
@@ -135,19 +134,19 @@ function ListeningResultsContent() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-64 rounded-2xl" />
           <Skeleton className="h-32 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!result || error) {
     return (
-      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
+      <>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <AlertCircle className="h-12 w-12 text-danger" aria-hidden />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
@@ -156,7 +155,7 @@ function ListeningResultsContent() {
             <Link href="/listening">Back to Listening</Link>
           </Button>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -184,7 +183,7 @@ function ListeningResultsContent() {
       : 'the submitted part';
 
   return (
-    <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
+    <>
       <div className="space-y-5 sm:space-y-8 pb-24">
         {requiresAdminReview ? (
           <div
@@ -431,18 +430,18 @@ function ListeningResultsContent() {
           </MotionList>
         </MotionSection>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
 export default function ListeningResults() {
   return (
     <Suspense fallback={
-      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
+      <>
         <div className="flex flex-1 items-center justify-center" role="status" aria-label="Loading results">
           <Loader2 className="h-8 w-8 animate-spin text-primary motion-reduce:animate-none" aria-hidden />
         </div>
-      </LearnerDashboardShell>
+      </>
     }>
       <ListeningResultsContent />
     </Suspense>

@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -135,19 +134,19 @@ export default function VideoDetailPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="aspect-video rounded-2xl" />
           <Skeleton className="h-40 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!video) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert
           variant="warning"
           action={
@@ -158,7 +157,7 @@ export default function VideoDetailPage() {
         >
           {error ?? 'Video not found.'}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -166,7 +165,7 @@ export default function VideoDetailPage() {
   const progress = video.progress?.percentComplete ?? 0;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <div className="space-y-2.5">
           <div className="flex items-center justify-between gap-3">
@@ -414,6 +413,6 @@ export default function VideoDetailPage() {
           </aside>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

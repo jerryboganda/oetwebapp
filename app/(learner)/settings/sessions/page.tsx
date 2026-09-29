@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -159,11 +158,7 @@ export default function SessionsPage() {
   const otherSessionCount = sessions.filter((s) => !s.isCurrent).length;
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Active Sessions"
-      subtitle="View and manage devices signed into your account"
-      backHref="/settings"
-    >
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Security"
@@ -334,6 +329,6 @@ export default function SessionsPage() {
           Back to Settings
         </Button>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

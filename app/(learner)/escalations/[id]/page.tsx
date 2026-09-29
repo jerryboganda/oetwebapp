@@ -12,7 +12,6 @@ import {
   FileText,
   MessageSquare,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -69,11 +68,7 @@ export default function EscalationDetailPage() {
   }, [escalationId]);
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Escalation Details"
-      subtitle="View the full details of your dispute"
-      backHref="/escalations"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/escalations')}>
           <ArrowLeft className="h-4 w-4" />
@@ -150,6 +145,6 @@ export default function EscalationDetailPage() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

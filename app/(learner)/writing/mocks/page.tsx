@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Award, PlayCircle, Clock, AlertTriangle, Monitor, FileText } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -76,7 +75,7 @@ export default function WritingMocksCataloguePage() {
         : 'Start strict mock';
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.mocks.catalogue.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.mocks.catalogue.eyebrow')}
@@ -214,6 +213,6 @@ export default function WritingMocksCataloguePage() {
           ))}
         </ul>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

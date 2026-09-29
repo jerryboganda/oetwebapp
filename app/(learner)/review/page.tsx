@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, CheckCircle2, RotateCcw, ChevronRight } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -109,19 +108,19 @@ export default function ReviewPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-6">
         <LearnerPageHero eyebrow="Daily Review" title="Lock in what you've already learned" description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back." icon={Brain} highlights={heroHighlights} />
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-[24px]" />)}
         </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
       <LearnerPageHero
         eyebrow="Daily Review"
@@ -250,6 +249,6 @@ export default function ReviewPage() {
         </MotionPage>
       )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

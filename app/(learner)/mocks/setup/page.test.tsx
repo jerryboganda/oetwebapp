@@ -98,10 +98,9 @@ describe('Mock setup page', () => {
     mockCreateMockSession.mockResolvedValue({ sessionId: 'mock-sess-1', redirectUrl: '/mocks/mock-sess-1' });
   });
 
-  it('renders the mock setup form through the shared learner dashboard shell', async () => {
+  it('renders the mock setup form', async () => {
     renderWithRouter(<MockSetup />, { router: { push: mockPush } });
     expect(await screen.findByText('Full Mock')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('displays mock type options from backend setup options', async () => {

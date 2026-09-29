@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { CalendarDays, Plus, Trash2, ExternalLink } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -109,7 +108,7 @@ export default function ExamBookingPage() {
   const past = bookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6">
         <LearnerPageHero
           title="Exam Bookings"
@@ -216,6 +215,6 @@ export default function ExamBookingPage() {
           )}
         </>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

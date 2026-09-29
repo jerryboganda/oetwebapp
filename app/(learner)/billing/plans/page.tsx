@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreditCard, Sparkles } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -17,7 +16,7 @@ export default function BillingPlansPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell pageTitle="Plans & Pricing">
+    <>
       <main className="space-y-6">
         <LearnerPageHero
           eyebrow="OET Billing"
@@ -37,6 +36,6 @@ export default function BillingPlansPage() {
           Open Billing
         </Button>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

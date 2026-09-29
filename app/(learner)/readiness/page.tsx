@@ -14,7 +14,6 @@ import {
   RefreshCcw,
   BookOpen,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchReadiness, fetchReadinessHistory, fetchReadinessForecast, refreshReadiness } from '@/lib/api';
@@ -85,19 +84,19 @@ export default function ReadinessCenter() {
 
   if (error && !data) {
     return (
-      <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
+      <>
         <div><InlineAlert variant="error">{error}</InlineAlert></div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!data) {
     return (
-      <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
+      <>
         <div className="space-y-6">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 rounded-2xl" />)}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -112,11 +111,7 @@ export default function ReadinessCenter() {
   const riskFactors = (data as unknown as { riskFactors?: { label: string; severity: string; impact: number; description: string; actionHref?: string }[] }).riskFactors ?? [];
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Readiness Center"
-      subtitle={`Target Exam: ${data.targetDate}`}
-      backHref="/"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Readiness Focus"
@@ -344,7 +339,7 @@ export default function ReadinessCenter() {
         onClose={() => setSimulatorOpen(false)}
         initialForecast={forecast ?? undefined}
       />
-    </LearnerDashboardShell>
+    </>
   );
 }
 

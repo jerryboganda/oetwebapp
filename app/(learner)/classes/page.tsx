@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Clock, GraduationCap, PlayCircle, RotateCcw, Users, Video } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -96,7 +95,7 @@ export default function LiveClassesPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           title="Live classes"
@@ -241,6 +240,6 @@ export default function LiveClassesPage() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

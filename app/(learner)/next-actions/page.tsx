@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Sparkles, ArrowRight, Clock, AlertTriangle, Trophy, Target, CheckCircle2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -65,17 +64,17 @@ export default function NextActionsPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="What to Do Next"
         description="AI-powered recommendations based on your goals, performance, and exam timeline."
@@ -145,6 +144,6 @@ export default function NextActionsPage() {
           Check back regularly for updated guidance.
         </InlineAlert>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

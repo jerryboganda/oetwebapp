@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { XCircle, Tag } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -82,7 +81,7 @@ export default function CancelSubscriptionPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={XCircle}
         eyebrow="Billing"
@@ -138,6 +137,6 @@ export default function CancelSubscriptionPage() {
           </div>
         )}
       </Card>
-    </LearnerDashboardShell>
+    </>
   );
 }

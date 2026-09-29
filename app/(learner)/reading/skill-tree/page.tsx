@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -144,7 +143,7 @@ export default function SkillTreePage() {
   }, []);
 
   return (
-    <LearnerDashboardShell pageTitle="Skill Tree">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Reading"
@@ -179,6 +178,6 @@ export default function SkillTreePage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -6,7 +6,6 @@ import { MessageSquare, Clock, ChevronRight, Mic, Zap, History, Sparkles } from 
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
@@ -106,7 +105,7 @@ export default function ConversationPage() {
       : entitlement.remaining <= 1 ? 'warning' : 'default';
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="AI Conversation"
@@ -259,6 +258,6 @@ export default function ConversationPage() {
           )}
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

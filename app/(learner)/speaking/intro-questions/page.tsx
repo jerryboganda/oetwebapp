@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { ArrowLeft, MessageCircleQuestion, Users } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking-candidate-resources';
@@ -32,7 +31,7 @@ function renderWithPlaceholders(text: string) {
 
 export default function SpeakingIntroQuestionsPage() {
   return (
-    <LearnerDashboardShell pageTitle="Speaking Intro Questions" requireAuth={false}>
+    <>
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <Link
           href="/speaking"
@@ -100,6 +99,6 @@ export default function SpeakingIntroQuestionsPage() {
           </p>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

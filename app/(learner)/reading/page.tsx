@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
@@ -198,7 +197,7 @@ export default function ReadingHome() {
   );
 
   return (
-    <LearnerDashboardShell pageTitle="Reading">
+    <>
       <main className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module focus"
@@ -303,7 +302,7 @@ export default function ReadingHome() {
           />
         ) : null}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

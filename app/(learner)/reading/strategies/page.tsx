@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, CheckCircle2, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -87,7 +86,7 @@ export default function StrategiesPage() {
   }, [strategies, activeCategory]);
 
   return (
-    <LearnerDashboardShell pageTitle="Reading Strategies">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Reading strategies"
@@ -139,6 +138,6 @@ export default function StrategiesPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Users, Plus, MessageSquare, UserPlus, ArrowRight } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -45,26 +44,26 @@ export default function GroupsPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Study Groups">
+      <>
         <LearnerPageHero eyebrow="Community" title="Study Groups" description="Connect with peers preparing for the same exam." icon={Users} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (error) {
     return (
-      <LearnerDashboardShell pageTitle="Study Groups">
+      <>
         <LearnerPageHero eyebrow="Community" title="Study Groups" description="Connect with peers preparing for the same exam." icon={Users} />
         <EmptyState title="Could not load groups" description={error} />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Study Groups">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Community"
@@ -119,6 +118,6 @@ export default function GroupsPage() {
           </MotionSection>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

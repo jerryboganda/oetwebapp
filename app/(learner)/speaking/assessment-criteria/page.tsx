@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, BadgeCheck, ClipboardList } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Accordion } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +31,7 @@ const overviewRows = [
 
 export default function SpeakingAssessmentCriteriaPage() {
   return (
-    <LearnerDashboardShell pageTitle="Speaking Assessment Criteria" requireAuth={false}>
+    <>
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <Link
           href="/speaking"
@@ -164,6 +163,6 @@ export default function SpeakingAssessmentCriteriaPage() {
           </p>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

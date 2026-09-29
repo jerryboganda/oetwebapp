@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { BookOpen, Brain, CalendarCheck, RefreshCw, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import { isApiError } from '@/lib/api';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -86,7 +85,7 @@ export default function VocabHubPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Vocabulary">
+    <>
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
         <LearnerPageHero
@@ -206,6 +205,6 @@ export default function VocabHubPage() {
           </section>
         ) : null}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart3, Calendar, Clock, Flame, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -100,7 +99,7 @@ export default function WritingStatsPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.stats.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.stats.eyebrow')}
@@ -261,6 +260,6 @@ export default function WritingStatsPage() {
           </Card>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

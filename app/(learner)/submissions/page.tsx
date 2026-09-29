@@ -19,7 +19,6 @@ import {
   Play,
 } from 'lucide-react';
 import React from 'react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Button, buttonClassName } from '@/components/ui/button';
@@ -136,11 +135,7 @@ function SubmissionHistoryInner() {
   const comparisonReadyCount = visibleSubmissions.filter((submission) => Boolean(submission.actions.compareRoute)).length;
 
   return (
-    <LearnerDashboardShell
-      pageTitle={writingOnly ? 'Writing Submissions' : 'Submission History'}
-      subtitle={writingOnly ? 'Review your past Writing letters and feedback' : 'Review your past work and follow up on feedback'}
-      backHref={writingOnly ? '/writing' : '/'}
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow={writingOnly ? 'Writing Evidence' : 'Evidence History'}
@@ -334,6 +329,6 @@ function SubmissionHistoryInner() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

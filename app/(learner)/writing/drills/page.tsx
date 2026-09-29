@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowDownUp, Dumbbell, FileText, Hash, ListChecks, MessageSquareQuote, Repeat2, Sparkles, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -31,7 +30,7 @@ export default function WritingDrillsPage() {
   }, [skill]);
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Drills">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Practice"
@@ -75,6 +74,6 @@ export default function WritingDrillsPage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

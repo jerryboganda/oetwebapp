@@ -21,7 +21,6 @@ import {
   Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchStudyPlan, updateStudyPlanTask } from '@/lib/api';
@@ -205,7 +204,7 @@ export default function StudyPlanPage() {
   const nextCheckpointCount = tasks.filter((task) => task.section === 'nextCheckpoint').length;
 
   return (
-    <LearnerDashboardShell pageTitle="Study Plan">
+    <>
       <AsyncStateWrapper
         status={asyncStatus}
         onRetry={loadData}
@@ -263,6 +262,6 @@ export default function StudyPlanPage() {
           })}
         </div>
       </AsyncStateWrapper>
-    </LearnerDashboardShell>
+    </>
   );
 }

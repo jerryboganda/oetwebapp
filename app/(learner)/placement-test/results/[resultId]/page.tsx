@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/empty-error';
 import { ResultReportCard } from '@/components/placement/result-report-card';
@@ -46,7 +45,7 @@ export default function PlacementResultPage() {
 
   if (!report) {
     return (
-      <LearnerDashboardShell pageTitle="Placement Result">
+      <>
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted">
         {notFound ? (
           <>
@@ -64,12 +63,12 @@ export default function PlacementResultPage() {
           </p>
         )}
       </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Placement Result">
+    <>
     <div className="space-y-4">
       <ResultReportCard title="Your placement result" report={report} />
       <div className="text-center">
@@ -78,6 +77,6 @@ export default function PlacementResultPage() {
         </Button>
       </div>
     </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

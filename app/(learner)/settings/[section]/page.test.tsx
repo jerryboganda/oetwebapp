@@ -92,7 +92,6 @@ describe('Settings section page', () => {
     expect(screen.getByText('Profession')).toBeInTheDocument();
     /* All 3 fields have values → all show 'Set' */
     expect(screen.getAllByText('Set').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     /* Blue-themed accent for profile section */
     expect(container.querySelector('.bg-blue-50.text-blue-700')).toBeTruthy();
   });

@@ -7,7 +7,6 @@ import {
   Target, Loader2, ArrowRight, Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -84,7 +83,7 @@ function ExpertReviewRequestContent() {
 
   if (isSuccess) {
     return (
-      <LearnerDashboardShell pageTitle="Request Submitted">
+      <>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <MotionPage className="max-w-md w-full">
             <div className="w-24 h-24 bg-success/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
@@ -101,35 +100,35 @@ function ExpertReviewRequestContent() {
 </Button>
           </MotionPage>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Tutor Review Request">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (error) {
     return (
-      <LearnerDashboardShell pageTitle="Tutor Review Request">
+      <>
         <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Tutor Review Request">
+    <>
       <main className="flex-1">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
 
@@ -267,18 +266,18 @@ function ExpertReviewRequestContent() {
           )}
         </form>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
 export default function ExpertReviewRequest() {
   return (
     <Suspense fallback={
-      <LearnerDashboardShell pageTitle="Tutor Review Request">
+      <>
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </LearnerDashboardShell>
+      </>
     }>
       <ExpertReviewRequestContent />
     </Suspense>

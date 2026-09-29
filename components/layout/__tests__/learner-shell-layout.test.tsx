@@ -16,7 +16,7 @@ vi.mock('@/components/layout/app-shell', () => ({
   AppShell: (props: ShellProps) => appShellSpy(props),
 }));
 
-import { LearnerDashboardShell, LearnerNavActions, LearnerShellLayout } from '../learner-dashboard-shell';
+import { LearnerNavActions, LearnerShellLayout } from '../learner-dashboard-shell';
 
 function lastShellProps() {
   return appShellSpy.mock.calls.at(-1)?.[0] as ShellProps;
@@ -27,12 +27,10 @@ describe('LearnerShellLayout', () => {
     appShellSpy.mockClear();
   });
 
-  it('renders one shell when a page still wraps itself in LearnerDashboardShell', () => {
+  it('renders one learner shell around a workspace page', () => {
     renderWithRouter(
       <LearnerShellLayout>
-        <LearnerDashboardShell pageTitle="Progress">
-          <div>Progress page</div>
-        </LearnerDashboardShell>
+        <div>Progress page</div>
       </LearnerShellLayout>,
       { pathname: '/progress' },
     );
@@ -78,7 +76,7 @@ describe('LearnerShellLayout', () => {
   });
 
   it('renders self-chromed routes bare, leaving their own shell in charge', () => {
-    const { unmount } = renderWithRouter(
+    renderWithRouter(
       <LearnerShellLayout>
         <div>Player</div>
       </LearnerShellLayout>,
@@ -86,27 +84,15 @@ describe('LearnerShellLayout', () => {
     );
     expect(screen.getByText('Player')).toBeInTheDocument();
     expect(appShellSpy).not.toHaveBeenCalled();
-    unmount();
-
-    // e.g. billing/loading.tsx under /billing/payment-return keeps its full shell.
-    renderWithRouter(
-      <LearnerShellLayout>
-        <LearnerDashboardShell>
-          <div>Payment return</div>
-        </LearnerDashboardShell>
-      </LearnerShellLayout>,
-      { pathname: '/billing/payment-return' },
-    );
-    expect(screen.getAllByTestId('app-shell')).toHaveLength(1);
-    expect(screen.getByText('Payment return')).toBeInTheDocument();
   });
 
   it('portals page nav actions into the layout TopNav actions slot', async () => {
     renderWithRouter(
       <LearnerShellLayout>
-        <LearnerDashboardShell navActions={<button type="button">Cart</button>}>
-          <div>Plans</div>
-        </LearnerDashboardShell>
+        <LearnerNavActions>
+          <button type="button">Cart</button>
+        </LearnerNavActions>
+        <div>Plans</div>
         <LearnerNavActions>
           <span>Segment 1 of 3</span>
         </LearnerNavActions>

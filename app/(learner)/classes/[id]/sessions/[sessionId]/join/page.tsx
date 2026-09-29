@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ExternalLink, ShieldCheck, Video } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button, buttonClassName } from '@/components/ui/button';
@@ -67,7 +66,7 @@ export default function LiveClassJoinPage() {
   // Full-screen embedded meeting view
   if (meeting && token && token.sdkKey && token.signature) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-navy">Live class: Zoom meeting {token.meetingNumber}</h2>
@@ -77,12 +76,12 @@ export default function LiveClassJoinPage() {
           </div>
           <ZoomMeetingEmbed joinToken={token} onLeave={handleLeave} />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero title="Join live class" description="Use the secure Zoom link for this class. Embedded Meeting SDK support is enabled when SDK credentials are configured." icon={Video} />
 
@@ -148,6 +147,6 @@ export default function LiveClassJoinPage() {
           Retry join preparation
         </Button>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

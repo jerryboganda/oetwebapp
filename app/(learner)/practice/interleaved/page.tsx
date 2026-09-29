@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Shuffle, BookOpen, Headphones, Mic, PenLine, Lightbulb } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -48,7 +47,7 @@ export default function InterleavedPracticePage() {
   ];
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Practice"
@@ -140,6 +139,6 @@ export default function InterleavedPracticePage() {
         )}
       </MotionSection>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ClipboardCheck, FileText, Clock, MapPin, CheckCircle2, Circle, BookOpen, AlertTriangle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -64,7 +63,7 @@ export default function TestDayPrepPage() {
   const progressPct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Test-Day Preparation"
         description="Your comprehensive checklist and tips for OET exam day success."
@@ -144,6 +143,6 @@ export default function TestDayPrepPage() {
           </Link>
         </MotionItem>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

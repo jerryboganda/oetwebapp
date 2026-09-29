@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
@@ -41,7 +40,7 @@ export default function VocabReviewPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Vocab Review">
+    <>
       <main className="mx-auto max-w-lg space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-navy">
@@ -74,6 +73,6 @@ export default function VocabReviewPage() {
           <VocabReviewSession items={items} onComplete={handleComplete} />
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

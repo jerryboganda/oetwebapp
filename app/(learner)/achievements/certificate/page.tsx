@@ -7,7 +7,6 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -50,17 +49,17 @@ export default function CertificatePage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="max-w-3xl mx-auto space-y-4">
           <Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-80" />
           {[1,2,3].map(i => <Skeleton key={i} className="h-32" />)}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="My Certificates"
         description="Downloadable certificates for study plan milestones, mock exams, and readiness achievements"
@@ -152,6 +151,6 @@ export default function CertificatePage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

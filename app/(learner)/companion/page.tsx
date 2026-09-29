@@ -7,7 +7,6 @@ import { AlertCircle, Coins, Lock, Plus, Sparkles } from 'lucide-react';
 import { AiAssistantInput, AiAssistantMessages } from '@/components/domain/ai-assistant';
 import { CompanionMemoryPanel } from '@/components/domain/companion/CompanionMemoryPanel';
 import { CompanionPreferencesPanel } from '@/components/domain/companion/CompanionPreferencesPanel';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
@@ -90,30 +89,30 @@ export default function CompanionPage() {
 
   if (session.isLoading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <Skeleton className="h-64 w-full" />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   // Fail closed: an unreadable session is treated exactly like a disabled one.
   if (session.isError || !session.data?.enabled) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="info" title={t('companion.disabled.title')}>
           {t('companion.disabled.body')}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!hasAccess) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="info" title={t('companion.noAccess.title')}>
           {t('companion.noAccess.body')}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -121,7 +120,7 @@ export default function CompanionPage() {
   const canChat = data.access.canChat;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="flex flex-col gap-4">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -290,6 +289,6 @@ export default function CompanionPage() {
           </aside>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

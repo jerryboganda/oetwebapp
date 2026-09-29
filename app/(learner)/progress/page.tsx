@@ -23,7 +23,6 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { AuthContext } from '@/contexts/auth-context';
 import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
 import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
@@ -130,11 +129,7 @@ export default function ProgressDashboard() {
   const generatedAt = progressSummary?.freshness.generatedAt ?? null;
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Progress Dashboard"
-      subtitle="Track your performance and activity over time"
-      backHref="/"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Evidence Check"
@@ -384,6 +379,6 @@ export default function ProgressDashboard() {
         )}
 
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

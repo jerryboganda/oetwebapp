@@ -13,7 +13,6 @@ import {
   Volume2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -156,7 +155,7 @@ export default function PronunciationHubPage() {
   ];
 
   return (
-    <LearnerDashboardShell pageTitle="Pronunciation Library">
+    <>
       <main className="space-y-6 sm:space-y-10">
         {/* Hero */}
         <LearnerPageHero
@@ -338,6 +337,6 @@ export default function PronunciationHubPage() {
           )}
         </section>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

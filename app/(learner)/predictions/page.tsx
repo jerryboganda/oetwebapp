@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { TrendingUp, RefreshCw, BarChart3, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -103,19 +102,19 @@ export default function ScoreEstimatorPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <LearnerPageHero
@@ -243,6 +242,6 @@ export default function ScoreEstimatorPage() {
           Compute predictions regularly to track your progress toward your target score.
         </InlineAlert>
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

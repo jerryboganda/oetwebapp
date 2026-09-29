@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Globe, Save } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
@@ -86,7 +85,7 @@ export default function BillingProfilePage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={<Globe className="h-6 w-6" />}
         eyebrow="Billing"
@@ -134,6 +133,6 @@ export default function BillingProfilePage() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

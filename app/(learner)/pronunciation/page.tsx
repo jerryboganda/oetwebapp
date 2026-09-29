@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Mic } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,7 +55,7 @@ export default function PronunciationPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Pronunciation practice"
         description="Practise clinical phonemes, minimal-pair listening, and speaking-linked pronunciation drills."
@@ -107,6 +106,6 @@ export default function PronunciationPage() {
           </div>
         )}
       </section>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2, Lock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -125,7 +124,7 @@ export default function VocabularyTermDetailPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="mb-6 flex items-center gap-3">
           <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -133,16 +132,16 @@ export default function VocabularyTermDetailPage() {
           <Skeleton className="h-8 w-48 rounded" />
         </div>
         <Skeleton className="h-40 rounded-2xl" />
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!term) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="warning" className="mb-4">Term not found.</InlineAlert>
         <Button onClick={() => router.back()}>Go back</Button>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -151,7 +150,7 @@ export default function VocabularyTermDetailPage() {
   // prompt instead of the (empty) redacted content.
   if (term.isLocked) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="mb-6 flex items-center gap-3">
           <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -183,12 +182,12 @@ export default function VocabularyTermDetailPage() {
             </Button>
           </div>
         </Card>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6 flex items-center gap-3">
         <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -363,6 +362,6 @@ export default function VocabularyTermDetailPage() {
           </Button>
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

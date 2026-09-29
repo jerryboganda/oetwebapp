@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2, Lock } from 'lucide-react';
 import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
 import { AuthContext } from '@/contexts/auth-context';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
@@ -154,7 +153,7 @@ export default function BrowseVocabularyPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mb-6 flex items-center gap-3">
         <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -377,6 +376,6 @@ export default function BrowseVocabularyPage() {
           </div>
         </div>
       </Modal>
-    </LearnerDashboardShell>
+    </>
   );
 }

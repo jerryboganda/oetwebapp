@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { CircleDot, FileSearch, Sparkles, Award } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -127,7 +126,7 @@ export default function WritingSubmissionGradingPage() {
   const currentStepIdx = submission ? stepIndexForStatus(submission.status) : 0;
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.submissions.grading.pageTitle')}>
+    <>
       <div className="space-y-6" aria-busy>
         <LearnerPageHero
           eyebrow={t('writing.submissions.grading.eyebrow')}
@@ -196,6 +195,6 @@ export default function WritingSubmissionGradingPage() {
           </CardContent>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

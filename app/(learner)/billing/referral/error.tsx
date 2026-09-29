@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
@@ -26,7 +25,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <LearnerDashboardShell pageTitle="Referral program" backHref="/billing">
+    <>
       <div className="space-y-6">
         <BackToBillingLink />
         <InlineAlert variant="error" title="We couldn't load your referral program">
@@ -42,6 +41,6 @@ export default function Error({
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

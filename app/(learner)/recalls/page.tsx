@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { Brain, Layers, BookOpen, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -75,7 +74,7 @@ export default function RecallsHomePage() {
   ];
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Recalls"
@@ -138,6 +137,6 @@ export default function RecallsHomePage() {
         </div>
 
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

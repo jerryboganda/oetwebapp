@@ -1,9 +1,8 @@
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Loading() {
   return (
-    <LearnerDashboardShell pageTitle="Referral program" backHref="/billing">
+    <>
       <div className="space-y-6" aria-busy="true" aria-live="polite">
         {/* Hero */}
         <Skeleton className="h-44 w-full rounded-2xl" />
@@ -18,6 +17,6 @@ export default function Loading() {
           ))}
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

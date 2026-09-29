@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { TrendingUp, Users, DollarSign } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -58,7 +57,7 @@ export default function AffiliatePortalPage() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={TrendingUp}
         eyebrow="Partner"
@@ -105,7 +104,7 @@ export default function AffiliatePortalPage() {
           </section>
         </div>
       ) : null}
-    </LearnerDashboardShell>
+    </>
   );
 }
 

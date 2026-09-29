@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect } from 'react';
 import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Edit3, Star, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -69,15 +68,15 @@ function WritingResultContent() {
 
   if (!resultId) {
     return (
-      <LearnerDashboardShell pageTitle="Not Found">
+      <>
         <div className="p-10 text-center text-muted">Open results from a completed writing submission.</div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Evaluation Summary">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-40 rounded-2xl" />
           <Skeleton className="h-32 rounded-2xl" />
@@ -86,15 +85,15 @@ function WritingResultContent() {
             <Skeleton className="h-48 rounded-2xl" />
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!result) {
     return (
-      <LearnerDashboardShell pageTitle="Not Found">
+      <>
         <div className="p-10 text-center text-muted">Result not found.</div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -105,7 +104,7 @@ function WritingResultContent() {
       : 'danger';
 
   return (
-    <LearnerDashboardShell pageTitle="Evaluation Summary">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Assessment Output"
@@ -281,7 +280,7 @@ function WritingResultContent() {
           </Link>
         </MotionSection>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

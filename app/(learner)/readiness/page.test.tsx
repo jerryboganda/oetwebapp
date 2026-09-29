@@ -56,10 +56,9 @@ describe('Readiness center page', () => {
     mockFetchForecast.mockResolvedValue({ probability: 62, weeksNeeded: 8, weeksAvailable: 10, requiredImprovement: 10, slopePerWeek: 1.2, scenarios: [] });
   });
 
-  it('renders readiness hero through the learner dashboard shell', async () => {
+  it('renders readiness hero', async () => {
     render(<ReadinessCenter />);
     expect(await screen.findByText('Close the gap to exam day with evidence')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('tracks readiness_viewed analytics on mount', async () => {

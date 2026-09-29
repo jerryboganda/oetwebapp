@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Mic, AlertTriangle, Gauge, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -55,7 +54,7 @@ export default function FluencyTimelinePage() {
   };
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero title="Fluency Timeline" description="Visualize your speaking pace, pauses, and filler words across the recording." />
 
       <MotionSection className="space-y-6 max-w-5xl mx-auto">
@@ -108,6 +107,6 @@ export default function FluencyTimelinePage() {
           </>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

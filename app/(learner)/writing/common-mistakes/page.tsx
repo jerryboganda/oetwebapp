@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AlertCircle, Filter } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
@@ -44,7 +43,7 @@ export default function WritingCommonMistakesPage() {
   }, [items]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.mistakes.library.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.mistakes.library.eyebrow')}
@@ -115,6 +114,6 @@ export default function WritingCommonMistakesPage() {
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

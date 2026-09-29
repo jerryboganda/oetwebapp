@@ -21,7 +21,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -486,7 +485,7 @@ function MockCenterInner() {
       ];
 
   return (
-    <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and tutor reviews.">
+    <>
       <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module Focus"
@@ -989,7 +988,7 @@ function MockCenterInner() {
           </>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
@@ -999,9 +998,9 @@ export default function MockCenter() {
   return (
     <Suspense
       fallback={
-        <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and tutor reviews.">
+        <>
           <LearnerSkeleton variant="dashboard" />
-        </LearnerDashboardShell>
+        </>
       }
     >
       <MockCenterInner />

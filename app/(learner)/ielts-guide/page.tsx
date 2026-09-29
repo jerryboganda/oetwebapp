@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { Globe, LockKeyhole, Mail } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,7 @@ export default function IeltsGuidePage() {
   }, []);
 
   return (
-    <LearnerDashboardShell pageTitle="IELTS Guide">
+    <>
       <main className="space-y-6">
         <LearnerPageHero
           eyebrow="Beta foundation"
@@ -42,6 +41,6 @@ export default function IeltsGuidePage() {
           </Button>
         </div>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

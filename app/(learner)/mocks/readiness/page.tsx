@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Loader2, ShieldCheck, Target, TrendingDown, TrendingUp } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -94,11 +93,7 @@ export default function MockReadinessPage() {
   }
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Mock Readiness"
-      subtitle="Trend across recent mocks and the 7-day plan that closes your weakest gaps."
-      backHref="/mocks"
-    >
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/mocks')}>
           <ArrowLeft className="h-4 w-4" />
@@ -279,6 +274,6 @@ export default function MockReadinessPage() {
           </span>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

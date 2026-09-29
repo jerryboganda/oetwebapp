@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -89,27 +88,27 @@ export default function ConversationResultsPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="max-w-3xl mx-auto space-y-4">
           <Skeleton className="h-48 rounded-2xl" />
           <Skeleton className="h-64 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (error) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="error">{error}</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (evaluation && !evaluation.ready) {
     return (
-      <LearnerDashboardShell>
+      <>
         <MotionSection className="max-w-md mx-auto text-center py-16">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <BarChart3 className="w-8 h-8 text-primary motion-safe:animate-pulse" aria-hidden />
@@ -117,7 +116,7 @@ export default function ConversationResultsPage() {
           <h2 className="text-xl font-bold text-navy mb-2">Evaluating conversation…</h2>
           <p className="text-muted text-sm">This usually takes a few seconds. The page will update automatically.</p>
         </MotionSection>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -137,7 +136,7 @@ export default function ConversationResultsPage() {
   const passScaled = evaluation.passScaled ?? gradeSpeaking(scaled ?? 0).requiredScaled;
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="max-w-3xl mx-auto">
         <Link href="/conversation" className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-primary">
           <ArrowLeft className="h-4 w-4" /> Back to Conversations
@@ -323,7 +322,7 @@ export default function ConversationResultsPage() {
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

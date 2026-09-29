@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Award, FileText, Flag, RefreshCw, Share2, Sparkles, UserRoundCheck } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -225,7 +224,7 @@ export default function WritingSubmissionResultsPage() {
     : 0;
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.submissions.results.pageTitle')}>
+    <>
       <div className="space-y-6" aria-busy={!grade}>
         {practiceScore != null && assessment ? (
           <ResultsScorePanel
@@ -524,6 +523,6 @@ export default function WritingSubmissionResultsPage() {
           ) : null}
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

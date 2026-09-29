@@ -49,11 +49,10 @@ describe('Submission history page', () => {
     ]);
   });
 
-  it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
+  it('renders without a second page-root width wrapper', async () => {
     const { container } = renderWithRouter(<SubmissionHistoryPage />);
 
     expect(await screen.findByText('Reopen the attempts that need review or comparison')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(container.querySelector('[class*="max-w-4xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
   });
 

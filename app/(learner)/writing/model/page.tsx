@@ -12,7 +12,6 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -76,27 +75,27 @@ export default function ModelAnswerExplainer() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Model Answer Explainer">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-32 rounded-2xl" />
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!model) {
     return (
-      <LearnerDashboardShell pageTitle="Model Answer Explainer">
+      <>
         <div className="p-6">
           <InlineAlert variant="warning">{error ?? 'Model answer not found.'}</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Model Answer Explainer">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Study Guide"
@@ -186,6 +185,6 @@ export default function ModelAnswerExplainer() {
           ))}
         </div>
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }

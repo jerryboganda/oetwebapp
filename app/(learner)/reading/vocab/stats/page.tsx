@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from '@/components/charts/dynamic-recharts';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
@@ -46,7 +45,7 @@ export default function VocabStatsPage() {
     : [];
 
   return (
-    <LearnerDashboardShell pageTitle="Vocab Stats">
+    <>
       <main className="space-y-6 sm:space-y-10">
         <div className="flex items-center justify-between">
           <div>
@@ -152,7 +151,7 @@ export default function VocabStatsPage() {
           </>
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

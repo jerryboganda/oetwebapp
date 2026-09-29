@@ -16,7 +16,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
 import { fetchStrategyGuide, isApiError, setStrategyGuideBookmark, updateStrategyGuideProgress } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -107,18 +106,18 @@ function parseStructuredContent(json: string | null): StrategyGuideStructuredCon
 
 function LoadingState() {
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-5">
         <Skeleton className="h-36 rounded-surface" />
         <Skeleton className="h-96 rounded-2xl" />
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
 function DisabledState() {
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Strategy guide unavailable"
         description="This learner strategy guide is behind a release flag right now."
@@ -133,7 +132,7 @@ function DisabledState() {
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Back to strategies
       </Link>
-    </LearnerDashboardShell>
+    </>
   );
 }
 
@@ -251,13 +250,13 @@ export default function StrategyGuidePage() {
 
   if (error || !guide) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="error" title="Strategy guide did not load">{error ?? 'Strategy guide not found.'}</InlineAlert>
         <Link href="/strategies" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to strategies
         </Link>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -267,7 +266,7 @@ export default function StrategyGuidePage() {
   const takeaways = content?.keyTakeaways ?? [];
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-7">
         <Link href="/strategies" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -432,6 +431,6 @@ export default function StrategyGuidePage() {
           </MotionSection>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

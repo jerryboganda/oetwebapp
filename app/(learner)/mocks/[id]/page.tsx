@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchMockReport, fetchMockSession, isApiError } from '@/lib/api';
@@ -62,7 +61,7 @@ export default function MockRouteRedirectPage() {
   const visibleError = missingIdError ?? error;
 
   return (
-    <LearnerDashboardShell pageTitle="Mocks" backHref="/mocks">
+    <>
       {!visibleError ? (
         <div className="flex min-h-[40vh] items-center justify-center px-4">
           <div className="text-center">
@@ -80,6 +79,6 @@ export default function MockRouteRedirectPage() {
           </div>
         </div>
       )}
-    </LearnerDashboardShell>
+    </>
   );
 }

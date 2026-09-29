@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -161,7 +160,7 @@ export default function SpeakingResultSummary() {
 
   if (analysing) {
     return (
-      <LearnerDashboardShell pageTitle="Analyzing...">
+      <>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -199,14 +198,14 @@ export default function SpeakingResultSummary() {
             </div>
           </motion.div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (failedResult) {
     const noCredits = failedResult.statusReasonCode === 'ai_credits_insufficient';
     return (
-      <LearnerDashboardShell pageTitle="Results">
+      <>
         <div className="max-w-xl space-y-4">
           <InlineAlert variant={noCredits ? 'warning' : 'error'}>
             {failedResult.statusMessage
@@ -228,13 +227,13 @@ export default function SpeakingResultSummary() {
             </Button>
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (stillProcessing || error || !result) {
     return (
-      <LearnerDashboardShell pageTitle="Results">
+      <>
         <InlineAlert
           variant={stillProcessing ? 'info' : 'error'}
           action={<Button size="sm" variant="outline" onClick={restartPolling}>Check again</Button>}
@@ -243,7 +242,7 @@ export default function SpeakingResultSummary() {
             ? 'Grading is taking longer than usual. Your recording is saved and the result will appear here.'
             : 'Could not load your speaking result. Please try again.'}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -276,7 +275,7 @@ export default function SpeakingResultSummary() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Performance Summary">
+    <>
       <div className="space-y-6">
         <section className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Speaking Results</p>
@@ -593,6 +592,6 @@ export default function SpeakingResultSummary() {
           </MotionSection>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

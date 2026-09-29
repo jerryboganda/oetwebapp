@@ -14,7 +14,6 @@ import {
   Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -207,7 +206,7 @@ export default function DictationDrillPage() {
   // ────────── Render ──────────
 
   return (
-    <LearnerDashboardShell pageTitle="Dictation Drills">
+    <>
       <main className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Phase 4 · Listening pathway"
@@ -254,7 +253,7 @@ export default function DictationDrillPage() {
           />
         )}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

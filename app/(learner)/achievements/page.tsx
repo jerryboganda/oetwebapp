@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Trophy, Flame, Star, Zap, Lock, ShieldCheck } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/progress';
@@ -87,7 +86,7 @@ export default function AchievementsPage() {
     .sort((first, second) => new Date(second.unlockedAt ?? '').getTime() - new Date(first.unlockedAt ?? '').getTime())[0]?.unlockedAt ?? null;
 
   return (
-    <LearnerDashboardShell pageTitle="Achievements">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Momentum"
@@ -259,6 +258,6 @@ export default function AchievementsPage() {
       )}
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

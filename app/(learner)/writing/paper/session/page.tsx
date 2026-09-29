@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { ArrowRight, FileText, PenSquare } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -37,7 +36,7 @@ export default function WritingPaperSessionIndexPage() {
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
         <Card>
           <CardHeader>
@@ -90,6 +89,6 @@ export default function WritingPaperSessionIndexPage() {
           </CardContent>
         </Card>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

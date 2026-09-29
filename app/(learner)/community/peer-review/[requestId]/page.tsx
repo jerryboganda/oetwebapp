@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { FileText, Star, Send, ArrowLeft, CheckCircle, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -117,19 +116,19 @@ export default function PeerReviewDetailPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Peer Review">
+      <>
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-40 rounded-lg" />
           <Skeleton className="h-32 rounded-lg" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (error || !request) {
     return (
-      <LearnerDashboardShell pageTitle="Peer Review">
+      <>
         <div className="space-y-4">
           <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
@@ -138,12 +137,12 @@ export default function PeerReviewDetailPage() {
             <p className="text-muted-foreground">{error ?? 'Review not found'}</p>
           </Card>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Peer Review">
+    <>
       <div className="space-y-6">
         <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
@@ -294,6 +293,6 @@ export default function PeerReviewDetailPage() {
           </Card>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

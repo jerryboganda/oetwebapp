@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Copy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -46,7 +45,7 @@ export default function WritingParaphraseToolPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.tools.paraphrase.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.tools.paraphrase.eyebrow')}
@@ -109,6 +108,6 @@ export default function WritingParaphraseToolPage() {
           </section>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

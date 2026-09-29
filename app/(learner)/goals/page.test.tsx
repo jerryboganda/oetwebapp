@@ -42,11 +42,6 @@ describe('Goals setup page', () => {
     mockUpdateUserProfile.mockResolvedValue({});
   });
 
-  it('renders the goals form through the shared learner dashboard shell', () => {
-    renderWithRouter(<GoalsPage />, { router: { push: mockPush } });
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
-  });
-
   it('displays exam family selector', () => {
     renderWithRouter(<GoalsPage />, { router: { push: mockPush } });
     expect(screen.getByText('OET')).toBeInTheDocument();

@@ -8,7 +8,6 @@ import {
   Trophy,
   Sparkles,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -139,7 +138,7 @@ export default function ListeningPathwayPage() {
   );
 
   return (
-    <LearnerDashboardShell pageTitle="Listening Pathway">
+    <>
       <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Listening pathway"
@@ -210,6 +209,6 @@ export default function ListeningPathwayPage() {
           </div>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

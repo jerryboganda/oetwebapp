@@ -1,6 +1,5 @@
 'use client';
 
-import { LearnerDashboardShell } from '@/components/layout';
 import { NotificationsSettingsView } from '@/components/settings/notifications-settings-view';
 
 /**
@@ -11,12 +10,8 @@ import { NotificationsSettingsView } from '@/components/settings/notifications-s
  */
 export default function NotificationSettingsPage() {
   return (
-    <LearnerDashboardShell
-      pageTitle="Notifications"
-      subtitle="Manage how and when you receive updates"
-      backHref="/settings"
-    >
+    <>
       <NotificationsSettingsView />
-    </LearnerDashboardShell>
+    </>
   );
 }

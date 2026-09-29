@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Headphones, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +35,7 @@ function ListeningDrillContent() {
   }, [attemptId, drillId, paperId]);
 
   return (
-    <LearnerDashboardShell pageTitle="Listening Drill" subtitle="Focused error-type practice for listening accuracy." backHref="/listening">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
           <ArrowLeft className="h-4 w-4" />
@@ -89,7 +88,7 @@ function ListeningDrillContent() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

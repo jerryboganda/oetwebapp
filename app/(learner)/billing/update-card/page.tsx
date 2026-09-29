@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CreditCard } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -47,7 +46,7 @@ export default function UpdateCardPage() {
   }, [token]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         icon={CreditCard}
         eyebrow="Billing"
@@ -75,6 +74,6 @@ export default function UpdateCardPage() {
           </>
         )}
       </Card>
-    </LearnerDashboardShell>
+    </>
   );
 }

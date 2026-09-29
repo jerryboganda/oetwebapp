@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
@@ -81,7 +80,7 @@ export default function SelectSpeakingProfessionPage() {
 
   if (locked) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
           <header className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight text-navy">Your profession is locked</h1>
@@ -108,12 +107,12 @@ export default function SelectSpeakingProfessionPage() {
             </div>
           </Card>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-navy">Choose your healthcare profession</h1>
@@ -164,6 +163,6 @@ export default function SelectSpeakingProfessionPage() {
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

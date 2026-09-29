@@ -13,7 +13,6 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -220,24 +219,24 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle={copy('billing.page.title')} backHref="/">
+      <>
         <div className="space-y-6">
           <Skeleton className="h-44 rounded-2xl" />
           <Skeleton className="h-12 rounded-2xl" />
           <Skeleton className="h-64 rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!data) {
     return (
-      <LearnerDashboardShell pageTitle={copy('billing.page.title')} backHref="/">
+      <>
         <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
         <Button className="mt-4" onClick={loadBilling}>
           Try again
         </Button>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -249,11 +248,7 @@ export default function BillingPage() {
   const freezeStart = currentFreeze?.startedAt ?? currentFreeze?.scheduledStartAt ?? null;
 
   return (
-    <LearnerDashboardShell
-      pageTitle={copy('billing.page.title')}
-      subtitle={copy('billing.page.subtitle')}
-      backHref="/"
-    >
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={copy('billing.hero.eyebrow')}
@@ -556,6 +551,6 @@ export default function BillingPage() {
           }
         }}
       />
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -11,7 +11,6 @@ import {
   Plus,
   Users,
 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -324,11 +323,7 @@ export default function ListeningTeacherClassesPage() {
   };
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Class Analytics"
-      subtitle="Manage your classes and view learner progress."
-      backHref="/listening"
-    >
+    <>
       <div className="space-y-6 pb-24">
         {/* Back nav */}
         <Button variant="ghost" size="sm" className="gap-2 -ml-2" asChild>
@@ -413,6 +408,6 @@ export default function ListeningTeacherClassesPage() {
         onClose={() => setShowCreate(false)}
         onCreate={handleCreateClass}
       />
-    </LearnerDashboardShell>
+    </>
   );
 }

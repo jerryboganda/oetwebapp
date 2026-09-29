@@ -7,7 +7,6 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-error';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -71,17 +70,17 @@ export default function ScoreCalculatorPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="max-w-3xl mx-auto space-y-4">
           <Skeleton className="h-8 w-64 max-w-full" /><Skeleton className="h-4 w-96 max-w-full" />
           <Skeleton className="h-32" /><Skeleton className="h-64" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero
         title="Score Cross-Reference Calculator"
         description="Compare OET scores with IELTS, PTE, and CEFR equivalents · Check institution requirements"
@@ -245,6 +244,6 @@ export default function ScoreCalculatorPage() {
           <p>Score equivalences are approximate and based on publicly available official guidance. Always verify requirements directly with the accepting institution or regulatory body.</p>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

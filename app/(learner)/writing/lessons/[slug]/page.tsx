@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, ArrowRight, BookOpenCheck, CheckCircle2, Dumbbell, HelpCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -50,7 +49,7 @@ export default function WritingLessonPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle={lesson?.title ?? t('writing.lessons.detail.pageTitleFallback')}>
+    <>
       <div className="space-y-5 sm:space-y-8">
         <Button asChild variant="ghost" size="sm"><Link href="/writing/skill-tree"><ArrowLeft className="h-4 w-4" /> {t('writing.lessons.detail.back')}</Link></Button>
 
@@ -128,6 +127,6 @@ export default function WritingLessonPage() {
           </>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

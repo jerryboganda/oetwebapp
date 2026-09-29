@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Timer, Shield, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -33,7 +32,7 @@ export default function ExamSimulationPage() {
   }, []);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions: strict timing, no pauses, sequential subtests." />
 
       <MotionSection className="space-y-6">
@@ -91,6 +90,6 @@ export default function ExamSimulationPage() {
           <Card className="p-8 text-center text-muted"><p>Unable to load simulation configuration.</p></Card>
         )}
       </MotionSection>
-    </LearnerDashboardShell>
+    </>
   );
 }

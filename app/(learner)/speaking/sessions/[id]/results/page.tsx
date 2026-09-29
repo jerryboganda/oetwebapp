@@ -26,7 +26,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, Loader2, Mic, UserPlus } from 'lucide-react';
 
-import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -394,7 +393,7 @@ export default function SpeakingSessionResultsPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Speaking results">
+      <>
         <div className="flex flex-col gap-4">
           <Skeleton className="h-12 w-64" />
           <div className="grid gap-4 md:grid-cols-2">
@@ -402,16 +401,13 @@ export default function SpeakingSessionResultsPage() {
             <Skeleton className="h-96 w-full" />
           </div>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (v11 && session) {
     return (
-      <LearnerDashboardShell
-        pageTitle="Speaking results"
-        subtitle={`${session.card.scenarioTitle} · Session ${sessionId.slice(0, 8)}…`}
-      >
+      <>
         <div className="flex flex-col gap-4">
           {showSubmissionReceived && session.submittedAt ? (
             <InlineAlert
@@ -435,13 +431,13 @@ export default function SpeakingSessionResultsPage() {
             tutorOverride={v11TutorOverride}
           />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (errorMsg) {
     return (
-      <LearnerDashboardShell pageTitle="Speaking results">
+      <>
         <InlineAlert
           variant="error"
           title="Failed to load assessment"
@@ -453,7 +449,7 @@ export default function SpeakingSessionResultsPage() {
         >
           {errorMsg}
         </InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
@@ -467,15 +463,8 @@ export default function SpeakingSessionResultsPage() {
   };
   const isFreeSession = Boolean(session?.isFreeSample || freeRow);
 
-  const subtitle = session
-    ? `${session.card.scenarioTitle} · Session ${sessionId.slice(0, 8)}…`
-    : `Session ${sessionId.slice(0, 8)}…`;
-
   return (
-    <LearnerDashboardShell
-      pageTitle="Speaking results"
-      subtitle={subtitle}
-    >
+    <>
       <div className="flex flex-col gap-4">
         {showSubmissionReceived && session?.submittedAt ? (
           <InlineAlert
@@ -571,6 +560,6 @@ export default function SpeakingSessionResultsPage() {
           </TabPanel>
         ) : null}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

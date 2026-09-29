@@ -4,7 +4,6 @@ import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AlertTriangle, BookOpen, CheckCircle2, FileText, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
@@ -83,7 +82,7 @@ interface PendingMockCompletion {
 
 export default function ReadingPaperResultsPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (
-    <Suspense fallback={<LearnerDashboardShell pageTitle="Reading Results"><Skeleton className="h-64" /></LearnerDashboardShell>}>
+    <Suspense fallback={<><Skeleton className="h-64" /></>}>
       <ReadingPaperResultsContent params={params} />
     </Suspense>
   );
@@ -233,7 +232,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
       };
 
   return (
-    <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
+    <>
       <main className="space-y-5 sm:space-y-8">
         {loading ? <Skeleton className="h-96" /> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
@@ -540,7 +539,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
           </>
         ) : null}
       </main>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

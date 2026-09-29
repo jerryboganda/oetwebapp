@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
@@ -28,7 +27,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
+    <>
       <div className="space-y-6">
         <InlineAlert
           variant="error"
@@ -46,6 +45,6 @@ export default function Error({
           </Button>
         </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -102,27 +101,27 @@ export default function SpeakingTranscriptPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Transcript Review">
+      <>
         <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Skeleton className="h-[70vh] rounded-2xl" />
           <Skeleton className="h-[70vh] rounded-2xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   if (!review) {
     return (
-      <LearnerDashboardShell pageTitle="Transcript Review" backHref="/speaking">
+      <>
         <div className="mx-auto max-w-3xl px-4 py-8">
           <InlineAlert variant="error">{error ?? 'Transcript review is unavailable.'}</InlineAlert>
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell pageTitle={review.title} subtitle="Review your speaking transcript alongside the original recording.">
+    <>
       <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {review.disclaimer ? <InlineAlert variant="info">{review.disclaimer}</InlineAlert> : null}
@@ -284,6 +283,6 @@ export default function SpeakingTranscriptPage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

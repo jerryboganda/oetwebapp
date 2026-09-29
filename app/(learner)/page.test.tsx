@@ -195,11 +195,10 @@ describe('Dashboard page', () => {
     });
   });
 
-  it('renders through the shared learner dashboard shell', async () => {
+  it('renders the page', async () => {
     renderDashboard();
 
     expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('does not crash when readiness evidence is missing', async () => {
@@ -218,7 +217,6 @@ describe('Dashboard page', () => {
     renderDashboard();
 
     expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('hides dashboard tasks outside the purchased module set', async () => {

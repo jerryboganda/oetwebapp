@@ -63,11 +63,10 @@ describe('Settings page', () => {
     mockUpdateSettingsSection.mockResolvedValue({});
   });
 
-  it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
+  it('renders without a second page-root width wrapper', async () => {
     const { container } = renderSettings();
 
     expect(await screen.findByText('Adjust account and study settings without hunting for them')).toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(container.querySelector('[class*="max-w-3xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
   });
 

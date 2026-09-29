@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
@@ -72,18 +71,18 @@ export default function RemediationPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell>
+      <>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
           <Skeleton className="h-40 rounded-xl" />
           <Skeleton className="h-60 rounded-xl" />
         </div>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <LearnerPageHero
@@ -139,6 +138,6 @@ export default function RemediationPage() {
         </MotionSection>
       )}
 
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -14,7 +14,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -117,14 +116,14 @@ export default function SpeakingWarmupPage() {
 
   if (!sessionId) {
     return (
-      <LearnerDashboardShell>
+      <>
         <InlineAlert variant="error">Missing session id.</InlineAlert>
-      </LearnerDashboardShell>
+      </>
     );
   }
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="mx-auto max-w-2xl space-y-6 py-8">
         <header className="space-y-2">
           <p className="text-sm font-medium uppercase tracking-wide text-primary">
@@ -170,6 +169,6 @@ export default function SpeakingWarmupPage() {
           </Card>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

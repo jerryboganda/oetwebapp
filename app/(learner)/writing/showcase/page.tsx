@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Filter } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
@@ -46,7 +45,7 @@ export default function WritingShowcasePage() {
   }, [profession, letterType, t]);
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.showcase.pageTitle')}>
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow={t('writing.showcase.eyebrow')}
@@ -111,6 +110,6 @@ export default function WritingShowcasePage() {
           ))}
         </ul>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

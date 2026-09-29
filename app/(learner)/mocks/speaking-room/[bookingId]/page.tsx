@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Mic } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { createMockSpeakingExam } from '@/lib/api';
@@ -27,7 +26,7 @@ export default function SpeakingLiveRoomRedirectPage() {
   }, [bookingId, router]);
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="space-y-6">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/mocks/bookings')}>
           <ArrowLeft className="h-4 w-4" />
@@ -44,6 +43,6 @@ export default function SpeakingLiveRoomRedirectPage() {
           <InlineAlert variant="info">Preparing the two-card Speaking exam and consent gate...</InlineAlert>
         )}
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

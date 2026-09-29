@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Award, Lock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -321,7 +320,7 @@ function WritingMockSessionInner() {
   );
 
   return (
-    <LearnerDashboardShell pageTitle={t('writing.mocks.session.pageTitle')} distractionFree>
+    <>
       <div className="space-y-4 pb-32" aria-busy={!session}>
         <header
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
@@ -459,7 +458,7 @@ function WritingMockSessionInner() {
           onHighlightsChange={setPdfHighlights}
         />
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
 

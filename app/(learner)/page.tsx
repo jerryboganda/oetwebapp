@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { InlineAlert } from '@/components/ui/alert';
-import { LearnerDashboardShell } from '@/components/layout';
 import {
   LearnerDashboardLoadingCard,
   LearnerPageHero,
@@ -357,7 +356,7 @@ export default function Dashboard() {
     : null;
 
   return (
-    <LearnerDashboardShell pageTitle="Dashboard">
+    <>
       <div className="space-y-6">
         <PostLoginAppModal />
         {/* Keep the stable, useful dashboard context outside the authenticated
@@ -524,6 +523,6 @@ export default function Dashboard() {
         </div>
         </AsyncStateWrapper>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -57,7 +56,7 @@ export default function WritingCanonRuleDetailPage() {
   const personalCount = violations.length;
 
   return (
-    <LearnerDashboardShell pageTitle={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}>
+    <>
       <div className="space-y-6" aria-busy={!rule}>
         <LearnerPageHero
           eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
@@ -181,6 +180,6 @@ export default function WritingCanonRuleDetailPage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

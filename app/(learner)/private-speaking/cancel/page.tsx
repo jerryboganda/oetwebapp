@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -9,7 +8,7 @@ export default function PrivateSpeakingCancelPage() {
   const router = useRouter();
 
   return (
-    <LearnerDashboardShell>
+    <>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
       <div className="w-16 h-16 bg-danger/10 rounded-full flex items-center justify-center">
         <XCircle className="w-8 h-8 text-danger" />
@@ -30,6 +29,6 @@ export default function PrivateSpeakingCancelPage() {
         </Button>
       </div>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

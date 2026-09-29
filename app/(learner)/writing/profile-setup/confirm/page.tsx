@@ -4,7 +4,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ArrowLeft, ClipboardCheck } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -80,7 +79,7 @@ export default function ProfileSetupConfirmPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile: Confirm">
+    <>
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 4 of 4"
@@ -166,6 +165,6 @@ export default function ProfileSetupConfirmPage() {
           </div>
         </form>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }

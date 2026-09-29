@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Compass, CalendarDays, CheckCircle2, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -21,7 +20,7 @@ export default function WritingPathwayPage() {
   const currentStage = pathway?.currentStage ?? 'onboarding';
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Pathway">
+    <>
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Writing Pathway"
@@ -74,6 +73,6 @@ export default function WritingPathwayPage() {
           </div>
         </section>
       </div>
-    </LearnerDashboardShell>
+    </>
   );
 }
