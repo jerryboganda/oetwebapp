@@ -94,8 +94,10 @@ public sealed class AiGatewayService(
     internal const int GradingMaxTokens = 128_000; // claude-sonnet-5 output maximum
 
     internal static bool GradingMaxReasoning(string featureCode)
-        => string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase);
+        // Writing grading (claude-opus-5-5) runs effort "high" per the 2026-09-29
+        // owner directive — effort "max" on Claude 5 models previously consumed the
+        // whole token budget and returned empty grades. Speaking keeps max.
+        => string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase);
 
     public async Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
     {

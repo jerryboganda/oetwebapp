@@ -12,8 +12,8 @@
 import { createSidecarServer } from '../shared/http.mjs';
 import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
 
-const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-sonnet-5-5';
-const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'max').toLowerCase();
+const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-opus-5-5';
+const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'high').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
 
@@ -122,14 +122,9 @@ async function complete(body) {
       return { text, inputTokens, outputTokens };
     };
 
-    let out = await attempt(EFFORT);
-    let effortUsed = EFFORT;
-    if (!out.text.trim() && EFFORT === 'max') {
-      // Empty at max → retry once at high (the proven-working effort).
-      console.warn('[writing-ai:claude] empty completion at effort=max; retrying at high');
-      out = await attempt('high');
-      effortUsed = 'high';
-    }
+    // Single attempt at the configured effort. No max→high fallback — the owner
+    // pinned effort=high everywhere, which is the proven-working setting.
+    const out = await attempt(EFFORT);
     if (!out.text.trim()) throw new Error('claude returned empty completion');
 
     rollWeekIfNeeded();
@@ -146,8 +141,8 @@ async function complete(body) {
       content: [{ type: 'text', text: out.text }],
       stop_reason: 'end_turn',
       usage: { input_tokens: out.inputTokens, output_tokens: out.outputTokens },
-      // Lets the backend/admins see when the auto-guard kicked in.
-      effort: effortUsed,
+      // The effort the grade actually ran at (always the configured value now).
+      effort: EFFORT,
     };
   });
 }

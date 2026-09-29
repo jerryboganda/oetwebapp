@@ -55,7 +55,7 @@ public static class WritingSubscriptionProviders
     public const string ClaudeApi = "anthropic";
     // Level 3 — Codex subscription (sidecar over the codex CLI).
     public const string Codex = "writing-codex-sub";
-    public const string ClaudeModel = "claude-sonnet-5-5";
+    public const string ClaudeModel = "claude-opus-5-5";
     public const string CodexModel = "gpt-6-sol";
 
     public const string ModeAuto = "auto";
