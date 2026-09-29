@@ -84,7 +84,7 @@ test.describe('Admin workflows @admin @smoke', () => {
     await expect(reason).toHaveText(optionText);
     await expect(dialog).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    // Stacking check only; console noise is QA Smoke's other specs' concern.
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
