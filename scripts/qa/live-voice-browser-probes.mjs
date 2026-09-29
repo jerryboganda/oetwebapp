@@ -50,7 +50,8 @@ export function installProbes(provider) {
   };
 
   // One recording per patient audio stream (a card / session each): webm streams from
-  // different recorders cannot be concatenated.
+  // different recorders cannot be concatenated. startedAt (epoch ms) aligns a recording with
+  // the speech spans, e.g. to cut the patient's reply to a given candidate line.
   const recordings = [];
   const record = (stream) => {
     try {
@@ -58,14 +59,14 @@ export function installProbes(provider) {
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       recorder.start(1000);
-      recordings.push(chunks);
+      recordings.push({ chunks, startedAt: Date.now() });
     } catch { /* recording is best effort */ }
   };
-  window.__patientAudios = () => Promise.all(recordings.map(async (chunks) => {
+  window.__patientAudios = () => Promise.all(recordings.map(async ({ chunks, startedAt }) => {
     const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
     let binary = '';
     for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(binary);
+    return { startedAt, audio: btoa(binary) };
   }));
 
   // GPT-Live: the patient arrives as a WebRTC remote track.
