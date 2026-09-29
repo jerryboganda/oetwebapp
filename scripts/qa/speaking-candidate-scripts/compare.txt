@@ -1,0 +1,15 @@
+[after=10] Good morning. My name is Doctor Smith, one of the doctors here. Please have a seat. What brings you in today?
+[after=10] I'm sorry to hear that. When did you first notice these symptoms?
+[after=10] Could you describe the stomach cramps for me? Where exactly do you feel them?
+[after=10] Have you also noticed any wind, bloating or diarrhoea after eating dairy foods?
+[after=10] Have you had any stomach problems recently, for example a stomach bug or gastroenteritis?
+[after=10] How long did that illness last, and have you recovered from it now?
+[after=10] Is it all right if I explain what I think is happening?
+[after=10] Just to check I explained clearly, could you tell me in your own words what you understand so far?
+[after=10] Based on what you have told me, I think you have a condition called secondary lactose intolerance.
+[after=10] When you had gastroenteritis, the infection irritated the lining of your gut. That lining makes an enzyme called lactase, which digests the sugar in milk.
+[after=10] Some people think it cannot be lactose intolerance if nobody in their family has it. Actually, this type is not inherited. It is caused by the recent infection.
+[after=10] The good news is that it is usually temporary. It should settle within several weeks. In the meantime, it would help to cut down on milk and dairy.
+[after=18] Just to make sure I explained clearly, could you tell me in your own words what is causing your symptoms?
+[after=10] If the symptoms do not improve within six weeks, please come back and we can arrange some further tests. Is there anything else you would like to ask me today?
+Thank you for coming in. Take care, and I will see you at your follow-up appointment.

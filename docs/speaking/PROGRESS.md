@@ -2,6 +2,8 @@
 
 > **Current status (2026-05-29)**: historical Speaking hardening ledger. The current cross-project source of pending work is the root [`PROGRESS.md`](../../PROGRESS.md) (the old `STATUS/REMAINING-WORK.md` was removed in 81506d1e0), with security sign-off tracked separately in [`../security/speaking/checklist.md`](../security/speaking/checklist.md).
 
+> **Live voice agent (Sept 2026)**: providers, default, limits, E2E harness and open items are recorded in [live-voice.md](./live-voice.md).
+
 Last updated: 2026-05-07
 Mode: Ralph-style hardening loop
 Linked PRD: ./PRD.md

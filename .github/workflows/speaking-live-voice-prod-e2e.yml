@@ -5,6 +5,10 @@ name: Speaking live voice E2E (production)
 # the real live voice provider (Gemini Live or OpenAI GPT-Live). Uses the
 # dedicated QA learner account. Emits provider usage, latency, stability and
 # the patient's audio as artifacts so providers can be compared like for like.
+# One run at a time: the QA learner has a single session and every run bills real AI usage.
+concurrency:
+  group: speaking-live-voice-prod-e2e
+  cancel-in-progress: false
 on:
   workflow_dispatch:
     inputs:
@@ -18,9 +22,9 @@ on:
         required: false
         default: rpc-54dc0a57ec3d4a97978b690379edd2d9
       script:
-        description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt)
+        description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt). compare and full-lactose are written for the lactose practice card, not for exam mode.
         type: choice
-        options: [short, full-lactose, generic, smoke]
+        options: [short, full-lactose, generic, smoke, compare]
         default: short
       voice:
         description: Candidate TTS voice (piper = natural neural en-GB; espeak = robotic)
@@ -28,8 +32,9 @@ on:
         options: [piper, espeak]
         default: piper
       speak_seconds:
-        description: Seconds of live conversation before submitting (practice mode)
-        default: '110'
+        description: Seconds of live conversation before submitting (practice mode). Blank = the candidate tape's last speech + 10 s (max 280, the app auto-ends at 5:00).
+        required: false
+        default: ''
       voice_provider:
         description: Live voice provider for this run (blank = production primary)
         type: choice
@@ -41,11 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Reject a card-specific script in exam mode
+        run: |
+          if [ "${{ inputs.mode }}" = exam ] && { [ "${{ inputs.script }}" = compare ] || [ "${{ inputs.script }}" = full-lactose ]; }; then
+            echo "::error::compare and full-lactose are written for the lactose practice card; exam mode draws its own cards. Use smoke, generic or short."
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Candidate voice (16 kHz mono, 8 s gap after each line unless [after=N]) + timeline
+      - name: Candidate voice (16 kHz mono, 6 s lead-in, 8 s gap after each line unless [after=N]) + timeline
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng sox >/dev/null
           if [ "${{ inputs.voice }}" = piper ]; then
@@ -55,7 +66,11 @@ jobs:
             curl -sSL -o voice.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx
             curl -sSL -o voice.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json
           fi
-          i=0; t=0; echo '[' > timeline.json
+          # The fake mic starts when the page opens the microphone, 1-2.5 s before the provider is
+          # live: 6 s of leading silence keeps the greeting from being clipped (and the tape plays once).
+          lead=6
+          sox -n -r 16000 -c 1 -b 16 lead.wav trim 0 $lead
+          i=0; t=$lead; echo '[' > timeline.json
           while IFS= read -r line; do
             [ -z "$line" ] && continue
             # "[after=N] text" = N seconds of silence after this line (barge-in / pause tests).
@@ -75,7 +90,7 @@ jobs:
             i=$((i+1))
           done < "scripts/qa/speaking-candidate-scripts/${{ inputs.script }}.txt"
           echo ']' >> timeline.json
-          sox $(ls p*.wav | sort -V) candidate.wav
+          sox lead.wav $(ls p*.wav | sort -V) candidate.wav
           soxi candidate.wav
           node -e "JSON.parse(require('fs').readFileSync('timeline.json','utf8'))"
       - name: Playwright Chromium
@@ -93,7 +108,10 @@ jobs:
           VOICE_PROVIDER: ${{ inputs.voice_provider }}
           CANDIDATE_WAV: ${{ github.workspace }}/candidate.wav
           CANDIDATE_TIMELINE: ${{ github.workspace }}/timeline.json
-        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && node /tmp/pw/e2e.mjs
+          SCRIPT_NAME: ${{ inputs.script }}
+          VOICE: ${{ inputs.voice }}
+          SCRIPT_FILE: scripts/qa/speaking-candidate-scripts/${{ inputs.script }}.txt
+        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && cp scripts/qa/live-voice-browser-probes.mjs /tmp/pw/ && node /tmp/pw/e2e.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

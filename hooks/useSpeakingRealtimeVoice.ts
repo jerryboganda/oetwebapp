@@ -137,13 +137,6 @@ function audioRate(mimeType: unknown): number {
   return match ? Number(match[1]) || 24_000 : 24_000;
 }
 
-/**
- * Appends a transcript fragment to the segment list. Consecutive fragments from
- * one speaker extend one segment. With a provider timeline interval (`spoken`),
- * a fragment spoken before the other speaker's latest segment began (late
- * transcription) joins its own speaker's previous segment instead of splitting
- * it. Returns true for such a late fragment.
- */
 // The server rejects any transcript segment or saved turn text over 4,000
 // characters; stay well under it. Production 26 Sep 2026: a patient that never
 // replied left the candidate's whole 5 minutes in one segment, the save failed
@@ -151,6 +144,52 @@ function audioRate(mimeType: unknown): number {
 export const MAX_SEGMENT_CHARS = 1_500;
 const MAX_PENDING_TURN_CHARS = 3_000;
 
+// GPT-Live is full duplex and transcribes the candidate a beat behind real time, so a
+// sentence's last word can arrive after the patient's "Uh." / "Yeah," has begun. Its own
+// start_ms can then place that word at or just after the backchannel, so timing alone
+// cannot order it (production 26 Sep 2026, saved transcript: "...How can I help you" /
+// patient "Uh." / candidate "today", 12 such splits in one two-card mock). Replaying that
+// run: transcription trails the audio by ~1.1 s, so the tail (and the rest of the sentence)
+// lands after the backchannel whatever start_ms says.
+const BACKCHANNEL_MAX_WORDS = 3;
+const MAX_TAIL_GAP_MS = 2_000;
+const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * True when a fragment belongs to its own speaker's previous segment although the other
+ * speaker's latest segment has already started: the provider timeline places it before
+ * that segment began, or the other speaker's segment is only a short backchannel and the
+ * fragment continues the sentence the speaker was in the middle of (each fragment follows
+ * the previous one within MAX_TAIL_GAP_MS, so a whole continued sentence rejoins). A
+ * continuation starts lowercase or with punctuation (", I would like..." / ". Could you...");
+ * a genuine reply after a backchannel starts a capitalised sentence, so it stays a new
+ * segment. Only mid-sentence tails are rejoined; whole sentences keep the provider's order.
+ * The closing-punctuation guard matters for patient text (GPT-Live's candidate transcript has none).
+ */
+export function isLateFragment(
+  segments: readonly LiveVoiceTranscriptSegmentInput[],
+  speaker: RealtimeVoiceSpeaker,
+  fragment: string,
+  at: { startMs: number; endMs: number },
+): boolean {
+  const last = segments[segments.length - 1];
+  if (last === undefined || last.speaker === speaker) return false;
+  if (at.startMs < last.startMs) return true;
+  const previous = segments[segments.length - 2];
+  return previous !== undefined
+    && previous.speaker === speaker
+    && wordCount(last.text) <= BACKCHANNEL_MAX_WORDS
+    && /^\s*[a-z,;:.?!]/.test(fragment)
+    && !/[.?!]\s*$/.test(previous.text)
+    && at.startMs - previous.endMs <= MAX_TAIL_GAP_MS;
+}
+
+/**
+ * Appends a transcript fragment to the segment list. Consecutive fragments from
+ * one speaker extend one segment. With a provider timeline interval (`spoken`),
+ * a late fragment (see `isLateFragment`) joins its own speaker's previous segment
+ * instead of splitting it. Returns true for such a late fragment.
+ */
 export function appendTranscriptFragment(
   segments: LiveVoiceTranscriptSegmentInput[],
   speaker: RealtimeVoiceSpeaker,
@@ -160,7 +199,7 @@ export function appendTranscriptFragment(
   spoken = false,
 ): boolean {
   const last = segments[segments.length - 1];
-  const late = spoken && last !== undefined && last.speaker !== speaker && at.startMs < last.startMs;
+  const late = spoken && isLateFragment(segments, speaker, fragment, at);
   const candidate = late
     ? [...segments].reverse().find((segment) => segment.speaker === speaker)
     : last?.speaker === speaker ? last : undefined;
@@ -207,7 +246,6 @@ export function useSpeakingRealtimeVoice(
   const pendingCandidateRef = useRef('');
   const pendingPatientRef = useRef('');
   const pendingStartedAtRef = useRef<number | null>(null);
-  const patientStartMsRef = useRef<number | null>(null);
   const turnIndexRef = useRef(0);
   const segmentsRef = useRef<LiveVoiceTranscriptSegmentInput[]>([]);
   const flushPromiseRef = useRef(Promise.resolve());
@@ -320,7 +358,6 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
-    patientStartMsRef.current = null;
     return {
       provider,
       providerSessionId,
@@ -403,16 +440,15 @@ export function useSpeakingRealtimeVoice(
     const spoken = typeof value.start_ms === 'number' && typeof value.end_ms === 'number'
       ? { startMs: value.start_ms, endMs: value.end_ms }
       : undefined;
-    // A late candidate fragment (spoken before the patient's reply began) still
-    // belongs to the current turn; only new candidate speech closes it.
-    const lateCandidate = spoken !== undefined && patientStartMsRef.current !== null && spoken.startMs < patientStartMsRef.current;
-    if (speaker === 'candidate' && pendingPatientRef.current.trim() && !lateCandidate) void queueFlush();
+    // A late candidate fragment (the tail of a sentence the patient's backchannel or
+    // reply already overtook) still belongs to the current turn; only new candidate
+    // speech after the patient has spoken closes it.
+    const lastSegment = segmentsRef.current[segmentsRef.current.length - 1];
+    const lateCandidate = spoken !== undefined && isLateFragment(segmentsRef.current, speaker, delta, spoken);
+    if (speaker === 'candidate' && pendingPatientRef.current.trim() && lastSegment?.speaker === 'patient' && !lateCandidate) void queueFlush();
     addCaption(speaker, delta, true, spoken);
     if (speaker === 'candidate') pendingCandidateRef.current += delta;
-    else {
-      if (!pendingPatientRef.current) patientStartMsRef.current = spoken?.startMs ?? null;
-      pendingPatientRef.current += delta;
-    }
+    else pendingPatientRef.current += delta;
     flushIfLong();
     setPhase(speaker === 'patient' ? 'speaking' : 'listening');
   }, [addCaption, flushIfLong, queueFlush]);
@@ -722,7 +758,6 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
-    patientStartMsRef.current = null;
     segmentsRef.current = [];
     turnIndexRef.current = 0;
     stoppingRef.current = false;

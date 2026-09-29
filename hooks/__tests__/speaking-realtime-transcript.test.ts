@@ -38,6 +38,108 @@ describe('appendTranscriptFragment', () => {
     expect(segments).toHaveLength(3);
   });
 
+  it('rejoins the last word when GPT-Live times it at or after the patient backchannel', () => {
+    // Production 26 Sep 2026 (two-card mock, Card A, saved transcript): the provider timed
+    // "today" at/after the patient's "Uh.", so start_ms alone could not order it.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Mr. Smith, one of the doctors here. Please have a seat. How can I help', true, at(0, 4_800), true);
+    appendTranscriptFragment(segments, 'candidate', ' you', true, at(4_800, 4_950), true);
+    appendTranscriptFragment(segments, 'patient', ' Uh.', true, at(5_160, 5_300), true);
+    const late = appendTranscriptFragment(segments, 'candidate', ' today', true, at(5_330, 5_450), true);
+    appendTranscriptFragment(segments, 'patient', ' Well, I was lifting weights this morning', true, at(5_340, 6_500), true);
+    expect(late).toBe(true);
+    expect(segments.map((s) => [s.speaker, s.text])).toEqual([
+      ['candidate', 'Mr. Smith, one of the doctors here. Please have a seat. How can I help you today'],
+      ['patient', ' Uh. Well, I was lifting weights this morning'],
+    ]);
+  });
+
+  it('keeps a patient backchannel whole when a candidate tail lands inside it', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Can you tell', true, at(0, 900), true);
+    appendTranscriptFragment(segments, 'patient', ' Mm-h', true, at(1_000, 1_200), true);
+    const late = appendTranscriptFragment(segments, 'candidate', ' me', true, at(1_050, 1_250), true);
+    appendTranscriptFragment(segments, 'patient', 'mm.', true, at(1_100, 1_300), true);
+    expect(late).toBe(true);
+    expect(segments.map((s) => [s.speaker, s.text])).toEqual([
+      ['candidate', 'Can you tell me'],
+      ['patient', ' Mm-hmm.'],
+    ]);
+  });
+
+  it('rejoins a tail that starts with punctuation', () => {
+    // Replay of the 26 Sep 2026 mock: GPT-Live sent ", I would like..." and ". Could you..." as
+    // separate deltas after a patient backchannel.
+    for (const [first, backchannel, tail] of [
+      ['Based on what you have told me', ' Mm-hmm.', ', I would like us to agree on a plan'],
+      ["I'm sorry to hear", ' [sigh]', '. Could you tell me everything'],
+    ]) {
+      const segments: LiveVoiceTranscriptSegmentInput[] = [];
+      appendTranscriptFragment(segments, 'candidate', first, true, at(0, 1_000), true);
+      appendTranscriptFragment(segments, 'patient', backchannel, true, at(1_100, 1_400), true);
+      expect(appendTranscriptFragment(segments, 'candidate', tail, true, at(1_450, 1_800), true)).toBe(true);
+      expect(segments.map((s) => s.speaker)).toEqual(['candidate', 'patient']);
+      expect(segments[0].text).toBe(first + tail);
+    }
+  });
+
+  it('rejoins the whole rest of a sentence that the backchannel interrupted', () => {
+    // Replay of the 26 Sep 2026 mock: "I'm sorry to hear" / patient "[sigh]" / then "that. Could you tell me
+    // everything that has happened..." arrived word by word after the backchannel.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', " I'm sorry to hear", true, at(0, 1_000), true);
+    appendTranscriptFragment(segments, 'patient', ' [sigh]', true, at(1_100, 1_400), true);
+    const tail = [' that', '. Could', ' you', ' tell', ' me', ' everything', ' that has', ' happened', ' from', ' the', ' very', ' beginning'];
+    tail.forEach((word, i) => {
+      expect(appendTranscriptFragment(segments, 'candidate', word, true, at(1_450 + i * 250, 1_650 + i * 250), true)).toBe(true);
+    });
+    appendTranscriptFragment(segments, 'patient', ' Well, it started this morning', true, at(4_600, 5_500), true);
+    expect(segments.map((s) => [s.speaker, s.text])).toEqual([
+      ['candidate', " I'm sorry to hear that. Could you tell me everything that has happened from the very beginning"],
+      ['patient', ' [sigh] Well, it started this morning'],
+    ]);
+  });
+
+  it('keeps a tail that starts long after the previous candidate fragment as its own segment', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Could you tell me', true, at(0, 900), true);
+    appendTranscriptFragment(segments, 'patient', ' Uh.', true, at(1_000, 1_200), true);
+    expect(appendTranscriptFragment(segments, 'candidate', ' more', true, at(3_100, 3_200), true)).toBe(false);
+    expect(segments).toHaveLength(3);
+  });
+
+  it('does not merge a genuine reply after a backchannel', () => {
+    const cases: Array<[string, string, string]> = [
+      // capitalised new sentence: whole sentences keep the provider's order (only mid-sentence tails are rejoined)
+      ['Could you tell me more about the pain', ' Sharp.', ' Okay, and where exactly'],
+      // the candidate's sentence was already finished
+      ['How long has that been going on?', ' A week.', ' thanks'],
+      // the other speaker's segment is a real answer, not a backchannel
+      ['Tell me more', ' No, not really sure', ' and then'],
+    ];
+    for (const [first, reply, next] of cases) {
+      const segments: LiveVoiceTranscriptSegmentInput[] = [];
+      appendTranscriptFragment(segments, 'candidate', first, true, at(0, 2_000), true);
+      appendTranscriptFragment(segments, 'patient', reply, true, at(2_200, 2_500), true);
+      expect(appendTranscriptFragment(segments, 'candidate', next, true, at(2_600, 3_000), true)).toBe(false);
+      expect(segments).toHaveLength(3);
+    }
+  });
+
+  it('keeps a barge-in and a long-stale sentence separate', () => {
+    const barge: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(barge, 'candidate', 'Tell me more', true, at(0, 1_000), true);
+    appendTranscriptFragment(barge, 'patient', ' I felt a sharp pain in my chest yesterday and it spread', true, at(1_200, 4_000), true);
+    expect(appendTranscriptFragment(barge, 'candidate', ' and then', true, at(3_000, 3_400), true)).toBe(false);
+    expect(barge).toHaveLength(3);
+
+    const stale: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(stale, 'candidate', 'Take a seat', true, at(0, 500), true);
+    appendTranscriptFragment(stale, 'patient', ' Thanks.', true, at(9_000, 9_400), true);
+    expect(appendTranscriptFragment(stale, 'candidate', ' please', true, at(9_500, 9_700), true)).toBe(false);
+    expect(stale).toHaveLength(3);
+  });
+
   it('keeps Gemini chunks space-joined without provider timing', () => {
     const segments: LiveVoiceTranscriptSegmentInput[] = [];
     appendTranscriptFragment(segments, 'patient', 'I have', false, at(10));
