@@ -49,8 +49,8 @@ services:
       TZ: UTC
       PORT: "8080"
       CLAUDE_CONFIG_DIR: /home/agent/.claude
-      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_MODEL:-claude-opus-5-5}
-      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_EFFORT:-high}
+      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_MODEL:-claude-sonnet-5-5}
+      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_EFFORT:-max}
       WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_WEEKLY_TOKEN_CAP:-0}
       # Reach the vendor through the shared egress allowlist proxy.
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}

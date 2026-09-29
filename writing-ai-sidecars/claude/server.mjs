@@ -12,8 +12,8 @@
 import { createSidecarServer } from '../shared/http.mjs';
 import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
 
-const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-opus-5-5';
-const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'high').toLowerCase();
+const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-sonnet-5-5';
+const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'max').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
 
@@ -77,53 +77,65 @@ async function complete(body) {
   return mutex.run(async () => {
     const model = typeof body.model === 'string' && body.model ? body.model : MODEL;
     const prompt = buildPrompt(body);
-    // `-p` with no positional arg reads the prompt from stdin. Tools disabled so
-    // the model only reads the prompt and answers — no FS/shell access.
-    const args = [
-      '-p',
-      '--output-format', 'json',
-      '--model', model,
-      '--effort', EFFORT,
-      '--allowedTools', '',
-    ];
 
-    let result;
-    try {
-      result = await runCli('claude', args, { timeoutMs: TIMEOUT_MS, input: prompt });
-    } catch (err) {
-      throw err;
+    // Auto-guard (owner directive 2026-09-29): run at the configured effort
+    // ("max"). Max thinking can consume the whole completion budget and emit an
+    // empty answer — if that happens, retry the SAME call at "high" so the
+    // subscription is not burned on an empty grade. The retry is reported via
+    // the `x-effort-fallback` field in the response so the backend can see it.
+    const attempt = async (effort) => {
+      // `-p` with no positional arg reads the prompt from stdin. Tools disabled so
+      // the model only reads the prompt and answers — no FS/shell access.
+      const args = [
+        '-p',
+        '--output-format', 'json',
+        '--model', model,
+        '--effort', effort,
+        '--allowedTools', '',
+      ];
+
+      const result = await runCli('claude', args, { timeoutMs: TIMEOUT_MS, input: prompt });
+      const combined = `${result.stdout}\n${result.stderr}`;
+      if (result.code !== 0 && looksLikeQuotaExceeded(combined)) {
+        throw new QuotaExceededError(`Claude subscription quota/rate limit: ${combined.slice(-400)}`);
+      }
+      if (result.code !== 0) {
+        throw new Error(`claude exited ${result.code}: ${combined.slice(-400)}`);
+      }
+
+      const events = parseJsonLines(result.stdout);
+      const final = events.find((e) => e && (e.type === 'result' || e.result)) || events[events.length - 1];
+      if (!final) throw new Error('claude returned no parseable result event');
+
+      if (final.is_error === true || final.subtype === 'error') {
+        const errText = final.result || final.error || combined;
+        if (looksLikeQuotaExceeded(String(errText))) throw new QuotaExceededError(String(errText).slice(-400));
+        throw new Error(`claude error: ${String(errText).slice(-400)}`);
+      }
+
+      const text = typeof final.result === 'string'
+        ? final.result
+        : (typeof final.text === 'string' ? final.text : '');
+      const usage = final.usage || final.modelUsage || {};
+      const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0) || 0;
+      const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0) || 0;
+      return { text, inputTokens, outputTokens };
+    };
+
+    let out = await attempt(EFFORT);
+    let effortUsed = EFFORT;
+    if (!out.text.trim() && EFFORT === 'max') {
+      // Empty at max → retry once at high (the proven-working effort).
+      console.warn('[writing-ai:claude] empty completion at effort=max; retrying at high');
+      out = await attempt('high');
+      effortUsed = 'high';
     }
-    const combined = `${result.stdout}\n${result.stderr}`;
-    if (result.code !== 0 && looksLikeQuotaExceeded(combined)) {
-      throw new QuotaExceededError(`Claude subscription quota/rate limit: ${combined.slice(-400)}`);
-    }
-    if (result.code !== 0) {
-      throw new Error(`claude exited ${result.code}: ${combined.slice(-400)}`);
-    }
-
-    const events = parseJsonLines(result.stdout);
-    const final = events.find((e) => e && (e.type === 'result' || e.result)) || events[events.length - 1];
-    if (!final) throw new Error('claude returned no parseable result event');
-
-    if (final.is_error === true || final.subtype === 'error') {
-      const errText = final.result || final.error || combined;
-      if (looksLikeQuotaExceeded(String(errText))) throw new QuotaExceededError(String(errText).slice(-400));
-      throw new Error(`claude error: ${String(errText).slice(-400)}`);
-    }
-
-    const text = typeof final.result === 'string'
-      ? final.result
-      : (typeof final.text === 'string' ? final.text : '');
-    if (!text.trim()) throw new Error('claude returned empty completion');
-
-    const usage = final.usage || final.modelUsage || {};
-    const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0) || 0;
-    const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0) || 0;
+    if (!out.text.trim()) throw new Error('claude returned empty completion');
 
     rollWeekIfNeeded();
     state.requestsThisWeek += 1;
-    state.inputTokensThisWeek += inputTokens;
-    state.outputTokensThisWeek += outputTokens;
+    state.inputTokensThisWeek += out.inputTokens;
+    state.outputTokensThisWeek += out.outputTokens;
 
     // Anthropic Messages shape.
     return {
@@ -131,9 +143,11 @@ async function complete(body) {
       type: 'message',
       role: 'assistant',
       model,
-      content: [{ type: 'text', text }],
+      content: [{ type: 'text', text: out.text }],
       stop_reason: 'end_turn',
-      usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+      usage: { input_tokens: out.inputTokens, output_tokens: out.outputTokens },
+      // Lets the backend/admins see when the auto-guard kicked in.
+      effort: effortUsed,
     };
   });
 }
