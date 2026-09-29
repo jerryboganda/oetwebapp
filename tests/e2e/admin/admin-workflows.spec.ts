@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 test.describe('Admin workflows @admin @smoke', () => {
   test('admin can create a new content draft and reach the seeded editor flow', async ({ page }, testInfo) => {
@@ -44,6 +46,45 @@ test.describe('Admin workflows @admin @smoke', () => {
     await expect(page.getByTestId('ai-credit-summary')).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
+  test('admin Select inside a Dialog renders above the dialog and is clickable', async ({ page, request }, testInfo) => {
+    if (testInfo.project.name !== 'chromium-admin') {
+      test.skip();
+    }
+
+    // Single-active-session: the cached admin state may already be revoked by
+    // another shard, so mint a fresh session first (as visual-qa.spec.ts does).
+    const route = '/admin/billing/scholarships';
+    await recoverBrowserSession(page, request, 'admin', route);
+    const diagnostics = observePage(page);
+
+    await page.goto(route);
+    await waitForSessionGuardToClear(page, { recover: () => recoverBrowserSession(page, request, 'admin', route) });
+    const grantButton = page.getByRole('button', { name: /^grant scholarship$/i });
+    const permissionDenied = page.getByRole('heading', { name: /admin permission required/i });
+    await expect(grantButton.or(permissionDenied)).toBeVisible({ timeout: 30000 });
+    test.skip(await permissionDenied.isVisible(), 'Seeded admin lacks the billing permission for /admin/billing/scholarships.');
+
+    await grantButton.click();
+    const dialog = page.getByRole('dialog', { name: /grant scholarship/i });
+    await expect(dialog).toBeVisible();
+
+    const reason = dialog.getByRole('combobox', { name: /^reason$/i });
+    const current = ((await reason.textContent()) ?? '').trim();
+    await reason.click();
+    // First option that differs from the current value, so the value check proves the click landed.
+    const options = page.getByRole('listbox').getByRole('option');
+    const option = (current ? options.filter({ hasNotText: current }) : options).first();
+    const optionText = ((await option.textContent()) ?? '').trim();
+    await option.click();
+
+    await expect(reason).toHaveText(optionText);
+    await expect(dialog).toBeVisible();
+
+    // Stacking check only; console noise is QA Smoke's other specs' concern.
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

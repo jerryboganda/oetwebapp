@@ -109,6 +109,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | Inputs | `form-controls`: soft surface, 1px border, primary focus ring | Label, hint and error wired with aria |
 | Tabs | Segmented pill with a moving active pill | Arrow/Home/End keys |
 | Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
+| Overlays | admin Dialog/AlertDialog use `--z-modal`; Select/DropdownMenu use `--z-popover` | One `--z-*` scale in `app/globals.css` |
 | Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
 | Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
