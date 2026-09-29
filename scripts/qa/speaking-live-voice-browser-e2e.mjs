@@ -46,7 +46,7 @@ await context.addInitScript(installProbes, VOICE_PROVIDER);
 const page = await context.newPage();
 const transcript = { candidate: '', patient: '' };
 const stability = { providerErrors: [], socketsOpened: 0, socketCloses: [], sessionClosed: [], goAway: [], wsClose: [], rtcStates: [] };
-const gemini = { usage: [], audioChunks: [], audioAt: [] };
+const gemini = { usage: [], audioChunks: [], audioAt: [], words: [] };
 const providerCalls = [];
 page.on('request', (r) => { const m = r.url().match(/\/realtime\/sessions\/[^/]+\/(openai\/offer|gemini\/token)/); if (m) providerCalls.push(m[1]); });
 page.on('websocket', (ws) => {
@@ -61,8 +61,8 @@ page.on('websocket', (ws) => {
       if (v.goAway) stability.goAway.push({ at, ...v.goAway });
       if (v.usageMetadata) gemini.usage.push({ at, ...v.usageMetadata });
       const sc = v.serverContent;
-      if (sc?.inputTranscription?.text) transcript.candidate += sc.inputTranscription.text;
-      if (sc?.outputTranscription?.text) transcript.patient += sc.outputTranscription.text;
+      if (sc?.inputTranscription?.text) { transcript.candidate += sc.inputTranscription.text; gemini.words.push({ at, who: 'candidate', text: sc.inputTranscription.text, startMs: null, endMs: null }); }
+      if (sc?.outputTranscription?.text) { transcript.patient += sc.outputTranscription.text; gemini.words.push({ at, who: 'patient', text: sc.outputTranscription.text, startMs: null, endMs: null }); }
       for (const part of sc?.modelTurn?.parts ?? []) {
         if (part.inlineData?.data) { gemini.audioChunks.push(Buffer.from(part.inlineData.data, 'base64')); gemini.audioAt.push(at); }
       }
@@ -98,7 +98,11 @@ let examDto = null;
 page.on('response', async (r) => {
   const url = r.url();
   for (const m of url.matchAll(/\/sessions\/(sps_[a-f0-9]+)/g)) sessionIds.add(m[1]);
-  if (r.status() >= 400 && /oetwithdrhesham|googleapis|openai/.test(url)) errors.http.push(`${r.status()} ${r.request().method()} ${redact(url)}`);
+  if (r.status() >= 400 && /oetwithdrhesham|googleapis|openai/.test(url)) {
+    // The app's own error code (e.g. live_voice_provider_unavailable) says why, without leaking a body.
+    const code = /oetwithdrhesham/.test(url) ? (await r.json().catch(() => null))?.code : null;
+    errors.http.push(`${r.status()} ${r.request().method()} ${redact(url)}${typeof code === 'string' ? ` ${code}` : ''}`);
+  }
   if (/\/v1\/speaking\/exams\/[^/?]+$/.test(url) && r.ok()) {
     examDto = await r.json().catch(() => examDto);
     // A card's session id is null until the card is revealed: keep every one seen.
@@ -280,7 +284,14 @@ async function startLive(label) {
   // Auto-start may already be connecting (button shown but disabled); click only when needed.
   if (await start.isEnabled({ timeout: 2_000 }).catch(() => false)) await start.click({ timeout: 5_000 }).catch(() => undefined);
   const t0 = Date.now();
-  await page.getByText(/Live — the patient is listening|Patient speaking/).waitFor({ timeout: 45_000 });
+  // Fail fast, with the reason, when the provider refuses the session (production 29 Sep: OpenAI 429).
+  const connected = page.getByText(/Live — the patient is listening|Patient speaking/).waitFor({ timeout: 45_000 }).then(() => 'live');
+  const refused = page.getByText(/could not start this conversation/i).waitFor({ timeout: 45_000 }).then(() => 'refused');
+  const outcome = await Promise.race([connected, refused]).catch(() => 'timeout');
+  connected.catch(() => undefined);
+  refused.catch(() => undefined);
+  if (outcome === 'refused') throw new Error(`${label}: the live voice provider refused to start the conversation (see metrics.errors.http).`);
+  if (outcome !== 'live') throw new Error(`${label}: live voice did not connect within 45 s.`);
   metrics[`${label}ConnectMs`] = Date.now() - t0;
   log(`${label}: live voice connected`);
 }
@@ -316,7 +327,11 @@ async function openAiUsage() {
 // The patient's audio exactly as audible, one webm per card / session (both providers).
 async function savePatientAudio(name) {
   const audios = await page.evaluate(() => window.__patientAudios?.()).catch(() => null);
-  (audios ?? []).forEach((audio, i) => { if (audio) fs.writeFileSync(`${out}/${name}-${i + 1}.webm`, Buffer.from(audio, 'base64')); });
+  (audios ?? []).forEach((rec, i) => {
+    if (!rec?.audio) return;
+    fs.writeFileSync(`${out}/${name}-${i + 1}.webm`, Buffer.from(rec.audio, 'base64'));
+    fs.writeFileSync(`${out}/${name}-${i + 1}.json`, JSON.stringify({ startedAt: rec.startedAt }));
+  });
 }
 
 // The results page loads the saved transcript itself (the response handler captures it); if that
@@ -413,6 +428,7 @@ try {
     await page.waitForTimeout(speakSeconds * 1000);
     await shot('4-active-after-conversation');
     const before = await readLive();
+    metrics.micStartedAt = before.micStartedAt;
     await snapshot();
     log('provider calls:', providerCalls.join(', ') || '(none)', '| data-channel events:', before.events.length);
     if (VOICE_PROVIDER && !providerCalls.includes(VOICE_PROVIDER === 'openai' ? 'openai/offer' : 'gemini/token')) {
@@ -469,9 +485,9 @@ try {
   // Timed words + speech spans, to read what was said at each barge-in / overlap. start/end are
   // the provider's own timeline (GPT-Live start_ms/end_ms), kept to calibrate transcript ordering.
   fs.writeFileSync(`${out}/timeline-events.json`, JSON.stringify({
-    words: events.filter((e) => /transcript\.delta$/.test(e.type)).map((e) => ({
+    words: events.length ? events.filter((e) => /transcript\.delta$/.test(e.type)).map((e) => ({
       at: e.__at, who: e.type.includes('input') ? 'candidate' : 'patient', text: e.delta, startMs: e.start_ms ?? null, endMs: e.end_ms ?? null,
-    })),
+    })) : gemini.words,
     eventTypes: events.reduce((acc, e) => ({ ...acc, [e.type]: (acc[e.type] ?? 0) + 1 }), {}),
     speechEvents: events.filter((e) => /speech|interrupt|cancel|turn/i.test(e.type)).map((e) => ({ at: e.__at, type: e.type })),
     candidateSpans: merge(docs.flatMap((d) => d.mic)),
