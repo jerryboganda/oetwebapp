@@ -54,16 +54,17 @@ function headerRightEdge(page: Page) {
 
 /** In the header, or (learner, below md) at the top of the menu drawer. */
 function searchTrigger(page: Page) {
-  return page.getByRole('banner').or(page.locator('#mobile-menu')).getByRole('button', { name: /^search/i });
+  // Staff shells render two TopNavs (one hidden per breakpoint): only the visible one counts.
+  return page.getByRole('banner').or(page.locator('#mobile-menu')).getByRole('button', { name: /^search/i }).filter({ visible: true }).first();
 }
 
 async function openFromTrigger(page: Page) {
   const trigger = searchTrigger(page);
-  const menu = page.getByRole('button', { name: /open menu/i });
+  const menu = page.getByRole('button', { name: /open menu/i }).filter({ visible: true }).first();
   // Wait for the header to render one of them rather than counting once.
-  await expect(trigger.or(menu).first()).toBeVisible({ timeout: 30_000 });
-  if (!(await trigger.first().isVisible())) await menu.click();
-  await trigger.first().click();
+  await expect(trigger.or(menu)).toBeVisible({ timeout: 30_000 });
+  if (!(await trigger.isVisible())) await menu.click();
+  await trigger.click();
 }
 
 test.describe('Command palette @visual', () => {
@@ -129,13 +130,15 @@ test.describe('Command palette @visual', () => {
     await recoverBrowserSession(page, request, role!, start);
     await openShell(page, request, role!, start);
     const dialog = page.getByRole('dialog', { name: 'Search' });
+    const trigger = searchTrigger(page);
+    // The trigger renders with the palette, so the hotkey listener is mounted.
+    await expect(trigger).toBeVisible({ timeout: 30_000 });
 
     await page.keyboard.press('Control+k');
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Control+k');
     await expect(dialog).toBeHidden();
 
-    const trigger = searchTrigger(page);
     await trigger.click();
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
