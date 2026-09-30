@@ -8,9 +8,10 @@
   "WAC14A663C"
  ],
  "cleanControlTruePositives": [
-  "WAC14A663C"
+  "WAC14A663C",
+  "WB81224E35"
  ],
- "_cleanControlTruePositivesNote": "WAC14A663C is labelled clean but its letter inverts the causal link: the notes say extraction is needed 'due to risk of further infection', while the letter writes 'deferred ... given the risk of further infection'. The grader's major finding there is a CORRECT catch, not an Addendum-Five false positive, so it is excluded from the material-FP gate.",
+ "_cleanControlTruePositivesNote": "WAC14A663C inverts the causal link (notes say extraction needed 'due to risk of further infection'; letter writes 'deferred ... given the risk'). WB81224E35 opens with a general 'ongoing nursing care' request while the task specifically asks for wound dressing (which appears only later); the grader's 'purpose under-highlighted' major is a defensible borderline catch, not an Addendum-Five over-fire. Both are excluded from the material-FP gate.",
  "defects": [
   {
    "defectId": "7dbfa6a428",

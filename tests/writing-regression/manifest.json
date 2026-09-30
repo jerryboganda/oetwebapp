@@ -1,21 +1,21 @@
 {
  "version": "writing-regression.v1",
- "generatedAt": "2026-09-29T20:47:47Z",
- "gitSha": "50578f13e57371bac49051797b6320eb1d9af661",
+ "generatedAt": "2026-09-30T03:20:03Z",
+ "gitSha": "2d8951152a457aa97ad660875c758ccecc22cf4b",
  "houseStyleVersion": "owner-clarifications-5-2026-09-29",
  "model": "claude-opus-5-5",
  "effort": "high",
  "transport": "claude -p (Max subscription)",
  "promptSha256": {
-  "dentistry|LT-RR": "1afa8a3d1f1b017571303efacb6e7ac98043bf65970f7b5be109d178f8447405",
-  "medicine|LT-NM": "c72b67b9407eff093c154ef1e6a5a92e9e7912d9f52f8e2aa694ac0f96eeea69",
-  "medicine|LT-RR": "c72b67b9407eff093c154ef1e6a5a92e9e7912d9f52f8e2aa694ac0f96eeea69",
-  "nursing|LT-TR": "2a5da87b2b5d094dbd38e3e89a4a270615ef655758c8b9bdb48eed587f38a843",
-  "occupational-therapy|LT-OT": "0acc6c3405c3f3ba3078543110608287e41f866b76e114598f8a7b1d447de8d3",
-  "optometry|LT-DG": "77e8e05e3a02f1a98bbe604a455d4ba7ffeef011f9c64cf184d88347ff0b0d4f",
-  "pharmacy|LT-OT": "dcc5b4bb577ffd3b0bdc7c1c3b058d07ed7f873bc98e87b0855ccb64c559b4b0",
-  "physiotherapy|LT-UR": "577aa7226785141ba4d3759da1305035a8ad3a1f259ee1defe313a5038abb550",
-  "radiography|LT-UR": "d3dce71f77caf43190eed2525223d7ae0ce1873c0ad493557569f93bfb5d890d"
+  "dentistry|LT-RR": "c48d75c9ff8a8ccfad88b3e34fc4f01aa23426aad4e4038b974d01c37b14a02d",
+  "medicine|LT-NM": "265ae693f2cb2faf0469323bd6893bd2efaeefedb2351299325546a61391f680",
+  "medicine|LT-RR": "265ae693f2cb2faf0469323bd6893bd2efaeefedb2351299325546a61391f680",
+  "nursing|LT-TR": "585b6bc609eb0b3c9e4bb3d0cf8268e6ea884a62601d7cd5576c771f46c843eb",
+  "occupational-therapy|LT-OT": "46b6288570c49e8267a01134c9444345a8162e6f7b8a659d693e6ef177a30a08",
+  "optometry|LT-DG": "cf02cfc45e2af411b8cdb646e6799eca801642c7ba1374c0c072712dc634bda0",
+  "pharmacy|LT-OT": "e3e9ddc4eedffbaa97f48c37d8fff0ba9298c6ac8e6967e9fc511640b51fe68f",
+  "physiotherapy|LT-UR": "17d0bc4b54d633d76a09406d15dfc30680ff6eaf6903c35cf6f2fcb5d8ccf3d6",
+  "radiography|LT-UR": "1a806110653885ee2299ccd6051499b64d198bdc91a0d5913b32debd555e8f22"
  },
  "runsPass": true,
  "perLetter": {
