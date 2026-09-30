@@ -231,13 +231,13 @@ public sealed class AiExecutionCoordinatorReplayTests : IAsyncDisposable
         var coordinator = NewCoordinator(db, core);
 
         // Build the storm: two failed attempts on slots v1 and v2 (as the retry loop
-        // leaves behind). Both must land in FailedTerminal.
+        // leaves behind). Both must land in FailedTerminal. ResourceVersion is
+        // init-only, so the v2 storm row is built by mutation of the factory result's
+        // construction, not by assignment.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => coordinator.ExecuteAsync(BuildRequest(), default));                 // slot v1
-        var ghosted = BuildRequest();
-        ghosted.ResourceVersion = 2;
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => coordinator.ExecuteAsync(ghosted, default));                        // slot v2
+            () => coordinator.ExecuteAsync(BuildRequestV2(), default));               // slot v2
 
         Assert.Equal(2, await db.AiOperations.AsNoTracking().CountAsync(o => o.State == AiOperationState.FailedTerminal));
 
@@ -352,6 +352,26 @@ public sealed class AiExecutionCoordinatorReplayTests : IAsyncDisposable
         ResourceId = "sub-replay",
         ResourceType = "writing_submission",
         ResourceVersion = 1,
+        RequestHash = "hash-stable",
+        PromptVersion = "pv1",
+        RulebookVersion = "rb1",
+        GatewayRequest = new AiGatewayRequest
+        {
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            UserId = "user-replay",
+            Prompt = new AiGroundedPrompt { SystemPrompt = "system", TaskInstruction = "grade" },
+        },
+    };
+
+    /// <summary>The same logical request on resource-version slot 2 — the second storm
+    /// ghost in <see cref="SafeFailureSlotGhosts_FromARetryStorm_AreClearedSoGradingRuns"/>.
+    /// ResourceVersion is init-only, so this is a separate initializer.</summary>
+    private static AiOperationRequest BuildRequestV2() => new()
+    {
+        Module = "writing",
+        ResourceId = "sub-replay",
+        ResourceType = "writing_submission",
+        ResourceVersion = 2,
         RequestHash = "hash-stable",
         PromptVersion = "pv1",
         RulebookVersion = "rb1",
