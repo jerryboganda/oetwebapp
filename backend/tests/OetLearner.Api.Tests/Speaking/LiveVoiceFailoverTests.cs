@@ -559,19 +559,19 @@ public sealed class LiveVoiceFailoverTests
     [Fact]
     public async Task AuditWriteFault_NeverMasksTheProviderFailure()
     {
-        using var rig = LiveVoiceTestKit.Create();
+        using var rig = LiveVoiceTestKit.Create(faultingDb: true);
         var session = await SeedAsync(rig);
-        rig.AuditFault.Enabled = true;
+        rig.FaultingDb.FailAuditWrites = true;
         FailProvider(rig, OpenAiHost, HttpStatusCode.TooManyRequests, QuotaBody());
 
         var ex = await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
 
         Assert.Equal("live_voice_provider_unavailable", ex.ErrorCode);
-        Assert.Equal(1, rig.AuditFault.Failures);
+        Assert.Equal(1, rig.FaultingDb.AuditWriteFailures);
         Assert.True(rig.State.IsOpen(LiveVoiceProviders.OpenAi));
         Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Warning
             && e.Text.Contains("audit event", StringComparison.Ordinal));
-        rig.AuditFault.Enabled = false;
+        rig.FaultingDb.FailAuditWrites = false;
         Assert.Empty(await CircuitEventsAsync(rig));
     }
 

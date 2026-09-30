@@ -125,26 +125,25 @@ internal sealed class CapturingLogger<T> : ILogger<T>
     }
 }
 
-/// <summary>Fails any save that adds an AuditEvent, to prove a database fault never masks the provider 503.</summary>
-internal sealed class FailingAuditSaveInterceptor : SaveChangesInterceptor
+/// <summary>
+/// Fails any save that adds an AuditEvent, to prove a database fault never masks the provider 503.
+/// A subclass rather than a SaveChanges interceptor: EF keeps one internal service provider per
+/// distinct interceptor instance, so an instance per test would trip its "many service providers" guard.
+/// </summary>
+internal sealed class FaultingLearnerDbContext(DbContextOptions<LearnerDbContext> options) : LearnerDbContext(options)
 {
-    public bool Enabled { get; set; }
+    public bool FailAuditWrites { get; set; }
 
-    public int Failures { get; private set; }
+    public int AuditWriteFailures { get; private set; }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = default)
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        if (Enabled
-            && eventData.Context is { } context
-            && context.ChangeTracker.Entries<AuditEvent>().Any(entry => entry.State == EntityState.Added))
+        if (FailAuditWrites && ChangeTracker.Entries<AuditEvent>().Any(entry => entry.State == EntityState.Added))
         {
-            Failures++;
+            AuditWriteFailures++;
             throw new DbUpdateException("Simulated audit write failure.");
         }
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
+        return base.SaveChangesAsync(cancellationToken);
     }
 }
 
@@ -226,8 +225,7 @@ internal sealed class LiveVoiceRig(
     ScriptedHttpHandler handler,
     CapturingLogger<LiveVoiceService> log,
     MutableTimeProvider clock,
-    LiveVoiceOptions options,
-    FailingAuditSaveInterceptor auditFault) : IDisposable
+    LiveVoiceOptions options) : IDisposable
 {
     public LiveVoiceService Service { get; } = service;
     public LearnerDbContext Db { get; } = db;
@@ -236,7 +234,9 @@ internal sealed class LiveVoiceRig(
     public CapturingLogger<LiveVoiceService> Log { get; } = log;
     public MutableTimeProvider Clock { get; } = clock;
     public LiveVoiceOptions Options { get; } = options;
-    public FailingAuditSaveInterceptor AuditFault { get; } = auditFault;
+
+    /// <summary>The database as its fault-injecting subclass; only when the rig was created with <c>faultingDb</c>.</summary>
+    public FaultingLearnerDbContext FaultingDb => (FaultingLearnerDbContext)Db;
 
     public void Dispose() => Db.Dispose();
 }
@@ -261,16 +261,16 @@ internal static class LiveVoiceTestKit
     public static LiveVoiceRig Create(
         LiveVoiceOptions? options = null,
         bool verified = true,
-        DateTimeOffset? now = null)
+        DateTimeOffset? now = null,
+        bool faultingDb = false)
     {
         options ??= DefaultOptions();
         var clock = new MutableTimeProvider(now ?? Epoch);
-        var auditFault = new FailingAuditSaveInterceptor();
         var dbOptions = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase($"live-voice-{Guid.NewGuid():N}")
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning));
-        dbOptions.AddInterceptors(auditFault);
-        var db = new LearnerDbContext(dbOptions.Options);
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        LearnerDbContext db = faultingDb ? new FaultingLearnerDbContext(dbOptions) : new LearnerDbContext(dbOptions);
 
         var state = new LiveVoiceProviderProbeState(clock);
         if (verified)
@@ -293,7 +293,7 @@ internal static class LiveVoiceTestKit
             state,
             clock,
             log);
-        return new LiveVoiceRig(service, db, state, handler, log, clock, options, auditFault);
+        return new LiveVoiceRig(service, db, state, handler, log, clock, options);
     }
 
     /// <summary>
