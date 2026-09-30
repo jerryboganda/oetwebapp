@@ -1,0 +1,41 @@
+{
+ "profession": "medicine",
+ "letterType": "LT-RR",
+ "title": "Medicine - Ms Eleanor Bennet",
+ "writingTask": "Using the information given in the case notes, write a letter of referral to Dr Banerjee, consultant cardiologist. In your letter, briefly outline Ms Bennet's history and treatment so far, requesting advice and a review of her medication. Address your letter to Dr James Banerjee, Consultant Cardiologist, Sanditon City Hospital, Sanditon.\n\nIn your answer:\n- Expand the relevant notes into complete sentences\n- Do not use note form\n- Use letter format\n\nThe body of the letter should be approximately 180–200 words.",
+ "todayDate": "15 May 2021",
+ "wordGuide": [
+  180,
+  200
+ ],
+ "caseNotes": [
+  "Patient is Eleanor Bennet, DOB 06 Dec 1975 (45 years old)",
+  "Address: 32 Station Road, Oakville",
+  "Commercial lawyer with frequent international travel",
+  "Divorced, with two daughters aged 18 and 16",
+  "Children live mainly with their father (custody currently contested); patient reports extreme stress about the quality of the father's childcare",
+  "Since 2019, alcohol intake has increased from 10 to 40 units per week",
+  "Smokes 20 cigarettes a day",
+  "BMI 29 (overweight); little exercise (gym once a month)",
+  "Father died aged 53 of heart disease",
+  "Older brother has mental health problems, with two suicide attempts in the last 12 months",
+  "08 Feb 2021, 0800 hrs: heart attack at the airport after a long-haul flight, with pain in the jaw, nausea and shortness of breath",
+  "Defibrillator applied by a first-aider",
+  "08 Feb 2021, 0915 hrs: emergency hospital admission to Oakville General Hospital",
+  "Balloon-expandable stent applied via the groin (arm access tried initially, but the artery was too small)",
+  "Discharged 15 Feb 2021, with 4 weeks off work and a gradual return to work",
+  "Mother moved in to provide care; patient reports increased stress due to a poor relationship with her mother",
+  "Discharge medication: Captopril 50mg twice daily",
+  "Discharge medication: Atorvastatin 80mg daily",
+  "Referred for cardiac rehabilitation sessions, but has not attended",
+  "Counselling given regarding lifestyle changes",
+  "15 May 2021: presenting with side effects of captopril – dizziness and light-headedness, headaches, and episodes of diarrhoea",
+  "Patient reports increased stress from the medication side effects",
+  "Patient requests discontinuation of captopril due to the side effects, and is reluctant to start new medications",
+  "Plan noted in GP's own record: referral to cardiologist regarding medication review and ways to encourage lifestyle changes",
+  "Ms Bennet was fitted with a Holter monitor, to be removed at her appointment on 22 May 2021."
+ ],
+ "letterId": "W8A4E1D972-unseen-r2-2",
+ "candidateLetter": "Dr James Banerjee\nConsultant Cardiologist\nSanditon City Hospital\nSanditon\n\n15 May 2021\n\nDear Dr Banerjee,\nRe: Ms Eleanor Bennet, DOB: 6 December 1975\n\nI am writing to request a medication review for Ms Eleanor Bennet, who has developed captopril side effects following a myocardial infarction.\n\nToday, Ms Bennet presented with dizziness, light-headedness, headaches and intermittent diarrhoea attributed to captopril. She requests its discontinuation and is reluctant to start new medications.\n\nOn 8 February 2021, Ms Bennet had a myocardial infarction after a long-haul flight. A first-aider applied a defibrillator. She underwent stent insertion at Oakville General Hospital and was discharged on 15 February 2021 taking captopril, 50 mg twice daily and atorvastatin, 80 mg daily. She received lifestyle counselling and was referred for cardiac rehabilitation, which she has not attended.\n\nMs Bennet smokes twenty cigarettes daily, and her alcohol intake has increased from ten to forty units weekly since 2019. Her body mass index is 29 kg/m², and she exercises monthly. She reports extreme stress about the care her daughters receive from their father. Living with her mother, with whom she has a poor relationship, has increased her stress. Her father died of heart disease at age fifty-three.\n\nI would be grateful if you could advise on encouraging lifestyle changes.\n\nShould there be any queries, kindly do not hesitate to contact me.\n\nYours sincerely,\n\nDoctor",
+ "isCleanControl": false
+}

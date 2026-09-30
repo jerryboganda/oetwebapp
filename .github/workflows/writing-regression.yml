@@ -1,0 +1,68 @@
+name: Writing grader regression gate
+
+# Recorded-artifact gate (owner directive: grading runs use the Claude Max
+# subscription via the Claude Code CLI, which is NOT reachable from GitHub
+# runners). The live regression run therefore executes locally on the owner's
+# subscription; this workflow VERIFIES that any change to the Writing prompt,
+# house-style rules, rulebooks, model route or the regression corpus is backed
+# by a fresh, passing regression manifest whose prompt hashes match the CURRENT
+# prompt source. If the prompt changed but the manifest is stale or failing,
+# the gate fails and deploy is blocked.
+#
+# Live run (local, owner's machine):
+#   cd tests/writing-regression
+#   python run_regression.py --execute      # grades via claude -p (subscription)
+#   python check_regression.py              # enforces detection + severity gates
+#   python stamp_manifest.py --report-last-run
+#   git add tests/writing-regression && git commit && git push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingRev8HouseStyle.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingOetDescriptors.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingRuleEngine*.cs"
+      - "backend/src/OetLearner.Api/Services/Ai/AiFeatureRouteResolver.cs"
+      - "rulebooks/writing/**"
+      - "tests/writing-regression/**"
+  pull_request:
+    paths:
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingRev8HouseStyle.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingOetDescriptors.cs"
+      - "backend/src/OetLearner.Api/Services/Rulebook/WritingRuleEngine*.cs"
+      - "backend/src/OetLearner.Api/Services/Ai/AiFeatureRouteResolver.cs"
+      - "rulebooks/writing/**"
+      - "tests/writing-regression/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify regression manifest matches current prompt
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Checker self-test (oracle passes; blind/downgrade/over-call fail)
+        working-directory: tests/writing-regression
+        run: python selftest_checker.py
+
+      - name: Verify prompt hashes and passing manifest
+        working-directory: tests/writing-regression
+        run: python verify_manifest.py

@@ -289,3 +289,5 @@ ruvector.db
 .freebuff/
 .tools-state/
 
+tests/writing-regression/_sys.txt
+tests/writing-regression/runs/

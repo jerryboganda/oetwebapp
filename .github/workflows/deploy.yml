@@ -50,8 +50,58 @@ jobs:
           node scripts/ship/pre-push-gate.mjs --self-test
           node scripts/ship/pre-push-gate.mjs --ci
 
+  # Writing grader prompt/model gate (recorded-artifact). When the push touches the
+  # Writing prompt, house-style rules, rulebooks or the AI route, this verifies the
+  # committed regression manifest matches the CURRENT prompt and records a passing run
+  # (the live grading uses the owner's Claude Max subscription, which runners cannot
+  # reach). No writing change -> the gate passes immediately and deploy is unaffected.
+  writing-regression-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect Writing grader changes in this push
+        id: changed
+        run: |
+          set -e
+          PATTERNS='backend/src/OetLearner.Api/Services/Rulebook/WritingRev8HouseStyle.cs
+          backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService.cs
+          backend/src/OetLearner.Api/Services/Rulebook/WritingOetDescriptors.cs
+          backend/src/OetLearner.Api/Services/Ai/AiFeatureRouteResolver.cs
+          rulebooks/writing
+          tests/writing-regression'
+          BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-parse HEAD~1 || echo '')"
+          fi
+          HIT=0
+          if [ -n "$BASE" ]; then
+            while IFS= read -r p; do
+              [ -z "$p" ] && continue
+              if git diff --name-only "$BASE" HEAD -- "$p" | grep -q .; then HIT=1; break; fi
+            done <<< "$PATTERNS"
+          fi
+          echo "changed=$HIT" >> "$GITHUB_OUTPUT"
+          echo "writing files changed: $HIT"
+      - name: Enforce regression manifest
+        if: steps.changed.outputs.changed == '1'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Checker self-test + verify manifest matches current prompt
+        if: steps.changed.outputs.changed == '1'
+        working-directory: tests/writing-regression
+        run: |
+          python selftest_checker.py
+          python verify_manifest.py
+      - name: Skip (no Writing grader change)
+        if: steps.changed.outputs.changed == '0'
+        run: echo "No Writing prompt/rules/model change in this push — regression gate not required."
+
   build-web:
-    needs: [syntax-gate]
+    needs: [syntax-gate, writing-regression-gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
