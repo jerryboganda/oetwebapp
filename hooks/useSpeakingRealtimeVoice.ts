@@ -1020,7 +1020,7 @@ export function useSpeakingRealtimeVoice(
       if (index < order.length - 1) console.warn('Live voice provider failed before going live; trying the next one.', failureCode(failure));
     }
     closeTransport();
-    // The server's health order may have changed by now: a retry asks it again.
+    // The server's healthy-candidate list may have changed by now: a retry asks it again.
     plannedRef.current = [];
     setError(learnerMessage(failure));
     setConnection('error');
