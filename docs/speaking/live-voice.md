@@ -57,9 +57,10 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
 
 ## Behaviour and limits
 
-- One card is served by one provider: once a provider's link is live it serves the card to the end (no reconnect, no
-  switch mid-conversation). Failover happens only *before* the link is live ([Provider failover](#provider-failover)), so a
-  card can still mint more than one provider session (a leg that failed after its create call, a reload); at most
+- One card is normally served by one provider to the end. Failover happens *before* the link is live
+  ([Provider failover](#provider-failover)); a link that dies or goes silent *after* it was live is restored on a new
+  provider session ([Mid-session recovery](#mid-session-recovery)). So a card can mint more than one provider session (a
+  leg that failed after its create call, a restore, a reload); at most
   `MaxProviderSessionsPerRolePlay` (3) are allowed ([Hard duration cap](#hard-duration-cap)). Instructions are built from
   that card only (`LiveVoiceService.BuildInstructions`); hidden roleplayer information is protected by the prompt alone.
 - The saved transcript is built in the browser (`hooks/useSpeakingRealtimeVoice.ts`) and graded verbatim.
@@ -73,8 +74,9 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   rule); and, added with this change and **pending verification**, never attribute unsaid treatments, tests or
   referrals to the doctor (2 of 5 post-#257 teach-back replies did).
 - No audio is stored ("Recording unavailable" on the transcript page); grading sees the transcript only.
-- No reconnect: a connection that drops mid-conversation ends the patient for that card. A provider that cannot *start*
-  is replaced by the other one automatically ([Provider failover](#provider-failover)). The recorder fallback is used
+- A connection that drops mid-conversation, or a patient that stays silent, is restored automatically up to twice per card
+  ([Mid-session recovery](#mid-session-recovery)); after that (or for a pinned provider) the error is shown as before. A
+  provider that cannot *start* is replaced by the other one automatically ([Provider failover](#provider-failover)). The recorder fallback is used
   only while **no** provider is usable (`liveVoiceAvailable` = at least one candidate; it was primary-only before). The
   flag is computed whenever a session or exam DTO is read, and each page fixes the mode of a card when the card starts
   (see the client fail-open rules under [Hard duration cap](#hard-duration-cap)).
@@ -137,7 +139,7 @@ and the Gemini leg needs the browser to open the WebSocket: the server cannot fi
 | Any other 4xx on the create call: consent missing, session not active, content not ready, 400 SDP, 409 `live_voice_time_limit_reached` or `live_voice_session_limit_reached` | No: terminal, the server's own text is shown |
 | 429 `rate_limited` (our per-user limiter, not the provider) | No: one retry on the same provider after about 1.5 s |
 | Microphone refused or missing | No: a device problem (shown with the microphone message, which on the live and recorder panels ends "press Start speaking again", and, in the apps, an "Open app settings" button) |
-| After the connection was live, or once any transcript text exists | No: there is no reconnect and providers are never mixed inside one transcript |
+| After the connection was live, or once any transcript text exists | Not at start: a dead link is restored by [Mid-session recovery](#mid-session-recovery) (same provider first, the other one on the second restore); the transcript stays one continuous list |
 | Pinned run (`?voiceProvider=` or `pinned: true`) | Never |
 
 The create calls are never retried by the API client (`maxRetries: 0`, 22 s timeout): a repeat POST after a
@@ -168,6 +170,48 @@ OpenAI the server hangs it up with the rest of the role-play's sessions at the h
 ([Hard duration cap](#hard-duration-cap)), so it can bill until then. An unused Gemini token cannot open a new socket
 after `LIVEVOICE__GEMININEWSESSIONLIFETIMESECONDS` (60 s) and expires at the latest at the hard stop + 15 s. Consent copy
 is generic, so a silent switch changes the data processor under it ([Consent and disclosure](#consent-and-disclosure)).
+
+**Recovery sessions.** A provider session minted after an earlier one in the same role-play (the browser re-mints when the
+connection drops or the patient goes silent) starts with no memory, so its instructions get a `CONVERSATION SO FAR` block
+(`LiveVoiceService.ComposeInstructionsAsync`, both providers): the saved `realtime_turn` rows as `Candidate:` / `Patient:`
+lines, oldest first, capped at 4000 characters (the newest turns that fit, with an `(earlier turns omitted)` line when older
+ones were dropped). The browser flushes the turn in progress before it asks, the first mint of a role-play is unchanged, and
+the history goes to the provider only (never logged, audited or returned); each recovery mint still counts towards
+`MaxProviderSessionsPerRolePlay` ([Hard duration cap](#hard-duration-cap)). **Pending: not yet verified in production.**
+
+## Mid-session recovery
+
+Gemini sessions on 30 Sep 2026 went silent after ~2.5 min (patient never answered again) or were closed by Google with 1011
+"Resource has been exhausted" / "Internal error"; with no recovery the learner's conversation simply ended. The hook
+(`hooks/useSpeakingRealtimeVoice.ts`, `startRecovery`) now restores the link on a **new provider session for the same
+role-play**; the microphone, its context and the transcript carry on untouched, and the server replays the saved turns
+into the new session's instructions ([Recovery sessions](#provider-failover)).
+
+- **Triggers.** (1) The link dies after it was live: Gemini socket close or error event; OpenAI data channel close, a
+  peer connection `failed` (a `disconnected` link gets 5 s to heal first), an `error` event, or `session.closed` with a
+  reason other than `close_requested`, `expired` or `content` (the provider's own time or content end is final).
+  (2) A **stall**: the candidate finished a real sentence (a microphone burst of at least 1 s) and the patient produced no
+  audio or transcript for **20 s** (`STALL_MS`; healthy replies take ~2-3 s, the slowest healthy one seen was ~19 s).
+- **Procedure.** Flush the turn in progress (so the server's history is complete) -> tear down the dead transport ->
+  mint a new session: the **same provider first**, then the other one; on the **second** restore of a card the other
+  provider goes first. A definite server answer (409 time over or session limit, any other 4xx) stops the attempts and shows
+  "The live conversation ended ...". The panel shows "Reconnecting the patient…" meanwhile and exposes
+  `data-live-recoveries` for the QA harness.
+- **Limits.** At most `MAX_RECOVERIES` = 2 per card (the server allows 3 provider sessions per role-play: the first plus two
+  restores). A provider forced with `?voiceProvider=` or pinned by the server **never recovers**, so comparison and QA runs
+  measure the raw stability of the provider they asked for. No restore after the learner pressed stop or left.
+- **Known limits.** Audio spoken while the link is down is lost. The candidate's last unanswered sentence is in the replayed
+  history, so the patient waits for the candidate to speak next; a candidate who is waiting for the answer must speak again.
+  The stall detector reads the microphone level (no echo handling beyond the browser's echo cancellation).
+
+### Gemini candidate timing
+
+Gemini gives the candidate's transcript no timing; every candidate segment used to be zero-length (start = end = the moment
+the text arrived), which the grader flagged ("the candidate segment has zero duration ... may be a capture error") and which
+hid the real order of speech. The hook now finds the candidate's speech bursts from the microphone level
+(`createSpeechTracker`: level >= 0.05 on the meter's scale, a burst ends after 700 ms of quiet, bursts under 400 ms are
+dropped) and gives a transcript fragment the span of its burst: the closed bursts since the last fragment, or the burst so
+far when the text arrives mid-sentence. Patient segments keep their arrival time. OpenAI keeps its own `start_ms`/`end_ms`.
 
 ## Consent and disclosure
 
@@ -432,7 +476,8 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
   `primaryProviderIsExpected` (only with `expected_primary` and a blank `voice_provider`), `pinnedProviderServed` (only
   with `voice_provider`: every connected card's panel reports the pinned provider, exam mode too), `failoverAsRequested`
   (only with `fail_primary`: per card exactly one call to the failed primary then one to the other provider, and the page
-  reports the other one serving) and `cardLabelsBySlot` (exam: Card A's text says "Role-Play Card A", Card B's says
+  reports the other one serving), `recoveredAsRequested` (only with a fault input, see [Fault injection](#fault-injection-mid-session-recovery))
+  and `cardLabelsBySlot` (exam: Card A's text says "Role-Play Card A", Card B's says
   "Role-Play Card B"). A 503 on one provider followed by a success on the other is a *failover*, not a browser error, but
   only in an unpinned run; usage and `noSplitSentences` follow the provider that actually served. Gemini patient speech
   is measured from playback timing, so its barge-in/talk-over numbers are not comparable with GPT-Live's pass/fail
@@ -443,6 +488,34 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
   `fail_primary` (practice and exam); a pinned run per provider for the like-for-like comparison. A `fail_primary` run
   proves the client failover only. The circuit, `hardStopAt` and the OpenAI hang-up need a real, unfaked run plus a read
   of `providerAttempts`, `GET /v1/admin/ai/live-voice/health` and the ai-worker's hang-up log lines.
+
+### Fault injection (mid-session recovery)
+
+Two optional inputs (blank = off, the run is unchanged) break the live link on purpose so the app's mid-session recovery can be
+measured. They hit only the first live conversation (practice, or exam Card A), N seconds after the candidate microphone tape
+starts. One fault per run: `fault_drop_at_s` wins when both are set (`metrics.fault.stallIgnored`).
+
+- `fault_drop_at_s` (env `FAULT_DROP_AT_S`): kills the live provider connection from inside the page. Gemini: its WebSocket is
+  closed (marked `injected` in `stability.wsClose`). OpenAI: the `oai-events` data channel is closed, because its `close` event
+  is what the app listens to (`peer.close()` alone fires nothing locally).
+- `fault_stall_at_s` (env `FAULT_STALL_AT_S`): the provider goes silent. Every server-to-client message (Gemini frames, OpenAI
+  data-channel events) is swallowed before the app and the recording probes see it, and the patient's WebRTC audio is silenced.
+  It ends by itself when the app builds a NEW transport, so the recovered session behaves normally. It exercises the app's
+  silence watchdog, so the candidate must still speak after the stall began. Gemini's wire-level records (`transcript.json`,
+  the timeline words, usage, `patient-audio-raw.wav`) still include what the stall hid from the app; what the learner could
+  hear is the speech spans and `patient-audio-<n>.webm`.
+- Rejected with `voice_provider` (a pinned provider never recovers, so the fault would only kill the session) and with
+  `fail_primary` (its check expects one create call per provider, a recovery makes another): by a workflow guard step and again
+  by the harness, before any provider is billed. The fault time must be before the conversation ends (`speak_seconds`, or 280 in
+  exam mode). Use `short` or `generic`: `smoke`'s 25-60 s silences would turn `survivesSilences` red for the wrong reason.
+- Metrics: `metrics.fault` = `{ kind: 'drop' | 'stall' | null, atSeconds, firedAt (epoch ms, null = it never fired), provider
+  (the transport hit), recoveredAt (the first provider create call after the fault, once the panel reports a recovery),
+  swallowed (stall: messages hidden from the app), stallIgnored, error (only when no live transport was found) }`.
+  `metrics.recoveries` = the panel's `data-live-recoveries` (exam: the total, with `recoveriesA` / `recoveriesB`; 0 when the
+  attribute is absent, null when the panel was never read). It is recorded on every run, fault or not.
+- Check `recoveredAsRequested` (null without a fault): the fault fired, the faulted card's panel reports at least 1 recovery,
+  the patient produced a speech span or a transcript delta after the recovery session was asked for, and the panel did not show
+  its error alert at its last live reading. The "Reconnecting the patient…" text is not required.
 
 ## Not implemented
 
@@ -468,7 +541,7 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
 - The 26 Sep two-card mock ended red; only 1 of 4 exam runs that completed both cards was ever graded (bugs fixed by #259/#264).
 - Gemini vs OpenAI: one matched pair (n=1 each); no complete graded Gemini run. Claude grading cost unmeasured.
 - Live-voice sessions store no audio; the results copy still says "We received your recording".
-- No reconnect; `?voiceProvider=` is not restricted (any learner can force the costlier provider or bypass the circuit);
+- Recovery is best-effort (two restores per card, none for a pinned provider, unverified against a real provider stall until the E2E fault runs are read); `?voiceProvider=` is not restricted (any learner can force the costlier provider or bypass the circuit);
   hidden information is prompt-only.
 - A provider session that was created but never connected (failover after a successful create, or a dead tab) cannot be
   closed by the browser. For OpenAI the server keeps the raw session id in the `live_session` audit row (wiped by the
