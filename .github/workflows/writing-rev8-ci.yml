@@ -31,6 +31,11 @@ on:
         required: false
         default: ""
         type: string
+      diagnose_submission:
+        description: "Optional production submission UUID for read-only operation and provider failure metadata"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -40,6 +45,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  production-diagnostics:
+    name: Read-only Writing failure diagnostics
+    if: ${{ inputs.diagnose_submission != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read operation and provider failure metadata
+        env:
+          SUBMISSION_ID: ${{ inputs.diagnose_submission }}
+          ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+        run: |
+          node --input-type=module <<'NODE'
+          const id = process.env.SUBMISSION_ID;
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+            throw new Error('A submission UUID is required');
+          }
+          if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) throw new Error('CI admin credentials unavailable');
+          const base = 'https://api.oetwithdrhesham.co.uk';
+          const login = await fetch(`${base}/v1/auth/sign-in`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-OET-Client-Platform': 'web' },
+            body: JSON.stringify({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD, rememberMe: false }),
+            signal: AbortSignal.timeout(30000),
+          });
+          const session = await login.json();
+          if (!login.ok || !session.accessToken) {
+            throw new Error(`Admin sign-in failed: HTTP ${login.status} (${session.errorCode ?? session.code ?? 'no_session'})`);
+          }
+          const headers = { Authorization: `Bearer ${session.accessToken}` };
+          async function read(path) {
+            const response = await fetch(`${base}${path}`, { headers, signal: AbortSignal.timeout(30000) });
+            if (!response.ok) throw new Error(`Read-only diagnostic failed: HTTP ${response.status} on ${path}`);
+            return response.json();
+          }
+          const [operations, usage, circuits, budgets] = await Promise.all([
+            read('/v1/admin/ai/operations?featureCode=writing.grade&pageSize=200'),
+            read('/v1/admin/ai/usage?featureCode=writing.grade&pageSize=100'),
+            read('/v1/admin/ai/circuits'),
+            read('/v1/admin/ai/budgets'),
+          ]);
+          const matches = operations.rows.filter(row => String(row.resourceId ?? '').replaceAll('-', '') === id.replaceAll('-', ''));
+          const userIds = new Set(matches.map(row => row.userId));
+          console.log('SUBMISSION_OPERATIONS', JSON.stringify(matches.map(row => ({
+            id: row.id, state: row.state, featureCode: row.featureCode, createdAt: row.createdAt,
+            updatedAt: row.updatedAt, hasResult: Boolean(row.resultRef),
+          }))));
+          console.log('WRITING_USAGE', JSON.stringify(usage.rows.filter(row => userIds.size === 0 || userIds.has(row.userId)).slice(0, 30).map(row => ({
+            id: row.id, providerId: row.providerId, model: row.model, outcome: row.outcome,
+            errorCode: row.errorCode, latencyMs: row.latencyMs, retryCount: row.retryCount,
+            promptTokens: row.promptTokens, completionTokens: row.completionTokens, createdAt: row.createdAt,
+          }))));
+          console.log('PROVIDER_CIRCUITS', JSON.stringify(circuits.rows.filter(row => row.kind === 'provider').map(row => ({
+            key: row.key, state: row.state, failureCount: row.failureCount, lastFailureCode: row.lastFailureCode,
+          }))));
+          console.log('BUDGETS', JSON.stringify(budgets.map(row => ({
+            scope: row.scope, periodKey: row.periodKey,
+            exhausted: row.limit > 0 && row.reserved + row.committed >= row.limit,
+          }))));
+          NODE
+
   software-review:
     name: Jev typed software review (AI Gateway)
     if: ${{ inputs.review_json != '' }}
