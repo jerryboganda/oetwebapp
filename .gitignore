@@ -290,3 +290,5 @@ backend/_*.sql
 backend/_*.ps1
 backend/TestResults/
 
+tests/writing-regression/_sys.txt
+tests/writing-regression/runs/

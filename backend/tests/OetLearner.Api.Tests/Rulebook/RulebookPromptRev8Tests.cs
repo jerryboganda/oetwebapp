@@ -109,6 +109,36 @@ public class RulebookPromptRev8Tests
         Assert.Contains("  \"advisory\": \"AI-generated — pending tutor review\"", prompt.SystemPrompt, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(AiTaskMode.Score)]
+    [InlineData(AiTaskMode.Coach)]
+    [InlineData(AiTaskMode.Correct)]
+    [InlineData(AiTaskMode.GenerateFeedback)]
+    public void Writing_Grading_Prompts_Carry_Addendum_Five_Regression_Rules(AiTaskMode task)
+    {
+        // Addendum Five (29 Sep 2026) generalises the 9 defect classes Opus 5.5 High
+        // missed in the 22-letter benchmark into permanent candidate-grading rules
+        // R1-R9. This test guards against their silent removal from the rendered prompt.
+        var prompt = Build(RuleKind.Writing, ExamProfession.Medicine, task, letterType: "LT-RR");
+
+        Assert.Contains("ADDENDUM FIVE (29 Sep 2026)", prompt.SystemPrompt, StringComparison.Ordinal);
+        foreach (var marker in new[]
+        {
+            "R1. Explicit-request completeness (MAJOR)",
+            "R2. Device, treatment and planned-date completeness (MAJOR)",
+            "R3. Procedure-outcome completeness (MAJOR)",
+            "R4. Medication-reconciliation completeness (MAJOR)",
+            "R5. Relevance filter — excessive inpatient/nursing minutiae (MAJOR when substantial)",
+            "R6. Topic grouping (MINOR)",
+            "R7. Superseded or outdated detail (MINOR)",
+            "R8. Recipient-utility technical detail (MINOR)",
+            "R9. Section placement (MINOR)",
+        })
+            Assert.Contains(marker, prompt.SystemPrompt, StringComparison.Ordinal);
+        // Severity guardrail: majors must not be downgraded to minor.
+        Assert.Contains("NEVER downgrade them to minor", prompt.SystemPrompt, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Writing_GenerateContent_Prompt_Carries_Model_Answer_House_Style_And_Defers_To_User_Json()
     {
