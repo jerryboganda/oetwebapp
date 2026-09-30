@@ -93,4 +93,32 @@ describe('SpeakingRoleCard', () => {
     render(<SpeakingRoleCard {...props} />);
     expect(screen.getByText('Role-Play Card No. 7')).toBeInTheDocument();
   });
+
+  describe('card heading', () => {
+    const base = { role: 'Doctor', setting: 'General practice', patient: 'Mr Lee, 54' };
+
+    it('names an exam card by its slot, and never prints the source number beside it', () => {
+      render(<SpeakingRoleCard {...base} slotLabel="B" />);
+
+      expect(screen.getByRole('heading', { name: 'Role-Play Card B' })).toBeInTheDocument();
+      expect(screen.queryByText(/No\./)).not.toBeInTheDocument();
+    });
+
+    it('lets the slot win over the printed number, so two cards that print 4 read A and B', () => {
+      const { rerender } = render(<SpeakingRoleCard {...base} cardNumber={4} slotLabel="A" />);
+      expect(screen.getByRole('heading', { name: 'Role-Play Card A' })).toBeInTheDocument();
+
+      rerender(<SpeakingRoleCard {...base} cardNumber={4} slotLabel="B" />);
+      expect(screen.getByRole('heading', { name: 'Role-Play Card B' })).toBeInTheDocument();
+      expect(screen.queryByText(/No\. 4/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the printed number on a practice card, and prints a bare heading when there is neither', () => {
+      const { rerender } = render(<SpeakingRoleCard {...base} cardNumber={4} />);
+      expect(screen.getByRole('heading', { name: 'Role-Play Card No. 4' })).toBeInTheDocument();
+
+      rerender(<SpeakingRoleCard {...base} />);
+      expect(screen.getByRole('heading', { name: 'Role-Play Card' })).toBeInTheDocument();
+    });
+  });
 });

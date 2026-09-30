@@ -368,6 +368,8 @@ export function SpeakingSimulationV11ReportView({
   }
 
   const scorePercent = score == null ? 0 : Math.max(0, Math.min(100, score / 5));
+  // A card slot exists only inside a two-card mock; a standalone practice report has no card letter to print.
+  const scopeLabel = report.cardSlot === 'combined' ? 'Full mock' : /^[ab]$/i.test(report.cardSlot) ? `Card ${report.cardSlot.toUpperCase()}` : null;
 
   return (
     <div className="space-y-5">
@@ -397,8 +399,8 @@ export function SpeakingSimulationV11ReportView({
               </div>
             </div>
             <div className="text-sm">
-              <p className="font-semibold text-navy">{report.cardSlot === 'combined' ? 'Full mock' : `Card ${report.cardSlot.toUpperCase()}`}</p>
-              <p className="mt-1 text-muted">Confidence: <span className="font-semibold text-navy">{report.confidenceLabel}</span></p>
+              {scopeLabel ? <p className="font-semibold text-navy">{scopeLabel}</p> : null}
+              <p className={cn('text-muted', scopeLabel && 'mt-1')}>Confidence: <span className="font-semibold text-navy">{report.confidenceLabel}</span></p>
               <p className="text-muted">Range: <span className="font-semibold text-navy">{rangeLow ?? '—'}–{rangeHigh ?? '—'}</span></p>
             </div>
           </div>

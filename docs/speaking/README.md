@@ -21,7 +21,7 @@ Plan: `~/.claude/plans/1-oet-speaking-module-sequential-candy.md`.
 - [Content model](content-model.md)
 - [Scoring](scoring.md)
 - [AI provider matrix](ai-providers.md)
-- [Live voice agent (AI patient)](live-voice.md)
+- [Live voice agent (AI patient)](live-voice.md): providers, automatic failover, provider health, hard duration cap, card labels, production E2E and open items (30 Sep 2026 close-out)
 - [LiveKit](livekit.md)
 - [Compliance](compliance.md)
 - [Glossary](glossary.md)

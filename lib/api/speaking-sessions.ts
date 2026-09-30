@@ -65,7 +65,8 @@ export interface SpeakingSessionTimingDetail {
   mode: SpeakingSessionMode | string;
   prepStartedAt: string;
   prepEndsAt: string;
-  rolePlayEndsAt: string;
+  /** Set on create; the read endpoint may omit it or send null. */
+  rolePlayEndsAt?: string | null;
   rolePlayStartedAt: string | null;
   endedAt: string | null;
   /** WS4 (§14.2) — stamped once the learner submits the role-play for marking. */
@@ -178,6 +179,8 @@ export interface SpeakingSessionClock {
   secondsRemaining: number | null;
   expired: boolean;
   canAdvanceTo: string[];
+  /** ISO time the server force-ends an active role-play (deadline plus grace). Absent on an older server. */
+  hardStopAt?: string | null;
 }
 
 export interface SpeakingTranscriptionStatus {
