@@ -204,6 +204,7 @@ class FakeSocket {
 
 const streams: FakeStream[] = [];
 const getUserMedia = vi.fn();
+let warn: { mock: { calls: unknown[][] } };
 
 const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePreflight => ({
   provider: 'openai',
@@ -285,7 +286,7 @@ async function candidateSays(text: string, index = 0) {
 describe('useSpeakingRealtimeVoice provider failover', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     for (const fn of [mockPreflight, mockOffer, mockToken, mockTurn, mockTranscript, getUserMedia]) fn.mockReset();
     mockPreflight.mockResolvedValue(preflight());
     mockOffer.mockResolvedValue(offerAnswer());
@@ -396,6 +397,30 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(await stopVoice(result)).toBe(true);
     expect(mockTranscript).not.toHaveBeenCalled();
     expect(mockTurn).not.toHaveBeenCalled();
+  });
+
+  it('logs only the error code of a failed provider: no token, no SDP, no server text', async () => {
+    mockOffer.mockRejectedValue(providerDown());
+    mockToken.mockRejectedValue(providerDown());
+    const { result } = await mount();
+
+    await startVoice(result);
+
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain('live_voice_provider_unavailable');
+    expect(logged).not.toMatch(/access_token|secret|v=0|could not start this conversation/i);
+  });
+
+  it('falls back to the other provider when the browser has no WebRTC', async () => {
+    vi.stubGlobal('RTCPeerConnection', undefined);
+    const { result } = await mount();
+
+    expect(await startVoice(result)).toBe(true);
+
+    expect(mockOffer).not.toHaveBeenCalled();
+    expect(mockToken).toHaveBeenCalledTimes(1);
+    expect(result.current.provider).toBe('gemini');
+    expect(result.current.failedOver).toBe(true);
   });
 
   it.each([
