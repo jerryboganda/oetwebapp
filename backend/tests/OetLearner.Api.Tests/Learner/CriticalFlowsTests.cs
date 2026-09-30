@@ -310,6 +310,40 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task WritingSubmission_WhenEveryGradingProviderFails_ReturnsRetryable503()
+    {
+        await EnsureV11GradingPrerequisitesAsync();
+        var userId = $"writing-providers-down-{Guid.NewGuid():N}";
+        using var client = await CreateGradedClientAsync(userId);
+
+        // An unregistered code fails at every hop of the failover chain.
+        var selector = (TestWritingSubscriptionSelector)_factory.Services
+            .GetRequiredService<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector>();
+        selector.ProviderCode = "no-such-provider";
+        try
+        {
+            var submitResponse = await client.PostAsJsonAsync("/v1/writing/submissions/", new
+            {
+                scenarioId = V11ScenarioId,
+                mode = "practice",
+                letterContent = V11LetterContent,
+                wordCount = 140,
+                timeSpentSeconds = 2400,
+                idempotencyKey = Guid.NewGuid().ToString("N")
+            });
+
+            // Mapped like the single-call path — not a raw 500 internal_server_error.
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, submitResponse.StatusCode);
+            using var errorJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+            Assert.Equal("writing_rubric_failed", errorJson.RootElement.GetProperty("code").GetString());
+        }
+        finally
+        {
+            selector.ProviderCode = "";
+        }
+    }
+
+    [Fact]
     public async Task WritingSubmission_SecondCreateWhileLocked_Conflicts()
     {
         // The §17.7 submission lock: a second fresh submit for the same
