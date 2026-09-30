@@ -93,7 +93,8 @@ function apiErrorInfo(error: unknown): ApiErrorInfo | null {
 const isLiveVoiceProvider = (value: unknown): value is LiveVoiceProvider => value === 'openai' || value === 'gemini';
 
 /**
- * The providers to try, in order. The server names them healthiest first (`candidates`); an older
+ * The providers to try, in order. The server names them in the order to try (`candidates`: the
+ * configured primary first; health only filters out providers that are known to be down); an older
  * server sends none, so there is a single attempt with `provider`. A forced provider (`?voiceProvider=`
  * on the page, the server's `pinned`) never fails over: comparison and QA runs must measure the
  * provider they asked for.

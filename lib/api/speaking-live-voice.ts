@@ -10,7 +10,7 @@ export interface LiveVoicePreflight {
   retentionDays: number;
   sessionId: string;
   rolePlayCardId: string;
-  /** Providers to try in order, healthiest first (server-decided). Absent on an older server: one attempt with `provider`. */
+  /** Providers to try in order (server-decided: configured primary first, unhealthy ones filtered out). Absent on an older server: one attempt with `provider`. */
   candidates?: LiveVoiceProvider[];
   /** True when the caller forced a provider (`?provider=`): that run must not fail over. */
   pinned?: boolean;

@@ -179,7 +179,7 @@ const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePrefli
 });
 
 describe('planProviders', () => {
-  it('keeps the order the server chose, healthiest first', () => {
+  it('keeps the order the server chose', () => {
     expect(planProviders(preflight({ provider: 'gemini', candidates: ['gemini', 'openai'] }))).toEqual(['gemini', 'openai']);
     expect(planProviders(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }))).toEqual(['openai', 'gemini']);
   });
