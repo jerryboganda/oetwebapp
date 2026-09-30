@@ -45,6 +45,13 @@ graph LR
 
 ## Real-time flow (AI self-practice turn)
 
+> **Note 2026-09-30.** The diagram below is the earlier batch turn loop (ASR, then text model, then TTS through the
+> hub); it is no longer the user-facing AI patient (see the 2026-09-22 live voice design). The AI patient is a native
+> realtime voice session: the browser talks to OpenAI GPT-Live (WebRTC) or Gemini Live (WebSocket) directly, and the API
+> only decides the provider order, mints the session or token, persists the transcript and enforces a server-side
+> duration cap. Provider failover, health, the hard stop and the recorder fallback are documented in
+> [live-voice.md](live-voice.md).
+
 ```mermaid
 sequenceDiagram
   participant L as Learner
@@ -99,6 +106,8 @@ See [state-machines.md](state-machines.md). Summary: `Prep1 → Active1 → Fini
 ## Failure modes
 
 - **AI provider 5xx** → secondary provider via `AiFeatureRouteResolver`; `Features__SpeakingV2_AssessmentEnabled = false` is the kill switch.
+- **Live voice provider failure** → the browser tries the other realtime provider (server-ordered `candidates`); with none usable the recorder fallback is used ([live-voice.md](live-voice.md)).
+- **Speaking grading, Claude subscription sidecar failure** → the default route (`SpeakingGradeChain`, [ai-providers.md](ai-providers.md)).
 - **LiveKit outage** → `Features__PrivateSpeakingBookingsEnabled = false`; reschedule bookings.
 - **Postgres degraded** → `503` from API; client retry-after.
 - **S3 egress failure** → `SpeakingRecording.IsArchived = false`; retry queue.

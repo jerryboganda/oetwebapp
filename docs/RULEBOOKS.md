@@ -179,7 +179,7 @@ Adding a new vendor remains a single-class change: implement
 | GET  | `/v1/rulebooks/assessment/{kind}` | Assessment criteria JSON. |
 | POST | `/v1/writing/lint` | Run the Writing rule engine on a letter. |
 | POST | `/v1/speaking/audit` | Run the Speaking rule engine on a transcript. |
-| POST | `/v1/ai/complete` | Grounded AI call — builds the prompt, forwards to provider, returns completion + `appliedRuleIds`. |
+| POST | `/v1/ai/complete` | Grounded AI call — builds the prompt, forwards to provider, returns completion + `appliedRuleIds`. A `provider` named in the body is honoured for admins only (`RulebookEndpoints.ResolveRequestedProvider`); every other caller is routed by the feature route. |
 
 All inputs / outputs are JSON and version-stamped.
 

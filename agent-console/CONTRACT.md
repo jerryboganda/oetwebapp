@@ -25,7 +25,7 @@ base32) unless stated otherwise.
 
 - Engines are spawned through `/usr/local/bin/as-agent` (`setpriv --reuid=10002 --regid=10002 --clear-groups --reset-env`-style wrapper) with an allow-listed env (`src/env.ts`).
 - Control-only secrets: `/run/secrets/owner_agent_internal_token` (mode 0400 root), `/var/lib/oet-agent/ship-token` (0400 root), session store `/var/lib/oet-agent/sessions` (0700 root).
-- Networks: `oet_agent_ctl` (internal; API slots ↔ sidecar :8410) and `oet_agent_net` (internal; sidecar ↔ `oet-agent-egress:3128`, `oet-agent-dockerproxy:2375`, `oet-agent-dbproxy:5432`).
+- Networks: `oet_agent_ctl` (internal; API slots and `oet-ai-worker` ↔ this sidecar :8410 and the Writing/Speaking subscription sidecars `oet-writing-claude` / `oet-writing-codex` :8080; only the API slots carry the internal token and `OwnerAgent__*` settings, so `oet-ai-worker` can reach :8410 but cannot authenticate to it) and `oet_agent_net` (internal; sidecar ↔ `oet-agent-egress:3128`, `oet-agent-dockerproxy:2375`, `oet-agent-dbproxy:5432`).
 - Agent env: `HTTPS_PROXY=HTTP_PROXY=http://oet-agent-egress:3128`, `NO_PROXY=oet-agent-dockerproxy,oet-agent-dbproxy,localhost,127.0.0.1`, `DOCKER_HOST=tcp://oet-agent-dockerproxy:2375`, `OET_AGENT_DATABASE_URL=postgres://oet_owner_agent:…@oet-agent-dbproxy:5432/<db>`.
 
 ## 3. Sidecar HTTP API (internal only)

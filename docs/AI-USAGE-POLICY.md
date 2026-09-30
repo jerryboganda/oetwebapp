@@ -448,10 +448,13 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
 **Isolation from product AI traffic**
 
 - The engines are **never** registered as `AiProvider` rows, feature routes,
-  BYOK credentials or fallback targets. Learner traffic can reach any active
-  provider row (explicit provider pin on `/v1/ai/complete`, lowest-priority
-  fallback, assistant fallback), so registering a subscription there would
-  put learner traffic on the owner's personal quota.
+  BYOK credentials or fallback targets. Learner traffic could reach any active
+  provider row (explicit provider pin on `/v1/ai/complete` - closed 30 Sep 2026,
+  admin-only now; lowest-priority fallback - `AiGatewayService` now skips
+  keyless subscription-sidecar rows; assistant fallback - still open), so
+  registering a subscription there would put learner traffic on the owner's
+  personal quota. The Speaking grading pin is the one deliberate exception (owner
+  directive 30 Sep 2026, see `docs/speaking/ai-providers.md`).
 - Only the API's `OwnerAgent`-policy endpoints relay to the sidecar, over the
   internal network `oet_agent_ctl`. No learner request, scheduled job,
   background worker or other admin action may call it.
@@ -516,6 +519,10 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   enforced in `AiGatewayService.CompleteAsync` and
   `AiAssistantGateway.ResolveProviderAsync`; learner provider pin removed
   from `/v1/ai/complete`), and then only for owner-triggered calls.
+  Status 30 Sep 2026: the provider pin is closed (admin-only) and the
+  `AiGatewayService` fallthrough skips keyless sidecar rows; the
+  `AiAssistantGateway` fallback is **still open**, and `/v1/ai/complete` with
+  `task=GenerateContent` still has no per-user quota or rate limiter.
 
 **Vendor-terms position**
 
@@ -554,11 +561,30 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
   together, and the automatic fallback to the API route is what keeps Speaking grading alive.
 - **Learner data:** Speaking transcripts are sent to Anthropic through the CLI under the
   subscription's terms; the "Data protection" rules above apply, and confirming that model
-  training is off on the dedicated account is the owner's check. The sidecar spawns one CLI
-  process per request with tools disabled and writes no candidate content itself; whether the
-  CLI keeps session transcripts on the shared credential volume has **not** been verified and
-  is an open item.
-- **Open item — provider pin:** `POST /v1/ai/complete` lets any authenticated caller name an
-  active provider row, so while `writing-claude-sub` is active a caller could put their own
-  request on the subscription lane (plan and quota gates still apply). Closing that leak path
-  is outstanding work under "Rule for any future non-owner use".
+  training is off on the dedicated account is the owner's check. Session persistence is now
+  **off**: the Claude sidecar runs the CLI with `--no-session-persistence --tools ""` (every
+  built-in tool removed; `--allowedTools` alone never removed any) and
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, so `/home/agent/.claude/projects/-tmp` on the
+  `oet_agent_home` volume (shared with the owner console) receives no new files once the new image
+  is deployed. Files written there by earlier images are purged by the owner; the flags are
+  validated in the running container before the image is deployed (both steps:
+  [`docs/ops/WRITING-AI-PROVIDERS.md`](ops/WRITING-AI-PROVIDERS.md) §9). Other CLI bookkeeping under
+  the config directory (credential refresh, caches) is outside those switches. The Codex sidecar has
+  none of these switches and whether `codex exec` keeps session files on disk is unverified; it
+  carries Writing letters only, never Speaking.
+- **Provider pin (closed 2026-09-30):** `POST /v1/ai/complete` ignores the request's `provider`
+  unless the caller is an admin (`RulebookEndpoints.ResolveRequestedProvider`), so a learner or
+  expert cannot name the `writing-claude-sub` row. Learner-triggered Writing features still reach the
+  lane through their feature routes, under plan quota and credit accounting. Still open on that
+  endpoint: `task=GenerateContent` classifies to `admin.content_generation` (admin-batch, no per-user
+  quota, platform key) and the endpoint has no rate limiter.
+- **Implicit fallthrough (closed 2026-09-30 for the gateway):** the keyless sidecar rows carry the
+  lowest `FailoverPriority` values (1 and 2), so the gateway's "no pin, no route" default (the lowest
+  priority active keyed text-chat row) would have picked `writing-claude-sub` for every feature
+  without a route once the row was active. `AiGatewayService` now skips marker-key rows there: the
+  sidecar rows are reached only by an explicit pin (`SpeakingGradeChain`, the Writing pipeline, an
+  admin) or a feature route set on purpose. The AI assistant's own default-row selection
+  (`AiAssistantGateway`) is a separate code path and is **not** covered by this change.
+- **Provider row key marker:** the registry only hands the seeded marker back as a key while the
+  row's `BaseUrl` host is on `OET_INTERNAL_AI_HOSTS`, so an admin re-pointing a sidecar row at a
+  vendor URL cannot leave it looking credentialed.

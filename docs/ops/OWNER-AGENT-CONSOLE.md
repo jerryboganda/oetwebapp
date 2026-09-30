@@ -642,6 +642,7 @@ e.g. `printf %s "$VALUE" | sha256sum`.
 |---|---|---|
 | Session events (JSONL, one line per event, redacted) + SQLite index | `oet_agent_sessions` → `/var/lib/oet-agent/sessions/<id>/events.jsonl` | **90 days** after the session's last update, then purged |
 | Engine-native transcripts (needed for resume) | `oet_agent_home` → `$CLAUDE_CONFIG_DIR/projects/**` (e.g. `/home/agent/.claude/projects`), `$CODEX_HOME/sessions/**` (`/home/agent/.codex/sessions`) | `*.jsonl` not modified for **90 days** are deleted by the same retention sweep (every 6 h) |
+| Claude subscription sidecar sessions (`oet-writing-claude`: Writing letters and Speaking transcripts) written by sidecar images **before** the session-persistence-off change; not console sessions | the same `oet_agent_home` volume → `$CLAUDE_CONFIG_DIR/projects/-tmp/*.jsonl` (the sidecar's working directory is `/tmp`) | Same 90-day `*.jsonl` sweep, or earlier by the purge in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9. Newer sidecar images write none (once deployed and the flags validated) |
 | Audit | Postgres `AuditEvent` (`ResourceType = "OwnerAgent"`), hash-chained | platform audit retention; no secrets, message text ≤ 200 chars |
 | Postgres statement log (`log_statement = 'mod'`) | `oet-postgres` container log (50 MB × 5 rotation) | rotation |
 | Vendor side | Anthropic / OpenAI under each subscription's terms (training off) | vendor-defined |
@@ -673,7 +674,10 @@ secrets into prompts.
    `{"erased":true,"engineTranscripts":N}`. The token is read from the
    root-only secret file and passed to `curl` on stdin, never on a command
    line. Re-run the step-2 `grep` to confirm nothing is left (a match inside
-   an unrelated session means that session must be erased too).
+   an unrelated session means that session must be erased too). A match under
+   `projects/-tmp` is a sidecar-written file, not a console session: it has no
+   console session id, so `oet-console-erase` does not remove it; delete it or
+   purge the folder as described in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9.
 4. Do not edit `AuditEvent` rows (it breaks the hash chain); they are
    minimised by design. Record the decision in the erasure log.
 5. Vendor side: data sent as prompt context remains under the vendor's
