@@ -7,7 +7,7 @@
  * layout but renders the patient's background + tasks.
  *
  * ┌───────────────────────────────────────────────┐
- * │ ROLEPLAYER CARD NO. 2                 MEDICINE │
+ * │ ROLEPLAYER CARD B                     MEDICINE │
  * ├───────────────────────────────────────────────┤
  * │ SETTING    General Practice                    │
  * │ PATIENT    You are an 18-year-old …            │
@@ -37,6 +37,8 @@ export interface RoleplayerCardData {
 export interface RoleplayerCardProps {
   card: RoleplayerCardData;
   cardNumber?: number;
+  /** Exam slot letter ("A" / "B"): the tutor's card is named like the candidate's, and it wins over the printed number. */
+  slotLabel?: string;
   className?: string;
 }
 
@@ -45,8 +47,9 @@ function titleCaseProfession(raw: string): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
-export function RoleplayerCard({ card, cardNumber, className }: RoleplayerCardProps) {
+export function RoleplayerCard({ card, cardNumber, slotLabel, className }: RoleplayerCardProps) {
   const number = card.displayCardNumber ?? cardNumber;
+  const heading = slotLabel ? `Roleplayer Card ${slotLabel}` : `Roleplayer Card${number != null ? ` No. ${number}` : ''}`;
   const roleLabel = (card.interlocutorRole || 'Patient').toUpperCase();
   const tasks = (card.patientTasks ?? []).filter((t) => t && t.trim().length > 0);
 
@@ -60,9 +63,7 @@ export function RoleplayerCard({ card, cardNumber, className }: RoleplayerCardPr
       aria-label="Roleplayer card (tutor only)"
     >
       <header className="flex items-center justify-between gap-3 bg-amber-700 px-4 py-2 text-white">
-        <h3 className="text-sm font-bold uppercase tracking-wide">
-          Roleplayer Card{number != null ? ` No. ${number}` : ''}
-        </h3>
+        <h3 className="text-sm font-bold uppercase tracking-wide">{heading}</h3>
         <span className="text-xs font-semibold uppercase tracking-widest text-amber-100">
           {titleCaseProfession(card.professionId)}
         </span>

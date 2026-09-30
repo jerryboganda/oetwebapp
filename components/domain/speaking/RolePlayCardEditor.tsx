@@ -253,8 +253,9 @@ export function RolePlayCardEditor({
             required
           />
         </div>
-        {/* Hidden card type + printed card number (2026-06-11 rebuild). Never
-            shown to students — aids human + AI marking only. */}
+        {/* Hidden card type (never shown to students; aids human + AI marking) and the number printed on
+            the source card. The printed number is shown on practice cards only: it repeats across source
+            sets, so an exam names its two cards A and B by slot instead. */}
         <div className="grid gap-4 md:grid-cols-2">
           <Select
             label="Card type (hidden from students)"
@@ -273,7 +274,7 @@ export function RolePlayCardEditor({
             min={1}
             value={displayCardNumber}
             onChange={(e) => setDisplayCardNumber(e.target.value)}
-            placeholder='e.g. "2" → "CANDIDATE CARD NO. 2"'
+            placeholder='e.g. "2" → "Role-Play Card No. 2" (practice only)'
           />
         </div>
       </section>
