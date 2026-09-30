@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -17,10 +18,12 @@ public interface IWritingSubmissionService
     /// persisted submission (the candidate letter is never retyped): the
     /// credit reservation is idempotent on the submission's business
     /// reference and any persisted provider result is resumed, so a retry
-    /// never creates a duplicate paid workflow. Returns null when the
-    /// submission is not owned; throws Conflict when it is not retryable.
+    /// never creates a duplicate paid workflow. Grading resumes off the request
+    /// path; the returned submission reads queued until the grade lands.
+    /// Throws NotFound when the submission is not owned, Conflict when it is
+    /// not retryable.
     /// </summary>
-    Task<WritingSubmissionGradeOutcome> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct);
+    Task<WritingSubmissionResponse> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct);
 
     /// <summary>
     /// Resolves the owning scenario's answer-sheet PDF download path for a submitted letter.
@@ -51,7 +54,10 @@ public sealed class WritingSubmissionService(
     IWritingSubmissionEvaluationPipeline pipeline,
     ILogger<WritingSubmissionService> logger,
     IWritingCaseNoteHighlightService highlightStore,
-    IWritingAttemptEventService? attemptEvents = null) : IWritingSubmissionService
+    IWritingAttemptEventService? attemptEvents = null,
+    // Optional so unit tests that construct the service directly keep the
+    // legacy inline (synchronous) grading; production DI always injects it.
+    IServiceScopeFactory? scopeFactory = null) : IWritingSubmissionService
 {
     private const string EmptyHighlights = "{}";
 
@@ -102,8 +108,15 @@ public sealed class WritingSubmissionService(
             OriginalSubmissionId: null,
             IdempotencyKey: request.IdempotencyKey), ct);
         var submissionId = submit.SubmissionId;
-        var outcome = await pipeline.EvaluateAsync(submissionId, ct);
-        await EnsureGradeForSubmissionAsync(submissionId, outcome, ct);
+        // Grade off the request path: the HTTP response returns immediately and
+        // grading runs detached on a fresh scope, so a client timeout/abort can
+        // never cancel a paid grade mid-flight. Only genuinely NEW submissions
+        // start grading — repeats resolve to an existing row whose grading is
+        // already in flight (or done).
+        if (submit.IsNew)
+        {
+            await RunOrDetachGradingAsync(submissionId, ct);
+        }
 
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw new InvalidOperationException("Submission missing after submit.");
@@ -158,7 +171,7 @@ public sealed class WritingSubmissionService(
         return s is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(s);
     }
 
-    public async Task<WritingSubmissionGradeOutcome> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct)
+    public async Task<WritingSubmissionResponse> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct)
     {
         var submission = await db.WritingSubmissions.FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
         if (submission is null)
@@ -172,8 +185,8 @@ public sealed class WritingSubmissionService(
                 .FirstOrDefaultAsync(g => g.SubmissionId == submission.Id, ct);
             if (existingGrade is not null)
             {
-                return new WritingSubmissionGradeOutcome(
-                    submission.Id, existingGrade.Id, existingGrade.RawTotal, existingGrade.BandLabel, true);
+                // Already graded: idempotent no-op, return the submission as-is.
+                return WritingV2ResponseMapper.ToSubmissionResponse(submission);
             }
         }
 
@@ -219,9 +232,12 @@ public sealed class WritingSubmissionService(
             "Writing grade retry requested for submission {SubmissionId} scenario {ScenarioId} user {UserId}.",
             submission.Id, submission.ScenarioId, userId);
 
-        var outcome = await pipeline.EvaluateAsync(submission.Id, ct);
-        await EnsureGradeForSubmissionAsync(submission.Id, outcome, ct);
-        return outcome;
+        await RunOrDetachGradingAsync(submission.Id, ct);
+        // Re-read so the response reflects the true persisted status — the
+        // tracked entity still shows queued after the pipeline's CAS updates.
+        var updated = await db.WritingSubmissions.AsNoTracking()
+            .FirstAsync(s => s.Id == submission.Id, ct);
+        return WritingV2ResponseMapper.ToSubmissionResponse(updated);
     }
 
     public async Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct)
@@ -329,14 +345,51 @@ public sealed class WritingSubmissionService(
             IsRevision: true,
             OriginalSubmissionId: originalSubmissionId), ct);
         var newId = reviseSubmit.SubmissionId;
-        var outcome = await pipeline.EvaluateAsync(newId, ct);
-        await EnsureGradeForSubmissionAsync(newId, outcome, ct);
+        await RunOrDetachGradingAsync(newId, ct);
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == newId, ct)
             ?? throw new InvalidOperationException("Revision submission missing after create.");
         return WritingV2ResponseMapper.ToSubmissionResponse(entity);
     }
 
-    private async Task EnsureGradeForSubmissionAsync(Guid submissionId, WritingSubmissionGradeOutcome outcome, CancellationToken ct)
+    /// <summary>
+    /// Runs grading off the request path in production (the class contract:
+    /// persist, return immediately, grade asynchronously). The detached task
+    /// runs on a fresh DI scope with <see cref="CancellationToken.None"/> so a
+    /// client disconnect/abort can never cancel a paid grade mid-flight — the
+    /// same idiom <c>WritingBatchGradingCron</c> uses. The pipeline self-marks
+    /// the submission failed on grading errors, so the catch is log-only.
+    /// Unit tests construct this service without a scope factory and keep the
+    /// legacy inline (synchronous) grading so their assertions stay
+    /// deterministic.
+    /// </summary>
+    private async Task RunOrDetachGradingAsync(Guid submissionId, CancellationToken ct)
+    {
+        if (scopeFactory is null)
+        {
+            var inlineOutcome = await pipeline.EvaluateAsync(submissionId, ct);
+            await EnsureGradeForSubmissionAsync(db, submissionId, inlineOutcome, ct);
+            return;
+        }
+        _ = Task.Run(() => GradeDetachedAsync(submissionId));
+    }
+
+    private async Task GradeDetachedAsync(Guid submissionId)
+    {
+        try
+        {
+            await using var scope = scopeFactory!.CreateAsyncScope();
+            var scopedPipeline = scope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>();
+            var scopedDb = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var outcome = await scopedPipeline.EvaluateAsync(submissionId, CancellationToken.None);
+            await EnsureGradeForSubmissionAsync(scopedDb, submissionId, outcome, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Detached writing grading crashed for submission {SubmissionId}.", submissionId);
+        }
+    }
+
+    private static async Task EnsureGradeForSubmissionAsync(LearnerDbContext db, Guid submissionId, WritingSubmissionGradeOutcome outcome, CancellationToken ct)
     {
         if (await db.WritingGrades.AsNoTracking().AnyAsync(g => g.SubmissionId == submissionId, ct)) return;
         var reused = await db.WritingGrades.AsNoTracking().FirstOrDefaultAsync(g => g.Id == outcome.GradeId, ct);

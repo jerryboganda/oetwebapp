@@ -80,8 +80,13 @@ public sealed class WritingBatchGradingCron(
         using var scope = ScopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var pipeline = scope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>();
+        // Express rows are graded on a detached task at submit time; a process
+        // kill between persist and task start would leave one queued forever,
+        // so also sweep express rows that sat unclaimed past a short grace.
+        var staleExpressCutoff = clock.GetUtcNow().AddMinutes(-2);
         var ids = await db.WritingSubmissions.AsNoTracking()
-            .Where(s => s.Status == "queued" && s.GradingTier == "batched")
+            .Where(s => s.Status == "queued"
+                && (s.GradingTier == "batched" || s.SubmittedAt < staleExpressCutoff))
             .OrderBy(s => s.SubmittedAt)
             .Select(s => s.Id)
             .Take(25)

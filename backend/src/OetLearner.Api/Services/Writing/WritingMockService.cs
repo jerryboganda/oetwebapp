@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -47,7 +48,8 @@ public sealed class WritingMockService(
     IWritingSubmissionEvaluationPipeline pipeline,
     IWritingTutorReviewService tutorReview,
     ILogger<WritingMockService> logger,
-    IWritingAttemptEventService? attemptEvents = null) : IWritingMockService
+    IWritingAttemptEventService? attemptEvents = null,
+    IServiceScopeFactory? scopeFactory = null) : IWritingMockService
 {
     private const int ReadingPhaseSeconds = 5 * 60;
     private const int WritingPhaseSeconds = 40 * 60;
@@ -425,7 +427,31 @@ public sealed class WritingMockService(
                 CheckTerminalLock: false), ct);
             submissionId = mockSubmit.SubmissionId;
 
-            await pipeline.EvaluateAsync(submissionId, ct);
+            // Detached grading (see WritingSubmissionService.RunOrDetachGradingAsync):
+            // the mock submit returns instantly and a client abort can never
+            // cancel the grade. The pipeline self-marks failed on error, so the
+            // catch is log-only. Tests construct this service without a scope
+            // factory and keep the legacy inline grading.
+            if (scopeFactory is null)
+            {
+                await pipeline.EvaluateAsync(submissionId, ct);
+            }
+            else
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await using var scope = scopeFactory.CreateAsyncScope();
+                        await scope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>()
+                            .EvaluateAsync(submissionId, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Detached mock writing grading crashed for submission {SubmissionId}.", submissionId);
+                    }
+                });
+            }
             await tutorReview.EnsureMockReviewAssignmentAsync(userId, submissionId, ct);
 
             await SubmitSessionAsync(userId, sessionId, submissionId, ct);

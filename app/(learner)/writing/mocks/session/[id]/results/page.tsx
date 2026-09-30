@@ -85,8 +85,10 @@ export default function WritingMockResultsPage() {
           setStatus(nextStatus);
           if (b) setBandHistory(b.history);
           setError(null);
-          // Mock Writing is human-marked: keep polling until the examiner's band lands.
-          if (!r.grade && nextStatus === 'awaiting_review' && attempts < 120) {
+          // Keep polling until AI grading finishes (queued/preflight/grading)
+          // and while awaiting the examiner's band (human-marked path).
+          const stillInProgress = !r.grade && ['queued', 'preflight', 'grading', 'awaiting_review'].includes(nextStatus);
+          if (stillInProgress && attempts < 120) {
             timer = setTimeout(load, 5000);
           }
         })

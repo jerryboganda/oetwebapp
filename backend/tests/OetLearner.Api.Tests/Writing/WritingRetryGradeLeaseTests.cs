@@ -55,10 +55,12 @@ public sealed class WritingRetryGradeLeaseTests
 
         var service = BuildService(db);
 
-        var outcome = await service.RetryGradeAsync("learner-1", submissionId, default);
+        var response = await service.RetryGradeAsync("learner-1", submissionId, default);
 
-        Assert.Equal(submissionId, outcome.SubmissionId);
-        Assert.False(outcome.IdempotentReuse);
+        Assert.Equal(submissionId, response.Id);
+        // Tests construct the service without a scope factory, so grading runs
+        // inline and the response reflects the completed grade.
+        Assert.Equal("graded", response.Status);
         Assert.Equal("graded", (await db.WritingSubmissions.AsNoTracking().FirstAsync(s => s.Id == submissionId)).Status);
         Assert.Equal(1, await db.WritingGrades.CountAsync(g => g.SubmissionId == submissionId));
     }

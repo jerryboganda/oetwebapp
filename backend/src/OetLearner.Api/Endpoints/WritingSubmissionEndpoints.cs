@@ -55,8 +55,10 @@ public static class WritingSubmissionEndpoints
             IWritingSubmissionService service,
             CancellationToken ct) =>
         {
-            var outcome = await service.RetryGradeAsync(http.WritingV2UserId(), id, ct);
-            return Results.Ok(outcome);
+            // Grading resumes off the request path; the returned submission
+            // reads queued until the grade lands (the grading page polls).
+            var submission = await service.RetryGradeAsync(http.WritingV2UserId(), id, ct);
+            return Results.Ok(submission);
         })
         .RequireRateLimiting("AiScoring")
         .WithName("RetryWritingSubmissionGrade");

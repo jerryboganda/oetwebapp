@@ -332,22 +332,15 @@ export {
 export const createWritingSubmission = (payload: WritingSubmissionCreatePayload) =>
   apiClient.post<WritingSubmissionDto>('/v1/writing/submissions', payload);
 
-export interface WritingRetryGradeResponse {
-  submissionId: string;
-  gradeId: string;
-  rawTotal: number;
-  bandLabel: string;
-  idempotentReuse: boolean;
-}
-
 /**
  * Controlled resume for a submission stuck in `failed` after a transient
  * provider/rate-limit failure. Re-grades the SAME persisted submission —
  * the letter is preserved server-side, and the retry never opens a duplicate
- * paid workflow.
+ * paid workflow. Grading resumes in the background; the returned submission
+ * reads `queued` until the grade lands (the grading page polls).
  */
 export const retryWritingGrade = (submissionId: string) =>
-  apiClient.post<WritingRetryGradeResponse>(
+  apiClient.post<WritingSubmissionDto>(
     path('/v1/writing/submissions/{id}/retry-grade', { id: submissionId }),
     {},
   );
