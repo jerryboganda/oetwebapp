@@ -49,6 +49,16 @@ public sealed class LiveVoiceService(
     // provider-session audit insert fail with Postgres 22001, so no live voice
     // conversation could start in production (25 Sep 2026).
     internal const string LiveVoiceSessionRole = "live_session";
+    private const string LiveVoiceTurnRole = "realtime_turn";
+    // Appended to the instructions of a provider session minted after an earlier one (see
+    // ComposeInstructionsAsync): the new session starts with no memory of the conversation.
+    private const string ConversationSoFarHeader =
+        "CONVERSATION SO FAR: the live connection dropped and was restored. " +
+        "Everything below was ALREADY said aloud in this consultation. " +
+        "Continue seamlessly as the same patient: do not greet again, do not repeat anything already said, " +
+        "do not raise again a concern you already raised, and do not summarise. " +
+        "Wait for the candidate to speak next.";
+    private const int MaxConversationSoFarChars = 4000;
     private const string ProviderUnavailableMessage = "The realtime voice provider could not start this conversation. Please retry.";
     private static readonly TimeSpan HangupTimeout = TimeSpan.FromSeconds(5);
     // The longest a Gemini token is minted for (30 minutes); see GeminiTokenTimes.
@@ -143,12 +153,13 @@ public sealed class LiveVoiceService(
             throw ApiException.Validation("live_voice_sdp_too_large", "The WebRTC SDP offer is too large.");
         }
 
+        var instructions = await ComposeInstructionsAsync(context, ct);
         var payload = new
         {
             session = new
             {
                 model = liveVoice.OpenAiModel,
-                instructions = context.Instructions,
+                instructions,
             },
             transport = new
             {
@@ -208,6 +219,7 @@ public sealed class LiveVoiceService(
         await EnsureConsentAsync(context, ct);
         EnsureProviderConfigured(LiveVoiceProviders.Gemini);
 
+        var instructions = await ComposeInstructionsAsync(context, ct);
         var (expiresAt, newSessionExpiresAt) = GeminiTokenTimes(clock.GetUtcNow(), context.Window, liveVoice);
 
         var payload = new
@@ -217,7 +229,7 @@ public sealed class LiveVoiceService(
             newSessionExpireTime = newSessionExpiresAt.UtcDateTime.ToString("O"),
             // REST field name (the SDKs call it liveConnectConstraints, which the
             // auth_tokens endpoint rejects with 400). Locks model + persona server-side.
-            bidiGenerateContentSetup = BuildGeminiSetup(liveVoice.GeminiModel, context.Instructions),
+            bidiGenerateContentSetup = BuildGeminiSetup(liveVoice.GeminiModel, instructions),
         };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, liveVoice.GeminiBaseUrl)
@@ -330,7 +342,7 @@ public sealed class LiveVoiceService(
         var row = await patientTurns.PersistAsync(
             context.Session.Id,
             clientTurnId,
-            "realtime_turn",
+            LiveVoiceTurnRole,
             BuildTurnText(candidateText, patientText),
             new
             {
@@ -480,6 +492,92 @@ public sealed class LiveVoiceService(
             BuildInstructions(card, readiness.Script, readiness),
             window);
     }
+
+    /// <summary>
+    /// The instructions for ONE provider session. The first session of a role-play gets the card
+    /// instructions unchanged. A later one (the connection dropped or the patient went silent, and the
+    /// browser minted a fresh session) starts with no memory, so the turns already saved for this
+    /// Speaking session are appended: the most recent ones that fit
+    /// <see cref="MaxConversationSoFarChars"/>. The browser flushes its turn in progress before it asks.
+    /// The history goes to the provider only: it is never logged, audited or returned.
+    /// </summary>
+    private async Task<string> ComposeInstructionsAsync(LiveVoiceContext context, CancellationToken ct)
+    {
+        var sessionId = context.Session.Id;
+        if (!await db.SpeakingPatientTurns.AsNoTracking()
+                .AnyAsync(x => x.SessionId == sessionId && x.Role == LiveVoiceSessionRole, ct))
+        {
+            return context.Instructions;
+        }
+
+        var saved = await db.SpeakingPatientTurns.AsNoTracking()
+            .Where(x => x.SessionId == sessionId && x.Role == LiveVoiceTurnRole)
+            .OrderBy(x => x.SequenceNumber)
+            .Select(x => new { x.Text, x.ResponseJson })
+            .ToListAsync(ct);
+        var turns = saved
+            .Select(x => FormatSavedTurn(x.Text, x.ResponseJson))
+            .Where(turn => turn.Length > 0)
+            .ToList();
+        if (turns.Count == 0)
+        {
+            return context.Instructions;
+        }
+
+        // Newest first, so the cap drops the OLDEST turns. The first turn that does not fit ends the
+        // walk, which keeps the history contiguous. Starting at -1 leaves out the newline before the
+        // first turn, so the length is exactly that of the turns joined with "\n".
+        var kept = new List<string>();
+        var length = -1;
+        for (var i = turns.Count - 1; i >= 0; i--)
+        {
+            length += turns[i].Length + 1;
+            if (length > MaxConversationSoFarChars) break;
+            kept.Insert(0, turns[i]);
+        }
+
+        var block = new List<string> { ConversationSoFarHeader };
+        if (kept.Count < turns.Count) block.Add("(earlier turns omitted)");
+        block.AddRange(kept);
+        return $"{context.Instructions}\n{string.Join('\n', block)}";
+    }
+
+    /// <summary>
+    /// One saved turn as "Candidate: ..." and "Patient: ..." lines (an empty side is skipped; empty
+    /// when nothing was said). Reads the structured fields and, when the JSON is unusable, the
+    /// "C: ...\nP: ..." text column (<see cref="BuildTurnText"/>). Newlines inside a side collapse to
+    /// spaces, so a transcript can never start a line of its own. Never throws.
+    /// </summary>
+    private static string FormatSavedTurn(string text, string responseJson)
+    {
+        string? candidate = null;
+        string? patient = null;
+        try
+        {
+            using var document = JsonDocument.Parse(responseJson);
+            candidate = ReadString(document.RootElement, "candidateText");
+            patient = ReadString(document.RootElement, "patientText");
+        }
+        catch (JsonException)
+        {
+            // A damaged row is read from its text column below.
+        }
+
+        if (candidate is null && patient is null && text.StartsWith("C:", StringComparison.Ordinal))
+        {
+            var split = text.IndexOf("\nP:", StringComparison.Ordinal);
+            candidate = split < 0 ? text[2..] : text[2..split];
+            patient = split < 0 ? null : text[(split + 3)..];
+        }
+
+        var lines = new List<string>(2);
+        if (CollapseWhitespace(candidate) is { Length: > 0 } candidateLine) lines.Add($"Candidate: {candidateLine}");
+        if (CollapseWhitespace(patient) is { Length: > 0 } patientLine) lines.Add($"Patient: {patientLine}");
+        return string.Join('\n', lines);
+    }
+
+    private static string CollapseWhitespace(string? text)
+        => text is null ? string.Empty : string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>
     /// A provider credential is minted only during the active role-play, before its deadline, and
