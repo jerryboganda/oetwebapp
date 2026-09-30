@@ -87,14 +87,20 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
     setLevel(0);
   }, []);
 
-  useEffect(() => () => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      try {
-        recorder.stop();
-      } catch {}
-    }
-    releaseMic();
+  // Set again on every mount (React strict mode runs mount -> cleanup -> mount in development).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch {}
+      }
+      releaseMic();
+    };
   }, [releaseMic]);
 
   const start = useCallback(async () => {
@@ -107,6 +113,12 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
         throw new Error('this browser cannot record audio. Use an updated Chrome, Edge, Safari or the mobile app.');
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (!mountedRef.current) {
+        // The panel left while the permission prompt was open: nothing owns this stream any more, so
+        // the microphone indicator would stay on until the tab closed.
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
       streamRef.current = stream;
       const mimeType = pickRecordingMimeType();
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
