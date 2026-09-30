@@ -979,6 +979,260 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal(StatusCodes.Status400BadRequest, blank.StatusCode);
     }
 
+    // ── Recovery mints: the conversation so far ──────────────────────
+
+    // Pinned literally on purpose: the wording is a contract with the patient prompt.
+    private const string ConversationSoFarHeader =
+        "CONVERSATION SO FAR: the live connection dropped and was restored. Everything below was ALREADY said aloud in this consultation. Continue seamlessly as the same patient: do not greet again, do not repeat anything already said, do not raise again a concern you already raised, and do not summarise. Wait for the candidate to speak next.";
+    private const string EarlierTurnsOmitted = "(earlier turns omitted)";
+
+    private static async Task<string> MintAsync(LiveVoiceRig rig, SeededLiveVoiceSession session, string provider)
+        => provider == LiveVoiceProviders.OpenAi
+            ? (await MintOpenAiAsync(rig, session)).ProviderSessionId
+            : (await MintGeminiAsync(rig, session)).ProviderSessionId;
+
+    /// <summary>Saves completed turns through the service, as the browser does.</summary>
+    private static async Task SaveTurnsAsync(
+        LiveVoiceRig rig,
+        SeededLiveVoiceSession session,
+        string provider,
+        string providerSessionId,
+        params (string Candidate, string Patient)[] turns)
+    {
+        for (var i = 0; i < turns.Length; i++)
+        {
+            await rig.Service.PersistTurnAsync(
+                session.UserId,
+                session.SessionId,
+                new LiveVoiceTurnRequest(provider, providerSessionId, turns[i].Candidate, turns[i].Patient, $"voice-turn:{i + 1}", i + 1),
+                CancellationToken.None);
+        }
+    }
+
+    /// <summary>The instructions of every provider session the service asked a provider to create, oldest first.</summary>
+    private static string[] MintedInstructions(LiveVoiceRig rig)
+        => rig.Handler.Requests.Where(r => r.Body is not null).Select(InstructionsOf).ToArray();
+
+    /// <summary>What the first mint of a seeded card must carry, byte for byte: the card instructions and nothing else.</summary>
+    private static async Task<string> BaseInstructionsAsync(LiveVoiceRig rig, SeededLiveVoiceSession session)
+    {
+        var card = await rig.Db.RolePlayCards.AsNoTracking().SingleAsync(c => c.Id == session.CardId);
+        var script = await rig.Db.InterlocutorScripts.AsNoTracking().SingleAsync(s => s.RolePlayCardId == session.CardId);
+        return LiveVoiceService.BuildInstructions(
+            card,
+            script,
+            new LiveVoiceContentReadiness(script, false, false, "authored_interlocutor_script", "not_required"));
+    }
+
+    private static SpeakingPatientTurn SavedTurnRow(
+        SeededLiveVoiceSession session,
+        int sequenceNumber,
+        string text,
+        string responseJson,
+        DateTimeOffset createdAt)
+        => new()
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SessionId = session.SessionId,
+            ClientTurnId = $"voice-turn:{sequenceNumber}",
+            SequenceNumber = sequenceNumber,
+            Role = "realtime_turn",
+            Text = text,
+            ResponseJson = responseJson,
+            CreatedAt = createdAt,
+        };
+
+    [Theory]
+    [InlineData(LiveVoiceProviders.OpenAi)]
+    [InlineData(LiveVoiceProviders.Gemini)]
+    public async Task FirstMint_CarriesTheCardInstructionsUnchanged_WithNoConversationBlock(string provider)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+
+        await MintAsync(rig, session, provider);
+
+        var instructions = Assert.Single(MintedInstructions(rig));
+        Assert.Equal(await BaseInstructionsAsync(rig, session), instructions);
+        Assert.DoesNotContain("CONVERSATION SO FAR", instructions, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(LiveVoiceProviders.OpenAi, LiveVoiceProviders.OpenAi)]
+    [InlineData(LiveVoiceProviders.Gemini, LiveVoiceProviders.Gemini)]
+    // The provider that died is often not the one that recovers it.
+    [InlineData(LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini)]
+    [InlineData(LiveVoiceProviders.Gemini, LiveVoiceProviders.OpenAi)]
+    public async Task RecoveryMint_AppendsTheSavedTurnsInOrder_AfterTheUnchangedInstructions(
+        string firstProvider,
+        string recoveryProvider)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var providerSessionId = await MintAsync(rig, session, firstProvider);
+        await SaveTurnsAsync(
+            rig,
+            session,
+            firstProvider,
+            providerSessionId,
+            ("Good morning, how can I help you today?", "Doctor, my knee hurts when I walk."),
+            ("How long has this\nbeen going on?", "About two weeks. It is worse at night."));
+
+        await MintAsync(rig, session, recoveryProvider);
+
+        var minted = MintedInstructions(rig);
+        var baseInstructions = await BaseInstructionsAsync(rig, session);
+        Assert.Equal(2, minted.Length);
+        Assert.Equal(baseInstructions, minted[0]);
+        Assert.Equal(
+            baseInstructions + "\n" + ConversationSoFarHeader
+                + "\nCandidate: Good morning, how can I help you today?"
+                + "\nPatient: Doctor, my knee hurts when I walk."
+                + "\nCandidate: How long has this been going on?"
+                + "\nPatient: About two weeks. It is worse at night.",
+            minted[1]);
+        Assert.DoesNotContain(EarlierTurnsOmitted, minted[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RecoveryMint_KeepsOnlyTheNewestTurnsThatFitTheCap_AndSaysEarlierTurnsWereOmitted()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var first = await MintOpenAiAsync(rig, session);
+        // Twelve turns of 621 characters each (400 + 200, plus the two labels and the newline) are
+        // 7,451 characters of history against a cap of 4,000: exactly the newest six fit.
+        var turns = Enumerable.Range(1, 12)
+            .Select(i => (Candidate: $"c{i:00}-{new string('c', 396)}", Patient: $"p{i:00}-{new string('p', 196)}"))
+            .ToArray();
+        await SaveTurnsAsync(rig, session, first.Provider, first.ProviderSessionId, turns);
+
+        await MintGeminiAsync(rig, session);
+
+        var newest = string.Join('\n', turns.Skip(6).Select(t => $"Candidate: {t.Candidate}\nPatient: {t.Patient}"));
+        Assert.True(newest.Length <= 4000);
+        var recovered = MintedInstructions(rig)[1];
+        // The omitted line sits right after the header sentence; the oldest six turns are gone.
+        Assert.Equal(
+            await BaseInstructionsAsync(rig, session) + "\n" + ConversationSoFarHeader + "\n" + EarlierTurnsOmitted + "\n" + newest,
+            recovered);
+        Assert.DoesNotContain("c06-", recovered, StringComparison.Ordinal);
+        Assert.Contains("c07-", recovered, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(4000, false)]
+    [InlineData(4001, true)]
+    public async Task TheCap_CountsTheTurnsJoinedWithNewlines_AndIsInclusive(int joinedLength, bool oldestDropped)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var first = await MintOpenAiAsync(rig, session);
+        // Two candidate-only turns: "Candidate: " + text each, one newline between = 23 + both texts.
+        var older = new string('a', 2000);
+        var newer = new string('b', joinedLength - 23 - older.Length);
+        await SaveTurnsAsync(rig, session, first.Provider, first.ProviderSessionId, (older, string.Empty), (newer, string.Empty));
+
+        await MintOpenAiAsync(rig, session);
+
+        var recovered = MintedInstructions(rig)[1];
+        Assert.Contains(newer, recovered, StringComparison.Ordinal);
+        Assert.Equal(!oldestDropped, recovered.Contains(older, StringComparison.Ordinal));
+        Assert.Equal(oldestDropped, recovered.Contains(EarlierTurnsOmitted, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RecoveryMint_WithNoSavedTurnsOfItsOwn_CarriesNoBlock_EvenWhenAnotherSessionHasSome()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var other = await SeedAsync(rig);
+        var session = await SeedAsync(rig);
+        var otherMint = await MintOpenAiAsync(rig, other);
+        await SaveTurnsAsync(
+            rig,
+            other,
+            otherMint.Provider,
+            otherMint.ProviderSessionId,
+            ("Another learner's words", "Another patient's words"));
+
+        // Provider sessions exist but nobody spoke (a leg that failed after its create call, a reload
+        // before the first word): there is nothing to hand the new session.
+        await MintOpenAiAsync(rig, session);
+        await MintOpenAiAsync(rig, session);
+        await MintGeminiAsync(rig, session);
+
+        Assert.Equal(3, (await SessionRowsAsync(rig, session)).Count);
+        var baseInstructions = await BaseInstructionsAsync(rig, session);
+        var minted = MintedInstructions(rig).Skip(1).ToArray();
+        Assert.Equal(3, minted.Length);
+        Assert.All(minted, instructions => Assert.Equal(baseInstructions, instructions));
+    }
+
+    [Fact]
+    public async Task TheHistory_GoesToTheProviderOnly_NeverLoggedAuditedOrReturned()
+    {
+        const string marker = "HISTORY-MARKER";
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var first = await MintOpenAiAsync(rig, session);
+        await SaveTurnsAsync(
+            rig,
+            session,
+            first.Provider,
+            first.ProviderSessionId,
+            ($"{marker} the candidate's words", $"{marker} the patient's words"));
+
+        // A failed recovery call logs its failure: the body it carried must not reach that line.
+        FailProvider(rig, OpenAiHost, HttpStatusCode.InternalServerError, LiveVoiceTestKit.OpenAiError("server_error", "boom"));
+        var failed = await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
+        var recovered = await MintGeminiAsync(rig, session);
+
+        // Both recovery calls did carry the history, so the absences below are not vacuous.
+        var sent = MintedInstructions(rig);
+        Assert.Equal(3, sent.Length);
+        Assert.DoesNotContain(marker, sent[0], StringComparison.Ordinal);
+        Assert.Contains(marker, sent[1], StringComparison.Ordinal);
+        Assert.Contains(marker, sent[2], StringComparison.Ordinal);
+        var logs = rig.Log.AllText;
+        Assert.Contains("session creation failed", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(marker, logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(marker, failed.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(marker, JsonSerializer.Serialize(recovered), StringComparison.Ordinal);
+        Assert.All(
+            await SessionRowsAsync(rig, session),
+            row => Assert.DoesNotContain(marker, row.Text + row.ResponseJson, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RecoveryMint_ReadsDamagedRowsFromTheTextColumn_SkipsEmptySidesAndWipedRows_AndCollapsesNewlines()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        await MintOpenAiAsync(rig, session);
+        var now = rig.Clock.GetUtcNow();
+        // Inserted out of order: the history is read oldest first by sequence number.
+        rig.Db.SpeakingPatientTurns.AddRange(
+            // The fields win over the text column; newlines collapse; an empty candidate side is skipped.
+            SavedTurnRow(session, 13, "ignored", """{"candidateText":"","patientText":"Still\nhere"}""", now),
+            // Wiped by the retention sweep: nothing left to say.
+            SavedTurnRow(session, 12, string.Empty, """{"retention":"expired"}""", now),
+            // JSON without the fields: "C: ...\nP: ..." is read instead; an empty patient side is skipped.
+            SavedTurnRow(session, 11, "C: Any pain?\nP:", "{}", now),
+            // Invalid JSON: the same fallback; newlines inside a side collapse.
+            SavedTurnRow(session, 10, "C: Hello\ndoctor\nP: Good morning", "not json", now));
+        await rig.Db.SaveChangesAsync();
+
+        await MintGeminiAsync(rig, session);
+
+        Assert.Equal(
+            await BaseInstructionsAsync(rig, session) + "\n" + ConversationSoFarHeader
+                + "\nCandidate: Hello doctor"
+                + "\nPatient: Good morning"
+                + "\nCandidate: Any pain?"
+                + "\nPatient: Still here",
+            MintedInstructions(rig)[1]);
+    }
+
     private static int MaxLength<T>(string property)
         => typeof(T).GetProperty(property)!
             .GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.MaxLengthAttribute), false)

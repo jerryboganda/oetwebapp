@@ -49,6 +49,14 @@ on:
         description: Answer the expected primary's create call with a 503 in the browser and assert the app fails over to the other provider (needs expected_primary, blank voice_provider). The API never sees the faked failure, so only the client failover is exercised.
         type: boolean
         default: false
+      fault_drop_at_s:
+        description: Recovery run, blank = off. This many seconds after the candidate microphone tape starts, kill the live provider connection from inside the page (Gemini closes its WebSocket, OpenAI its data channel) and assert the app recovers on a new session. Needs a blank voice_provider (a pinned provider never recovers) and fail_primary off.
+        type: string
+        default: ''
+      fault_stall_at_s:
+        description: Recovery run, blank = off. This many seconds after the candidate microphone tape starts, make the provider go silent (every server message is swallowed until the app builds a new session) and assert the app recovers. Same rules as fault_drop_at_s, which wins when both are set.
+        type: string
+        default: ''
 
 jobs:
   e2e:
@@ -65,6 +73,24 @@ jobs:
         run: |
           if [ "${{ inputs.fail_primary }}" = true ] && { [ -z "${{ inputs.expected_primary }}" ] || [ -n "${{ inputs.voice_provider }}" ]; }; then
             echo "::error::fail_primary needs expected_primary (the provider to fail) and a blank voice_provider: a pinned provider never fails over."
+            exit 1
+          fi
+      - name: Reject a fault run that cannot recover
+        # Free-text inputs reach the script through env, never through its text.
+        env:
+          FAULT_DROP_AT_S: ${{ inputs.fault_drop_at_s }}
+          FAULT_STALL_AT_S: ${{ inputs.fault_stall_at_s }}
+          VOICE_PROVIDER: ${{ inputs.voice_provider }}
+          FAIL_PRIMARY: ${{ inputs.fail_primary }}
+        run: |
+          for v in "$FAULT_DROP_AT_S" "$FAULT_STALL_AT_S"; do
+            if [ -n "$v" ] && ! [[ "$v" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+              echo "::error::fault_drop_at_s and fault_stall_at_s must be a number of seconds, for example 40."
+              exit 1
+            fi
+          done
+          if [ -n "$FAULT_DROP_AT_S$FAULT_STALL_AT_S" ] && { [ -n "$VOICE_PROVIDER" ] || [ "$FAIL_PRIMARY" = true ]; }; then
+            echo "::error::A fault run needs a blank voice_provider (a pinned provider never recovers, so the fault would only kill the session) and fail_primary off (its failover check expects exactly one create call per provider)."
             exit 1
           fi
       - uses: actions/checkout@v4
@@ -123,6 +149,8 @@ jobs:
           VOICE_PROVIDER: ${{ inputs.voice_provider }}
           EXPECTED_PRIMARY: ${{ inputs.expected_primary }}
           FAIL_PRIMARY: ${{ inputs.fail_primary }}
+          FAULT_DROP_AT_S: ${{ inputs.fault_drop_at_s }}
+          FAULT_STALL_AT_S: ${{ inputs.fault_stall_at_s }}
           CANDIDATE_WAV: ${{ github.workspace }}/candidate.wav
           CANDIDATE_TIMELINE: ${{ github.workspace }}/timeline.json
           SCRIPT_NAME: ${{ inputs.script }}
