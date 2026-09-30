@@ -41,12 +41,12 @@ on:
         options: ['', gemini, openai]
         default: ''
       expected_primary:
-        description: Provider this unpinned run should try first (blank = no assertion). Fails the run if the app's first provider call goes elsewhere.
+        description: Provider this unpinned run should try first (blank = no assertion). Fails the run if the app's first provider call goes elsewhere. Ignored (metrics.json says so) when voice_provider pins a provider.
         type: choice
         options: ['', gemini, openai]
         default: ''
       fail_primary:
-        description: Answer the expected primary's create call with a 503 in the browser and assert the app fails over to the other provider (needs expected_primary, blank voice_provider)
+        description: Answer the expected primary's create call with a 503 in the browser and assert the app fails over to the other provider (needs expected_primary, blank voice_provider). The API never sees the faked failure, so only the client failover is exercised.
         type: boolean
         default: false
 
@@ -128,7 +128,7 @@ jobs:
           SCRIPT_NAME: ${{ inputs.script }}
           VOICE: ${{ inputs.voice }}
           SCRIPT_FILE: scripts/qa/speaking-candidate-scripts/${{ inputs.script }}.txt
-        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && cp scripts/qa/live-voice-browser-probes.mjs /tmp/pw/ && node /tmp/pw/e2e.mjs
+        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && cp scripts/qa/live-voice-browser-probes.mjs scripts/qa/live-voice-served-provider.mjs /tmp/pw/ && node /tmp/pw/e2e.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

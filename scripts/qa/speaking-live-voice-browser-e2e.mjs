@@ -8,12 +8,17 @@
 // (ordering + cross-card leak checks) and the patient's audio for a listening check.
 // Provider selection: VOICE_PROVIDER pins one provider (the app never fails over then, so every check is strict).
 // Blank = the server's health-ordered candidates. EXPECTED_PRIMARY (openai | gemini, blank = no assertion) is the
-// provider the run should try first; FAIL_PRIMARY=true answers that provider's create call with a 503 in the
-// browser and asserts the app fails over to the other one (exactly one call to each, per card).
+// provider the run should try first; it is ignored when VOICE_PROVIDER pins one (metrics.expectedPrimaryIgnored,
+// and its check stays null). FAIL_PRIMARY=true answers that provider's create call with a 503 in the browser (the
+// request never reaches the API, so only the client failover is exercised) and asserts the app fails over to the
+// other one (exactly one call to each, per card).
+// Which provider served is what each card's panel reports (data-live-provider): metrics.servedProvider. Transcripts,
+// usage and the split check are attributed to it, never to "some data-channel event exists".
 // Run by .github/workflows/speaking-live-voice-prod-e2e.yml (never locally).
 import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
 import { installProbes } from './live-voice-browser-probes.mjs';
+import { createServedRecord } from './live-voice-served-provider.mjs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
 const {
@@ -33,6 +38,10 @@ const secondaryCall = EXPECTED_PRIMARY ? CALL_OF[EXPECTED_PRIMARY === 'openai' ?
 const out = 'live-voice-e2e';
 fs.mkdirSync(out, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+// A pinned provider is never "tried first" (the app makes one attempt and never fails over), so an expected primary has
+// nothing to assert there: it is reported as ignored, not silently dropped.
+const expectedPrimaryIgnored = Boolean(EXPECTED_PRIMARY && VOICE_PROVIDER);
+if (expectedPrimaryIgnored) log(`EXPECTED_PRIMARY=${EXPECTED_PRIMARY} is ignored: the run is pinned to ${VOICE_PROVIDER}.`);
 const timeline = CANDIDATE_TIMELINE && fs.existsSync(CANDIDATE_TIMELINE) ? JSON.parse(fs.readFileSync(CANDIDATE_TIMELINE, 'utf8')) : [];
 const scriptText = SCRIPT_FILE && fs.existsSync(SCRIPT_FILE) ? fs.readFileSync(SCRIPT_FILE, 'utf8') : '';
 // Practice mode submits after this many seconds of conversation. Blank = the candidate tape's last
@@ -56,7 +65,9 @@ if (QA_DEVICE_ID) await context.addInitScript((id) => { try { localStorage.setIt
 // In-page probes (audio spans, patient recording, GPT-Live events, RTC / WebSocket state).
 await context.addInitScript(installProbes, VOICE_PROVIDER);
 // FAIL_PRIMARY: the primary provider's create call fails the way an outage does (503 + retryable:false), so the
-// app must move on to the other provider by itself. The request still goes out and is counted; only its answer is faked.
+// app must move on to the other provider by itself. The request never reaches the API: route.fulfill answers it in the
+// browser (the page still counts it), so only the client failover is exercised. The server's breaker, health model and
+// audit never see this failure.
 if (failPrimary) {
   await context.route(new RegExp(`/realtime/sessions/[^/]+/${primaryCall}(?:[?#]|$)`), (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
@@ -72,7 +83,8 @@ if (failPrimary) {
 const page = await context.newPage();
 const transcript = { candidate: '', patient: '' };
 const stability = { providerErrors: [], socketsOpened: 0, socketCloses: [], sessionClosed: [], goAway: [], wsClose: [], rtcStates: [] };
-const gemini = { usage: [], audioChunks: [], audioAt: [], words: [] };
+// Everything the Gemini socket frames carried. Whether it counts is decided by who served (see servedProviders).
+const gemini = { usage: [], audioChunks: [], audioAt: [], words: [], errors: [] };
 // Every provider create call in request order, with how it ended. A 503 on one provider followed by a 200 on the
 // other is a failover, not a browser error; usage and the ordering checks follow the provider that actually served.
 // Bodies are never kept (the answer carries the SDP, the token URL carries the access token): status, the app's
@@ -100,12 +112,12 @@ page.on('websocket', (ws) => {
     const at = Date.now();
     try {
       const v = JSON.parse(typeof payload === 'string' ? payload : Buffer.from(payload).toString('utf8'));
-      if (v.error) stability.providerErrors.push(JSON.stringify(v.error));
+      if (v.error) gemini.errors.push(JSON.stringify(v.error));
       if (v.goAway) stability.goAway.push({ at, ...v.goAway });
       if (v.usageMetadata) gemini.usage.push({ at, ...v.usageMetadata });
       const sc = v.serverContent;
-      if (sc?.inputTranscription?.text) { transcript.candidate += sc.inputTranscription.text; gemini.words.push({ at, who: 'candidate', text: sc.inputTranscription.text, startMs: null, endMs: null }); }
-      if (sc?.outputTranscription?.text) { transcript.patient += sc.outputTranscription.text; gemini.words.push({ at, who: 'patient', text: sc.outputTranscription.text, startMs: null, endMs: null }); }
+      if (sc?.inputTranscription?.text) gemini.words.push({ at, who: 'candidate', text: sc.inputTranscription.text, startMs: null, endMs: null });
+      if (sc?.outputTranscription?.text) gemini.words.push({ at, who: 'patient', text: sc.outputTranscription.text, startMs: null, endMs: null });
       for (const part of sc?.modelTurn?.parts ?? []) {
         if (part.inlineData?.data) { gemini.audioChunks.push(Buffer.from(part.inlineData.data, 'base64')); gemini.audioAt.push(at); }
       }
@@ -180,16 +192,17 @@ const snapshot = async () => {
 };
 const snapshotTimer = setInterval(snapshot, 3_000);
 
+// Who served (what each connected card's panel reports, see live-voice-served-provider.mjs) decides whose events,
+// frames, usage and split check count. `metrics` is read lazily: it is created further down.
+const { reportedProviders, servedProviders, openAiServed, geminiServed, openAiWords, applyServed } = createServedRecord({
+  panels: () => [metrics.roleplayPanel, metrics.cardAPanel, metrics.cardBPanel],
+  servedCalls, gemini, transcript, stability,
+});
+
 const readLive = async () => {
   const state = await page.evaluate(() => ({ events: window.__voiceEvents ?? [], patient: window.__patientSpans ?? [], micStartedAt: window.__micStartedAt }))
     .catch(() => ({ events: [], patient: [], micStartedAt: null }));
-  const text = (type) => state.events.filter((e) => e.type === type).map((e) => e.delta ?? '').join('');
-  if (state.events.length) {
-    transcript.candidate = text('session.input_transcript.delta');
-    transcript.patient = text('session.output_transcript.delta');
-    stability.providerErrors = state.events.filter((e) => String(e.type).includes('error')).map((e) => JSON.stringify(e));
-    stability.sessionClosed = state.events.filter((e) => e.type === 'session.closed').map((e) => ({ reason: e.reason, usage: e.usage }));
-  }
+  applyServed(state.events);
   return state;
 };
 
@@ -324,7 +337,7 @@ function wav(pcm, rate = 24_000) {
 
 const shot = (name) => page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
 const metrics = {
-  mode: MODE, provider: VOICE_PROVIDER || 'primary', expectedPrimary: EXPECTED_PRIMARY || null, failPrimary,
+  mode: MODE, provider: VOICE_PROVIDER || 'primary', expectedPrimary: EXPECTED_PRIMARY || null, expectedPrimaryIgnored, failPrimary,
   cardId: CARD_ID, speakSeconds,
   script: SCRIPT_NAME, voice: VOICE, runId: process.env.GITHUB_RUN_ID ?? null, startedAt: new Date().toISOString(),
 };
@@ -339,17 +352,19 @@ async function startLive(label) {
   const t0 = Date.now();
   // Fail fast, with the reason, when no provider can start the session (production 29 Sep: OpenAI 429). The app shows
   // this only after every candidate failed: "The live AI patient could not start" (older builds showed the server's
-  // "...could not start this conversation").
+  // "The realtime voice provider could not start this conversation"). Deliberately narrow: the microphone ("Could not
+  // start the microphone") and exam-page ("Could not start the discussion") errors are other failures, and reporting
+  // them as "no provider could start" would point the reader at the wrong place.
   const connected = page.getByText(/Live — the patient is listening|Patient speaking/).first().waitFor({ timeout: 45_000 }).then(() => 'live');
-  const refused = page.getByText(/could not start/i).first().waitFor({ timeout: 45_000 }).then(() => 'refused');
+  const refused = page.getByText(/(?:live AI patient|voice provider) could not start/i).first().waitFor({ timeout: 45_000 }).then(() => 'refused');
   const outcome = await Promise.race([connected, refused]).catch(() => 'timeout');
   connected.catch(() => undefined);
   refused.catch(() => undefined);
   if (outcome === 'refused') throw new Error(`${label}: no live voice provider could start the conversation (see metrics.providerAttempts and metrics.errors.http).`);
   if (outcome !== 'live') throw new Error(`${label}: live voice did not connect within 45 s.`);
   metrics[`${label}ConnectMs`] = Date.now() - t0;
-  // What the panel says served this card (data attributes, not learner text) and whether the microphone was released
-  // between cards: informational, read alongside the provider calls.
+  // What the panel says served this card (data attributes, not learner text): the source of metrics.servedProvider and
+  // of every provider attribution below (see servedProviders). Also whether the microphone was released between cards.
   const indicator = page.getByTestId('speaking-mic-indicator');
   metrics[`${label}Panel`] = {
     provider: await indicator.getAttribute('data-live-provider').catch(() => null),
@@ -446,12 +461,12 @@ try {
       await shot(`3-after-card-${card}`);
     }
     metrics.providerCalls = providerCalls;
-    // Usage follows the provider(s) that actually served a card, not the ones that were tried.
-    const served = servedCalls();
+    // Usage follows the provider(s) that actually served a card, not the ones that were tried. The analysis scripts read
+    // OpenAI's usage at the top level, so a mixed exam keeps it there and nests Gemini's under `gemini`.
     const geminiUsage = { usageMetadataFrames: gemini.usage.length, all: gemini.usage };
-    metrics.providerUsage = served.includes('openai/offer') && served.includes('gemini/token')
-      ? { openai: await openAiUsage(), gemini: geminiUsage }
-      : served.includes('openai/offer') ? await openAiUsage() : geminiUsage;
+    metrics.providerUsage = openAiServed() && geminiServed()
+      ? { ...(await openAiUsage()), gemini: geminiUsage }
+      : openAiServed() ? await openAiUsage() : geminiUsage;
     await savePatientAudio('patient-audio');
     log('exam submitted', page.url());
     const text = await waitForGrade('exam', 25);
@@ -521,7 +536,7 @@ try {
       p90Ms: sorted[Math.floor(sorted.length * 0.9)] ?? null,
       perLine: lat,
     };
-    metrics.providerUsage = before.events.length
+    metrics.providerUsage = openAiServed()
       ? await openAiUsage()
       : { usageMetadataFrames: gemini.usage.length, last: gemini.usage.at(-1) ?? null, all: gemini.usage };
     log('METRICS', JSON.stringify({ ...metrics, providerUsage: { ...metrics.providerUsage, all: undefined } }));
@@ -539,21 +554,15 @@ try {
   clearInterval(snapshotTimer);
   const docs = Object.values(snapshots);
   const events = docs.flatMap((d) => d.events);
-  if (events.length) {
-    transcript.candidate = events.filter((e) => e.type === 'session.input_transcript.delta').map((e) => e.delta ?? '').join('');
-    transcript.patient = events.filter((e) => e.type === 'session.output_transcript.delta').map((e) => e.delta ?? '').join('');
-    stability.providerErrors = events.filter((e) => String(e.type).includes('error')).map((e) => JSON.stringify(e));
-    stability.sessionClosed = events.filter((e) => e.type === 'session.closed').map((e) => ({ reason: e.reason, usage: e.usage }));
-  }
+  applyServed(events);
   stability.wsClose = docs.flatMap((d) => d.ws ?? []);
   stability.rtcStates = docs.flatMap((d) => d.rtc ?? []);
   metrics.conversation = conversation(docs.flatMap((d) => d.mic), docs.flatMap((d) => d.patient));
   // Timed words + speech spans, to read what was said at each barge-in / overlap. start/end are
-  // the provider's own timeline (GPT-Live start_ms/end_ms), kept to calibrate transcript ordering.
+  // the provider's own timeline (GPT-Live start_ms/end_ms), kept to calibrate transcript ordering. Words are the
+  // serving provider(s)' own (OpenAI's events, Gemini's frames); eventTypes and speechEvents stay raw diagnostics.
   fs.writeFileSync(`${out}/timeline-events.json`, JSON.stringify({
-    words: events.length ? events.filter((e) => /transcript\.delta$/.test(e.type)).map((e) => ({
-      at: e.__at, who: e.type.includes('input') ? 'candidate' : 'patient', text: e.delta, startMs: e.start_ms ?? null, endMs: e.end_ms ?? null,
-    })) : gemini.words,
+    words: [...(openAiServed() ? openAiWords(events) : []), ...(geminiServed() ? gemini.words : [])].sort((a, b) => a.at - b.at),
     eventTypes: events.reduce((acc, e) => ({ ...acc, [e.type]: (acc[e.type] ?? 0) + 1 }), {}),
     speechEvents: events.filter((e) => /speech|interrupt|cancel|turn/i.test(e.type)).map((e) => ({ at: e.__at, type: e.type })),
     candidateSpans: merge(docs.flatMap((d) => d.mic)),
@@ -589,7 +598,13 @@ try {
   const failoverObserved = failoverSeen();
   metrics.failoverObserved = failoverObserved;
   metrics.hardStopAt = providerAttempts.find((a) => a.hardStopAt)?.hardStopAt ?? null;
-  const served = servedCalls();
+  // The provider whose link went live, as each connected card's panel reported it: one name, 'mixed' when an exam's
+  // cards were served by different providers, null when none reported (nothing went live, or a build that predates
+  // data-live-provider). providerCalls / providerAttempts still list every create call, failed ones included.
+  const reported = [...new Set(reportedProviders())];
+  metrics.servedProvider = reported.length === 0 ? null : reported.length === 1 ? reported[0] : 'mixed';
+  const served = servedProviders();
+  const openAiEvents = openAiServed() ? events : [];
   // A failed provider create call is expected, not a browser error, only in an unpinned run that then failed over.
   // A pinned run (VOICE_PROVIDER) never fails over, so any failure there stays a red check.
   const failoverNoise = (line) => !VOICE_PROVIDER && failoverObserved
@@ -597,11 +612,15 @@ try {
   const secondaryName = EXPECTED_PRIMARY === 'openai' ? 'gemini' : 'openai';
   const panels = MODE === 'exam' ? [metrics.cardAPanel, metrics.cardBPanel] : [metrics.roleplayPanel];
   const c = metrics.conversation;
-  const closedAt = (from) => events.some((e) => e.type === 'session.closed' && e.__at >= from && e.__at - from < 20_000)
+  const closedAt = (from) => openAiEvents.some((e) => e.type === 'session.closed' && e.__at >= from && e.__at - from < 20_000)
     || stability.socketCloses.some((t) => t >= from && t - from < 20_000);
   metrics.checks = {
-    // The first provider the app tried is the one this run expected (an unpinned run with EXPECTED_PRIMARY set).
+    // The first provider the app tried is the one this run expected (an unpinned run with EXPECTED_PRIMARY set). Null
+    // when nothing was expected, and when VOICE_PROVIDER pins one: then EXPECTED_PRIMARY is ignored
+    // (metrics.expectedPrimaryIgnored), because a pinned run makes one attempt and never "tries first".
     primaryProviderIsExpected: !VOICE_PROVIDER && EXPECTED_PRIMARY ? providerCalls[0] === primaryCall : null,
+    // A pinned run is served by the provider it pinned, in exam mode too (the page could lose ?voiceProvider=).
+    pinnedProviderServed: VOICE_PROVIDER && reported.length ? reported.every((p) => p === VOICE_PROVIDER) : null,
     // FAIL_PRIMARY: per card exactly one call to the failed primary, then exactly one to the other provider, and
     // the panel reports the other provider as serving after a failover.
     failoverAsRequested: failPrimary
@@ -634,7 +653,7 @@ try {
     // Every card's saved transcript was captured, and (GPT-Live only, judged on the provider that served: its
     // transcription lag is the #257 defect) has no split sentence.
     savedTranscriptsCaptured: expected.length > 0 && expected.every((id) => metrics.savedTranscripts[id]?.segments > 0),
-    noSplitSentences: served.length > 0 && served.every((p) => p === 'openai/offer')
+    noSplitSentences: served.length > 0 && served.every((p) => p === 'openai')
       ? expected.length > 0 && expected.every((id) => metrics.savedTranscripts[id]?.splitHazards?.length === 0)
       : null,
     // Cross-card leaks are judged by reading both transcripts; metrics.leakCheck only lists suspects.
