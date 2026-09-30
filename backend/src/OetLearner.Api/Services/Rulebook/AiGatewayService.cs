@@ -275,7 +275,11 @@ public sealed class AiGatewayService(
 
         // No explicit pin → consult the text-chat provider registry to honor
         // the active highest-priority row's dialect. Voice/OCR rows share the
-        // registry but cannot service grounded chat completions.
+        // registry but cannot service grounded chat completions. The keyless
+        // subscription sidecar rows (marker key, FailoverPriority 1 and 2) are
+        // never a default: they are reachable only by an explicit pin or a route
+        // set on purpose, so activating writing-claude-sub cannot make the Claude
+        // Max lane the fallthrough for every unrouted feature.
         if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && providerRegistry is not null)
         {
             try
@@ -283,6 +287,7 @@ public sealed class AiGatewayService(
                 var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
                     .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
                     .Where(row => !string.IsNullOrWhiteSpace(row.EncryptedApiKey))
+                    .Where(row => !OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.IsMarkerKey(row.EncryptedApiKey))
                     .OrderBy(row => row.FailoverPriority)
                     .FirstOrDefault();
                 if (topRow is not null)
@@ -851,6 +856,9 @@ public sealed class AiGatewayService(
         {
             stopwatch.Stop();
             var errorCode = ClassifyError(ex);
+            LogProviderFailure(
+                ex, featureCode, selectedProviderCode ?? provider.Name, effectiveModel,
+                request.OperationId, resolution?.ApiKeyPlaintext);
 
             // BYOK auth failure: invalidate the credential so the resolver
             // will skip it until the configured cooldown expires. Non-fatal
@@ -1097,9 +1105,7 @@ public sealed class AiGatewayService(
                 var classification = AiRetryPolicy.Classify(ex, requestLikelySent: true);
                 if (circuitBreaker is not null && keySource == AiKeySource.Platform)
                 {
-                    var failureCode = classification.Disposition == AiRetryDisposition.Quarantine
-                        ? "401"
-                        : ClassifyError(ex);
+                    var failureCode = CircuitFailureCode(ex, classification);
                     if (classification.Disposition == AiRetryDisposition.Quarantine
                         && !string.IsNullOrWhiteSpace(circuitCredentialKey))
                     {
@@ -1243,8 +1249,90 @@ public sealed class AiGatewayService(
             ? new AiUsage { PromptTokens = promptTokens, CompletionTokens = completionTokens }
             : fallback;
 
+    /// <summary>Code recorded on the circuit breaker for a failed provider call. A typed quota or
+    /// auth failure passes its class (both open the circuit immediately); any other quarantined
+    /// failure keeps the legacy "401", everything else the usage-row error code.</summary>
+    private static string CircuitFailureCode(Exception ex, AiRetryClassification classification)
+    {
+        if (AiProviderErrorParser.FindHttpException(ex) is { } typed)
+        {
+            if (typed.ErrorClass == AiProviderErrorClass.QuotaExhausted) return "quota_exhausted";
+            if (typed.ErrorClass == AiProviderErrorClass.Auth) return "auth";
+        }
+
+        return classification.Disposition == AiRetryDisposition.Quarantine ? "401" : ClassifyError(ex);
+    }
+
+    /// <summary>One structured server log line per failed provider call. This is the ONLY place
+    /// provider text is written (redacted and capped at 300 characters): never to the exception
+    /// Message, a usage row or a client response (INC-2026-CLAUDE-01). Logging must never mask
+    /// the provider failure it describes.</summary>
+    private void LogProviderFailure(
+        Exception ex,
+        string featureCode,
+        string providerCode,
+        string model,
+        string? operationId,
+        string? apiKey)
+    {
+        if (logger is null) return;
+        try
+        {
+            var typed = AiProviderErrorParser.FindHttpException(ex);
+            var providerError = typed?.ProviderError;
+            var errorClass = typed?.ErrorClass ?? AiProviderErrorParser.Classify(ex);
+            int? httpStatus = typed?.StatusCode ?? providerError?.HttpStatus;
+            if (httpStatus is null)
+            {
+                var match = HttpStatusPattern.Match(ex.Message ?? string.Empty);
+                if (match.Success) httpStatus = int.Parse(match.Value);
+            }
+
+            var providerText = AiProviderErrorParser.SanitizeMessage(
+                providerError?.Message ?? (typed is null ? ex.Message : null), apiKey, headOnly: false);
+            // Operator action needed (billing, credential, request shape) is Error; transient classes are Warning.
+            var operatorActionNeeded = errorClass is AiProviderErrorClass.QuotaExhausted
+                or AiProviderErrorClass.Auth
+                or AiProviderErrorClass.InvalidRequest;
+            var level = operatorActionNeeded ? LogLevel.Error : LogLevel.Warning;
+            logger.Log(
+                level,
+                "AI provider call failed: feature={FeatureCode} provider={ProviderCode} model={Model} operation={OperationId} http={HttpStatus} class={ErrorClass} type={ProviderErrorType} code={ProviderErrorCode} requestId={ProviderRequestId} providerError={ProviderError}",
+                featureCode,
+                providerCode,
+                model,
+                operationId,
+                httpStatus,
+                errorClass.ToCode(),
+                providerError?.Type,
+                providerError?.Code,
+                providerError?.RequestId,
+                providerText);
+        }
+        catch
+        {
+            // Diagnostics only.
+        }
+    }
+
     private static string ClassifyError(Exception ex)
     {
+        // Typed provider failures carry a parsed class: use it instead of guessing from message text.
+        if (AiProviderErrorParser.FindHttpException(ex) is { } typed)
+        {
+            return typed.ErrorClass switch
+            {
+                AiProviderErrorClass.QuotaExhausted => "provider_quota_exhausted",
+                AiProviderErrorClass.RateLimited => "provider_429",
+                AiProviderErrorClass.InvalidRequest => "provider_invalid_request",
+                AiProviderErrorClass.Auth => "provider_auth",
+                AiProviderErrorClass.Overloaded => "provider_overloaded",
+                AiProviderErrorClass.ServerError => "provider_5xx",
+                AiProviderErrorClass.Network => "provider_network",
+                _ => "provider_error",
+            };
+        }
+
         var message = ex.Message ?? string.Empty;
         if (message.Contains("401", StringComparison.Ordinal) || message.Contains("403", StringComparison.Ordinal))
             return "provider_auth";
@@ -1257,6 +1345,17 @@ public sealed class AiGatewayService(
 
     private static string SanitiseProviderErrorMessage(Exception ex, string errorCode)
     {
+        // Typed failures get an allow-listed message built only from the status, the class code and
+        // the sanitised provider error type token; provider text never reaches a usage row.
+        if (AiProviderErrorParser.FindHttpException(ex) is { } typed)
+        {
+            var classCode = typed.ErrorClass.ToCode();
+            var typeToken = AiProviderErrorParser.ToToken(typed.ProviderError?.Type);
+            return typeToken is null
+                ? $"Provider request failed with HTTP {typed.StatusCode} ({classCode})."
+                : $"Provider request failed with HTTP {typed.StatusCode} ({classCode}; {typeToken}).";
+        }
+
         var message = ex.Message ?? string.Empty;
         var status = HttpStatusPattern.Match(message);
         if (status.Success)
@@ -1272,7 +1371,7 @@ public sealed class AiGatewayService(
     }
 
     private static readonly Regex HttpStatusPattern = new(
-        @"(?<!\d)(?:401|403|408|409|422|429|500|502|503|504)(?!\d)",
+        @"(?<!\d)(?:400|401|403|404|408|409|413|422|429|500|502|503|504|529)(?!\d)",
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(50));
 
@@ -2453,7 +2552,28 @@ public sealed class MockAiProvider : IAiModelProvider
                 ]
               }
               """
-            : "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
+            : request.SystemPrompt.Contains("**This call concerns SPEAKING**", StringComparison.OrdinalIgnoreCase)
+                // Complete 9-criterion contract: the Speaking assessor rejects a reply that omits a criterion.
+                ? """
+                  {
+                    "findings": [],
+                    "criterionScores": {
+                      "intelligibility": 5,
+                      "fluency": 5,
+                      "appropriateness": 5,
+                      "grammarExpression": 5,
+                      "relationshipBuilding": 2,
+                      "patientPerspective": 2,
+                      "structure": 2,
+                      "informationGathering": 2,
+                      "informationGiving": 2
+                    },
+                    "overallSummary": "Mock AI provider generated a deterministic Speaking scoring contract; no external model call was made.",
+                    "confidenceBand": "low",
+                    "advisory": "mock AI provider — no external model call was made"
+                  }
+                  """
+                : "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
         return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
     }
 }

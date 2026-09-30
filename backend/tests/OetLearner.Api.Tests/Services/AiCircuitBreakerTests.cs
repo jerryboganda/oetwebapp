@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests.Services;
 
@@ -117,5 +118,89 @@ public sealed class AiCircuitBreakerTests : IDisposable
         await _store.RecordFailureAsync(AiCircuitBreakerStore.KindProvider, "reset-me", "402", default);
         await _store.ResetAsync(AiCircuitBreakerStore.KindProvider, "reset-me", default);
         Assert.True(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, "reset-me", default));
+    }
+
+    [Theory]
+    [InlineData("quota_exhausted")]
+    [InlineData("auth")]
+    public async Task ProviderQuotaOrAuthClass_OpensImmediately(string failureCode)
+    {
+        var key = $"class-{failureCode}";
+
+        await _store.RecordFailureAsync(AiCircuitBreakerStore.KindProvider, key, failureCode, default);
+
+        Assert.False(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, key, default));
+        using var scope = _provider.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<LearnerDbContext>()
+            .AiCircuitStates.AsNoTracking()
+            .SingleAsync(s => s.Key == key);
+        Assert.Equal(AiCircuitBreakerStore.StateOpen, row.State);
+        Assert.Equal(failureCode, row.LastFailureCode);
+    }
+
+    [Fact]
+    public async Task ProviderInvalidRequest_DoesNotOpenImmediately_AndNeedsFiveFailures()
+    {
+        // One bad request (a content specific 400) must never shut a provider shared by every feature.
+        for (var i = 0; i < 4; i++)
+        {
+            await _store.RecordFailureAsync(AiCircuitBreakerStore.KindProvider, "bad-requests", "provider_invalid_request", default);
+            Assert.True(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, "bad-requests", default));
+        }
+
+        await _store.RecordFailureAsync(AiCircuitBreakerStore.KindProvider, "bad-requests", "provider_invalid_request", default);
+        Assert.False(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, "bad-requests", default));
+    }
+
+    [Fact]
+    public async Task Gateway_TypedQuotaFailure_OpensTheProviderCircuit_AndShortCircuitsTheNextCall()
+    {
+        var provider = new QuotaExhaustedProvider();
+        var gateway = new AiGatewayService(
+            new RulebookLoader(), new IAiModelProvider[] { provider }, circuitBreaker: _store);
+        var request = new AiGatewayRequest
+        {
+            Prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                LetterType = "routine_referral",
+            }),
+            Provider = "quota-provider",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        };
+
+        // First call: quota exhausted, quarantined (no retry), circuit opens at once.
+        var typed = await Assert.ThrowsAsync<AiProviderHttpException>(() => gateway.CompleteAsync(request));
+        Assert.Equal(AiProviderErrorClass.QuotaExhausted, typed.ErrorClass);
+        Assert.Equal(1, provider.Calls);
+
+        // Second call: refused by the open circuit without touching the provider.
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(request));
+        Assert.Equal("HTTP 503 Provider circuit is open.", refused.Message);
+        Assert.Equal(1, provider.Calls);
+
+        using var scope = _provider.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<LearnerDbContext>()
+            .AiCircuitStates.AsNoTracking()
+            .SingleAsync(s => s.Key == "quota-provider");
+        Assert.Equal(AiCircuitBreakerStore.StateOpen, row.State);
+        Assert.Equal("quota_exhausted", row.LastFailureCode);
+    }
+
+    private sealed class QuotaExhaustedProvider : IAiModelProvider
+    {
+        public int Calls { get; private set; }
+
+        public string Name => "quota-provider";
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+        {
+            Calls++;
+            throw new AiProviderHttpException(
+                "Anthropic", 400, "Bad Request", null,
+                new AiProviderError(AiProviderErrorClass.QuotaExhausted, 400, "invalid_request_error", null, null, null, null));
+        }
     }
 }

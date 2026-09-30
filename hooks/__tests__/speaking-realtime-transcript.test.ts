@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_SEGMENT_CHARS, appendTranscriptFragment } from '../useSpeakingRealtimeVoice';
-import type { LiveVoiceTranscriptSegmentInput } from '@/lib/api/speaking-live-voice';
+import {
+  MAX_SEGMENT_CHARS,
+  ProviderConnectError,
+  appendTranscriptFragment,
+  isClientRejection,
+  isProviderFailure,
+  planProviders,
+} from '../useSpeakingRealtimeVoice';
+import { ApiError } from '@/lib/api/client';
+import type { LiveVoicePreflight, LiveVoiceTranscriptSegmentInput } from '@/lib/api/speaking-live-voice';
 
 const at = (startMs: number, endMs = startMs + 100) => ({ startMs, endMs });
 
@@ -156,5 +164,82 @@ describe('appendTranscriptFragment', () => {
     expect(segments.length).toBeGreaterThan(1);
     expect(Math.max(...segments.map((s) => s.text.length))).toBeLessThanOrEqual(MAX_SEGMENT_CHARS);
     expect(segments.map((s) => s.text).join('')).toBe(sentence.repeat(100));
+  });
+});
+
+const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePreflight => ({
+  provider: 'openai',
+  providerDisplayName: 'Provider',
+  model: 'model',
+  disclosure: 'disclosure',
+  retentionDays: 30,
+  sessionId: 's1',
+  rolePlayCardId: 'c1',
+  ...overrides,
+});
+
+describe('planProviders', () => {
+  it('keeps the order the server chose', () => {
+    expect(planProviders(preflight({ provider: 'gemini', candidates: ['gemini', 'openai'] }))).toEqual(['gemini', 'openai']);
+    expect(planProviders(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }))).toEqual(['openai', 'gemini']);
+  });
+
+  it('drops duplicates and values that are not a live voice provider', () => {
+    const candidates = ['openai', 'openai', 'claude', 'gemini'] as unknown as LiveVoicePreflight['candidates'];
+    expect(planProviders(preflight({ candidates }))).toEqual(['openai', 'gemini']);
+  });
+
+  it('is a single attempt with the named provider when the server sent no candidates (older server)', () => {
+    expect(planProviders(preflight({ provider: 'gemini' }))).toEqual(['gemini']);
+    expect(planProviders(preflight({ provider: 'gemini', candidates: [] }))).toEqual(['gemini']);
+  });
+
+  it('never fails over a pinned run or a provider forced from the page', () => {
+    expect(planProviders(preflight({ candidates: ['openai', 'gemini'], pinned: true }))).toEqual(['openai']);
+    expect(planProviders(preflight({ candidates: ['openai', 'gemini'] }), 'openai')).toEqual(['openai']);
+  });
+
+  it('plans nothing when the preflight names no usable provider', () => {
+    expect(planProviders(preflight({ provider: 'claude' as unknown as LiveVoicePreflight['provider'] }))).toEqual([]);
+  });
+});
+
+describe('isProviderFailure', () => {
+  const api = (status: number, code = 'code') => new ApiError(status, code, 'message', false);
+
+  it('is true for a leg that failed before it was live and for outage-shaped create failures', () => {
+    expect(isProviderFailure(new ProviderConnectError('closed before setup'))).toBe(true);
+    expect(isProviderFailure(api(503, 'live_voice_provider_unavailable'))).toBe(true);
+    expect(isProviderFailure(api(503, 'live_voice_provider_timeout'))).toBe(true);
+    expect(isProviderFailure(api(502))).toBe(true);
+    expect(isProviderFailure(api(500))).toBe(true);
+    expect(isProviderFailure(api(408, 'request_timeout'))).toBe(true);
+    expect(isProviderFailure(api(0, 'network_error'))).toBe(true);
+  });
+
+  it('is false for a definite answer, our own rate limit and anything that is not an API error', () => {
+    for (const status of [400, 401, 403, 404, 409, 422]) expect(isProviderFailure(api(status)), String(status)).toBe(false);
+    expect(isProviderFailure(api(429, 'rate_limited'))).toBe(false);
+    expect(isProviderFailure(new Error('plain'))).toBe(false);
+    expect(isProviderFailure(new DOMException('denied', 'NotAllowedError'))).toBe(false);
+    expect(isProviderFailure(null)).toBe(false);
+  });
+
+  it('reads the status of any error object, so stubbed API errors behave like the real one', () => {
+    expect(isProviderFailure(Object.assign(new Error('stub'), { status: 503 }))).toBe(true);
+    expect(isProviderFailure(Object.assign(new Error('stub'), { status: 409 }))).toBe(false);
+  });
+});
+
+describe('isClientRejection', () => {
+  it('is true only for a 4xx the server will give again for the same request', () => {
+    for (const status of [400, 403, 404, 409, 422]) {
+      expect(isClientRejection(new ApiError(status, 'code', 'message', false)), String(status)).toBe(true);
+    }
+    // 401 is an expired sign-in: the same request succeeds after re-auth, so it is never a permanent rejection.
+    for (const status of [0, 401, 408, 429, 500, 503]) {
+      expect(isClientRejection(new ApiError(status, 'code', 'message', true)), String(status)).toBe(false);
+    }
+    expect(isClientRejection(new Error('plain'))).toBe(false);
   });
 });

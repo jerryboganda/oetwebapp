@@ -23,7 +23,9 @@ public sealed class AiAssistantFeatureRouteSeeder(
         var defaultProvider = await db.AiProviders.AsNoTracking()
             .Where(provider => provider.IsActive
                                && provider.Category == AiProviderCategory.TextChat
-                               && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey))
+                               && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey)
+                               // Never seed an assistant route onto a keyless subscription sidecar row.
+                               && provider.EncryptedApiKey != OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey)
             .OrderBy(provider => provider.FailoverPriority)
             .FirstOrDefaultAsync(ct);
         if (defaultProvider is null)

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,6 +10,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Tests.Services;
 
@@ -377,6 +379,581 @@ public sealed class RegistryBackedProviderTests
         Assert.Equal("text", block.GetProperty("type").GetString());
         Assert.Equal("rulebook and scoring criteria", block.GetProperty("text").GetString());
         Assert.Equal("ephemeral", block.GetProperty("cache_control").GetProperty("type").GetString());
+    }
+
+    private const string CreditBalanceBody =
+        """{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_body123"}""";
+
+    private static AiProviderRequest AnthropicRequest(string providerCode = "anthropic", string model = "claude-sonnet-5")
+        => new()
+        {
+            ProviderCode = providerCode,
+            Model = model,
+            SystemPrompt = "system",
+            UserPrompt = "user",
+        };
+
+    private static HttpResponseMessage JsonResponse(HttpStatusCode status, string body)
+        => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
+    [Fact]
+    public async Task AnthropicProvider_Http400CreditBalance_CapturesQuotaClassWithoutLeakingTheTextIntoMessage()
+    {
+        var provider = await NewAnthropicProviderAsync(new StubHandler(_ =>
+        {
+            var response = JsonResponse(HttpStatusCode.BadRequest, CreditBalanceBody);
+            response.Headers.TryAddWithoutValidation("request-id", "req_hdr456");
+            return Task.FromResult(response);
+        }));
+
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => provider.CompleteAsync(AnthropicRequest(), CancellationToken.None));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal(AiProviderErrorClass.QuotaExhausted, ex.ErrorClass);
+        // The exception Message is parsed by the retry policy and the gateway classifier: unchanged, no provider text.
+        Assert.Equal("Anthropic call failed: HTTP 400 Bad Request.", ex.Message);
+        Assert.DoesNotContain("credit balance", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(ex.ProviderError);
+        Assert.Equal("invalid_request_error", ex.ProviderError!.Type);
+        Assert.Equal("req_hdr456", ex.ProviderError.RequestId);
+        // The test row's host is not a first-party Anthropic host, so only the head of the text is kept.
+        Assert.StartsWith("Your credit balance is too low", ex.ProviderError.Message);
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_Http529WithRetryAfter_IsOverloadedAndKeepsRetryAfter()
+    {
+        var provider = await NewAnthropicProviderAsync(new StubHandler(_ =>
+        {
+            var response = JsonResponse(
+                (HttpStatusCode)529,
+                """{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}""");
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(7));
+            return Task.FromResult(response);
+        }));
+
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => provider.CompleteAsync(AnthropicRequest(), CancellationToken.None));
+
+        Assert.Equal(529, ex.StatusCode);
+        Assert.Equal(AiProviderErrorClass.Overloaded, ex.ErrorClass);
+        Assert.Equal(TimeSpan.FromSeconds(7), ex.RetryAfter);
+        Assert.Equal(TimeSpan.FromSeconds(7), ex.ProviderError!.RetryAfter);
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_ErrorBodyEchoingTheApiKey_IsRedacted()
+    {
+        var provider = await NewAnthropicProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.Unauthorized,
+            """{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key anthropic-key-1234567890"}}"""))));
+
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => provider.CompleteAsync(AnthropicRequest(), CancellationToken.None));
+
+        Assert.Equal(AiProviderErrorClass.Auth, ex.ErrorClass);
+        Assert.DoesNotContain("anthropic-key-1234567890", ex.ProviderError!.Message);
+        Assert.Contains("***REDACTED***", ex.ProviderError.Message);
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_TemperatureDeprecatedRetryThatFailsAgain_CapturesTheSecondBody()
+    {
+        var calls = 0;
+        var provider = await NewAnthropicProviderAsync(new StubHandler(_ =>
+        {
+            calls++;
+            return Task.FromResult(calls == 1
+                ? JsonResponse(
+                    HttpStatusCode.BadRequest,
+                    """{"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."}}""")
+                : JsonResponse(HttpStatusCode.BadRequest, CreditBalanceBody));
+        }));
+
+        // A model that still accepts temperature, so the first request carries it.
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() =>
+            provider.CompleteAsync(AnthropicRequest(model: "claude-3-haiku"), CancellationToken.None));
+
+        Assert.Equal(2, calls);
+        Assert.Equal(AiProviderErrorClass.QuotaExhausted, ex.ErrorClass);
+    }
+
+    [Theory]
+    [InlineData("https://api.anthropic.com", true)]
+    [InlineData("https://api.anthropic.com/v1", true)]
+    [InlineData("https://anthropic.com", true)]
+    [InlineData("https://anthropic.example.test/v1", false)]
+    [InlineData("https://evilanthropic.com", false)]
+    [InlineData("http://oet-writing-claude:8080", false)]
+    [InlineData("not a url", false)]
+    [InlineData(null, false)]
+    public void RetainsVendorText_OnlyForFirstPartyAnthropicHosts(string? baseUrl, bool expected)
+    {
+        Assert.Equal(expected, AnthropicProvider.RetainsVendorText(baseUrl));
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SubscriptionSidecarRowWithMarkerKey_CallsTheSidecarWithoutDecryptingTheKey()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            HttpRequestMessage? captured = null;
+            var provider = await NewSidecarProviderAsync(new StubHandler(req =>
+            {
+                captured = req;
+                return Task.FromResult(JsonResponse(
+                    HttpStatusCode.OK,
+                    """{"content":[{"type":"text","text":"graded"}],"usage":{"input_tokens":12,"output_tokens":3},"stop_reason":"end_turn"}"""));
+            }));
+
+            var completion = await provider.CompleteAsync(
+                AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel),
+                CancellationToken.None);
+
+            Assert.Equal("graded", completion.Text);
+            Assert.NotNull(captured);
+            Assert.Equal("http://oet-writing-claude:8080/v1/messages", captured!.RequestUri!.ToString());
+            Assert.True(captured.Headers.TryGetValues("x-api-key", out var keys));
+            Assert.Equal(WritingSubscriptionProviderDefaults.MarkerKey, Assert.Single(keys!));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SubscriptionSidecarRowOutsideTheInternalHostList_HasNoKey_AndIsNeverCalled()
+    {
+        // The marker only counts as a key while the row's host is on OET_INTERNAL_AI_HOSTS.
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "ubag-vps-gateway-1");
+        try
+        {
+            var called = false;
+            var provider = await NewSidecarProviderAsync(new StubHandler(_ =>
+            {
+                called = true;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            }));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(
+                AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel),
+                CancellationToken.None));
+
+            Assert.Contains("Platform API key missing", ex.Message);
+            Assert.False(called);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SubscriptionSidecarUrlOutsideTheInternalHostList_IsRefusedByTheHostGuard()
+    {
+        // Same wrong allow-list, but the caller supplies the marker itself, so credential resolution
+        // is skipped and the SSRF guard is the only thing left standing between the call and the host.
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "ubag-vps-gateway-1");
+        try
+        {
+            var called = false;
+            var provider = await NewSidecarProviderAsync(new StubHandler(_ =>
+            {
+                called = true;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            }));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(
+                new AiProviderRequest
+                {
+                    ProviderCode = WritingSubscriptionProviderDefaults.ClaudeCode,
+                    Model = WritingSubscriptionProviderDefaults.ClaudeModel,
+                    SystemPrompt = "system",
+                    UserPrompt = "user",
+                    BaseUrlOverride = WritingSubscriptionProviderDefaults.ClaudeBaseUrl,
+                    ApiKeyOverride = WritingSubscriptionProviderDefaults.MarkerKey,
+                },
+                CancellationToken.None));
+
+            Assert.Contains("https", ex.Message);
+            Assert.False(called);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SidecarQuota429_IsQuotaExhaustedAndKeepsOnlyTheHeadOfTheText()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var provider = await NewSidecarProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+                (HttpStatusCode)429,
+                """{"error":{"code":"quota_exceeded","message":"Claude subscription quota/rate limit: you have hit your limit; evidence quote from the transcript","type":"rate_limit_error"}}"""))));
+
+            var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => provider.CompleteAsync(
+                AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel),
+                CancellationToken.None));
+
+            Assert.Equal(AiProviderErrorClass.QuotaExhausted, ex.ErrorClass);
+            Assert.Equal("quota_exceeded", ex.ProviderError!.Code);
+            Assert.Equal("Claude subscription quota/rate limit", ex.ProviderError.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_Sidecar502EngineError_NeverKeepsTheCliOutputTail()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var provider = await NewSidecarProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+                HttpStatusCode.BadGateway,
+                """{"error":{"code":"engine_error","message":"claude exited 1: the candidate said this evidence quote"}}"""))));
+
+            var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => provider.CompleteAsync(
+                AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel),
+                CancellationToken.None));
+
+            Assert.Equal(AiProviderErrorClass.ServerError, ex.ErrorClass);
+            Assert.Equal("claude exited 1", ex.ProviderError!.Message);
+            Assert.DoesNotContain("evidence quote", ex.ProviderError.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task Registry_ReturnsTheMarkerForKeylessSidecarRows_AndNullForUndecryptableKeys()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-marker-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            foreach (var (code, storedKey) in new[]
+                     {
+                         (WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.MarkerKey),
+                         ("broken-key", "definitely-not-ciphertext"),
+                     })
+            {
+                db.AiProviders.Add(new AiProvider
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Code = code,
+                    Name = code,
+                    Dialect = AiProviderDialect.Anthropic,
+                    Category = AiProviderCategory.TextChat,
+                    BaseUrl = "http://oet-writing-claude:8080",
+                    EncryptedApiKey = storedKey,
+                    ApiKeyHint = "hint",
+                    DefaultModel = "claude-opus-5-5",
+                    IsActive = true,
+                    FailoverPriority = 1,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            await db.SaveChangesAsync();
+            var registry = new AiProviderRegistry(db, new EphemeralDataProtectionProvider());
+
+            Assert.Equal(
+                WritingSubscriptionProviderDefaults.MarkerKey,
+                await registry.GetPlatformKeyAsync(WritingSubscriptionProviderDefaults.ClaudeCode, CancellationToken.None));
+            Assert.Null(await registry.GetPlatformKeyAsync("broken-key", CancellationToken.None));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task Registry_ResolvesTheMarkerOnlyWhileTheRowPointsAtAnAllowListedInternalHost()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-marker-host-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            foreach (var (code, baseUrl) in new[]
+                     {
+                         ("marker-internal", "http://oet-writing-claude:8080"),
+                         // A vendor row an admin re-pointed at a public URL keeps its seeded marker key.
+                         ("marker-vendor", "https://api.anthropic.com"),
+                         // Plain HTTP to a host that is not on the allow-list.
+                         ("marker-unlisted", "http://some-other-host:8080"),
+                         ("marker-blank-url", ""),
+                     })
+            {
+                db.AiProviders.Add(new AiProvider
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Code = code,
+                    Name = code,
+                    Dialect = AiProviderDialect.Anthropic,
+                    Category = AiProviderCategory.TextChat,
+                    BaseUrl = baseUrl,
+                    EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey,
+                    ApiKeyHint = "hint",
+                    DefaultModel = "claude-opus-5-5",
+                    IsActive = true,
+                    FailoverPriority = 1,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            await db.SaveChangesAsync();
+            var registry = new AiProviderRegistry(db, new EphemeralDataProtectionProvider());
+
+            Assert.Equal(
+                WritingSubscriptionProviderDefaults.MarkerKey,
+                await registry.GetPlatformKeyAsync("marker-internal", CancellationToken.None));
+            Assert.Null(await registry.GetPlatformKeyAsync("marker-vendor", CancellationToken.None));
+            Assert.Null(await registry.GetPlatformKeyAsync("marker-unlisted", CancellationToken.None));
+            Assert.Null(await registry.GetPlatformKeyAsync("marker-blank-url", CancellationToken.None));
+
+            // With the allow-list gone the very same seeded row stops looking credentialed.
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+            Assert.Null(await registry.GetPlatformKeyAsync("marker-internal", CancellationToken.None));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_SubscriptionSidecarRow_DoesNotTakeAPlatformGatePermit()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var gate = await SaturatedGateAsync();
+            var provider = await NewSidecarProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(HttpStatusCode.OK, SidecarMessagesBody))), gate);
+
+            // Every permit is held by other platform-key calls: the sidecar call must not queue behind them,
+            // because its own serial CLI lane is the limiter.
+            var completion = await provider
+                .CompleteAsync(AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel), CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal("graded", completion.Text);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task AnthropicProvider_KeyedRow_StillQueuesForAPlatformGatePermit()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var gate = await SaturatedGateAsync();
+            var handlerCalled = false;
+            var provider = await NewSidecarProviderAsync(
+                new StubHandler(_ =>
+                {
+                    handlerCalled = true;
+                    return Task.FromResult(JsonResponse(HttpStatusCode.OK, SidecarMessagesBody));
+                }),
+                gate,
+                markerKey: false);
+
+            var pending = provider.CompleteAsync(
+                AnthropicRequest(WritingSubscriptionProviderDefaults.ClaudeCode, WritingSubscriptionProviderDefaults.ClaudeModel),
+                CancellationToken.None);
+            await Task.Delay(300);
+
+            Assert.False(pending.IsCompleted);
+            Assert.False(handlerCalled);
+
+            gate.Release();
+            var completion = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("graded", completion.Text);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task RegistryBackedProvider_CodexSubscriptionSidecarRow_DoesNotTakeAPlatformGatePermit()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var gate = await SaturatedGateAsync();
+            var provider = await NewCodexSidecarProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(HttpStatusCode.OK, SidecarChatCompletionBody))), gate);
+
+            var completion = await provider
+                .CompleteAsync(
+                    new AiProviderRequest
+                    {
+                        ProviderCode = WritingSubscriptionProviderDefaults.CodexCode,
+                        Model = WritingSubscriptionProviderDefaults.CodexModel,
+                        SystemPrompt = "system",
+                        UserPrompt = "user",
+                    },
+                    CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal("graded", completion.Text);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task RegistryBackedProvider_KeyedRow_StillQueuesForAPlatformGatePermit()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            var gate = await SaturatedGateAsync();
+            var handlerCalled = false;
+            var provider = await NewCodexSidecarProviderAsync(
+                new StubHandler(_ =>
+                {
+                    handlerCalled = true;
+                    return Task.FromResult(JsonResponse(HttpStatusCode.OK, SidecarChatCompletionBody));
+                }),
+                gate,
+                markerKey: false);
+
+            var pending = provider.CompleteAsync(
+                new AiProviderRequest
+                {
+                    ProviderCode = WritingSubscriptionProviderDefaults.CodexCode,
+                    Model = WritingSubscriptionProviderDefaults.CodexModel,
+                    SystemPrompt = "system",
+                    UserPrompt = "user",
+                },
+                CancellationToken.None);
+            await Task.Delay(300);
+
+            Assert.False(pending.IsCompleted);
+            Assert.False(handlerCalled);
+
+            gate.Release();
+            var completion = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("graded", completion.Text);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    private const string SidecarMessagesBody =
+        """{"content":[{"type":"text","text":"graded"}],"usage":{"input_tokens":12,"output_tokens":3},"stop_reason":"end_turn"}""";
+
+    private const string SidecarChatCompletionBody =
+        """{"choices":[{"message":{"role":"assistant","content":"graded"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}""";
+
+    private static async Task<OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate> SaturatedGateAsync()
+    {
+        var gate = new OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate();
+        for (var i = 0; i < OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate.MaxInFlight; i++)
+            await gate.WaitAsync(CancellationToken.None);
+        return gate;
+    }
+
+    /// <param name="markerKey">True stores exactly what the seeder stores (the literal marker); false stores a
+    /// real encrypted key, so the row is an ordinary keyed row that merely lives at the sidecar URL.</param>
+    private static async Task<AnthropicProvider> NewSidecarProviderAsync(
+        HttpMessageHandler handler,
+        OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? gate = null,
+        bool markerKey = true)
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase($"anthropic-sidecar-{Guid.NewGuid():N}")
+            .Options;
+        var db = new LearnerDbContext(options);
+        var dpProvider = new EphemeralDataProtectionProvider();
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = WritingSubscriptionProviderDefaults.ClaudeCode,
+            Name = WritingSubscriptionProviderDefaults.ClaudeName,
+            Dialect = AiProviderDialect.Anthropic,
+            Category = AiProviderCategory.TextChat,
+            BaseUrl = WritingSubscriptionProviderDefaults.ClaudeBaseUrl,
+            // Exactly what WritingSubscriptionProviderSeeder stores: a literal marker, not ciphertext.
+            EncryptedApiKey = markerKey
+                ? WritingSubscriptionProviderDefaults.MarkerKey
+                : dpProvider.CreateProtector("AiProvider.PlatformKey.v1").Protect("sidecar-real-key-1234567890"),
+            ApiKeyHint = "claude-max-5x",
+            DefaultModel = WritingSubscriptionProviderDefaults.ClaudeModel,
+            IsActive = true,
+            FailoverPriority = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        return new AnthropicProvider(
+            new StubHttpClientFactory(handler),
+            new AiProviderRegistry(db, dpProvider),
+            gate);
+    }
+
+    private static async Task<RegistryBackedProvider> NewCodexSidecarProviderAsync(
+        HttpMessageHandler handler,
+        OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? gate = null,
+        bool markerKey = true)
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase($"codex-sidecar-{Guid.NewGuid():N}")
+            .Options;
+        var db = new LearnerDbContext(options);
+        var dpProvider = new EphemeralDataProtectionProvider();
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = WritingSubscriptionProviderDefaults.CodexCode,
+            Name = WritingSubscriptionProviderDefaults.CodexName,
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            Category = AiProviderCategory.TextChat,
+            BaseUrl = WritingSubscriptionProviderDefaults.CodexBaseUrl,
+            EncryptedApiKey = markerKey
+                ? WritingSubscriptionProviderDefaults.MarkerKey
+                : dpProvider.CreateProtector("AiProvider.PlatformKey.v1").Protect("sidecar-real-key-1234567890"),
+            ApiKeyHint = "codex-chatgpt",
+            DefaultModel = WritingSubscriptionProviderDefaults.CodexModel,
+            IsActive = true,
+            FailoverPriority = 2,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        return new RegistryBackedProvider(
+            new StubHttpClientFactory(handler),
+            new AiProviderRegistry(db, dpProvider),
+            Options.Create(new AiProviderOptions()),
+            gate);
     }
 
     private static async Task<RegistryBackedProvider> NewProviderAsync(HttpMessageHandler handler)

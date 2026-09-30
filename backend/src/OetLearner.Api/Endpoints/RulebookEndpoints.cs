@@ -228,7 +228,7 @@ public static class RulebookEndpoints
                 {
                     Prompt = prompt,
                     UserInput = body.UserInput,
-                    Provider = body.Provider ?? string.Empty,
+                    Provider = ResolveRequestedProvider(http.User, body.Provider),
                     Model = body.Model ?? "mock",
                     Temperature = body.Temperature ?? 0.2,
                     MaxTokens = body.MaxTokens,
@@ -256,6 +256,15 @@ public static class RulebookEndpoints
             }
         }).RequireAuthorization("AiCaller");
     }
+
+    /// <summary>
+    /// Only an admin may name the provider row on POST /v1/ai/complete. Every other caller is routed
+    /// by the feature route, so a learner or expert can never put a request on the subscription
+    /// sidecar lane (docs/AI-USAGE-POLICY.md, "Provider pin"). Internal callers (Writing and
+    /// Speaking grading) set AiGatewayRequest.Provider directly and are unaffected.
+    /// </summary>
+    internal static string ResolveRequestedProvider(ClaimsPrincipal user, string? requested)
+        => user.IsInRole(ApplicationUserRoles.Admin) ? (requested ?? string.Empty) : string.Empty;
 
     /// <summary>
     /// Map a jev route target onto its canonical feature code. Only targets

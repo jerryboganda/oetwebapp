@@ -53,6 +53,8 @@ import {
 import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
 const POLL_INTERVAL_MS = 3_000;
+// A live transcript that still will not save after this many tries stops holding the exam back.
+const MAX_FAILED_TRANSCRIPT_FLUSHES = 3;
 
 function formatMmSs(secondsLeft: number): string {
   const safe = Math.max(0, secondsLeft);
@@ -93,11 +95,23 @@ export default function SpeakingExamPage() {
   const examRef = useRef<SpeakingExamDetail | null>(null);
   examRef.current = exam;
   const mockSectionCompletedRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const failedFlushesRef = useRef(0);
   const liveRoomSessionRef = useRef<string | null>(null);
   const liveRoomRef = useRef<CreateLiveRoomResponse | null>(null);
   const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
+  // The mode ExamConversationPanel latched when this card mounted. The panel keeps it for the whole card although
+  // every poll re-reads liveVoiceAvailable, so a failed save is judged by this, never by the latest poll.
+  const cardModeRef = useRef<{ sessionId: string | null; live: boolean } | null>(null);
   const handleVoiceStopReady = useCallback((stop: (() => Promise<boolean>) | null) => {
     voiceStopRef.current = stop;
+    // The panel registers in the commit that mounts it, so examRef still holds the DTO it latched from.
+    // A re-registration inside the same card (a new stop identity) keeps the first value.
+    const current = examRef.current;
+    const sessionId = current?.currentSessionId ?? null;
+    if (stop && cardModeRef.current?.sessionId !== sessionId) {
+      cardModeRef.current = { sessionId, live: Boolean(current?.liveVoiceAvailable) };
+    }
   }, []);
 
   useEffect(() => {
@@ -106,7 +120,10 @@ export default function SpeakingExamPage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!examId) return;
+    // One poll at a time: an overlapping poll would run the previous card's save again (or mount the next
+    // card) while the first is still saving.
+    if (!examId || refreshingRef.current) return;
+    refreshingRef.current = true;
     try {
       const detail = await getSpeakingExam(examId);
       const previous = examRef.current;
@@ -122,12 +139,24 @@ export default function SpeakingExamPage() {
         // Never move on (and never drop the audio) until it lands.
         const saved = await voiceStopRef.current?.() ?? true;
         if (!saved) {
-          setLoadError(previous?.liveVoiceAvailable
-            ? 'The live voice transcript could not be saved. Retrying before moving to the next card.'
-            : RECORDING_UPLOAD_FAILED);
-          setLoading(false);
-          return;
+          failedFlushesRef.current += 1;
+          // The mode this card's panel latched at mount, not the latest poll's flag: provider health flips at
+          // runtime, and a recording must never be dropped because a later poll said live voice was back.
+          const mode = cardModeRef.current;
+          const live = mode && mode.sessionId === (previous?.currentSessionId ?? null)
+            ? mode.live
+            : Boolean(previous?.liveVoiceAvailable);
+          // A transcript that will not save must not strand the learner on a card the exam clock has
+          // already closed: after a few tries the exam moves on. A recording is never dropped.
+          if (!live || failedFlushesRef.current < MAX_FAILED_TRANSCRIPT_FLUSHES) {
+            setLoadError(live
+              ? 'The live voice transcript could not be saved. Retrying before moving to the next card.'
+              : RECORDING_UPLOAD_FAILED);
+            setLoading(false);
+            return;
+          }
         }
+        failedFlushesRef.current = 0;
       }
       setExam(detail);
       setFetchedAt(Date.now());
@@ -155,6 +184,7 @@ export default function SpeakingExamPage() {
         err instanceof ApiError ? err.userMessage : err instanceof Error ? err.message : 'Could not load the exam.',
       );
     } finally {
+      refreshingRef.current = false;
       setLoading(false);
     }
   }, [examId, router]);
@@ -329,9 +359,11 @@ export default function SpeakingExamPage() {
   const state = exam.state;
   const isPrep = state === 'prep_a' || state === 'prep_b';
   const isActive = state === 'active_a' || state === 'active_b';
-  const partLabel = exam.currentCardNumber === 2 ? 'Card B' : 'Card A';
+  // The card is named by its slot (the server's 1|2 ordinal), never by the number printed on the source card:
+  // the two cards are drawn at random and can print the same number. Unknown slot = no letter rather than a guess.
+  const slotLetter = exam.currentCardNumber === 1 ? 'A' : exam.currentCardNumber === 2 ? 'B' : null;
   const cardProps = exam.currentCard ? roleCardPropsFrom(exam.currentCard) : null;
-  const candidateCard = cardProps ? { ...cardProps, cardNumber: cardProps.cardNumber ?? exam.currentCardNumber } : null;
+  const candidateCard = cardProps ? { ...cardProps, cardNumber: undefined, slotLabel: slotLetter ?? undefined } : null;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -339,7 +371,7 @@ export default function SpeakingExamPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Speaking exam</h1>
           <p className="text-sm text-muted">
-            {state === 'intro' ? 'Part 1 — Introduction' : `Part 2 — ${partLabel}`}
+            {state === 'intro' ? 'Part 1 — Introduction' : slotLetter ? `Part 2 — Card ${slotLetter}` : 'Part 2'}
           </p>
         </div>
         {(isPrep || isActive) && secondsLeft != null ? (

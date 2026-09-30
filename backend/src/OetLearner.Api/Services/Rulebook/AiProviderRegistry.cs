@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -61,9 +62,20 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
     {
         var p = await FindByCodeAsync(providerCode, ct);
         if (p is null || string.IsNullOrEmpty(p.EncryptedApiKey)) return null;
+        // Keyless subscription sidecar rows store a literal marker, not ciphertext; the sidecar
+        // ignores the key header, so hand the marker back instead of failing to decrypt it. Only
+        // while the row still points at an allow-listed INTERNAL host (OET_INTERNAL_AI_HOSTS): a
+        // vendor row that an admin re-pointed at a public URL must not keep looking credentialed
+        // (null = the same "platform key missing" path as an undecryptable key).
+        if (WritingSubscriptionProviderDefaults.IsMarkerKey(p.EncryptedApiKey))
+            return IsInternalBaseUrl(p.BaseUrl) ? p.EncryptedApiKey : null;
         try { return _protector.Unprotect(p.EncryptedApiKey); }
         catch { return null; }
     }
+
+    private static bool IsInternalBaseUrl(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+           && AiProviderConnectionTester.IsInternalAiHost(uri.Host);
 }
 
 /// <summary>
@@ -98,7 +110,12 @@ public sealed class RegistryBackedProvider(
     {
         var (baseUrl, apiKey, reasoningEffort) = await ResolveCredentialsAsync(request, ct);
         Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
-        if (platformGate is null || !string.IsNullOrWhiteSpace(request.ApiKeyOverride))
+        // The keyless subscription sidecar (writing-codex-sub) serialises every request on its own
+        // CLI lane: a permit here would only be held while the call queues behind other grades and
+        // would starve every other platform-key call in this process. The lane is its limiter.
+        if (platformGate is null
+            || !string.IsNullOrWhiteSpace(request.ApiKeyOverride)
+            || WritingSubscriptionProviderDefaults.IsMarkerKey(apiKey))
             return await Invoke();
         return await platformGate.RunAsync(_ => Invoke(), ct);
     }
@@ -439,14 +456,19 @@ public sealed class AnthropicProvider(
         return null;
     }
 
+    /// <summary>
+    /// True only for first-party Anthropic hosts, whose error text is vendor text we may log. Any
+    /// other host (the subscription sidecar, a proxy, an unknown gateway) can echo request
+    /// fragments or CLI output, so only the head of its message is kept.
+    /// </summary>
+    internal static bool RetainsVendorText(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+           && (uri.Host.Equals("anthropic.com", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".anthropic.com", StringComparison.OrdinalIgnoreCase));
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var held = false;
-        if (platformGate is not null && string.IsNullOrWhiteSpace(request.ApiKeyOverride))
-        {
-            await platformGate.WaitAsync(ct);
-            held = true;
-        }
 
         try
         {
@@ -466,6 +488,17 @@ public sealed class AnthropicProvider(
         var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
         if (unsafeBaseUrlReason is not null)
             throw new InvalidOperationException(unsafeBaseUrlReason);
+
+        // The keyless subscription sidecar serialises every request on its own CLI lane; a permit
+        // here would only be held while the call queues behind other grades and would starve every
+        // other platform-key call in this process. The lane, not this gate, is its limiter.
+        if (platformGate is not null
+            && string.IsNullOrWhiteSpace(request.ApiKeyOverride)
+            && !WritingSubscriptionProviderDefaults.IsMarkerKey(apiKey))
+        {
+            await platformGate.WaitAsync(ct);
+            held = true;
+        }
 
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         // Normalize so a bare-host BaseUrl (no /v1) still resolves correctly;
@@ -573,11 +606,21 @@ public sealed class AnthropicProvider(
         using var _response = response;
         if (!response.IsSuccessStatusCode)
         {
+            var status = (int)response.StatusCode;
+            // The body is parsed into allow-listed tokens plus a redacted, capped text and never
+            // enters the exception Message (post-mortem INC-2026-CLAUDE-01).
             throw new AiProviderHttpException(
                 "Anthropic",
-                (int)response.StatusCode,
+                status,
                 response.ReasonPhrase,
-                ReadRetryAfter(response));
+                ReadRetryAfter(response),
+                AiProviderErrorParser.Parse(
+                    AiProviderErrorDialect.Anthropic,
+                    status,
+                    body,
+                    response.Headers,
+                    apiKey,
+                    retainProviderText: RetainsVendorText(baseUrl)));
         }
 
         using var doc = JsonDocument.Parse(body);

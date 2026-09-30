@@ -49,6 +49,45 @@ provider credentials:
    the raw exception message before truncation, so neither
    `LastTestError` (database column) nor the JSON returned by the
    `…/test` endpoint can contain the secret.
+6. **Runtime provider errors keep provider text in one log line per call
+   path, never anywhere else.**
+   When a live provider call returns a non-success status,
+   `AiProviderErrorParser` reduces the body to a failure class, the HTTP
+   status, allow-listed `type` / `code` / request-id tokens and a
+   single-line message of at most 300 characters. Sanitising redacts the
+   WHOLE raw text first, and only then applies the 2000-character raw cap,
+   the head-only cut (below), control-character removal and the 300-character
+   final cap, so a secret that straddles a cut can never survive as a
+   fragment; a redaction that cannot finish (regex timeout) yields no text.
+   That message is written to exactly one structured server log line per
+   failed call: `AI provider call failed: ...` in `AiGatewayService` for
+   gateway calls (attached to `AiProviderHttpException.ProviderError`), and
+   `Live voice {Provider} session creation failed: ...` in `LiveVoiceService`
+   for the realtime voice create calls, which never go through the gateway.
+   It never enters `Exception.Message`, an `AiUsageRecord` row (only
+   class-derived codes such as `provider_quota_exhausted` and an
+   allow-listed message), or a client response (live voice answers a generic
+   503). For non-first-party hosts (the subscription sidecars) only the head
+   of the message before the first colon, at most 60 characters, is kept,
+   because a sidecar can echo CLI output. Live voice keeps provider text only
+   for HTTP 429 and 5xx answers from `api.openai.com` and
+   `generativelanguage.googleapis.com` (an allow-list: a 400, 413, 415 or 422
+   can echo the request, a 401 or 403 a masked key, a 404 the URL, and the
+   request carries the hidden card instructions and the learner's SDP); every
+   other status logs class, status, type, code and request id only, and the
+   live voice catalog probe never keeps provider text. Message phrases
+   ("credit balance", "usage limits", ...) do not decide the class of an
+   OpenAI or Gemini 400, 413, 415 or 422 either, so echoed request content
+   cannot open a shared circuit breaker.
+7. **The `subscription-sidecar` marker is not a secret.** The keyless
+   subscription sidecar rows store this literal in `EncryptedApiKey`; the
+   registry returns it as the key (the sidecars ignore it) only while the
+   row's `BaseUrl` host is on `OET_INTERNAL_AI_HOSTS` (a row re-pointed at a
+   public URL stops looking credentialed and fails as "Platform API key
+   missing"), and the admin probe treats such a row as credentialed, probing
+   the sidecar's `GET /healthz` rather than running a completion. A stored
+   value that is neither the marker nor decryptable makes the probe return
+   status `auth` with a clear message instead of an unhandled error.
 
 ## Code paths
 
@@ -56,6 +95,9 @@ provider credentials:
 | --- | --- |
 | Encryption + projection allow-list + hint shape | `backend/src/OetLearner.Api/Endpoints/AiUsageAdminEndpoints.cs` (provider + account groups) |
 | Connectivity probe + `RedactSecrets` helper | `backend/src/OetLearner.Api/Services/Rulebook/AiProviderConnectionTester.cs` |
+| Runtime provider-error parsing + sanitising | `backend/src/OetLearner.Api/Services/Rulebook/AiProviderError.cs` (tests: `AiProviderErrorParserTests`, `AiProviderHttpExceptionTests`) |
+| The single provider-error log line + usage-row message | `backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService.cs` (`LogProviderFailure`, `SanitiseProviderErrorMessage`) |
+| The realtime voice provider-error log line (allow-listed hosts and statuses) | `backend/src/OetLearner.Api/Services/Speaking/LiveVoiceService.cs` (`RetainsProviderText`, `FailProviderAsync`) |
 | Encrypted column declaration | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
 
 ## Test evidence

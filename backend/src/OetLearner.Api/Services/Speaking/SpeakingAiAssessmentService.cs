@@ -28,7 +28,8 @@ public sealed class SpeakingAiAssessmentService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     ILogger<SpeakingAiAssessmentService> logger,
-    SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null)
+    SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null)
 {
     private const string PromptTemplateId = "speaking.score.v2";
     private const string ProviderName = "ai_gateway";
@@ -208,10 +209,12 @@ Scoring rules:
         var freeSample = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct);
 
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
+        // SpeakingGradeChain pins the Claude subscription sidecar first and falls back to the
+        // default route; with no pinned provider configured it is one plain gateway call.
         AiGatewayResult aiResult;
         try
         {
-            aiResult = await aiGateway.CompleteAsync(new AiGatewayRequest
+            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, new AiGatewayRequest
             {
                 Prompt = prompt,
                 UserInput = userInput,
@@ -237,7 +240,7 @@ Scoring rules:
                         || !string.IsNullOrWhiteSpace(session.MockSessionId))
                         ? AiAssessmentContext.Mock
                         : AiAssessmentContext.Practice,
-            }, ct);
+            }, gradingOptions?.Value, logger, ct);
         }
         catch (PromptNotGroundedException)
         {
@@ -261,7 +264,7 @@ Scoring rules:
         if (parsed is null)
         {
             logger.LogWarning(
-                "Speaking AI assessment returned an unparseable payload for session {SessionId}.",
+                "Speaking AI assessment returned an unparseable or incomplete payload for session {SessionId}.",
                 sessionId);
             throw ApiException.Conflict("speaking_ai_unparseable",
                 "The AI scoring service returned an invalid response. Please retry.");
@@ -316,8 +319,9 @@ Scoring rules:
             Id = assessmentId,
             SpeakingSessionId = sessionId,
             TranscriptId = transcript.Id,
-            Provider = ProviderName,
-            ModelId = ModelId,
+            // Real provenance (which grader actually ran), cut to the column limits (32 / 96).
+            Provider = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
+            ModelId = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
             PromptTemplateId = PromptTemplateId,
             Intelligibility = rubricScores.Intelligibility,
             Fluency = rubricScores.Fluency,
@@ -591,6 +595,26 @@ Scoring rules:
         public string? ConfidenceBand { get; init; }
     }
 
+    /// <summary>The nine criteria every reply must score. A missing or non-numeric one makes the
+    /// reply unparseable (learner-retryable) rather than a silent zero grade.</summary>
+    private static readonly string[] RequiredCriteria =
+    [
+        "intelligibility", "fluency", "appropriateness", "grammarExpression",
+        "relationshipBuilding", "patientPerspective", "structure",
+        "informationGathering", "informationGiving",
+    ];
+
+    /// <summary>The grounded system prompt names two criteria differently from the JSON template in
+    /// <see cref="PROMPT_TEMPLATE_V2"/> (<c>grammar</c> / <c>providingStructure</c> vs
+    /// <c>grammarExpression</c> / <c>structure</c>), so a model may follow either; both spellings
+    /// map to the canonical code.</summary>
+    private static string CanonicalCriterionCode(string name)
+    {
+        if (string.Equals(name, "grammar", StringComparison.OrdinalIgnoreCase)) return "grammarExpression";
+        if (string.Equals(name, "providingStructure", StringComparison.OrdinalIgnoreCase)) return "structure";
+        return name;
+    }
+
     private static ParsedAssessment? ParseAssessment(string? completion)
     {
         if (string.IsNullOrWhiteSpace(completion)) return null;
@@ -609,13 +633,36 @@ Scoring rules:
             {
                 foreach (var prop in critEl.EnumerateObject())
                 {
-                    if (prop.Value.ValueKind != JsonValueKind.Object) continue;
-                    var rawScore = TryReadInt(prop.Value, "score") ?? 0;
-                    var rationale = TryReadString(prop.Value, "rationale") ?? string.Empty;
-                    var quotes = ReadStringArray(prop.Value, "evidenceQuotes");
-                    var max = IsLinguisticCriterion(prop.Name) ? 6 : 3;
-                    scores[prop.Name] = new CriterionScore(rawScore, max, rationale, quotes);
+                    var code = CanonicalCriterionCode(prop.Name);
+                    // When both spellings are present the canonical one wins, whatever the order.
+                    var isAlias = !string.Equals(code, prop.Name, StringComparison.Ordinal);
+                    if (isAlias && scores.ContainsKey(code)) continue;
+
+                    int? rawScore;
+                    var rationale = string.Empty;
+                    var quotes = Array.Empty<string>();
+                    if (prop.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        rawScore = TryReadInt(prop.Value, "score");
+                        rationale = TryReadString(prop.Value, "rationale") ?? string.Empty;
+                        quotes = ReadStringArray(prop.Value, "evidenceQuotes");
+                    }
+                    else
+                    {
+                        // A bare number is a legitimate way to state a score.
+                        rawScore = ScalarInt(prop.Value);
+                    }
+
+                    // Non-numeric = missing: never default to 0 and persist it as a real grade.
+                    if (rawScore is null) continue;
+                    var max = IsLinguisticCriterion(code) ? 6 : 3;
+                    scores[code] = new CriterionScore(rawScore.Value, max, rationale, quotes);
                 }
+            }
+
+            foreach (var required in RequiredCriteria)
+            {
+                if (!scores.ContainsKey(required)) return null;
             }
 
             return new ParsedAssessment
@@ -637,6 +684,9 @@ Scoring rules:
         return Math.Clamp(cs.Score, min, max);
     }
 
+    private static string Truncate(string value, int max)
+        => value.Length <= max ? value : value[..max];
+
     private static string NormaliseConfidenceBand(string? raw) => (raw ?? "medium").Trim().ToLowerInvariant() switch
     {
         "low" => "low",
@@ -651,16 +701,16 @@ Scoring rules:
     };
 
     private static int? TryReadInt(JsonElement el, string property)
-    {
-        if (!el.TryGetProperty(property, out var v)) return null;
-        return v.ValueKind switch
+        => el.TryGetProperty(property, out var v) ? ScalarInt(v) : null;
+
+    private static int? ScalarInt(JsonElement v)
+        => v.ValueKind switch
         {
             JsonValueKind.Number when v.TryGetInt32(out var i) => i,
             JsonValueKind.Number => (int)Math.Round(v.GetDouble()),
             JsonValueKind.String when int.TryParse(v.GetString(), out var s) => s,
             _ => null,
         };
-    }
 
     private static string? TryReadString(JsonElement el, string property)
         => el.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.String

@@ -2,7 +2,7 @@
 
 > **Current status (2026-05-29)**: historical Speaking hardening ledger. The current cross-project source of pending work is the root [`PROGRESS.md`](../../PROGRESS.md) (the old `STATUS/REMAINING-WORK.md` was removed in 81506d1e0), with security sign-off tracked separately in [`../security/speaking/checklist.md`](../security/speaking/checklist.md).
 
-> **Live voice agent (Sept 2026)**: providers, default, limits, E2E harness and open items are recorded in [live-voice.md](./live-voice.md).
+> **Live voice agent (Sept 2026)**: providers, default, automatic provider failover, the health model, the hard duration cap and OpenAI hang-up, consent disclosure, exam card labels, the E2E harness, what is not implemented and open items are recorded in [live-voice.md](./live-voice.md), reconciled with the final close-out code on 2026-09-30. The 30 Sep 2026 close-out (failover, hard cap and hang-up, client fail-open, card labels) has not run in production yet and is pending verification; its open items are listed there.
 
 Last updated: 2026-05-07
 Mode: Ralph-style hardening loop

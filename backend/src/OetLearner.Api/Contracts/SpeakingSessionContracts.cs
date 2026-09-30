@@ -38,7 +38,10 @@ public record CreateSpeakingSessionResponse(
 /// the current state of the session along with the same learner-safe
 /// card projection used at create time. The warm-up timestamps were
 /// added in Phase 3 so the frontend state-router can tell warmup from
-/// prep without a separate API call.</summary>
+/// prep without a separate API call. <c>RolePlayEndsAt</c> is the server's
+/// deadline for the role-play (start plus the card's capped time), null until
+/// the role-play has started; clients should count down to it rather than to
+/// the raw card seconds.</summary>
 public record SpeakingSessionDetail(
     string SessionId,
     string Mode,
@@ -56,7 +59,8 @@ public record SpeakingSessionDetail(
     string? FeedbackMessage = null,
     bool IsFreeSample = false,
     bool ConsentAccepted = false,
-    bool LiveVoiceAvailable = false);
+    bool LiveVoiceAvailable = false,
+    DateTimeOffset? RolePlayEndsAt = null);
 
 /// <summary>One criterion in the AI assessment per-criterion drawer.
 /// `Score`/`MaxScore` matches the canonical 0–6 linguistic / 0–3 clinical
@@ -95,7 +99,9 @@ public record SpeakingConsentRequest(string ConsentVersion);
 /// computed entirely server-side from persisted timestamps plus the card's
 /// prep/role-play windows, so a reconnecting or clock-skewed client cannot
 /// gain or lose time. The hub's <c>TimeNearlyUp</c>/<c>TimeUp</c> broadcasts
-/// are convenience signals only; this endpoint is authoritative.</summary>
+/// are convenience signals only; this endpoint is authoritative.
+/// <c>HardStopAt</c> is when the server force-ends an unfinished role-play
+/// (deadline plus grace); null unless the session is active.</summary>
 public record SpeakingSessionClock(
     string Stage,
     int RoleplayIndex,
@@ -104,7 +110,8 @@ public record SpeakingSessionClock(
     DateTimeOffset? StageEndsAt,
     int? SecondsRemaining,
     bool Expired,
-    string[] CanAdvanceTo);
+    string[] CanAdvanceTo,
+    DateTimeOffset? HardStopAt = null);
 
 /// <summary>POST /v1/speaking/sessions/{id}/technical-issue body (§22.5).</summary>
 public record SpeakingTechnicalIssueRequest(string? Note);

@@ -17,7 +17,8 @@ public sealed class SpeakingSimulationV11AssessmentService(
     SpeakingSimulationV11EvidenceCaptureService evidenceCapture,
     SpeakingSimulationV11AudioAssessmentService audioAssessment,
     SpeakingSimulationV11TurnTelemetryService telemetry,
-    ILogger<SpeakingSimulationV11AssessmentService> logger)
+    ILogger<SpeakingSimulationV11AssessmentService> logger,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null)
 {
     private const string PromptTemplateId = "speaking.simulation.v1.1.assessment";
     private const string CardKind = "card";
@@ -207,7 +208,9 @@ Rules:
         AiGatewayResult result;
         try
         {
-            result = await aiGateway.CompleteAsync(new AiGatewayRequest
+            // Same chain as the classic assessor: pinned Claude subscription sidecar first, the
+            // default route as fallback; one plain gateway call when no provider is pinned.
+            result = await SpeakingGradeChain.CompleteAsync(aiGateway, new AiGatewayRequest
             {
                 Prompt = prompt,
                 UserInput = input,
@@ -220,7 +223,7 @@ Rules:
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
-            }, ct);
+            }, gradingOptions?.Value, logger, ct);
         }
         catch (PromptNotGroundedException) { throw; }
         catch (Exception ex)

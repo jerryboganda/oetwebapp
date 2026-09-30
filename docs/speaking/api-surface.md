@@ -9,15 +9,25 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | GET | `/v1/speaking/role-play-cards` | Published cards filtered by `ActiveProfessionId` + universal |
 | GET | `/v1/speaking/role-play-cards/{id}` | Single card (404 on profession mismatch) |
 | POST | `/v1/speaking/sessions` | Create session |
-| GET | `/v1/speaking/sessions/{id}` | Session detail (owner) |
+| GET | `/v1/speaking/sessions/{id}` | Session detail (owner); carries `liveVoiceAvailable` (at least one live voice provider usable, else the recorder fallback) and `rolePlayEndsAt` (the role-play **deadline**, null until it starts) |
 | POST | `/v1/speaking/sessions/{id}/start-warmup` | WarmUp transition |
 | POST | `/v1/speaking/sessions/{id}/finish-warmup` | WarmUp → Prep |
-| POST | `/v1/speaking/sessions/{id}/start-roleplay` | Prep → Active |
-| POST | `/v1/speaking/sessions/{id}/end` | Active → Finished |
+| POST | `/v1/speaking/sessions/{id}/start-roleplay` | Prep → Active; stamps `RolePlayStartedAt`, the anchor of every server deadline. Exam cards are timed by the exam clock: 409 `speaking_session_exam_managed` |
+| POST | `/v1/speaking/sessions/{id}/end` | Active → Finished (learner). The server also finishes an abandoned Active role-play at its hard stop, see [live-voice.md](live-voice.md#hard-duration-cap) |
+| POST | `/v1/speaking/sessions/{id}/submit` | Finished → submitted for marking (needs a recording or a transcript with words) |
 | POST | `/v1/speaking/sessions/{id}/consent` | Stamp consent version |
-| POST | `/v1/speaking/sessions/{id}/ai-assess` | Run AI assessment |
+| POST | `/v1/speaking/sessions/{id}/ai-assess` | Run AI assessment (202 `processing` while a recorder-fallback transcript is pending) |
 | GET | `/v1/speaking/sessions/{id}/ai-assessment` | Latest assessment |
+| GET | `/v1/speaking/sessions/{id}/results` | Grading state: `assessmentState` (processing / completed / failed), `retryable` |
+| GET | `/v1/speaking/sessions/{id}/clock` | Server clock: stage, `secondsRemaining`, `expired` and, for an Active session only, `hardStopAt` (deadline + grace) |
+| POST | `/v1/speaking/sessions/{id}/recording` | Recorder fallback upload (multipart `audio`, optional `durationSeconds`); 202 `{status:"received"}`; a repeat is 409 `recording_already_received` (the only 409 the client treats as success); after the write window a first upload is 409 `live_voice_transcript_window_closed` |
+| POST | `/v1/speaking/sessions/{id}/technical-issue` | Flag a technical issue |
 | GET | `/v1/speaking/sessions/{id}/transcript` | Latest transcript |
+| GET | `/v1/speaking/realtime/sessions/{id}/preflight[?provider=]` | Live voice: disclosure plus `candidates` (providers to try in order: primary first, health only filters) and `pinned` |
+| POST | `/v1/speaking/realtime/sessions/{id}/openai/offer` | Live voice: WebRTC SDP exchange; returns `hardStopAt`. Any provider failure is a generic 503 |
+| POST | `/v1/speaking/realtime/sessions/{id}/gemini/token` | Live voice: single-use ephemeral token; returns `expiresAt` and `hardStopAt` |
+| POST | `/v1/speaking/realtime/sessions/{id}/turns` | Live voice: advisory per-turn row (a failure never blocks the transcript) |
+| POST | `/v1/speaking/realtime/sessions/{id}/transcript` | Live voice: the whole transcript for grading; frozen once grading has taken it |
 | GET | `/v1/speaking/mock-sets` | Published mock sets |
 | GET | `/v1/speaking/mock-sessions/{id}` | Mock session state |
 | POST | `/v1/speaking/mock-sessions/{id}/bridge/start` | Finished1 → Bridge |
@@ -66,6 +76,16 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | GET | `/v1/admin/speaking/analytics/{slug}` | Dashboard queries |
 | GET | `/v1/admin/speaking/recordings/audit` | Recording-access audit log |
 | POST | `/v1/admin/speaking/recordings/{id}/access` | Log + grant access |
+| GET | `/v1/admin/ai/live-voice/health` | Live voice provider health: catalog probe, circuit, last failure, counters (`AdminAiConfig`) |
+| POST | `/v1/admin/ai/live-voice/{provider}/reset` | Close a provider's circuit (`openai` \| `gemini`); audited as `LiveVoiceProviderCircuitReset` |
+
+## Live voice notes
+
+- The five `/realtime/sessions/{id}/...` routes and `start-roleplay` share the `AiLiveSpeaking` limiter: one in-flight
+  request per user, the next is answered 429 `rate_limited`.
+- Live voice error codes, retryable flags and the failover rules the client applies:
+  [live-voice.md](live-voice.md#provider-failover). Numbers (deadline, hard stop, write window, session cap):
+  [live-voice.md](live-voice.md#hard-duration-cap); keys: [../env/speaking.md](../env/speaking.md).
 
 ## Webhooks (unauthenticated, HMAC-verified)
 

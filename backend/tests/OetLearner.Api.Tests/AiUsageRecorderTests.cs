@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -256,7 +257,9 @@ public class AiGatewayRecorderIntegrationTests
 {
     private readonly RulebookLoader _loader = new();
 
-    private (IAiGatewayService gateway, LearnerDbContext db) BuildGateway(IAiModelProvider? provider = null)
+    private (IAiGatewayService gateway, LearnerDbContext db) BuildGateway(
+        IAiModelProvider? provider = null,
+        ILogger<AiGatewayService>? logger = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -269,7 +272,7 @@ public class AiGatewayRecorderIntegrationTests
         // that always reports sufficient balance so these recorder-focused tests
         // reach the provider call and persist a usage row.
         var creditService = new UnlimitedCreditStub();
-        return (new AiGatewayService(_loader, providers, recorder, creditService: creditService), db);
+        return (new AiGatewayService(_loader, providers, recorder, creditService: creditService, logger: logger), db);
     }
 
     /// <summary>
@@ -457,6 +460,130 @@ public class AiGatewayRecorderIntegrationTests
         await db.DisposeAsync();
     }
 
+    private AiGroundedPrompt WritingPrompt(IAiGatewayService gateway)
+        => gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
+        });
+
+    [Fact]
+    public async Task Gateway_RecordsTypedQuotaFailure_WithAnAllowListedMessage_AndLogsTheProviderTextOnly()
+    {
+        var providerError = new AiProviderError(
+            AiProviderErrorClass.QuotaExhausted, 400, "invalid_request_error", null,
+            "Your credit balance is too low to access the Anthropic API.", "req_gateway1", null);
+        var typed = new AiProviderHttpException("Anthropic", 400, "Bad Request", null, providerError);
+        var logger = new CapturingGatewayLogger();
+        var (gateway, db) = BuildGateway(new ThrowingProvider(typed), logger);
+
+        await Assert.ThrowsAsync<AiProviderHttpException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = WritingPrompt(gateway),
+                Provider = "throwing",
+                UserId = "user-quota",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal(AiCallOutcome.ProviderError, row.Outcome);
+        Assert.Equal("provider_quota_exhausted", row.ErrorCode);
+        Assert.Equal("Provider request failed with HTTP 400 (quota_exhausted; invalid_request_error).", row.ErrorMessage);
+        Assert.DoesNotContain("credit balance", row.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        // Provider text lives only in one structured log line, at Error because an operator must act.
+        var line = Assert.Single(logger.Entries, e => e.Message.StartsWith("AI provider call failed", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Error, line.Level);
+        Assert.Contains("feature=" + AiFeatureCodes.WritingGrade, line.Message);
+        Assert.Contains("provider=throwing", line.Message);
+        Assert.Contains("http=400", line.Message);
+        Assert.Contains("class=quota_exhausted", line.Message);
+        Assert.Contains("type=invalid_request_error", line.Message);
+        Assert.Contains("requestId=req_gateway1", line.Message);
+        Assert.Contains("credit balance is too low", line.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_LogsTransientTypedFailuresAtWarning_AndClassifiesThemFromTheTypedError()
+    {
+        var retryAfter = TimeSpan.FromMilliseconds(10);
+        var typed = new AiProviderHttpException(
+            "Anthropic", 529, "Overloaded", retryAfter,
+            new AiProviderError(AiProviderErrorClass.Overloaded, 529, "overloaded_error", null, "Overloaded", null, retryAfter));
+        var logger = new CapturingGatewayLogger();
+        var (gateway, db) = BuildGateway(new ThrowingProvider(typed), logger);
+
+        await Assert.ThrowsAsync<AiProviderHttpException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = WritingPrompt(gateway),
+                Provider = "throwing",
+                UserId = "user-overloaded",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal("provider_overloaded", row.ErrorCode);
+        Assert.Equal("Provider request failed with HTTP 529 (overloaded; overloaded_error).", row.ErrorMessage);
+        var line = Assert.Single(logger.Entries, e => e.Message.StartsWith("AI provider call failed", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Warning, line.Level);
+        Assert.Contains("class=overloaded", line.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_NeverWritesSecretsFromTypedProviderText_ToTheRowOrTheLog()
+    {
+        var providerError = new AiProviderError(
+            AiProviderErrorClass.Auth, 401, "authentication_error", null,
+            "bad key sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX1234 supplied", null, null);
+        var typed = new AiProviderHttpException("Anthropic", 401, "Unauthorized", null, providerError);
+        var logger = new CapturingGatewayLogger();
+        var (gateway, db) = BuildGateway(new ThrowingProvider(typed), logger);
+
+        await Assert.ThrowsAsync<AiProviderHttpException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = WritingPrompt(gateway),
+                Provider = "throwing",
+                UserId = "user-auth",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal("provider_auth", row.ErrorCode);
+        Assert.DoesNotContain("sk-proj", row.ErrorMessage);
+        var line = Assert.Single(logger.Entries, e => e.Message.StartsWith("AI provider call failed", StringComparison.Ordinal));
+        Assert.DoesNotContain("sk-proj-", line.Message);
+        Assert.Contains("***REDACTED***", line.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_UntypedHttp400_NowRecordsItsStatus()
+    {
+        var throwingProvider = new ThrowingProvider(new InvalidOperationException("AI provider call failed: HTTP 400 Bad Request."));
+        var (gateway, db) = BuildGateway(throwingProvider);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = WritingPrompt(gateway),
+                Provider = "throwing",
+                UserId = "user-400",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal("provider_error", row.ErrorCode);
+        Assert.Equal("Provider request failed with HTTP 400.", row.ErrorMessage);
+        await db.DisposeAsync();
+    }
+
     [Fact]
     public async Task Gateway_DoesNotBreak_WhenRecorderIsNotWired()
     {
@@ -481,5 +608,19 @@ public class AiGatewayRecorderIntegrationTests
         public string Name => "throwing";
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
             => throw ex;
+    }
+
+    private sealed class CapturingGatewayLogger : ILogger<AiGatewayService>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 }

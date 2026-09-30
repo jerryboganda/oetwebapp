@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai;
 
@@ -42,6 +43,15 @@ public static class AiRetryPolicy
                 AiRetryDisposition.Retry,
                 MaxSchemaRepairRetries,
                 AllowLocalRepair: true);
+        }
+
+        // A typed provider failure that no retry can fix (billing exhausted, bad credential) is
+        // quarantined whatever HTTP status carried it: Anthropic reports "credit balance is too
+        // low" as 400, the subscription sidecar reports exhausted quota as 429.
+        if (AiProviderErrorParser.FindHttpException(exception)?.ErrorClass
+            is AiProviderErrorClass.QuotaExhausted or AiProviderErrorClass.Auth)
+        {
+            return new AiRetryClassification(AiRetryDisposition.Quarantine, 0, false);
         }
 
         var status = TryGetHttpStatus(exception);
@@ -175,19 +185,35 @@ public static class AiRetryPolicy
         return null;
     }
 
+    /// <summary>Longest provider Retry-After the gateway will sleep through inside one call. A
+    /// larger value (a quota window, a hostile or buggy upstream) must not pin a request thread
+    /// for minutes; the retry then simply runs after this cap.</summary>
+    internal static readonly TimeSpan MaxHonouredRetryAfter = TimeSpan.FromSeconds(30);
+
     private static TimeSpan? TryGetRetryAfter(Exception exception)
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
-            if (current.Data["Retry-After"] is TimeSpan ts) return ts;
-            if (current.Data["Retry-After"] is int seconds) return TimeSpan.FromSeconds(seconds);
+            // Typed provider failures carry the parsed Retry-After header / Gemini RetryInfo.
+            if (current is AiProviderHttpException http
+                && (http.RetryAfter ?? http.ProviderError?.RetryAfter) is { } typed
+                && typed > TimeSpan.Zero)
+            {
+                return Cap(typed);
+            }
+
+            if (current.Data["Retry-After"] is TimeSpan ts) return Cap(ts);
+            if (current.Data["Retry-After"] is int seconds) return Cap(TimeSpan.FromSeconds(seconds));
             if (current.Data["Retry-After"] is string text
                 && int.TryParse(text, out var parsed))
             {
-                return TimeSpan.FromSeconds(parsed);
+                return Cap(TimeSpan.FromSeconds(parsed));
             }
         }
 
         return null;
     }
+
+    private static TimeSpan Cap(TimeSpan retryAfter)
+        => retryAfter > MaxHonouredRetryAfter ? MaxHonouredRetryAfter : retryAfter;
 }

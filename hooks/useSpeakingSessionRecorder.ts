@@ -8,6 +8,10 @@
  * `stop()` is the page's single finalize hook: it stops the recorder once,
  * keeps the blob in memory and uploads it. It is idempotent — call it again
  * after an upload failure to retry the SAME blob; it never discards audio.
+ * It resolves true when the audio landed ('uploaded') or when the server
+ * permanently refused it ('rejected': a retry cannot help and the caller must
+ * not be stranded, but it is never reported as received); false only for a
+ * failure worth retrying (network, 5xx, timeout, rate limit, expired sign-in).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
@@ -21,9 +25,20 @@ export type SpeakingRecorderStatus =
   | 'uploading'
   | 'uploaded'
   | 'upload_failed'
+  | 'rejected'
   | 'error';
 
 export const RECORDING_UPLOAD_FAILED = 'Upload failed — Retry upload';
+/** Shown when the server permanently refused the recording and gave no message of its own. */
+const RECORDING_NOT_SAVED = 'The recording could not be saved.';
+
+/**
+ * A 4xx the server will give again for this recording (upload window closed, session state, invalid audio): a retry
+ * cannot help. Not a sign-in expiry (401), a timeout (408) or the rate limit (429): those clear on a retry.
+ */
+function isPermanentRefusal(caught: unknown): caught is ApiError {
+  return caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && ![401, 408, 429].includes(caught.status);
+}
 
 /** webm/opus where supported (Chrome, Firefox, Android webview); mp4 for Safari / iOS webviews. */
 export function pickRecordingMimeType(): string | undefined {
@@ -127,7 +142,8 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
       recorderRef.current = null;
       const micError = describeMicrophoneError(caught);
       setMicPermissionDenied(micError.permissionDenied);
-      setError(micError.message);
+      // The shared microphone copy names "Start recording"; the control on this panel is "Start speaking".
+      setError(micError.message.replace('Start recording', 'Start speaking'));
       setStatus('error');
       return false;
     }
@@ -171,6 +187,13 @@ export function useSpeakingSessionRecorder(sessionId: string): UseSpeakingSessio
         return true;
       } catch (caught) {
         console.warn('Speaking recording upload failed', caught instanceof ApiError ? caught.code : caught);
+        if (isPermanentRefusal(caught)) {
+          // The server will never take this recording, so the caller may move on: a retry loop would strand the
+          // learner. It is never reported as uploaded.
+          setError(caught.userMessage || RECORDING_NOT_SAVED);
+          setStatus('rejected');
+          return true;
+        }
         setError(RECORDING_UPLOAD_FAILED);
         setStatus('upload_failed');
         return false;

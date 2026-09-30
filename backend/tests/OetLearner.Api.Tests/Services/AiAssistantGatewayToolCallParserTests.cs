@@ -295,6 +295,66 @@ public sealed class AiAssistantGatewayToolCallParserTests
         Assert.Equal("ubag", ubag.SeenRequest.ProviderCode);
     }
 
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_DefaultRow_SkipsKeylessSubscriptionSidecarRows()
+    {
+        // The route names no provider, so the gateway picks "the first active row with a key". The seeded
+        // subscription sidecar row carries the marker key, is listed first and must never win that pick.
+        var sidecar = new NamedCapturingProvider("anthropic");
+        var registry = new NamedCapturingProvider("registry");
+        var gateway = new AiAssistantGateway(
+            new FakeRouteResolver(providerCode: "", model: null),
+            new MapProviderRegistry(
+                new AiProvider { Code = "writing-claude-sub", Dialect = AiProviderDialect.Anthropic, DefaultModel = "claude-opus-5-5", IsActive = true, EncryptedApiKey = OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey },
+                new AiProvider { Code = "ubag", Dialect = AiProviderDialect.OpenAiCompatible, DefaultModel = "mock", IsActive = true, EncryptedApiKey = "k" }),
+            new IAiModelProvider[] { sidecar, registry },
+            NullLogger<AiAssistantGateway>.Instance);
+
+        var chunks = new List<LlmStreamChunk>();
+        await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantLearner,
+                   "learner-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: null,
+                   CancellationToken.None))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.Null(sidecar.SeenRequest);
+        Assert.NotNull(registry.SeenRequest);
+        Assert.Equal("ubag", Assert.IsType<LlmServedModel>(chunks[0]).ProviderCode);
+    }
+
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_DefaultRow_RefusesRatherThanUseAKeylessSidecarRow_WhenItIsTheOnlyActiveRow()
+    {
+        var sidecar = new NamedCapturingProvider("anthropic");
+        var gateway = new AiAssistantGateway(
+            new FakeRouteResolver(providerCode: "", model: null),
+            new MapProviderRegistry(
+                new AiProvider { Code = "writing-claude-sub", Dialect = AiProviderDialect.Anthropic, DefaultModel = "claude-opus-5-5", IsActive = true, EncryptedApiKey = OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey }),
+            new IAiModelProvider[] { sidecar },
+            NullLogger<AiAssistantGateway>.Instance);
+
+        var chunks = new List<LlmStreamChunk>();
+        await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantLearner,
+                   "learner-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: null,
+                   CancellationToken.None))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.Null(sidecar.SeenRequest);
+        var refusal = Assert.IsType<LlmTextChunk>(Assert.Single(chunks));
+        Assert.Contains("No AI provider is configured", refusal.Text);
+    }
+
     private static (AiAssistantGateway Gateway, NamedCapturingProvider Anthropic, NamedCapturingProvider Ubag) BuildSplitCatalogGateway()
     {
         var anthropic = new NamedCapturingProvider("anthropic");

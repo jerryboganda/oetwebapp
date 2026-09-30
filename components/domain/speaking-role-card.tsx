@@ -19,7 +19,10 @@ export interface SpeakingRoleCardProps {
   tasks?: string[];
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
+  /** The number printed on the source card. Practice only: two cards drawn for one exam can print the same number. */
   cardNumber?: number;
+  /** Exam slot letter ("A" / "B") from the server's card ordinal; names the card in an exam and wins over `cardNumber`. */
+  slotLabel?: string;
   disclaimer?: string;
   /** Rights notice printed on the source card. Shown verbatim beneath the card. */
   sourceAttribution?: string;
@@ -78,6 +81,7 @@ export function SpeakingRoleCard({
   prepTimeSeconds,
   roleplayTimeSeconds,
   cardNumber,
+  slotLabel,
   disclaimer,
   sourceAttribution,
   className,
@@ -85,6 +89,7 @@ export function SpeakingRoleCard({
   const prepLabel = formatSeconds(prepTimeSeconds);
   const roleplayLabel = formatSeconds(roleplayTimeSeconds);
   const cleanTasks = tasks.filter((t) => t && t.trim().length > 0);
+  const heading = slotLabel ? `Role-Play Card ${slotLabel}` : `Role-Play Card${cardNumber != null ? ` No. ${cardNumber}` : ''}`;
 
   return (
     <div className={cn('space-y-3', className)} role="region" aria-label="Role card details" data-testid="speaking-role-card">
@@ -97,9 +102,7 @@ export function SpeakingRoleCard({
 
       <article className="overflow-hidden rounded-lg border border-border bg-white text-slate-900 shadow-sm dark:bg-slate-50">
         <header className="flex items-center justify-between gap-3 bg-slate-800 px-4 py-2 text-white">
-          <h3 className="text-sm font-bold uppercase tracking-wide">
-            Role-Play Card{cardNumber != null ? ` No. ${cardNumber}` : ''}
-          </h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide">{heading}</h3>
         </header>
 
         <div className="divide-y divide-slate-200">

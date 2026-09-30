@@ -180,7 +180,7 @@ export function StepClassification() {
           min={1}
           value={displayCardNumber}
           onChange={(e) => setDisplayCardNumber(e.target.value)}
-          placeholder='e.g. "2" → "CANDIDATE CARD NO. 2"'
+          placeholder='e.g. "2" → "Role-Play Card No. 2" (practice only)'
         />
       </div>
     </div>

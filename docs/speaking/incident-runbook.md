@@ -11,7 +11,9 @@ Severity definitions follow standard practice: Sev1 = customer-impacting major o
 **Immediate action**:
 1. Page on-call Speaking + on-call Platform.
 2. Flip `Features__SpeakingV2_AssessmentEnabled = false` so the UI stops promising "assessment in 12s" and instead shows "assessment queued".
-3. Failover to secondary provider via `AiFeatureRouteResolver` (Anthropic → OpenAI fallback).
+3. Failover to secondary provider via `AiFeatureRouteResolver` (Anthropic → OpenAI fallback). For `speaking.grade` the first
+   failover is built in (Claude subscription sidecar, then the default route): see "Sev2: Speaking grading slow or failing
+   over" below.
 4. Drain backlog after recovery using `SpeakingAiAssessmentService.RetryQueueAsync`.
 
 **Communication template**:
@@ -41,6 +43,83 @@ Severity definitions follow standard practice: Sev1 = customer-impacting major o
 2. Auto-reschedule confirmed bookings via `MockBookingReminderWorker` to next available slot.
 3. Notify booked learners + tutors via existing email pipeline.
 4. Disable new bookings (`Features__PrivateSpeakingBookingsEnabled = false`).
+
+---
+
+## Sev2: Live voice provider failing ("The live AI patient could not start")
+
+Added 2026-09-30 with the live voice close-out; details and numbers in [live-voice.md](live-voice.md) (pending production
+verification). Before that, a provider failure was terminal for the session.
+
+**Detection**: the production E2E fails with "no live voice provider could start the conversation"; log lines
+`Live voice {Provider} session creation failed: class=... http=...` (Warning; **Error**, and so Sentry, for quota,
+credentials and refusals such as an unknown model or URL); the admin health endpoint shows a provider `open`.
+
+**What already happens**: the API offers the configured primary first, then the other; when a create call fails the browser
+tries the next provider (Gemini answers in about 2-3 s). A provider's circuit opens for 10 minutes on quota or credential
+failures, for its own `Retry-After` (5-120 s) on a rate limit, and for 60 s after two server or network failures within 60 s.
+With no provider usable the pages load the recorder fallback (`liveVoiceAvailable=false`); a learner already on a card can
+only retry.
+
+**Immediate action**:
+1. `GET /v1/admin/ai/live-voice/health`: per provider the circuit, the last failure (class, HTTP status, the provider's
+   error type and code), the catalog probe and the counters. The failure log line has the request id and, for a 429 or a 5xx
+   from the vendor host only, the redacted provider message.
+2. Fix the cause: `quota_exhausted` is the provider project's billing or spend limit, `auth` a revoked or wrong key,
+   `invalid_request` with 404 an unknown model or URL (`LIVEVOICE__*MODEL`, `LIVEVOICE__*BASEURL`).
+3. Then `POST /v1/admin/ai/live-voice/{provider}/reset` closes the circuit at once (audited); otherwise the next real success
+   after the open period closes it, and a restart clears it. The circuit is per API process.
+4. `LIVEVOICE__PRIMARYPROVIDER` only changes which provider is tried first (an owner-approved env edit plus an API slot
+   recreate, see live-voice.md); it is not needed to restore service while the other provider works. `?voiceProvider=` is a
+   QA pin (no failover, circuit bypassed), not a mitigation.
+
+---
+
+## Sev2: Role-plays not ending / OpenAI sessions still billing
+
+Added 2026-09-30 (hard duration cap; pending production verification).
+
+**Detection**: OpenAI usage for role-plays far beyond their card time; ai-worker log lines (Error)
+`Speaking role-play hard-stop sweep failed` or `Speaking role-play provider hang-up sweep failed`, (Warning)
+`Failed to hard-stop overdue Speaking role-play {SessionId}` or
+`Failed to hang up the provider sessions of ended Speaking role-play {SessionId}`; Active AI role-plays in the database
+past their deadline + grace.
+
+**Immediate action**:
+1. The cap is the ai-worker's `SpeakingExamAutoAdvanceWorker` (container `oet-ai-worker`; every 20 s; an Active role-play is
+   finished at deadline + 30 s, and rows more than 12 hours past that are left alone). No worker means no server-side cap:
+   browsers still finish at 00:00 and the mint and write guards still hold, but an abandoned session stays Active.
+2. Hang-up: read the ai-worker log for
+   `OpenAI live session hang-up returned HTTP {status} for Speaking session {SessionId}`. 200 (or 2xx) means it works;
+   every call answering 404 means the endpoint, which is not yet verified against the real provider, is probably wrong:
+   rely on the OpenAI project spend limit.
+   `OpenAI live session hang-up failed for Speaking session {SessionId}: {ErrorType}` is a transport fault or timeout.
+   Each role-play is tried once per worker process (no retry); a worker restart repeats the ones at most 10 minutes past
+   their hard stop.
+3. An abandoned standalone practice role-play is finished but not graded: its 2-credit hold is refunded by the hourly
+   stale-hold sweep after 24 hours and a free-sample use stays retryable. Abandoned exam cards are graded.
+
+---
+
+## Sev2: Speaking grading slow or failing over (Claude subscription sidecar)
+
+Added 2026-09-30; chain, budgets and revert in [ai-providers.md](ai-providers.md).
+
+**Detection**: the warning
+`Speaking grading via pinned provider writing-claude-sub failed (<class>); falling back to the default route.` in the log of
+the process that ran the grade (the ai-worker for queued grades, an API slot for a synchronous `/ai-assess`); learners see
+slower grading, or 409 `speaking_ai_unavailable` (retryable, no charge) when both routes fail.
+
+**Immediate action**:
+1. Read `<class>`: `quota_exhausted` or `auth` (the subscription: re-auth the sidecar, `docs/ops/WRITING-AI-PROVIDERS.md`
+   §8), `timeout` (the 900 s L1 budget ran out: a wedged or queued sidecar lane), `operation_indeterminate` (the pinned
+   attempt's outcome was unknown, so the default route took over), or another failure class. The gateway line
+   `AI provider call failed: ... provider=writing-claude-sub ...` gives status, class and error code.
+   `GET /v1/admin/ai/usage?featureCode=speaking.grade&outcome=ProviderError` lists failures and `outcome=Cancelled` the L1
+   budget expiries. The provider circuit is shared with Writing (`GET /v1/admin/ai/circuits`, reset
+   `POST /v1/admin/ai/circuits/{key}/reset?kind=provider`).
+2. To take the sidecar out of the grading path, set `SPEAKING_GRADING_PINNED_PROVIDER=` (empty) in the VPS env and recreate
+   the API slots and `oet-ai-worker`; grading is then one call on the default route.
 
 ---
 

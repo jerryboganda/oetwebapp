@@ -18,7 +18,7 @@
  * fold these into `lib/api.ts` — that file is owned by the core team
  * and edits there would conflict with parallel work.
  */
-import { apiClient } from '@/lib/api';
+import { ApiError, apiClient } from '@/lib/api';
 import type {
   RolePlayCardLearnerDetail,
   ResistanceLevelCode,
@@ -65,7 +65,8 @@ export interface SpeakingSessionTimingDetail {
   mode: SpeakingSessionMode | string;
   prepStartedAt: string;
   prepEndsAt: string;
-  rolePlayEndsAt: string;
+  /** Set on create; the read endpoint may omit it or send null. */
+  rolePlayEndsAt?: string | null;
   rolePlayStartedAt: string | null;
   endedAt: string | null;
   /** WS4 (§14.2) — stamped once the learner submits the role-play for marking. */
@@ -178,6 +179,8 @@ export interface SpeakingSessionClock {
   secondsRemaining: number | null;
   expired: boolean;
   canAdvanceTo: string[];
+  /** ISO time the server force-ends an active role-play (deadline plus grace). Absent on an older server. */
+  hardStopAt?: string | null;
 }
 
 export interface SpeakingTranscriptionStatus {
@@ -314,7 +317,8 @@ export async function recordConsent(
  * Recorder fallback (`liveVoiceAvailable=false`): upload the finished
  * recording. Must succeed BEFORE `/end` → `/submit` → `/ai-assess`.
  * Idempotent: a repeat upload returns 409 `recording_already_received`,
- * which the client treats as success.
+ * the ONLY 409 the client treats as success. Any other refusal (upload
+ * window closed, consent, session state) rejects with the ApiError.
  */
 export async function uploadSpeakingSessionRecording(
   sessionId: string,
@@ -327,11 +331,16 @@ export async function uploadSpeakingSessionRecording(
   if (durationSeconds && durationSeconds > 0) {
     form.append('durationSeconds', String(Math.round(durationSeconds)));
   }
-  await apiClient.request(
-    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/recording`,
-    { method: 'POST', body: form },
-    { json: false, acceptedStatuses: [409], timeoutMs: 120_000 },
-  );
+  try {
+    await apiClient.request(
+      `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/recording`,
+      { method: 'POST', body: form },
+      { json: false, timeoutMs: 120_000 },
+    );
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.status === 409 && caught.code === 'recording_already_received') return;
+    throw caught;
+  }
 }
 
 export type SpeakingAssessmentState = 'processing' | 'completed' | 'failed';

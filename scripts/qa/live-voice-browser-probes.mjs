@@ -41,16 +41,21 @@ export function installProbes(provider) {
     ctx.createMediaStreamSource(stream).connect(analyser);
     watchAnalyser(analyser, list);
   };
+  // Every microphone stream the page opened, so a run can show that one card's tracks ended before the next
+  // card's stream went live (and that a provider failover reused one stream instead of opening another).
+  window.__micStreams = [];
   const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = async (constraints) => {
     const stream = await getUserMedia(constraints);
     window.__micStartedAt ??= Date.now();
+    window.__micStreams.push(stream);
     try { spans(stream, window.__micSpans); } catch { /* best effort */ }
     return stream;
   };
 
   // One recording per patient audio stream (a card / session each): webm streams from
-  // different recorders cannot be concatenated.
+  // different recorders cannot be concatenated. startedAt (epoch ms) aligns a recording with
+  // the speech spans, e.g. to cut the patient's reply to a given candidate line.
   const recordings = [];
   const record = (stream) => {
     try {
@@ -58,14 +63,14 @@ export function installProbes(provider) {
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
       recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       recorder.start(1000);
-      recordings.push(chunks);
+      recordings.push({ chunks, startedAt: Date.now() });
     } catch { /* recording is best effort */ }
   };
-  window.__patientAudios = () => Promise.all(recordings.map(async (chunks) => {
+  window.__patientAudios = () => Promise.all(recordings.map(async ({ chunks, startedAt }) => {
     const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
     let binary = '';
     for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(binary);
+    return { startedAt, audio: btoa(binary) };
   }));
 
   // GPT-Live: the patient arrives as a WebRTC remote track.
@@ -123,15 +128,20 @@ export function installProbes(provider) {
   // Gemini Live: WebSocket close diagnostics, and the patient plays through Web Audio buffer
   // sources (not a track), so tap those sources for spans and the recording. Only while a
   // Gemini socket is open, so page sounds are never mistaken for the patient.
+  // A failover can open a second socket while the first one's close is still on its way, so count the
+  // open sockets instead of toggling a flag (a late close must not switch off the tap of the live one).
+  let openGeminiSockets = 0;
   const NativeWebSocket = window.WebSocket;
   window.WebSocket = class extends NativeWebSocket {
     constructor(...args) {
       super(...args);
       if (!/generativelanguage/.test(String(args[0]))) return;
+      openGeminiSockets += 1;
       window.__geminiWs = true;
       this.addEventListener('close', (e) => {
         window.__wsdiag.push({ at: Date.now(), type: 'close', code: e.code, reason: e.reason, wasClean: e.wasClean });
-        window.__geminiWs = false;
+        openGeminiSockets -= 1;
+        window.__geminiWs = openGeminiSockets > 0;
       });
       this.addEventListener('error', () => window.__wsdiag.push({ at: Date.now(), type: 'error' }));
     }

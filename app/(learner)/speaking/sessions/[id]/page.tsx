@@ -42,11 +42,18 @@ import { ApiError } from '@/lib/api';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
-const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
 const CLOCK_SYNC_INTERVAL_MS = 10_000;
+// A live transcript that still will not save after this many tries stops holding the learner back.
+const MAX_FAILED_TRANSCRIPT_FLUSHES = 3;
 
 function isAiMode(mode: string | SpeakingSessionMode): boolean {
   return mode === 'ai_self_practice' || mode === 'ai_exam';
+}
+
+/** What the card allows for the role-play. The server applies its own ceiling and reports the truth through /clock. */
+function cardRolePlaySeconds(session: SpeakingSessionDetail): number | null {
+  const seconds = session.card.rolePlayTimeSeconds;
+  return typeof seconds === 'number' && seconds > 0 ? seconds : null;
 }
 
 function formatMmSs(secondsLeft: number): string {
@@ -68,12 +75,16 @@ export default function SpeakingSessionRecordingPage() {
   const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
   const [consentAccepted, setConsentAccepted] = useState(true);
   const [speakingStarted, setSpeakingStarted] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState<number>(ROLE_PLAY_HARD_LIMIT_SECONDS);
+  // From the card, then the server clock; null until either is known (no timer is shown for a guess).
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
 
   const endedRef = useRef(false);
+  const failedFlushesRef = useRef(0);
+  // Device time at which the server force-ends the role-play (the /clock hardStopAt, corrected for clock skew).
+  const hardStopRef = useRef<number | null>(null);
   const speakingStartedAtRef = useRef<number | null>(null);
   const trackedTimeWarningRef = useRef(false);
   const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -99,6 +110,7 @@ export default function SpeakingSessionRecordingPage() {
       .then((s) => {
         if (cancelled) return;
         setSession(s);
+        setSecondsLeft(cardRolePlaySeconds(s));
         // Sessions created before the consent-first flow (or by the trainee
         // route) still get the one Rules + consent step, never a timed modal.
         setConsentAccepted(s.consentAccepted !== false);
@@ -136,6 +148,10 @@ export default function SpeakingSessionRecordingPage() {
       try {
         const clock = await getSpeakingSessionClock(session.sessionId);
         if (cancelled) return;
+        const hardStop = clock.hardStopAt ? Date.parse(clock.hardStopAt) : NaN;
+        const serverNow = Date.parse(clock.serverNow);
+        // Compared in server time, so a wrong device clock cannot move the deadline.
+        if (Number.isFinite(hardStop) && Number.isFinite(serverNow)) hardStopRef.current = Date.now() + (hardStop - serverNow);
         if (clock.expired || clock.stage === 'finished' || clock.stage === 'cancelled') {
           setSecondsLeft(0);
           return;
@@ -167,11 +183,24 @@ export default function SpeakingSessionRecordingPage() {
       // blob stays in memory and pressing the button again retries it.
       const saved = await voiceStopRef.current?.() ?? true;
       if (!saved) {
-        throw new Error(session.liveVoiceAvailable
-          ? 'The live voice transcript could not be saved. Please try again.'
-          : RECORDING_UPLOAD_FAILED);
+        failedFlushesRef.current += 1;
+        // A live transcript that will not save must not keep the learner from their result after a few
+        // tries. A recording is never dropped: its upload is retried until it lands.
+        if (!session.liveVoiceAvailable || failedFlushesRef.current < MAX_FAILED_TRANSCRIPT_FLUSHES) {
+          throw new Error(session.liveVoiceAvailable
+            ? 'The live voice transcript could not be saved. Please try again.'
+            : RECORDING_UPLOAD_FAILED);
+        }
       }
-      await endSpeakingSession(session.sessionId);
+      try {
+        await endSpeakingSession(session.sessionId);
+      } catch (endFailure) {
+        // The server hard stop (or an earlier finish) already ended the role-play: carry on to submit and assess.
+        const alreadyEnded = endFailure instanceof ApiError
+          && endFailure.status === 409
+          && endFailure.code === 'speaking_session_invalid_state';
+        if (!alreadyEnded) throw endFailure;
+      }
       // Both are idempotent server-side; the results page shows processing
       // and offers "Try grading again", so a blip here never strands the learner.
       await submitSpeakingSessionForMarking(session.sessionId).catch(() => undefined);
@@ -179,7 +208,7 @@ export default function SpeakingSessionRecordingPage() {
       const startedAt = speakingStartedAtRef.current;
       trackSpeaking('roleplay_ended', {
         sessionId: session.sessionId,
-        durationSeconds: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : ROLE_PLAY_HARD_LIMIT_SECONDS,
+        durationSeconds: startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0,
         reason,
       });
       router.push(`/speaking/sessions/${session.sessionId}/results`);
@@ -198,8 +227,9 @@ export default function SpeakingSessionRecordingPage() {
 
   // Local countdown — only once speaking has actually begun.
   useEffect(() => {
-    if (!session || !speakingStarted || !isAiMode(session.mode) || endedRef.current || endError) return;
-    if (secondsLeft <= 0) {
+    if (!session || !speakingStarted || secondsLeft === null || !isAiMode(session.mode) || endedRef.current || endError) return;
+    // The wall-clock hard stop backs up the countdown: a throttled background tab ticks late.
+    if (secondsLeft <= 0 || (hardStopRef.current !== null && Date.now() >= hardStopRef.current)) {
       void handleFinalize('timer');
       return;
     }
@@ -259,7 +289,7 @@ export default function SpeakingSessionRecordingPage() {
     );
   }
 
-  const isWarning = speakingStarted && secondsLeft > 0 && secondsLeft <= 30;
+  const isWarning = speakingStarted && secondsLeft !== null && secondsLeft > 0 && secondsLeft <= 30;
   const retryUpload = endError === RECORDING_UPLOAD_FAILED;
 
   return (
@@ -269,17 +299,19 @@ export default function SpeakingSessionRecordingPage() {
           <p className="text-xs font-medium uppercase tracking-wider text-muted">Speaking · Role-play</p>
           <h1 className="truncate text-base font-bold text-foreground sm:text-lg">{session.card.scenarioTitle}</h1>
         </div>
-        <div
-          role="timer"
-          aria-live={isWarning ? 'polite' : 'off'}
-          className={cn(
-            'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-base tabular-nums',
-            isWarning ? 'bg-danger/10 text-danger' : 'bg-background-light text-foreground',
-          )}
-        >
-          <Activity className="h-4 w-4" aria-hidden />
-          {formatMmSs(secondsLeft)}
-        </div>
+        {secondsLeft !== null ? (
+          <div
+            role="timer"
+            aria-live={isWarning ? 'polite' : 'off'}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-base tabular-nums',
+              isWarning ? 'bg-danger/10 text-danger' : 'bg-background-light text-foreground',
+            )}
+          >
+            <Activity className="h-4 w-4" aria-hidden />
+            {formatMmSs(secondsLeft)}
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4">

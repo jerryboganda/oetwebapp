@@ -687,14 +687,23 @@ public sealed class AiAssistantGateway(
         var rows = await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct);
         return rows.FirstOrDefault(row => row.IsActive
                                           && row.Dialect == AiProviderDialect.OpenAiCompatible
-                                          && !string.IsNullOrWhiteSpace(row.EncryptedApiKey));
+                                          && !string.IsNullOrWhiteSpace(row.EncryptedApiKey)
+                                          && !IsKeylessSubscriptionSidecar(row));
     }
 
     private async Task<AiProvider?> FirstCredentialedTextChatRowAsync(CancellationToken ct)
     {
         var rows = await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct);
-        return rows.FirstOrDefault(row => row.IsActive && !string.IsNullOrWhiteSpace(row.EncryptedApiKey));
+        return rows.FirstOrDefault(row => row.IsActive
+                                          && !string.IsNullOrWhiteSpace(row.EncryptedApiKey)
+                                          && !IsKeylessSubscriptionSidecar(row));
     }
+
+    // The owner's Claude/Codex subscription sidecars (marker key, no real credential) are only ever
+    // reached by an explicit route or provider pin, never by "the first active row with a key":
+    // activating one for Speaking grading must not put assistant traffic on the owner's Max quota.
+    private static bool IsKeylessSubscriptionSidecar(AiProvider row)
+        => OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.IsMarkerKey(row.EncryptedApiKey);
 
     private static string ResolveModel(string? requestedModel, string? providerDefaultModel, string providerName)
     {

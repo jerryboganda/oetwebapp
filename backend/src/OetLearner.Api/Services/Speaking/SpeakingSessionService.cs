@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -156,7 +157,8 @@ public sealed class SpeakingSessionService(
         // /finish-warmup call to get authoritative timestamps.
         var prepStartedAt = session.PrepStartedAt ?? now;
         var prepEndsAt = prepStartedAt.AddSeconds(card.PrepTimeSeconds);
-        var rolePlayEndsAt = prepEndsAt.AddSeconds(card.RolePlayTimeSeconds);
+        var rolePlayEndsAt = prepEndsAt.AddSeconds(
+            SpeakingRolePlayLimits.EffectiveSeconds(card.RolePlayTimeSeconds, liveVoiceOptions?.Value));
 
         return new CreateSpeakingSessionResponse(
             SessionId: sessionId,
@@ -307,11 +309,25 @@ public sealed class SpeakingSessionService(
             FeedbackMessage: feedbackMessage,
             IsFreeSample: await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct),
             ConsentAccepted: session.ConsentAcceptedAt is not null,
-            LiveVoiceAvailable: IsLiveVoiceAvailable());
+            LiveVoiceAvailable: IsLiveVoiceAvailable(),
+            RolePlayEndsAt: session.RolePlayStartedAt?.AddSeconds(
+                SpeakingRolePlayLimits.EffectiveSeconds(card.RolePlayTimeSeconds, liveVoiceOptions?.Value)));
     }
 
     private bool IsLiveVoiceAvailable()
         => liveVoiceProbe?.IsLiveVoiceAvailable(liveVoiceOptions?.Value) == true;
+
+    /// <summary>An exam card runs on the exam's own clock (prep, start and end are derived from the
+    /// exam's persisted timestamps), so the standalone start and end endpoints must not drive it:
+    /// starting one early would open a billed provider session during prep.</summary>
+    private static void RequireStandalone(SpeakingSession session)
+    {
+        if (session.ExamSessionId is not null)
+        {
+            throw ApiException.Conflict("speaking_session_exam_managed",
+                "This Speaking card is timed by its exam and cannot be started or ended separately.");
+        }
+    }
 
     public async Task<SpeakingSessionDetail> StartRolePlayAsync(
         string userId,
@@ -319,6 +335,7 @@ public sealed class SpeakingSessionService(
         CancellationToken ct)
     {
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+        RequireStandalone(session);
 
         // Strict state-machine: role-play only starts from Prep. Clients
         // still sitting in WarmUp must call /finish-warmup first so the
@@ -354,6 +371,7 @@ public sealed class SpeakingSessionService(
         CancellationToken ct)
     {
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+        RequireStandalone(session);
         if (session.State != SpeakingSessionState.Active)
         {
             throw ApiException.Conflict("speaking_session_invalid_state",
@@ -510,7 +528,7 @@ public sealed class SpeakingSessionService(
         // authoritative and the publish gate enforces those values for exam
         // content, so we read straight off the card.
         var prepSeconds = card.PrepTimeSeconds > 0 ? card.PrepTimeSeconds : 180;
-        var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
+        var rolePlaySeconds = SpeakingRolePlayLimits.EffectiveSeconds(card.RolePlayTimeSeconds, liveVoiceOptions?.Value);
 
         string stage;
         DateTimeOffset? stageStartedAt = null;
@@ -565,6 +583,12 @@ public sealed class SpeakingSessionService(
             expired = remaining <= 0;
         }
 
+        // When the server force-ends an unfinished role-play (deadline plus grace). Only an Active
+        // session can still be force-ended; a session with no start time has no clock yet.
+        DateTimeOffset? hardStopAt = session.State == SpeakingSessionState.Active && stageStartedAt is { } started
+            ? started.AddSeconds(rolePlaySeconds + SpeakingRolePlayLimits.GraceSeconds(liveVoiceOptions?.Value))
+            : null;
+
         return new SpeakingSessionClock(
             Stage: stage,
             RoleplayIndex: session.MockSessionId is null ? 1 : ResolveRoleplayIndex(session),
@@ -573,7 +597,116 @@ public sealed class SpeakingSessionService(
             StageEndsAt: stageEndsAt,
             SecondsRemaining: secondsRemaining,
             Expired: expired,
-            CanAdvanceTo: canAdvanceTo);
+            CanAdvanceTo: canAdvanceTo,
+            HardStopAt: hardStopAt);
+    }
+
+    /// <summary>
+    /// Server-side hard stop of an AI role-play the client never ended (closed tab, dead socket, a
+    /// hostile client): once <c>now</c> is past the hard stop the session is finished as the learner's
+    /// own /end would finish it (state, end time anchored to the deadline, elapsed seconds, legacy
+    /// attempt) plus one <c>SpeakingRolePlayHardStopped</c> audit event. Only an exam card is handed
+    /// to canonical grading (its exam clock grades it anyway). An abandoned standalone practice
+    /// role-play is NOT graded, so it neither commits its 2-credit hold nor consumes a free-sample use
+    /// (owner rule: abandoned uses never count) until the owner confirms otherwise; a late but alive
+    /// client still gets graded through its own /ai-assess. Returns true only for the caller that won
+    /// the Active to Finished compare-and-swap, so a race with the learner's /end or a second sweep
+    /// finishes it once.
+    /// </summary>
+    public async Task<bool> FinalizeAtHardStopAsync(string sessionId, DateTimeOffset now, CancellationToken ct)
+    {
+        var session = await db.SpeakingSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (session is null
+            || session.State != SpeakingSessionState.Active
+            || session.Mode == SpeakingSessionMode.LiveTutor)
+        {
+            return false;
+        }
+
+        var cardSeconds = await db.RolePlayCards.AsNoTracking()
+            .Where(c => c.Id == session.RolePlayCardId)
+            .Select(c => (int?)c.RolePlayTimeSeconds)
+            .FirstOrDefaultAsync(ct);
+        var window = SpeakingRolePlayLimits.Resolve(session, cardSeconds ?? 0, liveVoiceOptions?.Value);
+        if (now < window.HardStopAt)
+        {
+            return false;
+        }
+
+        var deadline = window.DeadlineAt;
+        var elapsed = window.EffectiveSeconds;
+        bool won;
+        if (db.Database.IsRelational())
+        {
+            // Compare-and-swap on the state we just read: exactly one finisher wins.
+            won = await db.SpeakingSessions
+                .Where(s => s.Id == sessionId && s.State == SpeakingSessionState.Active)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(s => s.State, SpeakingSessionState.Finished)
+                    .SetProperty(s => s.EndedAt, deadline)
+                    .SetProperty(s => s.ElapsedSeconds, elapsed)
+                    .SetProperty(s => s.UpdatedAt, now), ct) == 1;
+        }
+        else
+        {
+            // In-memory test provider: no ExecuteUpdate and single-threaded, so re-read the row to
+            // let a /end that landed after our load win.
+            await db.Entry(session).ReloadAsync(ct);
+            won = session.State == SpeakingSessionState.Active;
+            if (won)
+            {
+                session.State = SpeakingSessionState.Finished;
+                session.EndedAt = deadline;
+                session.ElapsedSeconds = elapsed;
+                session.UpdatedAt = now;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        if (!won)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.AttemptId))
+        {
+            var attempt = await db.Attempts.FirstOrDefaultAsync(a => a.Id == session.AttemptId, ct);
+            if (attempt is { State: AttemptState.InProgress })
+            {
+                attempt.State = AttemptState.Submitted;
+                attempt.SubmittedAt ??= deadline;
+                attempt.ElapsedSeconds = elapsed;
+            }
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = "system",
+            ActorName = "SpeakingRolePlayHardStop",
+            Action = "SpeakingRolePlayHardStopped",
+            ResourceType = "SpeakingSession",
+            ResourceId = session.Id,
+            Details = JsonSerializer.Serialize(new
+            {
+                sessionId = session.Id,
+                examSessionId = session.ExamSessionId,
+                mode = SpeakingSessionModes.ToCode(session.Mode),
+                effectiveSeconds = elapsed,
+                deadlineAt = deadline,
+                hardStopAt = window.HardStopAt,
+                overdueSeconds = (int)Math.Max(0, (now - deadline).TotalSeconds),
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+
+        // ponytail: exam cards only until the owner confirms grading abandoned practice
+        // (docs/speaking/live-voice.md); drop the ExamSessionId test to enable it.
+        if (canonical is not null && session.ExamSessionId is not null)
+        {
+            await canonical.EnqueueAsync(session.Id, ct);
+        }
+        return true;
     }
 
     /// <summary>

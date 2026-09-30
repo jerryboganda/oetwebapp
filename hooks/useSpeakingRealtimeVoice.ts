@@ -1,14 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { describeMicrophoneError } from '@/lib/mobile/speaking-recorder';
 import {
   createGeminiLiveToken,
   createOpenAiLiveOffer,
   getLiveVoicePreflight,
   persistLiveVoiceTranscript,
   persistLiveVoiceTurn,
-  type LiveVoiceGeminiTokenResponse,
-  type LiveVoiceOpenAiOfferResponse,
   type LiveVoicePreflight,
   type LiveVoiceProvider,
   type LiveVoiceTranscriptSegmentInput,
@@ -33,15 +32,167 @@ export interface UseSpeakingRealtimeVoiceResult {
   micEnabled: boolean;
   awaitingCandidateStart: boolean;
   error: string | null;
+  /** True when the last start failed because microphone permission was refused (drives the app-settings recovery path). */
+  micPermissionDenied: boolean;
   ended: boolean;
+  /** The provider whose link is live (null before that). Diagnostics and the QA harness only; never shown to learners. */
+  provider: LiveVoiceProvider | null;
+  /** True when an earlier provider failed before this one connected. Diagnostics only. */
+  failedOver: boolean;
   audioRef: RefObject<HTMLAudioElement | null>;
   prepare: () => Promise<void>;
   /** Consent (incl. the provider disclosure) is recorded on the Rules + consent step before prep. */
   start: () => Promise<boolean>;
+  /**
+   * Resolves true when the caller may move on: the transcript was saved, nothing was said, or the server
+   * will never accept it (a retry cannot help and must not strand the learner). False only for a failure
+   * worth retrying (network, 5xx, rate limit); calling stop() again retries the same transcript.
+   */
   stop: () => Promise<boolean>;
 }
 
 const TARGET_SAMPLE_RATE = 16_000;
+
+/** How long one provider gets to go live once its session exists (the create call has its own timeout). */
+export const CONNECT_TIMEOUT_MS = 15_000;
+// The API's per-user limiter admits one live-voice request at a time; a 429 is our own limiter, not the provider.
+const RATE_LIMIT_RETRY_DELAY_MS = 1_500;
+/** The one learner-facing start failure: provider names, provider bodies and transport detail never reach the UI. */
+export const LIVE_VOICE_UNAVAILABLE = 'The live AI patient could not start. Please try again.';
+const LIVE_VOICE_INTERRUPTED = 'The live conversation was interrupted.';
+const LIVE_VOICE_ENDED = 'The live conversation ended. End the role-play to save the completed transcript.';
+const LIVE_VOICE_UNREADABLE = 'The live voice stream returned an unreadable event.';
+const TRANSCRIPT_NOT_SAVED = 'The live voice transcript could not be saved. Please try again.';
+
+/** A provider leg failed before it was live (create refused, transport fault, deadline). Its message is for logs and tests, never for learners. */
+export class ProviderConnectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderConnectError';
+  }
+}
+
+interface ApiErrorInfo {
+  status: number;
+  code: string;
+  message: string;
+}
+
+// Duck-typed on `status`: it holds for the real ApiError and for the stubs page tests install.
+function apiErrorInfo(error: unknown): ApiErrorInfo | null {
+  if (!error || typeof error !== 'object') return null;
+  const { status, code, userMessage, message } = error as Record<string, unknown>;
+  if (typeof status !== 'number') return null;
+  return {
+    status,
+    code: typeof code === 'string' ? code : '',
+    message: typeof userMessage === 'string' && userMessage ? userMessage : typeof message === 'string' ? message : '',
+  };
+}
+
+const isLiveVoiceProvider = (value: unknown): value is LiveVoiceProvider => value === 'openai' || value === 'gemini';
+
+/**
+ * The providers to try, in order. The server names them in the order to try (`candidates`: the
+ * configured primary first; health only filters out providers that are known to be down); an older
+ * server sends none, so there is a single attempt with `provider`. A forced provider (`?voiceProvider=`
+ * on the page, the server's `pinned`) never fails over: comparison and QA runs must measure the
+ * provider they asked for.
+ */
+export function planProviders(
+  preflight: Pick<LiveVoicePreflight, 'provider' | 'candidates' | 'pinned'>,
+  forced?: LiveVoiceProvider,
+): LiveVoiceProvider[] {
+  if (forced || preflight.pinned) return isLiveVoiceProvider(preflight.provider) ? [preflight.provider] : [];
+  const listed = (preflight.candidates ?? []).filter(isLiveVoiceProvider);
+  const order = listed.length > 0 ? listed : [preflight.provider].filter(isLiveVoiceProvider);
+  return [...new Set(order)];
+}
+
+/**
+ * True when the next provider is worth trying: the leg failed before it was live (transport, deadline,
+ * refusal), or the create call failed the way a provider outage looks (network, timeout, 5xx). Any 4xx
+ * is a definite answer about this session (consent, session state, content, time over) that another
+ * provider would repeat, and the local 429 rate limit is our own limiter, so neither fails over.
+ */
+export function isProviderFailure(error: unknown): boolean {
+  if (error instanceof ProviderConnectError) return true;
+  const info = apiErrorInfo(error);
+  return info !== null && (info.status === 0 || info.status === 408 || info.status >= 500);
+}
+
+/**
+ * A 4xx the server will give again for the same request: retrying cannot help. Not a sign-in expiry (401: the same
+ * request succeeds after re-auth), a timeout (408) or the rate limit (429).
+ */
+export function isClientRejection(error: unknown): boolean {
+  const info = apiErrorInfo(error);
+  return info !== null && info.status >= 400 && info.status < 500
+    && info.status !== 401 && info.status !== 408 && info.status !== 429;
+}
+
+// A definite server answer (consent missing, time over, ...) is shown as written; a provider or
+// transport fault is nothing the learner can act on.
+function learnerMessage(error: unknown, fallback: string = LIVE_VOICE_UNAVAILABLE): string {
+  const info = apiErrorInfo(error);
+  return info !== null && info.message && info.status >= 400 && info.status < 500 && info.status !== 408 ? info.message : fallback;
+}
+
+// Anything that is not an API answer or already a connect failure is a browser WebRTC/socket fault: a failed leg.
+function asConnectFailure(caught: unknown): unknown {
+  if (caught instanceof ProviderConnectError || apiErrorInfo(caught)) return caught;
+  return new ProviderConnectError(caught instanceof Error ? caught.message : 'The provider connection failed.');
+}
+
+const failureCode = (error: unknown) => apiErrorInfo(error)?.code || (error instanceof ProviderConnectError ? 'connect_failed' : 'unknown');
+
+const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/** One provider connection attempt: settles exactly once, on the first of live, failure, deadline or cancel. */
+interface ProviderAttempt {
+  /** Resolves when the provider link is live; rejects with a ProviderConnectError before that. */
+  settled: Promise<void>;
+  live: () => void;
+  fail: (error: ProviderConnectError) => void;
+  /** Starts the connect deadline; called once the provider session exists. */
+  armDeadline: () => void;
+  /** True until live() or fail() ran: events arriving now belong to a link that is not up yet. */
+  pending: () => boolean;
+}
+
+function createProviderAttempt(): ProviderAttempt {
+  let done = false;
+  let timer: number | undefined;
+  let resolve!: () => void;
+  let reject!: (error: ProviderConnectError) => void;
+  const settled = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  // A failure that lands before anything awaits the promise must not surface as an unhandled rejection.
+  settled.catch(() => undefined);
+  const finish = (error?: ProviderConnectError) => {
+    if (done) return;
+    done = true;
+    window.clearTimeout(timer);
+    if (error) reject(error);
+    else resolve();
+  };
+  return {
+    settled,
+    live: () => finish(),
+    fail: (error) => finish(error),
+    armDeadline: () => {
+      if (!done) timer = window.setTimeout(() => finish(new ProviderConnectError('The provider did not go live in time.')), CONNECT_TIMEOUT_MS);
+    },
+    pending: () => !done,
+  };
+}
+
+function pendingAttemptOf(ref: { current: ProviderAttempt | null }): ProviderAttempt | null {
+  const attempt = ref.current;
+  return attempt !== null && attempt.pending() ? attempt : null;
+}
 
 function decodeBase64(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -225,7 +376,10 @@ export function useSpeakingRealtimeVoice(
   const [micEnabled, setMicEnabled] = useState(false);
   const [awaitingCandidateStart, setAwaitingCandidateStart] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [micPermissionDenied, setMicPermissionDenied] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<LiveVoiceProvider | null>(null);
+  const [failedOver, setFailedOver] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -241,8 +395,18 @@ export function useSpeakingRealtimeVoice(
   const playbackSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const meterFrameRef = useRef<number | null>(null);
   const nextPlaybackTimeRef = useRef(0);
+  // The provider whose link is live and its session id, committed together and only once the link is up:
+  // a leg that never connected must not leave an id behind that stop() would save a transcript under.
   const providerRef = useRef<LiveVoiceProvider | null>(null);
   const providerSessionIdRef = useRef<string | null>(null);
+  // The providers to try, from the last preflight (cleared after a failed start so a retry asks the server again).
+  const plannedRef = useRef<LiveVoiceProvider[]>([]);
+  // Bumped by stop(), unmount and a session change: a start() that resumes after an await sees it and lets go.
+  const runRef = useRef(0);
+  const prepareRunRef = useRef(0);
+  const startPromiseRef = useRef<{ run: number; promise: Promise<boolean> } | null>(null);
+  const stopPromiseRef = useRef<Promise<boolean> | null>(null);
+  const attemptRef = useRef<ProviderAttempt | null>(null);
   const pendingCandidateRef = useRef('');
   const pendingPatientRef = useRef('');
   const pendingStartedAtRef = useRef<number | null>(null);
@@ -253,7 +417,13 @@ export function useSpeakingRealtimeVoice(
   const stoppingRef = useRef(false);
   const openAiClosedRef = useRef<(() => void) | null>(null);
 
-  const closeTransport = useCallback(() => {
+  // Per-provider teardown between failover attempts. Handlers are detached BEFORE close(): a WebSocket
+  // closes asynchronously, and a stale onclose would flip the next attempt to 'error'. The microphone,
+  // its AudioContext and the level meter stay, so one permission prompt serves every attempt.
+  const resetProviderTransport = useCallback(() => {
+    attemptRef.current?.fail(new ProviderConnectError('The connection attempt was cancelled.'));
+    attemptRef.current = null;
+    openAiClosedRef.current = null;
     geminiReadyRef.current = false;
     playbackSourcesRef.current.forEach((source) => {
       try {
@@ -261,34 +431,64 @@ export function useSpeakingRealtimeVoice(
       } catch {}
     });
     playbackSourcesRef.current.clear();
-    dataChannelRef.current?.close();
+    const channel = dataChannelRef.current;
+    if (channel) {
+      channel.onopen = null;
+      channel.onmessage = null;
+      channel.onerror = null;
+      channel.onclose = null;
+      channel.close();
+    }
     dataChannelRef.current = null;
-    peerRef.current?.close();
+    const peer = peerRef.current;
+    if (peer) {
+      peer.ontrack = null;
+      peer.onconnectionstatechange = null;
+      peer.close();
+    }
     peerRef.current = null;
-    socketRef.current?.close();
+    const socket = socketRef.current;
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      socket.close();
+    }
     socketRef.current = null;
+    const processor = processorRef.current;
+    if (processor) {
+      // Its edge from the shared microphone source goes too, or it would keep sending on a later socket.
+      processor.onaudioprocess = null;
+      try {
+        inputSourceRef.current?.disconnect(processor);
+      } catch {}
+      processor.disconnect();
+    }
+    processorRef.current = null;
+    silentGainRef.current?.disconnect();
+    silentGainRef.current = null;
+    outputContextRef.current = null; // the input context: closeTransport closes it
+    nextPlaybackTimeRef.current = 0;
+    if (audioRef.current) audioRef.current.srcObject = null;
+  }, []);
+
+  const closeTransport = useCallback(() => {
+    resetProviderTransport();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    processorRef.current?.disconnect();
-    processorRef.current = null;
     inputSourceRef.current?.disconnect();
     inputSourceRef.current = null;
     analyserRef.current?.disconnect();
     analyserRef.current = null;
-    silentGainRef.current?.disconnect();
-    silentGainRef.current = null;
     if (meterFrameRef.current !== null) window.cancelAnimationFrame(meterFrameRef.current);
     meterFrameRef.current = null;
     void inputContextRef.current?.close().catch(() => undefined);
-    void outputContextRef.current?.close().catch(() => undefined);
     inputContextRef.current = null;
-    outputContextRef.current = null;
-    nextPlaybackTimeRef.current = 0;
-    if (audioRef.current) audioRef.current.srcObject = null;
     setMicEnabled(false);
     setMicLevel(0);
     setPhase('idle');
-  }, []);
+  }, [resetProviderTransport]);
 
   const interruptPlayback = useCallback(() => {
     playbackSourcesRef.current.forEach((source) => {
@@ -302,16 +502,21 @@ export function useSpeakingRealtimeVoice(
 
   const prepare = useCallback(async () => {
     if (!sessionId) return;
+    const run = ++prepareRunRef.current;
     setConnection('preparing');
     setError(null);
     try {
       const result = await getLiveVoicePreflight(sessionId, requestedProvider);
+      // A late answer (the page re-mounts the hook when it learns ?voiceProvider=) must not replace a newer one.
+      if (run !== prepareRunRef.current) return;
+      const planned = planProviders(result, requestedProvider);
+      if (planned.length === 0) throw new ProviderConnectError('The preflight named no usable provider.');
       setPreflight(result);
-      providerRef.current = result.provider;
+      plannedRef.current = planned;
       setConnection('ready');
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'The realtime voice agent is unavailable.';
-      setError(message);
+      if (run !== prepareRunRef.current) return;
+      setError(learnerMessage(caught));
       setConnection('error');
     }
   }, [requestedProvider, sessionId]);
@@ -375,17 +580,18 @@ export function useSpeakingRealtimeVoice(
     if (turn) await persistLiveVoiceTurn(sessionId, turn);
   }, [sessionId, takePendingTurn]);
 
+  // The per-turn rows are advisory (stop() saves the whole transcript), so a row that will not save is logged, never
+  // shown to the learner and never thrown: every caller is fire-and-forget. The chain therefore never rejects.
   const queueFlush = useCallback(() => {
     const turn = takePendingTurn();
-    flushPromiseRef.current = flushPromiseRef.current
-      .catch(() => undefined)
-      .then(async () => {
-        if (turn) await persistLiveVoiceTurn(sessionId, turn);
-      })
-      .catch((caught) => {
-        setError(caught instanceof Error ? caught.message : 'The voice transcript could not be saved.');
-        throw caught;
-      });
+    flushPromiseRef.current = flushPromiseRef.current.then(async () => {
+      if (!turn) return;
+      try {
+        await persistLiveVoiceTurn(sessionId, turn);
+      } catch (caught) {
+        console.warn('Live voice turn row not saved.', failureCode(caught));
+      }
+    });
     return flushPromiseRef.current;
   }, [sessionId, takePendingTurn]);
 
@@ -407,26 +613,39 @@ export function useSpeakingRealtimeVoice(
     flushIfLong();
   }, [addCaption, flushIfLong]);
 
+  const hasTranscriptText = useCallback(
+    () => segmentsRef.current.length > 0 || pendingCandidateRef.current.trim() !== '' || pendingPatientRef.current.trim() !== '',
+    [],
+  );
+
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
+    // Before the link is live an event ends the attempt (so the next provider can be tried); after, it is a mid-conversation fault.
+    const pending = pendingAttemptOf(attemptRef);
     if (type.includes('error')) {
-      const message = providerTranscriptText(value) ?? 'The OpenAI realtime voice session reported an error.';
-      setError(message);
+      if (pending) {
+        pending.fail(new ProviderConnectError('The provider reported an error before going live.'));
+        return;
+      }
+      setError(LIVE_VOICE_INTERRUPTED);
       setConnection('error');
       return;
     }
     if (type.includes('session.closed') || type.includes('session.ended')) {
+      if (pending) {
+        pending.fail(new ProviderConnectError('The provider closed the session before going live.'));
+        return;
+      }
       if (stoppingRef.current) {
         openAiClosedRef.current?.();
         return;
       }
-      setError('The OpenAI realtime voice session ended. End the role-play to save the completed transcript.');
+      setError(LIVE_VOICE_ENDED);
       setConnection('error');
       return;
     }
     if (type.includes('session.started') || type.includes('session.created')) {
-      setConnection('connected');
-      setPhase('listening');
+      pending?.live();
       return;
     }
 
@@ -456,12 +675,16 @@ export function useSpeakingRealtimeVoice(
   const handleGeminiMessage = useCallback((value: Record<string, unknown>) => {
     if (value.setupComplete || value.setup_complete) {
       geminiReadyRef.current = true;
-      setConnection('connected');
-      setPhase('listening');
+      pendingAttemptOf(attemptRef)?.live();
       return;
     }
     if (value.error) {
-      setError(providerTranscriptText(value.error) ?? 'The Gemini Live session reported an error.');
+      const pending = pendingAttemptOf(attemptRef);
+      if (pending) {
+        pending.fail(new ProviderConnectError('The provider reported an error before going live.'));
+        return;
+      }
+      setError(LIVE_VOICE_INTERRUPTED);
       setConnection('error');
       return;
     }
@@ -536,61 +759,83 @@ export function useSpeakingRealtimeVoice(
   const waitForIce = useCallback(async (peer: RTCPeerConnection) => {
     if (peer.iceGatheringState === 'complete') return;
     await new Promise<void>((resolve) => {
-      const handleState = () => {
-        if (peer.iceGatheringState !== 'complete') return;
+      let timer: number | undefined;
+      const finish = () => {
+        window.clearTimeout(timer);
         peer.removeEventListener('icegatheringstatechange', handleState);
         resolve();
       };
+      const handleState = () => {
+        if (peer.iceGatheringState === 'complete') finish();
+      };
       peer.addEventListener('icegatheringstatechange', handleState);
-      window.setTimeout(() => {
-        peer.removeEventListener('icegatheringstatechange', handleState);
-        resolve();
-      }, 5_000);
+      timer = window.setTimeout(finish, 5_000);
     });
   }, []);
 
-  const connectOpenAi = useCallback(async (stream: MediaStream) => {
-    const peer = new RTCPeerConnection();
-    peerRef.current = peer;
-    stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
-    peer.ontrack = (event) => {
-      const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
-      if (audioRef.current) {
-        audioRef.current.srcObject = remoteStream;
-        void audioRef.current.play().catch(() => undefined);
-      }
-    };
-    peer.onconnectionstatechange = () => {
-      if (peer.connectionState === 'connected') setConnection('connected');
-      if (!stoppingRef.current && (peer.connectionState === 'failed' || peer.connectionState === 'disconnected')) {
-        setError('The OpenAI realtime voice connection was interrupted.');
-        setConnection('error');
-      }
-    };
-    const dataChannel = peer.createDataChannel('oai-events');
-    dataChannelRef.current = dataChannel;
-    dataChannel.onopen = () => {
-      setConnection('connected');
-      setPhase('listening');
-    };
-    dataChannel.onmessage = (event) => {
-      try {
-        const value = JSON.parse(typeof event.data === 'string' ? event.data : '') as Record<string, unknown>;
-        handleOpenAiEvent(value);
-      } catch {
-        setError('The OpenAI realtime voice stream returned an unreadable event.');
-        setConnection('error');
-      }
-    };
+  // Resolves with the provider session id once the link is LIVE; rejects before that with the create
+  // call's ApiError or a ProviderConnectError. `alive` is false once stop(), unmount or a newer start
+  // took over: nothing more may be created then.
+  const connectOpenAi = useCallback(async (stream: MediaStream, alive: () => boolean): Promise<string> => {
+    if (typeof RTCPeerConnection === 'undefined') throw new ProviderConnectError('WebRTC is not available in this browser.');
+    const attempt = createProviderAttempt();
+    attemptRef.current = attempt;
+    try {
+      const peer = new RTCPeerConnection();
+      peerRef.current = peer;
+      stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
+      peer.ontrack = (event) => {
+        const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+        if (audioRef.current) {
+          audioRef.current.srcObject = remoteStream;
+          void audioRef.current.play().catch(() => undefined);
+        }
+      };
+      peer.onconnectionstatechange = () => {
+        const state = peer.connectionState;
+        if (attempt.pending()) {
+          if (state === 'connected') attempt.live();
+          else if (state === 'failed' || state === 'disconnected' || state === 'closed') attempt.fail(new ProviderConnectError(`The peer connection ${state}.`));
+          return;
+        }
+        if (state === 'connected') setConnection('connected');
+        if (!stoppingRef.current && (state === 'failed' || state === 'disconnected')) {
+          setError(LIVE_VOICE_INTERRUPTED);
+          setConnection('error');
+        }
+      };
+      const dataChannel = peer.createDataChannel('oai-events');
+      dataChannelRef.current = dataChannel;
+      dataChannel.onopen = () => attempt.live();
+      dataChannel.onmessage = (event) => {
+        try {
+          const value = JSON.parse(typeof event.data === 'string' ? event.data : '') as Record<string, unknown>;
+          handleOpenAiEvent(value);
+        } catch {
+          if (attempt.pending()) {
+            attempt.fail(new ProviderConnectError('The provider stream was unreadable.'));
+            return;
+          }
+          setError(LIVE_VOICE_UNREADABLE);
+          setConnection('error');
+        }
+      };
 
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-    await waitForIce(peer);
-    const localSdp = peer.localDescription?.sdp;
-    if (!localSdp) throw new Error('The browser did not produce a WebRTC offer.');
-    const answer: LiveVoiceOpenAiOfferResponse = await createOpenAiLiveOffer(sessionId, localSdp);
-    providerSessionIdRef.current = answer.providerSessionId;
-    await peer.setRemoteDescription({ type: 'answer', sdp: answer.answerSdp });
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await waitForIce(peer);
+      if (!alive()) throw new ProviderConnectError('The connection attempt was cancelled.');
+      const localSdp = peer.localDescription?.sdp;
+      if (!localSdp) throw new ProviderConnectError('The browser did not produce a WebRTC offer.');
+      const answer = await createOpenAiLiveOffer(sessionId, localSdp);
+      if (!alive()) throw new ProviderConnectError('The connection attempt was cancelled.');
+      await peer.setRemoteDescription({ type: 'answer', sdp: answer.answerSdp });
+      attempt.armDeadline();
+      await attempt.settled;
+      return answer.providerSessionId;
+    } catch (caught) {
+      throw asConnectFailure(caught);
+    }
   }, [handleOpenAiEvent, sessionId, waitForIce]);
 
   const configureGeminiInput = useCallback((stream: MediaStream, context: AudioContext) => {
@@ -619,16 +864,18 @@ export function useSpeakingRealtimeVoice(
     silentGainRef.current = silentGain;
   }, []);
 
-  const connectGemini = useCallback(async (stream: MediaStream, context: AudioContext) => {
-    const token: LiveVoiceGeminiTokenResponse = await createGeminiLiveToken(sessionId);
-    providerSessionIdRef.current = token.providerSessionId;
-    const socket = new WebSocket(token.webSocketUrl);
-    // Gemini Live sends every server message as a binary frame.
-    socket.binaryType = 'arraybuffer';
-    socketRef.current = socket;
-    outputContextRef.current = context;
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => reject(new Error('Gemini Live did not connect in time.')), 15_000);
+  const connectGemini = useCallback(async (stream: MediaStream, context: AudioContext, alive: () => boolean): Promise<string> => {
+    const attempt = createProviderAttempt();
+    attemptRef.current = attempt;
+    try {
+      const token = await createGeminiLiveToken(sessionId);
+      if (!alive()) throw new ProviderConnectError('The connection attempt was cancelled.');
+      const socket = new WebSocket(token.webSocketUrl);
+      // Gemini Live sends every server message as a binary frame.
+      socket.binaryType = 'arraybuffer';
+      socketRef.current = socket;
+      outputContextRef.current = context;
+      attempt.armDeadline();
       socket.onopen = () => {
         // The ephemeral token already locks the full setup (persona, audio
         // modality, transcription); the client may only name the model.
@@ -638,74 +885,196 @@ export function useSpeakingRealtimeVoice(
       socket.onmessage = (event) => {
         try {
           const raw = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data as ArrayBuffer);
-          const value = JSON.parse(raw) as Record<string, unknown>;
-          handleGeminiMessage(value);
-          if (value.setupComplete || value.setup_complete) {
-            window.clearTimeout(timeout);
-            resolve();
-          }
+          handleGeminiMessage(JSON.parse(raw) as Record<string, unknown>);
         } catch {
-          window.clearTimeout(timeout);
-          reject(new Error('The Gemini Live stream returned an unreadable event.'));
+          attempt.fail(new ProviderConnectError('The provider stream was unreadable.'));
         }
       };
-      socket.onerror = () => {
-        window.clearTimeout(timeout);
-        reject(new Error('The Gemini Live connection could not be established.'));
-      };
-      socket.onclose = () => {
+      socket.onerror = () => attempt.fail(new ProviderConnectError('The provider socket could not be established.'));
+      socket.onclose = (event) => {
+        // A socket closed by the provider before setup finished (auth, quota, handshake) ends the attempt at once.
+        if (attempt.pending()) {
+          attempt.fail(new ProviderConnectError(`The provider socket closed before setup (code ${event.code}).`));
+          return;
+        }
         if (!stoppingRef.current) {
-          setError('The Gemini Live connection was closed.');
+          setError(LIVE_VOICE_INTERRUPTED);
           setConnection('error');
         }
       };
-    });
+      await attempt.settled;
+      return token.providerSessionId;
+    } catch (caught) {
+      throw asConnectFailure(caught);
+    }
   }, [configureGeminiInput, handleGeminiMessage, sessionId]);
 
-  const start = useCallback(async () => {
-    if (!sessionId) return false;
-    if (!preflight) await prepare();
-    const provider = providerRef.current;
-    if (!provider) {
-      setError('The realtime voice provider is not ready.');
-      return false;
+  // Asks for the microphone once for the whole start (every failover attempt reuses it). Null when the
+  // run was cancelled meanwhile; whatever this call opened is released before returning. The stream and its
+  // context are registered the moment a live run owns them, so stop() and unmount release the microphone even
+  // while AudioContext.resume() has not answered (it can stay pending on WebKit and WebViews).
+  const acquireMic = useCallback(async (alive: () => boolean): Promise<{ stream: MediaStream; context: AudioContext } | null> => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('This browser cannot capture audio. Use an updated Chrome, Edge, Safari or the mobile app.');
     }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+    let context: AudioContext | null = null;
+    // Releases only what this call opened; a ref is cleared only while it still points at it (a newer run may own it).
+    const release = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      void context?.close().catch(() => undefined);
+      if (streamRef.current === stream) streamRef.current = null;
+      if (context && inputContextRef.current === context) inputContextRef.current = null;
+    };
+    try {
+      if (alive()) {
+        streamRef.current = stream;
+        context = new AudioContext();
+        inputContextRef.current = context;
+        await context.resume();
+      }
+    } catch (caught) {
+      release();
+      throw caught;
+    }
+    if (!context || !alive()) {
+      release();
+      return null;
+    }
+    configureMeter(stream, context);
+    return { stream, context };
+  }, [configureMeter]);
+
+  const runStart = useCallback(async (run: number): Promise<boolean> => {
+    if (!sessionId) return false;
+    const alive = () => runRef.current === run;
+    if (plannedRef.current.length === 0) {
+      await prepare();
+      // prepare() already reported why when it produced no plan.
+      if (!alive() || plannedRef.current.length === 0) return false;
+    }
+    const order = plannedRef.current;
     setError(null);
+    setMicPermissionDenied(false);
     setEnded(false);
+    setActiveProvider(null);
+    setFailedOver(false);
     stoppingRef.current = false;
     setConnection('connecting');
+    // A retry must not stack a second microphone, peer or socket on what a failed try left behind.
+    closeTransport();
+
+    let media: { stream: MediaStream; context: AudioContext } | null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
-      streamRef.current = stream;
-      const context = new AudioContext();
-      inputContextRef.current = context;
-      await context.resume();
-      configureMeter(stream, context);
-      if (provider === 'openai') await connectOpenAi(stream);
-      else await connectGemini(stream, context);
-      setMicEnabled(true);
-      setPhase('listening');
-      return true;
+      media = await acquireMic(alive);
     } catch (caught) {
+      if (!alive()) return false;
       closeTransport();
-      const message = caught instanceof Error ? caught.message : 'The native realtime voice agent could not start.';
-      setError(message);
+      const micError = describeMicrophoneError(caught);
+      setMicPermissionDenied(micError.permissionDenied);
+      // The shared microphone copy names "Start recording"; the control on this panel is "Start speaking".
+      setError(micError.message.replace('Start recording', 'Start speaking'));
       setConnection('error');
       return false;
     }
-  }, [closeTransport, configureGeminiInput, configureMeter, connectGemini, connectOpenAi, preflight, prepare, sessionId]);
+    if (!media) return false;
+    const { stream, context } = media;
 
-  const stop = useCallback(async () => {
+    // Strictly one provider at a time: the API admits a single in-flight live-voice request per user.
+    let failure: unknown = null;
+    for (let index = 0; index < order.length; index += 1) {
+      const provider = order[index];
+      let retriedRateLimit = false;
+      for (;;) {
+        // Checked right before anything is created: after a cancel nothing new may be opened.
+        if (!alive()) return false;
+        try {
+          const providerSessionId = provider === 'openai'
+            ? await connectOpenAi(stream, alive)
+            : await connectGemini(stream, context, alive);
+          if (!alive()) return false;
+          providerRef.current = provider;
+          providerSessionIdRef.current = providerSessionId;
+          setActiveProvider(provider);
+          setFailedOver(index > 0);
+          setMicEnabled(true);
+          setPhase('listening');
+          setConnection('connected');
+          return true;
+        } catch (caught) {
+          if (!alive()) return false;
+          resetProviderTransport();
+          failure = caught;
+          // The local per-user limiter is not the provider's fault: one retry on the same provider.
+          if (apiErrorInfo(caught)?.status === 429 && !retriedRateLimit) {
+            retriedRateLimit = true;
+            await delay(RATE_LIMIT_RETRY_DELAY_MS);
+            if (!alive()) return false;
+            continue;
+          }
+          break;
+        }
+      }
+      // Never switch providers on a definite answer, or once any of the conversation exists.
+      if (!isProviderFailure(failure) || hasTranscriptText()) break;
+      if (index < order.length - 1) console.warn('Live voice provider failed before going live; trying the next one.', failureCode(failure));
+    }
+    closeTransport();
+    // The server's health order may have changed by now: a retry asks it again.
+    plannedRef.current = [];
+    setError(learnerMessage(failure));
+    setConnection('error');
+    return false;
+  }, [acquireMic, closeTransport, connectGemini, connectOpenAi, hasTranscriptText, prepare, resetProviderTransport, sessionId]);
+
+  // Single-flight: the auto-start and a tap on "Start speaking" are one start.
+  const start = useCallback((): Promise<boolean> => {
+    const inFlight = startPromiseRef.current;
+    if (inFlight && inFlight.run === runRef.current) return inFlight.promise;
+    const run = ++runRef.current;
+    const promise: Promise<boolean> = runStart(run)
+      .catch((caught) => {
+        console.warn('Live voice start failed unexpectedly.', failureCode(caught));
+        if (runRef.current === run) {
+          closeTransport();
+          setError(LIVE_VOICE_UNAVAILABLE);
+          setConnection('error');
+        }
+        return false;
+      })
+      .finally(() => {
+        if (startPromiseRef.current?.promise === promise) startPromiseRef.current = null;
+      });
+    startPromiseRef.current = { run, promise };
+    return promise;
+  }, [closeTransport, runStart]);
+
+  const runStop = useCallback(async (): Promise<boolean> => {
+    const run = ++runRef.current; // abandons a start() that is still connecting
+    // False once unmount, a session change or a newer start took over: the refs are theirs then.
+    const current = () => runRef.current === run;
     const provider = providerRef.current;
     const providerSessionId = providerSessionIdRef.current;
-    if (stoppingRef.current || !provider || !providerSessionId) return true;
+    const segments = segmentsRef.current;
+    if (!provider || !providerSessionId) {
+      // Nothing ever went live, so there is nothing to save: leaving must never wait on a failed or cancelled start.
+      stoppingRef.current = true;
+      closeTransport();
+      setConnection((state) => (state === 'connecting' ? 'ready' : state));
+      return true;
+    }
     stoppingRef.current = true;
     setConnection('ending');
     setMicEnabled(false);
     setPhase('idle');
+    const releaseSession = () => {
+      if (providerSessionIdRef.current !== providerSessionId) return;
+      providerRef.current = null;
+      providerSessionIdRef.current = null;
+    };
     try {
-      // GPT-Live bills until the session closes and confirms final usage only
-      // on session.closed; closing first also drains the last transcript deltas.
+      // GPT-Live bills until the session closes and confirms final usage only on session.closed;
+      // closing first also drains the last transcript deltas.
       const channel = dataChannelRef.current;
       if (provider === 'openai' && channel?.readyState === 'open') {
         await new Promise<void>((resolve) => {
@@ -722,25 +1091,51 @@ export function useSpeakingRealtimeVoice(
         });
         openAiClosedRef.current = null;
       }
-      await flushPromiseRef.current;
-      await flushPendingTurn();
-      await persistLiveVoiceTranscript(sessionId, {
-        provider,
-        providerSessionId,
-        segments: segmentsRef.current,
-      });
-      closeTransport();
-      setEnded(true);
-      setConnection('ended');
+      // The per-turn rows are advisory: a turn that cannot be saved must not keep the transcript from being saved.
+      await flushPromiseRef.current.catch(() => undefined);
+      await flushPendingTurn().catch(() => undefined);
+      // The conversation is over: release the microphone and provider before the (retryable) save.
+      if (current()) closeTransport();
+      // The server rejects an empty transcript, and there is nothing to grade in one.
+      if (segments.length > 0) {
+        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments });
+      }
+      releaseSession();
+      if (current()) {
+        if (segments.length > 0) setEnded(true);
+        setConnection('ended');
+      }
       return true;
     } catch (caught) {
-      stoppingRef.current = false;
-      const message = caught instanceof Error ? caught.message : 'The completed voice transcript could not be saved.';
-      setError(message);
-      setConnection('error');
+      if (isClientRejection(caught)) {
+        // The server will never take this transcript (window closed, session no longer active, invalid):
+        // a retry cannot help and must not strand the learner.
+        console.warn('Live voice transcript rejected by the server.', failureCode(caught));
+        releaseSession();
+        if (current()) {
+          setError(learnerMessage(caught, TRANSCRIPT_NOT_SAVED));
+          setConnection('ended');
+        }
+        return true;
+      }
+      if (current()) {
+        stoppingRef.current = false;
+        setError(learnerMessage(caught, TRANSCRIPT_NOT_SAVED));
+        setConnection('error');
+      }
       return false;
     }
   }, [closeTransport, flushPendingTurn, sessionId]);
+
+  // Single-flight: overlapping callers (the exam page's 3 s polls, the unmount cleanup) share one save.
+  const stop = useCallback((): Promise<boolean> => {
+    if (stopPromiseRef.current) return stopPromiseRef.current;
+    const promise: Promise<boolean> = runStop().finally(() => {
+      if (stopPromiseRef.current === promise) stopPromiseRef.current = null;
+    });
+    stopPromiseRef.current = promise;
+    return promise;
+  }, [runStop]);
 
   useEffect(() => {
     return () => {
@@ -753,13 +1148,20 @@ export function useSpeakingRealtimeVoice(
     setError(null);
     setPreflight(null);
     setEnded(false);
+    setMicPermissionDenied(false);
+    setActiveProvider(null);
+    setFailedOver(false);
     providerRef.current = null;
     providerSessionIdRef.current = null;
+    plannedRef.current = [];
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
     segmentsRef.current = [];
     turnIndexRef.current = 0;
+    flushPromiseRef.current = Promise.resolve();
+    startPromiseRef.current = null;
+    stopPromiseRef.current = null;
     stoppingRef.current = false;
     if (!sessionId) {
       setConnection('idle');
@@ -767,6 +1169,8 @@ export function useSpeakingRealtimeVoice(
     }
     void prepare();
     return () => {
+      runRef.current += 1;
+      prepareRunRef.current += 1;
       stoppingRef.current = true;
       closeTransport();
     };
@@ -781,7 +1185,10 @@ export function useSpeakingRealtimeVoice(
     micEnabled,
     awaitingCandidateStart,
     error,
+    micPermissionDenied,
     ended,
+    provider: activeProvider,
+    failedOver,
     audioRef,
     prepare,
     start,

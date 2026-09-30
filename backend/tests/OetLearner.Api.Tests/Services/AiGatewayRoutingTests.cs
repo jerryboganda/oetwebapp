@@ -3,6 +3,7 @@ using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using SidecarDefaults = OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults;
 
 namespace OetLearner.Api.Tests.Services;
 
@@ -171,6 +172,110 @@ public class AiGatewayRoutingTests
         Assert.Equal("completion from mock", result.Completion);
         Assert.NotNull(mockProvider.LastRequest);
         Assert.Null(registryProvider.LastRequest);
+    }
+
+    // The keyless subscription sidecar rows are seeded at FailoverPriority 1 and 2, lower than every
+    // normal row. Activating writing-claude-sub for Writing/Speaking grading must never turn the Claude
+    // Max lane into the default for features that have no route of their own.
+
+    private static AiProvider[] SubscriptionSidecarRows() => new[]
+    {
+        ProviderRow(SidecarDefaults.ClaudeCode, AiProviderDialect.Anthropic, AiProviderCategory.TextChat, 1, SidecarDefaults.ClaudeModel, SidecarDefaults.MarkerKey),
+        ProviderRow(SidecarDefaults.CodexCode, AiProviderDialect.OpenAiCompatible, AiProviderCategory.TextChat, 2, SidecarDefaults.CodexModel, SidecarDefaults.MarkerKey),
+    };
+
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_SkipsKeylessSubscriptionSidecarRows()
+    {
+        var anthropicProvider = new CapturingProvider("anthropic");
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, anthropicProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(SubscriptionSidecarRows()
+                .Append(ProviderRow("openai-platform", AiProviderDialect.OpenAiCompatible, AiProviderCategory.TextChat, 10, "text-default-model"))
+                .ToArray()));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.Null(anthropicProvider.LastRequest);
+        Assert.Null(mockProvider.LastRequest);
+        Assert.NotNull(registryProvider.LastRequest);
+        Assert.Equal("openai-platform", registryProvider.LastRequest!.ProviderCode);
+        Assert.Equal("text-default-model", registryProvider.LastRequest.Model);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_UsesMock_WhenOnlyKeylessSubscriptionSidecarRowsAreActive()
+    {
+        var anthropicProvider = new CapturingProvider("anthropic");
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, anthropicProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(SubscriptionSidecarRows()));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.Null(anthropicProvider.LastRequest);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InProduction_RefusesRatherThanDefaultingToAKeylessSubscriptionSidecarRow()
+    {
+        var anthropicProvider = new CapturingProvider("anthropic");
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { anthropicProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(SubscriptionSidecarRows()),
+            hostEnvironment: new TestHostEnvironment("Production"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        Assert.Null(anthropicProvider.LastRequest);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ExplicitPin_StillReachesAKeylessSubscriptionSidecarRow()
+    {
+        // Only the implicit default is closed: the Speaking/Writing chains pin the row by code.
+        var anthropicProvider = new CapturingProvider("anthropic");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { anthropicProvider },
+            providerRegistry: new FakeProviderRegistry(SubscriptionSidecarRows()));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            Provider = SidecarDefaults.ClaudeCode,
+        });
+
+        Assert.Equal("completion from anthropic", result.Completion);
+        Assert.NotNull(anthropicProvider.LastRequest);
+        Assert.Equal(SidecarDefaults.ClaudeCode, anthropicProvider.LastRequest!.ProviderCode);
+        Assert.Equal(SidecarDefaults.ClaudeModel, anthropicProvider.LastRequest.Model);
     }
 
     [Fact]

@@ -246,6 +246,7 @@ export default function ExpertSpeakingExamPage() {
               ) : null}
               {c.cardTypeName ? <span className="text-muted">· {c.cardTypeName}</span> : null}
             </div>
+            {/* Named by slot like the candidate's card: the printed number is not unique within an exam. */}
             <RoleplayerCard
               card={{
                 professionId: view.professionId,
@@ -255,9 +256,8 @@ export default function ExpertSpeakingExamPage() {
                 patientAge: c.patientAge,
                 patientBackground: c.patientBackground,
                 patientTasks: c.patientTasks,
-                displayCardNumber: c.displayCardNumber,
               }}
-              cardNumber={c.cardNumber}
+              slotLabel={c.cardNumber === 1 ? 'A' : c.cardNumber === 2 ? 'B' : undefined}
             />
           </div>
         ))}

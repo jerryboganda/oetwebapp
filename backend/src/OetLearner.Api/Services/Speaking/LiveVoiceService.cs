@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -9,8 +10,21 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai.TypeSafe;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Speaking;
+
+/// <summary>Ends provider-side live sessions that the browser did not, so a hostile or dead client cannot keep one billing.</summary>
+public interface ILiveVoiceProviderSessionCloser
+{
+    /// <summary>
+    /// Best-effort hang-up of every OpenAI live session minted for a Speaking session, one at a
+    /// time. Never throws except for the caller's own cancellation. Returns how many the
+    /// provider confirmed ended (2xx, or 404 meaning already ended); the HTTP status of every call
+    /// is logged.
+    /// </summary>
+    Task<int> CloseProviderSessionsAsync(string speakingSessionId, CancellationToken ct);
+}
 
 /// <summary>
 /// Server control plane for native, full-duplex Speaking conversations.
@@ -28,35 +42,87 @@ public sealed class LiveVoiceService(
     LiveVoiceContentReadinessService contentReadiness,
     LiveVoiceProviderProbeState providerProbeState,
     TimeProvider clock,
-    ILogger<LiveVoiceService> logger)
+    ILogger<LiveVoiceService> logger) : ILiveVoiceProviderSessionCloser
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     // SpeakingPatientTurns.Role is varchar(16): "live_voice_session" (18) made every
     // provider-session audit insert fail with Postgres 22001, so no live voice
     // conversation could start in production (25 Sep 2026).
     internal const string LiveVoiceSessionRole = "live_session";
+    private const string ProviderUnavailableMessage = "The realtime voice provider could not start this conversation. Please retry.";
+    private static readonly TimeSpan HangupTimeout = TimeSpan.FromSeconds(5);
+    // The longest a Gemini token is minted for (30 minutes); see GeminiTokenTimes.
+    private const int MaxGeminiTokenLifetimeSeconds = 1800;
     private readonly LiveVoiceOptions liveVoice = options.Value;
     private readonly SpeakingComplianceOptions compliance = complianceOptions.Value;
 
+    /// <summary>What a caller is about to do: it decides which time and state guards run before card content is prepared.</summary>
+    private enum LiveVoiceAccess
+    {
+        Preflight,
+        Mint,
+        Write,
+    }
+
+    /// <summary>
+    /// Discloses every provider the microphone may be routed to (see <see cref="BuildDisclosure"/>)
+    /// before it is opened and orders the providers the browser may try.
+    /// Unpinned: primary first, then the other, each configured, catalog-verified and with
+    /// a breaker that is closed or in probation. Pinned (<paramref name="requestedProvider"/> set):
+    /// exactly that provider, no failover, breaker bypassed so a QA run still exercises it.
+    /// </summary>
     public async Task<LiveVoicePreflightResponse> GetPreflightAsync(
         string userId,
         string sessionId,
         string? requestedProvider,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, ct);
-        var provider = ResolveProvider(requestedProvider);
-        EnsureProviderConfigured(provider);
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Preflight, ct);
+        var pinned = !string.IsNullOrWhiteSpace(requestedProvider);
+        IReadOnlyList<string> candidates;
+        if (pinned)
+        {
+            var provider = LiveVoiceOptions.NormalizeProvider(requestedProvider);
+            if (provider.Length == 0)
+            {
+                throw ApiException.ServiceUnavailable(
+                    "live_voice_provider_not_configured",
+                    "No supported realtime voice provider is configured.",
+                    retryable: false);
+            }
+            EnsureProviderConfigured(provider);
+            candidates = new[] { provider };
+        }
+        else
+        {
+            candidates = providerProbeState.Candidates(liveVoice);
+            if (candidates.Count == 0)
+            {
+                throw LiveVoiceProviders.All.Any(liveVoice.IsConfigured)
+                    ? ApiException.ServiceUnavailable(
+                        "live_voice_provider_unavailable",
+                        "No realtime voice provider is available right now. Please retry shortly.",
+                        retryable: true)
+                    : ApiException.ServiceUnavailable(
+                        "live_voice_provider_not_configured",
+                        "No supported realtime voice provider is configured.",
+                        retryable: false);
+            }
+        }
 
-        var (model, displayName) = Describe(provider);
+        var primary = candidates[0];
+        var described = candidates.Select(candidate => Describe(candidate)).ToArray();
+        var (model, displayName) = described[0];
         return new LiveVoicePreflightResponse(
-            Provider: provider,
+            Provider: primary,
             ProviderDisplayName: displayName,
             Model: model,
-            Disclosure: BuildDisclosure(displayName, model),
+            Disclosure: BuildDisclosure(described),
             RetentionDays: Math.Max(1, liveVoice.RetentionDays),
             SessionId: context.Session.Id,
-            RolePlayCardId: context.Card.Id);
+            RolePlayCardId: context.Card.Id,
+            Candidates: candidates,
+            Pinned: pinned);
     }
 
     public async Task<LiveVoiceOpenAiOfferResponse> CreateOpenAiOfferAsync(
@@ -65,8 +131,7 @@ public sealed class LiveVoiceService(
         LiveVoiceOpenAiOfferRequest request,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, ct);
-        EnsureActive(context.Session);
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Mint, ct);
         await EnsureConsentAsync(context, ct);
         EnsureProviderConfigured(LiveVoiceProviders.OpenAi);
         if (request is null || string.IsNullOrWhiteSpace(request.Sdp))
@@ -98,49 +163,40 @@ public sealed class LiveVoiceService(
         };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", liveVoice.OpenAiApiKey);
 
-        using var response = await SendProviderRequestAsync(httpRequest, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
+        var startedAt = clock.GetTimestamp();
+        var body = await SendProviderRequestAsync(
+            LiveVoiceProviders.OpenAi,
+            AiProviderErrorDialect.OpenAi,
+            liveVoice.OpenAiApiKey,
+            liveVoice.OpenAiBaseUrl,
+            httpRequest,
+            startedAt,
+            ct);
+        if (!TryReadOpenAiAnswer(body, out var providerSessionId, out var answerSdp))
         {
-            logger.LogWarning("OpenAI live session creation failed with status {StatusCode}.", (int)response.StatusCode);
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_unavailable",
-                "The realtime voice provider could not start this conversation. Please retry.");
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            var providerSessionId = RequiredString(document.RootElement, "session", "id");
-            var answerSdp = RequiredString(document.RootElement, "transport", "sdp");
-            await RecordProviderSessionAsync(
-                context.Session.Id,
+            throw await FailProviderAsync(
                 LiveVoiceProviders.OpenAi,
-                liveVoice.OpenAiModel,
-                providerSessionId,
-                context.ContentReadiness,
+                InvalidProviderResponse("The realtime voice provider returned an invalid session response."),
+                startedAt,
                 ct);
+        }
 
-            return new LiveVoiceOpenAiOfferResponse(
-                Provider: LiveVoiceProviders.OpenAi,
-                Model: liveVoice.OpenAiModel,
-                ProviderSessionId: providerSessionId,
-                AnswerSdp: answerSdp);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(ex, "OpenAI live session response did not contain a usable WebRTC answer.");
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_invalid_response",
-                "The realtime voice provider returned an invalid session response.");
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex, "OpenAI live session response did not contain a usable WebRTC answer.");
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_invalid_response",
-                "The realtime voice provider returned an invalid session response.");
-        }
+        // A database fault here stays a 500 and is never counted against the provider.
+        await RecordProviderSessionAsync(
+            context.Session.Id,
+            LiveVoiceProviders.OpenAi,
+            liveVoice.OpenAiModel,
+            providerSessionId,
+            context.ContentReadiness,
+            ct);
+        await NoteSessionCreatedAsync(LiveVoiceProviders.OpenAi, ct);
+
+        return new LiveVoiceOpenAiOfferResponse(
+            Provider: LiveVoiceProviders.OpenAi,
+            Model: liveVoice.OpenAiModel,
+            ProviderSessionId: providerSessionId,
+            AnswerSdp: answerSdp,
+            HardStopAt: context.Window.HardStopAt);
     }
 
     public async Task<LiveVoiceGeminiTokenResponse> CreateGeminiTokenAsync(
@@ -148,19 +204,11 @@ public sealed class LiveVoiceService(
         string sessionId,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, ct);
-        EnsureActive(context.Session);
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Mint, ct);
         await EnsureConsentAsync(context, ct);
         EnsureProviderConfigured(LiveVoiceProviders.Gemini);
 
-        var now = clock.GetUtcNow();
-        // expireTime bounds the WHOLE live conversation (Gemini closes the socket
-        // with 1011 "auth token has expired" at that instant), so it must cover
-        // the 5-minute role-play plus overrun; newSessionExpireTime is only the
-        // window to open the socket. Production 25 Sep 2026: a 90 s token cut
-        // every conversation off after ~90 s.
-        var expiresAt = now.AddSeconds(Math.Clamp(liveVoice.GeminiTokenLifetimeSeconds, 900, 1800));
-        var newSessionExpiresAt = now.AddSeconds(Math.Clamp(liveVoice.GeminiNewSessionLifetimeSeconds, 15, 120));
+        var (expiresAt, newSessionExpiresAt) = GeminiTokenTimes(clock.GetUtcNow(), context.Window, liveVoice);
 
         var payload = new
         {
@@ -178,54 +226,64 @@ public sealed class LiveVoiceService(
         };
         httpRequest.Headers.TryAddWithoutValidation("x-goog-api-key", liveVoice.GeminiApiKey);
 
-        using var response = await SendProviderRequestAsync(httpRequest, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
+        var startedAt = clock.GetTimestamp();
+        var body = await SendProviderRequestAsync(
+            LiveVoiceProviders.Gemini,
+            AiProviderErrorDialect.Gemini,
+            liveVoice.GeminiApiKey,
+            liveVoice.GeminiBaseUrl,
+            httpRequest,
+            startedAt,
+            ct);
+        if (!TryReadGeminiTokenName(body, out var tokenName))
         {
-            logger.LogWarning("Gemini live token creation failed with status {StatusCode}.", (int)response.StatusCode);
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_unavailable",
-                "The realtime voice provider could not start this conversation. Please retry.");
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            var tokenName = ReadString(document.RootElement, "token", "name")
-                ?? ReadString(document.RootElement, "name")
-                ?? throw new InvalidOperationException("Gemini token response did not contain token.name.");
-
-            await RecordProviderSessionAsync(
-                context.Session.Id,
+            throw await FailProviderAsync(
                 LiveVoiceProviders.Gemini,
-                liveVoice.GeminiModel,
-                tokenName,
-                context.ContentReadiness,
+                InvalidProviderResponse("The realtime voice provider returned an invalid token response."),
+                startedAt,
                 ct);
+        }
 
-            var separator = liveVoice.GeminiWebSocketBaseUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-            var websocketUrl = $"{liveVoice.GeminiWebSocketBaseUrl}{separator}access_token={Uri.EscapeDataString(tokenName)}";
-            return new LiveVoiceGeminiTokenResponse(
-                Provider: LiveVoiceProviders.Gemini,
-                Model: liveVoice.GeminiModel,
-                ProviderSessionId: tokenName,
-                WebSocketUrl: websocketUrl,
-                ExpiresAt: expiresAt);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(ex, "Gemini live token response was not valid JSON.");
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_invalid_response",
-                "The realtime voice provider returned an invalid token response.");
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex, "Gemini live token response did not contain a token name.");
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_invalid_response",
-                "The realtime voice provider returned an invalid token response.");
-        }
+        await RecordProviderSessionAsync(
+            context.Session.Id,
+            LiveVoiceProviders.Gemini,
+            liveVoice.GeminiModel,
+            tokenName,
+            context.ContentReadiness,
+            ct);
+        await NoteSessionCreatedAsync(LiveVoiceProviders.Gemini, ct);
+
+        var separator = liveVoice.GeminiWebSocketBaseUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        var websocketUrl = $"{liveVoice.GeminiWebSocketBaseUrl}{separator}access_token={Uri.EscapeDataString(tokenName)}";
+        return new LiveVoiceGeminiTokenResponse(
+            Provider: LiveVoiceProviders.Gemini,
+            Model: liveVoice.GeminiModel,
+            ProviderSessionId: tokenName,
+            WebSocketUrl: websocketUrl,
+            ExpiresAt: expiresAt,
+            HardStopAt: context.Window.HardStopAt);
+    }
+
+    /// <summary>
+    /// When a Gemini token dies. <c>expireTime</c> bounds the WHOLE live conversation (Gemini closes
+    /// the socket with 1011 "auth token has expired" at that instant), so it is the earlier of the
+    /// hard stop plus 15 s and 30 minutes from now: a late mint can no longer outlive the role-play
+    /// by up to 15 minutes, and a mint at role-play start covers all of it. The configured
+    /// <see cref="LiveVoiceOptions.GeminiTokenLifetimeSeconds"/> is deliberately NOT consulted: a low
+    /// value must never cut a role-play short (a 90 s token cut every conversation off on 25 Sep
+    /// 2026), and a larger one could only outlive the hard stop. <c>newSessionExpireTime</c> is only
+    /// the window to open the socket and can never outlast the token.
+    /// </summary>
+    internal static (DateTimeOffset ExpiresAt, DateTimeOffset NewSessionExpiresAt) GeminiTokenTimes(
+        DateTimeOffset now,
+        SpeakingRolePlayWindow window,
+        LiveVoiceOptions options)
+    {
+        var byMaxLifetime = now.AddSeconds(MaxGeminiTokenLifetimeSeconds);
+        var byHardStop = window.HardStopAt.AddSeconds(15);
+        var expiresAt = byMaxLifetime < byHardStop ? byMaxLifetime : byHardStop;
+        var byWindow = now.AddSeconds(Math.Clamp(options.GeminiNewSessionLifetimeSeconds, 15, 120));
+        return (expiresAt, byWindow < expiresAt ? byWindow : expiresAt);
     }
 
     public async Task<LiveVoiceTurnResponse> PersistTurnAsync(
@@ -234,15 +292,15 @@ public sealed class LiveVoiceService(
         LiveVoiceTurnRequest request,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, ct);
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
         if (request is null)
         {
             throw ApiException.Validation("live_voice_turn_required", "A completed voice turn is required.");
         }
-        EnsureTurnWritable(context.Session);
         await EnsureConsentAsync(context, ct);
-        var provider = LiveVoiceOptions.NormalizeProvider(request?.Provider);
-        await EnsureProviderSessionAsync(context.Session.Id, provider, request?.ProviderSessionId, ct);
+        // The recorded provider wins over the client's label, so a client state bug after a
+        // failover cannot strand or mislabel a turn.
+        var provider = await EnsureProviderSessionAsync(context.Session.Id, request.ProviderSessionId, ct);
 
         var candidateText = NormalizeTranscriptText(request?.CandidateText, "candidate");
         var patientText = NormalizeTranscriptText(request?.PatientText, "patient");
@@ -305,16 +363,14 @@ public sealed class LiveVoiceService(
         LiveVoiceTranscriptRequest request,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, ct);
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
         if (request is null)
         {
             throw ApiException.Validation("live_voice_transcript_required", "A completed voice transcript is required.");
         }
-        EnsureTurnWritable(context.Session);
         await EnsureConsentAsync(context, ct);
-        var provider = LiveVoiceOptions.NormalizeProvider(request?.Provider);
-        await EnsureProviderSessionAsync(context.Session.Id, provider, request?.ProviderSessionId, ct);
-        if (request?.Segments is null || request.Segments.Count == 0)
+        var provider = await EnsureProviderSessionAsync(context.Session.Id, request.ProviderSessionId, ct);
+        if (request.Segments is null || request.Segments.Count == 0)
         {
             throw ApiException.Validation("live_voice_transcript_empty", "A completed voice transcript is required.");
         }
@@ -360,6 +416,7 @@ public sealed class LiveVoiceService(
     private async Task<LiveVoiceContext> LoadContextAsync(
         string userId,
         string sessionId,
+        LiveVoiceAccess access,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -393,6 +450,19 @@ public sealed class LiveVoiceService(
             throw ApiException.Conflict("role_play_card_not_published", "That role-play card is not currently available.");
         }
 
+        // Time and state guards come BEFORE content preparation: PrepareAsync can write and call
+        // Jev, and a rejected call must stay cheap.
+        var window = SpeakingRolePlayLimits.Resolve(session, card.RolePlayTimeSeconds, liveVoice);
+        switch (access)
+        {
+            case LiveVoiceAccess.Mint:
+                await EnsureMintAllowedAsync(session, window, ct);
+                break;
+            case LiveVoiceAccess.Write:
+                await EnsureWritableAsync(session, card, ct);
+                break;
+        }
+
         var script = await db.InterlocutorScripts.AsNoTracking()
             .FirstOrDefaultAsync(x => x.RolePlayCardId == card.Id, ct);
         var readiness = await contentReadiness.PrepareAsync(card, script, ct);
@@ -407,10 +477,16 @@ public sealed class LiveVoiceService(
             card,
             readiness.Script,
             readiness,
-            BuildInstructions(card, readiness.Script, readiness));
+            BuildInstructions(card, readiness.Script, readiness),
+            window);
     }
 
-    private void EnsureActive(SpeakingSession session)
+    /// <summary>
+    /// A provider credential is minted only during the active role-play, before its deadline, and
+    /// at most <see cref="LiveVoiceOptions.MaxProviderSessionsPerRolePlay"/> times: retries and
+    /// failover are legitimate, an endless stream of provider sessions is not.
+    /// </summary>
+    private async Task EnsureMintAllowedAsync(SpeakingSession session, SpeakingRolePlayWindow window, CancellationToken ct)
     {
         if (session.State != SpeakingSessionState.Active)
         {
@@ -418,18 +494,69 @@ public sealed class LiveVoiceService(
                 "live_voice_session_not_active",
                 $"Realtime voice can only run during the active role-play (current: {SpeakingSessionStates.ToCode(session.State)}).");
         }
-    }
-
-    private void EnsureTurnWritable(SpeakingSession session)
-    {
-        if (session.State is SpeakingSessionState.Active or SpeakingSessionState.Finished)
+        if (clock.GetUtcNow() >= window.DeadlineAt)
         {
-            return;
+            throw ApiException.Conflict("live_voice_time_limit_reached", "The time for this role-play has ended.");
         }
 
-        throw ApiException.Conflict(
-            "live_voice_session_not_active",
-            $"Realtime voice turns can only be saved during or immediately after the active role-play (current: {SpeakingSessionStates.ToCode(session.State)}).");
+        var minted = await db.SpeakingPatientTurns.AsNoTracking()
+            .CountAsync(x => x.SessionId == session.Id && x.Role == LiveVoiceSessionRole, ct);
+        if (minted >= SpeakingRolePlayLimits.MaxProviderSessions(liveVoice))
+        {
+            throw ApiException.Conflict(
+                "live_voice_session_limit_reached",
+                "This role-play has already used all of its live voice sessions.");
+        }
+    }
+
+    /// <summary>
+    /// Turns and the transcript are accepted while the role-play runs and for a bounded flush
+    /// window after it (a backgrounded tab can be late), but never once grading has started on
+    /// the transcript it already has: a later write would silently replace what was graded.
+    /// </summary>
+    private async Task EnsureWritableAsync(SpeakingSession session, RolePlayCard card, CancellationToken ct)
+    {
+        if (session.State is not (SpeakingSessionState.Active or SpeakingSessionState.Finished))
+        {
+            throw ApiException.Conflict(
+                "live_voice_session_not_active",
+                $"Realtime voice turns can only be saved during or immediately after the active role-play (current: {SpeakingSessionStates.ToCode(session.State)}).");
+        }
+
+        if (!SpeakingRolePlayLimits.IsWithinWriteWindow(session, card.RolePlayTimeSeconds, clock.GetUtcNow(), liveVoice)
+            || (session.State == SpeakingSessionState.Finished && await IsTranscriptFrozenAsync(session.Id, ct)))
+        {
+            throw ApiException.Conflict(
+                "live_voice_transcript_window_closed",
+                "The window for saving this role-play transcript has closed.");
+        }
+    }
+
+    /// <summary>
+    /// Frozen = a transcript exists and grading has taken it: an assessment exists, or the grading
+    /// operation is running or done. With no transcript yet the late flush IS the first
+    /// transcript, so it is accepted even while an attempt is leased (the grader reschedules
+    /// until one arrives).
+    /// </summary>
+    private async Task<bool> IsTranscriptFrozenAsync(string sessionId, CancellationToken ct)
+    {
+        if (!await db.SpeakingTranscripts.AsNoTracking()
+                .AnyAsync(t => t.SpeakingSessionId == sessionId && t.IsLatest, ct))
+        {
+            return false;
+        }
+        if (await SpeakingCreditSettlement.IsGradedAsync(db, sessionId, ct))
+        {
+            return true;
+        }
+
+        var operation = await db.AiOperations.AsNoTracking()
+            .Where(o => o.FeatureCode == AiFeatureCodes.SpeakingGrade
+                && o.ResourceType == "speaking_session"
+                && o.ResourceId == sessionId)
+            .Select(o => (AiOperationState?)o.State)
+            .FirstOrDefaultAsync(ct);
+        return operation is AiOperationState.Leased or AiOperationState.ProviderSucceeded or AiOperationState.Completed;
     }
 
     private async Task EnsureConsentAsync(LiveVoiceContext context, CancellationToken ct)
@@ -463,20 +590,8 @@ public sealed class LiveVoiceService(
         }
     }
 
-    private string ResolveProvider(string? requestedProvider)
-    {
-        var provider = LiveVoiceOptions.NormalizeProvider(
-            string.IsNullOrWhiteSpace(requestedProvider) ? liveVoice.PrimaryProvider : requestedProvider);
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_not_configured",
-                "No supported realtime voice provider is configured.",
-                retryable: false);
-        }
-        return provider;
-    }
-
+    /// <summary>Configured and catalog-verified, but deliberately NOT the breaker: a pinned run or a
+    /// stale-order client must still attempt the provider, and its outcome feeds the breaker.</summary>
     private void EnsureProviderConfigured(string provider)
     {
         if (!liveVoice.IsConfigured(provider))
@@ -505,11 +620,31 @@ public sealed class LiveVoiceService(
             retryable: false),
     };
 
-    private static string BuildDisclosure(string provider, string model)
-        => $"This Speaking card uses {provider} realtime voice ({model}). " +
-           "Your microphone audio is streamed to that provider during this session. " +
-           "The provider and this service may retain bounded session audio and transcript data " +
-           "under the published Speaking retention policy. Start only if you consent.";
+    /// <summary>
+    /// The consent disclosure names EVERY provider this attempt may be routed to, in the order they
+    /// are tried, so a failover never sends the microphone to a processor the learner was not told
+    /// about. One candidate (pinned, or the only healthy one) reads exactly as before.
+    /// </summary>
+    private static string BuildDisclosure(IReadOnlyList<(string Model, string DisplayName)> providers)
+    {
+        var names = providers
+            .Select(p => $"{p.DisplayName} realtime voice ({p.Model})")
+            .ToArray();
+        var routing = names.Length switch
+        {
+            0 => "This Speaking card uses a realtime voice provider. " +
+                 "Your microphone audio is streamed to that provider during this session. ",
+            1 => $"This Speaking card uses {names[0]}. " +
+                 "Your microphone audio is streamed to that provider during this session. ",
+            _ => $"This Speaking card uses {names[0]}. " +
+                 "If that cannot start this conversation the service may switch to " +
+                 string.Join(", then ", names.Skip(1)) + ". " +
+                 "Your microphone audio is streamed to whichever of these providers serves your session. ",
+        };
+        return routing +
+               "The provider and this service may retain bounded session audio and transcript data " +
+               "under the published Speaking retention policy. Start only if you consent.";
+    }
 
     private async Task RecordProviderSessionAsync(
         string sessionId,
@@ -524,6 +659,11 @@ public sealed class LiveVoiceService(
             provider,
             model,
             providerSessionIdHash = HashProviderSession(providerSessionId),
+            // The raw OpenAI id is what POST .../{id}/hangup needs to end the session from the
+            // server at the hard stop. It is already in the browser and is wiped with the rest of
+            // this row by the retention sweep. Never stored for Gemini: its "session id" is the
+            // ephemeral token, which is a bearer credential.
+            providerSessionId = provider == LiveVoiceProviders.OpenAi ? providerSessionId : null,
             connectedAt = clock.GetUtcNow(),
             retentionExpiresAt = clock.GetUtcNow().AddDays(Math.Max(1, liveVoice.RetentionDays)),
             contentGenerated = readiness.Generated,
@@ -540,13 +680,17 @@ public sealed class LiveVoiceService(
             ct);
     }
 
-    private async Task EnsureProviderSessionAsync(
+    /// <summary>
+    /// Proves the provider session id was minted by this server for THIS Speaking session and
+    /// returns the provider it was recorded against. The client's provider label is not consulted:
+    /// the recorded one is the truth.
+    /// </summary>
+    private async Task<string> EnsureProviderSessionAsync(
         string sessionId,
-        string provider,
         string? providerSessionId,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(providerSessionId))
+        if (string.IsNullOrWhiteSpace(providerSessionId))
         {
             throw ApiException.Validation("live_voice_provider_session_required", "A live provider session is required.");
         }
@@ -562,10 +706,11 @@ public sealed class LiveVoiceService(
             {
                 using var document = JsonDocument.Parse(json);
                 var root = document.RootElement;
-                if (string.Equals(ReadString(root, "provider"), provider, StringComparison.Ordinal)
+                var recorded = LiveVoiceOptions.NormalizeProvider(ReadString(root, "provider"));
+                if (recorded.Length > 0
                     && string.Equals(ReadString(root, "providerSessionIdHash"), hash, StringComparison.Ordinal))
                 {
-                    return;
+                    return recorded;
                 }
             }
             catch (JsonException)
@@ -578,6 +723,300 @@ public sealed class LiveVoiceService(
         throw ApiException.Conflict(
             "live_voice_provider_session_mismatch",
             "The realtime provider session is not valid for this Speaking session.");
+    }
+
+    // ── Provider failure handling ────────────────────────────────────
+
+    /// <summary>One provider-side failure, reduced to what may be logged and counted. The provider's
+    /// own text is only ever present in <c>ProviderText</c>, and only for the hosts and statuses
+    /// that are safe to log.</summary>
+    private sealed record ProviderFailure(
+        string ApiCode,
+        string Message,
+        AiProviderErrorClass Class,
+        int? HttpStatus = null,
+        string? Type = null,
+        string? Code = null,
+        string? RequestId = null,
+        string? ProviderText = null,
+        TimeSpan? RetryAfter = null);
+
+    private static ProviderFailure InvalidProviderResponse(string message)
+        => new(
+            "live_voice_provider_invalid_response",
+            message,
+            AiProviderErrorClass.ServerError,
+            HttpStatus: 200,
+            Code: "invalid_response");
+
+    /// <summary>
+    /// Vendor text may reach the logs only from the two vendor hosts and only for the statuses that
+    /// describe the vendor's own state: 429 (quota or rate limit, the text the owner needs to read)
+    /// and 5xx. Every other status can echo the request (a 400/422/413/415 the body, a 404 the URL)
+    /// or a masked key (401/403), and the request carries the hidden card instructions. An
+    /// allow-list, so a status nobody thought of stays closed.
+    /// </summary>
+    private static bool RetainsProviderText(string endpoint, int status)
+        => (status == 429 || status >= 500)
+            && Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Host, "api.openai.com", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Host, "generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Sends one provider session-creation request and returns the 2xx body. ANY other outcome
+    /// (non-2xx, transport fault, timeout) is recorded against the provider's breaker and thrown as
+    /// a generic, non-retryable 503: the browser reads it as "this provider cannot start, try the
+    /// next candidate". Caller cancellation is not a provider failure and propagates untouched.
+    /// </summary>
+    private async Task<string> SendProviderRequestAsync(
+        string provider,
+        AiProviderErrorDialect dialect,
+        string apiKey,
+        string endpoint,
+        HttpRequestMessage request,
+        long startedAt,
+        CancellationToken ct)
+    {
+        ProviderFailure failure;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(liveVoice.ProviderRequestTimeout());
+            var client = httpClientFactory.CreateClient("LiveVoiceProvider");
+            // The linked token above is the only timeout, so the failover budget is one number.
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token);
+            if (response.IsSuccessStatusCode)
+            {
+                return body;
+            }
+
+            var status = (int)response.StatusCode;
+            var retain = RetainsProviderText(endpoint, status);
+            var error = AiProviderErrorParser.Parse(dialect, status, body, response.Headers, apiKey, retain);
+            failure = new ProviderFailure(
+                "live_voice_provider_unavailable",
+                ProviderUnavailableMessage,
+                error.Class,
+                status,
+                error.Type,
+                error.Code,
+                error.RequestId,
+                retain ? error.Message : null,
+                error.RetryAfter);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            failure = new ProviderFailure(
+                "live_voice_provider_timeout",
+                "The realtime voice provider did not respond in time.",
+                AiProviderErrorClass.Network,
+                Code: "timeout");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            failure = new ProviderFailure(
+                "live_voice_provider_unavailable",
+                "The realtime voice provider could not be reached.",
+                AiProviderErrorClass.Network,
+                Code: "transport_error");
+        }
+
+        throw await FailProviderAsync(provider, failure, startedAt, ct);
+    }
+
+    /// <summary>
+    /// Counts the failure against the provider's breaker, writes ONE structured log line (never a
+    /// key, token, SDP or instruction, and provider text only where <see cref="RetainsProviderText"/>
+    /// allows it) and, when the breaker just opened, one best-effort audit event. Returns the
+    /// exception to throw.
+    /// </summary>
+    private async Task<ApiException> FailProviderAsync(string provider, ProviderFailure failure, long startedAt, CancellationToken ct)
+    {
+        var type = LiveVoiceProviderProbeState.SafeToken(failure.Type);
+        var code = LiveVoiceProviderProbeState.SafeToken(failure.Code);
+        var change = providerProbeState.RecordFailure(provider, failure.Class, failure.HttpStatus, type, code, failure.RetryAfter);
+
+        // Error where an operator has to act: quota, credentials, or a request the provider will
+        // never accept whoever the learner is (an unknown model or URL, an unsupported media type).
+        // A 400/422 is shaped by the learner's own browser (a malformed SDP), so it is a Warning like
+        // everything the breaker and the next candidate absorb: one learner must not be able to
+        // raise Error-level alerts at will.
+        var operatorMustAct = failure.Class is AiProviderErrorClass.QuotaExhausted or AiProviderErrorClass.Auth
+            || (failure.Class == AiProviderErrorClass.InvalidRequest && failure.HttpStatus is not (400 or 422));
+        var level = operatorMustAct ? LogLevel.Error : LogLevel.Warning;
+        logger.Log(
+            level,
+            "Live voice {Provider} session creation failed: class={ErrorClass} http={HttpStatus} type={ProviderErrorType} code={ProviderErrorCode} requestId={ProviderRequestId} elapsedMs={ElapsedMs} breaker={BreakerTransition} providerError={ProviderError}",
+            provider,
+            failure.Class.ToCode(),
+            failure.HttpStatus,
+            type,
+            code,
+            LiveVoiceProviderProbeState.SafeToken(failure.RequestId),
+            (long)clock.GetElapsedTime(startedAt).TotalMilliseconds,
+            change.Transition,
+            failure.ProviderText);
+
+        if (change.Transition == LiveVoiceBreakerTransition.Opened)
+        {
+            await WriteBreakerAuditAsync(provider, change, failure, ct);
+        }
+        return ApiException.ServiceUnavailable(failure.ApiCode, failure.Message, retryable: false);
+    }
+
+    /// <summary>The provider session exists and is recorded: count the success, closing an open or probing breaker.</summary>
+    private async Task NoteSessionCreatedAsync(string provider, CancellationToken ct)
+    {
+        var change = providerProbeState.RecordSuccess(provider);
+        if (change.Transition == LiveVoiceBreakerTransition.Closed)
+        {
+            logger.LogInformation("Live voice {Provider} circuit closed after a successful session creation.", provider);
+            await WriteBreakerAuditAsync(provider, change, failure: null, ct);
+        }
+    }
+
+    /// <summary>One AuditEvent per breaker transition (never per failure). Best effort: a database
+    /// fault here must never mask the provider failure the learner is about to be told about.</summary>
+    private async Task WriteBreakerAuditAsync(
+        string provider,
+        LiveVoiceBreakerChange change,
+        ProviderFailure? failure,
+        CancellationToken ct)
+    {
+        var audit = new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = clock.GetUtcNow(),
+            ActorId = "system",
+            ActorName = "LiveVoiceService",
+            Action = change.Transition == LiveVoiceBreakerTransition.Opened
+                ? "LiveVoiceProviderCircuitOpened"
+                : "LiveVoiceProviderCircuitClosed",
+            ResourceType = "LiveVoiceProvider",
+            ResourceId = provider,
+            Details = JsonSerializer.Serialize(new
+            {
+                kind = failure?.Class.ToCode(),
+                httpStatus = failure?.HttpStatus,
+                providerCode = LiveVoiceProviderProbeState.SafeToken(failure?.Code ?? failure?.Type),
+                openUntil = change.OpenUntil,
+                consecutiveFailures = change.ConsecutiveFailures,
+            }),
+        };
+        try
+        {
+            db.AuditEvents.Add(audit);
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            db.Entry(audit).State = EntityState.Detached;
+            logger.LogWarning(ex, "Could not write the live voice circuit audit event for {Provider}.", provider);
+        }
+    }
+
+    // ── Provider-side hang-up ────────────────────────────────────────
+
+    /// <inheritdoc />
+    public async Task<int> CloseProviderSessionsAsync(string speakingSessionId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(speakingSessionId) || !liveVoice.IsOpenAiConfigured)
+        {
+            return 0;
+        }
+
+        List<string> providerSessionIds;
+        try
+        {
+            providerSessionIds = await ReadOpenAiSessionIdsAsync(speakingSessionId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not read the OpenAI live sessions of Speaking session {SessionId} to hang them up.", speakingSessionId);
+            return 0;
+        }
+
+        // One at a time: a role-play holds at most a handful, and one bad call must not fan out.
+        var ended = 0;
+        foreach (var providerSessionId in providerSessionIds)
+        {
+            if (await HangUpOpenAiSessionAsync(speakingSessionId, providerSessionId, ct))
+            {
+                ended++;
+            }
+        }
+        return ended;
+    }
+
+    private async Task<List<string>> ReadOpenAiSessionIdsAsync(string speakingSessionId, CancellationToken ct)
+    {
+        var audits = await db.SpeakingPatientTurns.AsNoTracking()
+            .Where(x => x.SessionId == speakingSessionId && x.Role == LiveVoiceSessionRole)
+            .OrderBy(x => x.SequenceNumber)
+            .Select(x => x.ResponseJson)
+            .ToListAsync(ct);
+        var ids = new List<string>();
+        foreach (var json in audits)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+                var providerSessionId = ReadString(root, "providerSessionId");
+                if (LiveVoiceOptions.NormalizeProvider(ReadString(root, "provider")) == LiveVoiceProviders.OpenAi
+                    && !string.IsNullOrWhiteSpace(providerSessionId)
+                    && !ids.Contains(providerSessionId, StringComparer.Ordinal))
+                {
+                    ids.Add(providerSessionId);
+                }
+            }
+            catch (JsonException)
+            {
+                // A malformed or retention-wiped audit row has no id to hang up.
+            }
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// True when OpenAI reports the session ended: 2xx, or 404 (already ended, for example after a
+    /// repeat). The HTTP status of EVERY hang-up is logged with the Speaking session id only (never
+    /// the key, OpenAI's own session id or provider text): Information when it counts as ended,
+    /// Warning otherwise. That is how an operator confirms the endpoint really ends sessions, since a
+    /// wrong endpoint answers 404 to everything and would otherwise look like success. Never fatal.
+    /// </summary>
+    private async Task<bool> HangUpOpenAiSessionAsync(string speakingSessionId, string providerSessionId, CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(HangupTimeout);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{liveVoice.OpenAiBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(providerSessionId)}/hangup");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", liveVoice.OpenAiApiKey);
+            var client = httpClientFactory.CreateClient("LiveVoiceProvider");
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            var ended = response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound;
+            logger.Log(
+                ended ? LogLevel.Information : LogLevel.Warning,
+                "OpenAI live session hang-up returned HTTP {StatusCode} for Speaking session {SessionId}.",
+                (int)response.StatusCode,
+                speakingSessionId);
+            return ended;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // Type only: never the message, which can carry the request URI.
+            logger.LogWarning(
+                "OpenAI live session hang-up failed for Speaking session {SessionId}: {ErrorType}.",
+                speakingSessionId,
+                ex.GetType().Name);
+            return false;
+        }
     }
 
     // Boundary rules ported from the live-interlocutor v1.1 disclosure policy
@@ -664,34 +1103,49 @@ public sealed class LiveVoiceService(
         return builder.ToString();
     }
 
-    private async Task<HttpResponseMessage> SendProviderRequestAsync(
-        HttpRequestMessage request,
-        CancellationToken ct)
+    private static bool TryReadOpenAiAnswer(string body, out string providerSessionId, out string answerSdp)
     {
+        providerSessionId = string.Empty;
+        answerSdp = string.Empty;
         try
         {
-            var client = httpClientFactory.CreateClient("LiveVoiceProvider");
-            client.Timeout = TimeSpan.FromSeconds(20);
-            return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var document = JsonDocument.Parse(body);
+            var id = ReadString(document.RootElement, "session", "id");
+            var sdp = ReadString(document.RootElement, "transport", "sdp");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(sdp))
+            {
+                return false;
+            }
+            providerSessionId = id;
+            answerSdp = sdp;
+            return true;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (JsonException)
         {
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_timeout",
-                "The realtime voice provider did not respond in time.");
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogWarning(ex, "Realtime voice provider request failed before receiving a response.");
-            throw ApiException.ServiceUnavailable(
-                "live_voice_provider_unavailable",
-                "The realtime voice provider could not be reached.");
+            return false;
         }
     }
 
-    private static string RequiredString(JsonElement root, string parent, string property)
-        => ReadString(root, parent, property)
-           ?? throw new InvalidOperationException($"Missing {parent}.{property}.");
+    private static bool TryReadGeminiTokenName(string body, out string tokenName)
+    {
+        tokenName = string.Empty;
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var name = ReadString(document.RootElement, "token", "name")
+                ?? ReadString(document.RootElement, "name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+            tokenName = name;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static string? ReadString(JsonElement root, params string[] path)
     {
@@ -748,11 +1202,12 @@ public sealed class LiveVoiceService(
             throw ApiException.Validation("live_voice_segment_empty", "A transcript segment cannot be empty.");
         }
         var start = Math.Max(0, segment.StartMs);
-        var end = Math.Max(start, segment.EndMs);
-        if (end - start > 120_000)
-        {
-            throw ApiException.Validation("live_voice_segment_duration_invalid", "A transcript segment is too long.");
-        }
+        // Consecutive fragments of one speaker merge into one segment, so a long uninterrupted turn can
+        // legitimately span more than two minutes. The timing is only metadata: it is clamped, never
+        // rejected, because a rejected segment fails the whole save and a client that fails open on a
+        // 4xx would then drop the entire transcript.
+        const long MaxSegmentSpanMs = 120_000;
+        var end = (int)Math.Min(Math.Max(start, segment.EndMs), start + MaxSegmentSpanMs);
         return segment with
         {
             Speaker = speaker,
@@ -774,7 +1229,8 @@ public sealed class LiveVoiceService(
         RolePlayCard Card,
         InterlocutorScript Script,
         LiveVoiceContentReadiness ContentReadiness,
-        string Instructions);
+        string Instructions,
+        SpeakingRolePlayWindow Window);
 }
 
 public sealed record LiveVoiceAdvisoryWork(

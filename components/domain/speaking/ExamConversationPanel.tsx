@@ -14,7 +14,7 @@
  * tapped "Start speaking" / "Start preparation"); otherwise one simple
  * "Start speaking" control is shown.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -25,9 +25,13 @@ import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 
 export interface ExamConversationPanelProps {
   sessionId: string;
-  /** From the session/exam DTO. Missing/false = recorder fallback (production default today). */
+  /**
+   * From the session/exam DTO (true = at least one live voice provider is usable). Missing/false = recorder
+   * fallback. Read once when the panel mounts: a card keeps the mode it started with.
+   */
   liveVoiceAvailable?: boolean;
   className?: string;
+  /** Forces one provider and switches automatic failover off (comparison and QA runs); omitted = the server's health order. */
   requestedProvider?: LiveVoiceProvider;
   /** Receives the finalize hook: live = save transcript; fallback = stop + upload recording. */
   onVoiceStopReady?: (stop: (() => Promise<boolean>) | null) => void;
@@ -39,12 +43,20 @@ interface IndicatorProps {
   active: boolean;
   label: string;
   level: number;
+  /** Live provider and failover flag, exposed as data attributes for the QA harness and support screenshots only. */
+  provider?: string | null;
+  failedOver?: boolean;
 }
 
 /** The single voice-activity indicator. */
-function ActivityIndicator({ active, label, level }: IndicatorProps) {
+function ActivityIndicator({ active, label, level, provider, failedOver }: IndicatorProps) {
   return (
-    <div className="flex items-center gap-3" data-testid="speaking-mic-indicator">
+    <div
+      className="flex items-center gap-3"
+      data-testid="speaking-mic-indicator"
+      data-live-provider={provider ?? undefined}
+      data-live-failover={failedOver ? 'true' : undefined}
+    >
       <span
         className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
@@ -126,8 +138,15 @@ function LiveVoiceIndicator({ sessionId, requestedProvider, onVoiceStopReady, on
   return (
     <>
       <audio ref={voice.audioRef} autoPlay aria-label="Live patient voice" className="hidden" />
-      <ActivityIndicator active={connected} label={label} level={voice.micLevel} />
+      <ActivityIndicator
+        active={connected}
+        label={label}
+        level={voice.micLevel}
+        provider={voice.provider}
+        failedOver={voice.failedOver}
+      />
       {voice.error ? <ErrorLine message={voice.error} /> : null}
+      {voice.connection === 'error' && voice.micPermissionDenied ? <OpenAppSettingsButton /> : null}
       {!connected && !voice.ended && voice.connection !== 'ending' ? (
         voice.connection === 'error' && !voice.preflight ? (
           <Button type="button" variant="outline" fullWidth onClick={() => void voice.prepare()}>
@@ -173,6 +192,7 @@ function RecorderIndicator({ sessionId, onVoiceStopReady, onSpeakingStarted }: E
     uploading: 'Uploading your recording…',
     uploaded: 'Recording received',
     upload_failed: 'Recording kept on this device',
+    rejected: 'Recording could not be saved',
     error: 'Microphone off',
   }[recorder.status];
 
@@ -190,12 +210,15 @@ function RecorderIndicator({ sessionId, onVoiceStopReady, onSpeakingStarted }: E
 }
 
 export function ExamConversationPanel(props: ExamConversationPanelProps) {
+  // Latched: the exam re-reads liveVoiceAvailable every poll, and a provider-health flake mid-card must not
+  // swap the live indicator for the recorder (or back) while the learner is talking.
+  const [liveVoiceAvailable] = useState(Boolean(props.liveVoiceAvailable));
   return (
     <div
       className={cn('flex flex-col gap-3 rounded-xl border border-border bg-surface p-4', props.className)}
       data-testid="speaking-conversation-panel"
     >
-      {props.liveVoiceAvailable ? <LiveVoiceIndicator {...props} /> : <RecorderIndicator {...props} />}
+      {liveVoiceAvailable ? <LiveVoiceIndicator {...props} /> : <RecorderIndicator {...props} />}
     </div>
   );
 }

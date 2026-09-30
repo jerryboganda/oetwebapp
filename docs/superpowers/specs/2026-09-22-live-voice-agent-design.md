@@ -33,6 +33,20 @@ is allowed only before the first turn or during a reconnect boundary, never in
 the middle of a spoken turn. Provider errors are visible and terminal for that
 session. There is no silent switch to mock audio, batch text, or text-only mode.
 
+> **Update 2026-09-30 (live voice close-out; supersedes the two sentences above where they differ, pending production
+> verification).** Provider failure is no longer terminal while the connection is still being set up. The server returns
+> an ordered `candidates` list on the preflight (the configured primary first, then the other provider, each only if it is
+> configured, catalog-verified and its circuit is not open) and the browser tries them in order: a create call that fails
+> (any provider status, a timeout, an unreadable answer; the browser sees a generic 503) is followed by the next real
+> provider automatically. Once a provider's link is live it serves that card to the end: still no reconnect and no switch
+> in the middle of a conversation. The error is visible and terminal only when every candidate failed (one generic
+> message and a retry); when no provider is usable at page load the recorder fallback replaces live voice for the session.
+> There is still no switch to mock audio, batch text or text-only. Health is fed by real session-creation outcomes (a
+> per-provider circuit, admin health and reset endpoints); the server also enforces a hard duration cap (deadline, hard
+> stop, an ai-worker sweeper, Gemini token expiry, an OpenAI hang-up) that this design did not have. The preflight
+> disclosure now names every candidate, while the learner-facing consent copy stays generic: an open owner/legal
+> decision. Current behaviour and numbers: [`docs/speaking/live-voice.md`](../../speaking/live-voice.md).
+
 The server creates a safe card projection and source-grounded interlocutor
 instructions. Candidate-visible card data is available to the client. Hidden
 facts, resistance rules, closing cues, and state transitions are delivered to

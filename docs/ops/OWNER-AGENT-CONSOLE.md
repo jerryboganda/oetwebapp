@@ -80,7 +80,12 @@ Key properties:
 - **Separate compose project** (`docker-compose.agent-console.yml`, project
   `oet-agent-console`). Main deploys (`deploy.yml` → `auto-deploy-ghcr.sh`)
   never recreate it; they only ensure the `oet_agent_ctl` network exists.
-  Only the API slots `oet-api-blue` / `oet-api-green` join `oet_agent_ctl`.
+  The API slots `oet-api-blue` / `oet-api-green` and `oet-ai-worker` join
+  `oet_agent_ctl` (the Writing/Speaking subscription sidecars `oet-writing-claude`
+  / `oet-writing-codex` sit on it as well; queued `speaking.grade` operations run
+  only in `oet-ai-worker` and must reach `oet-writing-claude:8080`). Only the API
+  slots carry the internal token and `OwnerAgent__*` settings: `oet-ai-worker` can
+  reach the console's network port but cannot authenticate to it.
 - **No published ports, internal-only networks.** The sidecar has no
   internet route of its own; all outbound HTTP(S) goes through
   `oet-agent-egress` (allowlist; anything else becomes an approval card).
@@ -329,7 +334,9 @@ docker network inspect oet_agent_ctl --format '{{range .Containers}}{{.Name}} {{
 
 - Four `oet-agent-*` containers, all `healthy`, **empty Ports column**.
 - `/healthz` → `{"ok":true,...,"activeTurns":0,"draining":false}`.
-- `oet_agent_ctl` members: `oet-agent-console` and the live API slot(s) only.
+- `oet_agent_ctl` members: `oet-agent-console`, the live API slot(s), `oet-ai-worker`
+  and the Writing/Speaking subscription sidecars (`oet-writing-claude`,
+  `oet-writing-codex`) only.
 - As a non-owner admin, `GET /v1/owner-agent/status` → 403; `/me` →
   `{"isOwner":false}`.
 - As the owner: open `/admin/agent-console` → unlock (password + TOTP) →
@@ -635,6 +642,7 @@ e.g. `printf %s "$VALUE" | sha256sum`.
 |---|---|---|
 | Session events (JSONL, one line per event, redacted) + SQLite index | `oet_agent_sessions` → `/var/lib/oet-agent/sessions/<id>/events.jsonl` | **90 days** after the session's last update, then purged |
 | Engine-native transcripts (needed for resume) | `oet_agent_home` → `$CLAUDE_CONFIG_DIR/projects/**` (e.g. `/home/agent/.claude/projects`), `$CODEX_HOME/sessions/**` (`/home/agent/.codex/sessions`) | `*.jsonl` not modified for **90 days** are deleted by the same retention sweep (every 6 h) |
+| Claude subscription sidecar sessions (`oet-writing-claude`: Writing letters and Speaking transcripts) written by sidecar images **before** the session-persistence-off change; not console sessions | the same `oet_agent_home` volume → `$CLAUDE_CONFIG_DIR/projects/-tmp/*.jsonl` (the sidecar's working directory is `/tmp`) | Same 90-day `*.jsonl` sweep, or earlier by the purge in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9. Newer sidecar images write none (once deployed and the flags validated) |
 | Audit | Postgres `AuditEvent` (`ResourceType = "OwnerAgent"`), hash-chained | platform audit retention; no secrets, message text ≤ 200 chars |
 | Postgres statement log (`log_statement = 'mod'`) | `oet-postgres` container log (50 MB × 5 rotation) | rotation |
 | Vendor side | Anthropic / OpenAI under each subscription's terms (training off) | vendor-defined |
@@ -666,7 +674,10 @@ secrets into prompts.
    `{"erased":true,"engineTranscripts":N}`. The token is read from the
    root-only secret file and passed to `curl` on stdin, never on a command
    line. Re-run the step-2 `grep` to confirm nothing is left (a match inside
-   an unrelated session means that session must be erased too).
+   an unrelated session means that session must be erased too). A match under
+   `projects/-tmp` is a sidecar-written file, not a console session: it has no
+   console session id, so `oet-console-erase` does not remove it; delete it or
+   purge the folder as described in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9.
 4. Do not edit `AuditEvent` rows (it breaks the hash chain); they are
    minimised by design. Record the decision in the erasure log.
 5. Vendor side: data sent as prompt context remains under the vendor's
@@ -767,8 +778,10 @@ authenticate.
 
 **Containers:** `oet-agent-console`, `oet-agent-egress`,
 `oet-agent-dockerproxy`, `oet-agent-dbproxy` (compose project
-`oet-agent-console`). **Networks:** `oet_agent_ctl` (internal; API slots ↔
-sidecar :8410), `oet_agent_net` (internal; sidecar ↔ proxies). **Volumes**
+`oet-agent-console`). **Networks:** `oet_agent_ctl` (internal; API slots and
+`oet-ai-worker` ↔ sidecars: console :8410 for the API slots, the Writing/Speaking
+subscription sidecars :8080 for the API slots and the worker), `oet_agent_net`
+(internal; sidecar ↔ proxies). **Volumes**
 (external): `oet_agent_home`, `oet_agent_workspace`, `oet_agent_sessions`;
 never `docker volume rm` them — `protect-production-data.sh` blocks it.
 **Images:** `ghcr.io/jerryboganda/oetwebapp-agent-console{,-egress,-dockerproxy}:<sha>`

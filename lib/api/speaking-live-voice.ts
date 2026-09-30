@@ -10,6 +10,10 @@ export interface LiveVoicePreflight {
   retentionDays: number;
   sessionId: string;
   rolePlayCardId: string;
+  /** Providers to try in order (server-decided: configured primary first, unhealthy ones filtered out). Absent on an older server: one attempt with `provider`. */
+  candidates?: LiveVoiceProvider[];
+  /** True when the caller forced a provider (`?provider=`): that run must not fail over. */
+  pinned?: boolean;
 }
 
 export interface LiveVoiceOpenAiOfferResponse {
@@ -17,6 +21,8 @@ export interface LiveVoiceOpenAiOfferResponse {
   model: string;
   providerSessionId: string;
   answerSdp: string;
+  /** ISO time after which the server closes this role-play (deadline plus grace). Absent on an older server. */
+  hardStopAt?: string;
 }
 
 export interface LiveVoiceGeminiTokenResponse {
@@ -25,6 +31,8 @@ export interface LiveVoiceGeminiTokenResponse {
   providerSessionId: string;
   webSocketUrl: string;
   expiresAt: string;
+  /** ISO time after which the server closes this role-play (deadline plus grace). Absent on an older server. */
+  hardStopAt?: string;
 }
 
 export interface LiveVoiceTurnResponse {
@@ -62,17 +70,30 @@ export function getLiveVoicePreflight(
   return apiClient.get<LiveVoicePreflight>(`${sessionPath(sessionId)}/preflight${query}`);
 }
 
+// Creating a provider session is never retried by the API client: a repeat POST after a
+// post-creation failure could open a second billed session, and the hook's failover to the
+// other provider is the retry. The timeout is the server's provider timeout plus transport.
+const CREATE_SESSION_OPTIONS = { maxRetries: 0, timeoutMs: 22_000 };
+
 export function createOpenAiLiveOffer(
   sessionId: string,
   sdp: string,
 ): Promise<LiveVoiceOpenAiOfferResponse> {
-  return apiClient.post<LiveVoiceOpenAiOfferResponse>(`${sessionPath(sessionId)}/openai/offer`, { sdp });
+  return apiClient.request<LiveVoiceOpenAiOfferResponse>(
+    `${sessionPath(sessionId)}/openai/offer`,
+    { method: 'POST', body: JSON.stringify({ sdp }) },
+    CREATE_SESSION_OPTIONS,
+  );
 }
 
 export function createGeminiLiveToken(
   sessionId: string,
 ): Promise<LiveVoiceGeminiTokenResponse> {
-  return apiClient.post<LiveVoiceGeminiTokenResponse>(`${sessionPath(sessionId)}/gemini/token`, {});
+  return apiClient.request<LiveVoiceGeminiTokenResponse>(
+    `${sessionPath(sessionId)}/gemini/token`,
+    { method: 'POST', body: JSON.stringify({}) },
+    CREATE_SESSION_OPTIONS,
+  );
 }
 
 export function persistLiveVoiceTurn(
