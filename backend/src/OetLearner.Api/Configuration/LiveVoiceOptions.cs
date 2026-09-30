@@ -2,10 +2,10 @@ namespace OetLearner.Api.Configuration;
 
 /// <summary>
 /// Server-only configuration for the native realtime Speaking providers.
-/// One provider session serves one attempt. The provider for a NEW attempt is
-/// health-ordered (<see cref="PrimaryProvider"/> first, the other configured
-/// provider when the primary's circuit is open) and a failed creation may be
-/// retried by the browser on the next candidate. Provider errors are returned
+/// One provider session serves one attempt. The candidates for a NEW attempt are
+/// <see cref="PrimaryProvider"/> first, then the other configured provider, each only
+/// while it is configured, catalog-verified and its circuit is closed or probing,
+/// and a failed creation may be retried by the browser on the next candidate. Provider errors are returned
 /// to the caller and are never converted into a text, mock, or
 /// batch-transcription fallback.
 /// </summary>

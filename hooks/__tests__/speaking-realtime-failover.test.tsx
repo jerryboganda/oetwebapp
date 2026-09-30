@@ -435,7 +435,7 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     { name: 'consent is missing', error: new ApiError(409, 'live_voice_consent_required', 'Consent is required before live voice.', false), text: 'Consent is required before live voice.' },
     { name: 'the role-play time is over', error: new ApiError(409, 'live_voice_time_limit_reached', 'The time for this role-play has ended.', false), text: 'The time for this role-play has ended.' },
     { name: 'the session limit is reached', error: new ApiError(409, 'live_voice_session_limit_reached', 'This role-play cannot open another live session.', false), text: 'This role-play cannot open another live session.' },
-    { name: 'the offer is invalid', error: new ApiError(400, 'live_voice_sdp_invalid', 'The connection offer was not valid.', false), text: 'The connection offer was not valid.' },
+    { name: 'the offer is invalid', error: new ApiError(400, 'live_voice_sdp_too_large', 'The connection offer was not valid.', false), text: 'The connection offer was not valid.' },
   ])('does not fail over when $name, and keeps the server text', async ({ error, text }) => {
     mockOffer.mockRejectedValue(error);
     const { result } = await mount();
