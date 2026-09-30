@@ -144,6 +144,32 @@ public sealed class LiveVoiceFailoverTests
     }
 
     [Fact]
+    public async Task Preflight_DisclosureNamesEveryProviderTheLearnerMayBeRoutedTo_InTheOrderTheyAreTried()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+
+        var both = await PreflightAsync(rig, session);
+        var pinned = await PreflightAsync(rig, session, "gemini");
+        rig.State.RecordFailure(LiveVoiceProviders.OpenAi, AiProviderErrorClass.QuotaExhausted);
+        var onlyGemini = await PreflightAsync(rig, session);
+
+        // Failover can send the microphone to either provider, so the learner is told about both.
+        var openAiAt = both.Disclosure.IndexOf("OpenAI GPT-Live", StringComparison.Ordinal);
+        var geminiAt = both.Disclosure.IndexOf("Google Gemini Live", StringComparison.Ordinal);
+        Assert.True(openAiAt >= 0 && geminiAt > openAiAt, both.Disclosure);
+        Assert.Contains(rig.Options.OpenAiModel, both.Disclosure, StringComparison.Ordinal);
+        Assert.Contains(rig.Options.GeminiModel, both.Disclosure, StringComparison.Ordinal);
+        Assert.Contains("may switch to", both.Disclosure, StringComparison.Ordinal);
+        Assert.Contains("retain", both.Disclosure, StringComparison.Ordinal);
+        // A single candidate (pinned, or the only healthy provider) names only itself: no failover.
+        Assert.Contains("Google Gemini Live", pinned.Disclosure, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenAI", pinned.Disclosure, StringComparison.Ordinal);
+        Assert.DoesNotContain("may switch to", pinned.Disclosure, StringComparison.Ordinal);
+        Assert.Equal(pinned.Disclosure, onlyGemini.Disclosure);
+    }
+
+    [Fact]
     public async Task Preflight_Pinned_StillRequiresAConfiguredVerifiedProvider()
     {
         using var rig = LiveVoiceTestKit.Create();
@@ -295,9 +321,76 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal(3, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass[AiProviderErrorClass.InvalidRequest.ToCode()]);
         var logs = rig.Log.AllText;
         Assert.Contains($"class={AiProviderErrorClass.InvalidRequest.ToCode()}", logs, StringComparison.Ordinal);
-        Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Error);
+        // A malformed request is the learner's doing: a Warning, never an Error that reaches Sentry.
+        Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Warning
+            && e.Text.Contains($"class={AiProviderErrorClass.InvalidRequest.ToCode()}", StringComparison.Ordinal));
+        Assert.DoesNotContain(rig.Log.Entries, e => e.Level == LogLevel.Error);
         Assert.DoesNotContain("HIDDEN-", logs, StringComparison.Ordinal);
         Assert.Empty(await CircuitEventsAsync(rig));
+    }
+
+    [Theory]
+    [InlineData(400, "invalid_request_error", LogLevel.Warning)]
+    [InlineData(422, "invalid_request_error", LogLevel.Warning)]
+    // A request the provider will never accept whoever the learner is: an operator has to act.
+    [InlineData(404, "model_not_found", LogLevel.Error)]
+    [InlineData(415, "invalid_request_error", LogLevel.Error)]
+    [InlineData(401, "invalid_api_key", LogLevel.Error)]
+    [InlineData(429, "insufficient_quota", LogLevel.Error)]
+    // Everything the breaker and the next candidate absorb.
+    [InlineData(429, "rate_limit_exceeded", LogLevel.Warning)]
+    [InlineData(500, "server_error", LogLevel.Warning)]
+    [InlineData(503, "service_unavailable", LogLevel.Warning)]
+    public async Task ProviderFailures_LogAtErrorOnlyWhereAnOperatorMustAct(int status, string code, LogLevel expected)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        FailProvider(rig, OpenAiHost, (HttpStatusCode)status, LiveVoiceTestKit.OpenAiError(code, "provider said no"));
+
+        await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
+
+        var failureLog = Assert.Single(rig.Log.Entries, e => e.Text.Contains("session creation failed", StringComparison.Ordinal));
+        Assert.Equal(expected, failureLog.Level);
+    }
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(404)]
+    [InlineData(413)]
+    [InlineData(415)]
+    [InlineData(422)]
+    public async Task ClientErrorStatuses_NeverLogTheProviderText_BecauseTheyCanEchoTheRequest(int status)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        FailProvider(
+            rig,
+            OpenAiHost,
+            (HttpStatusCode)status,
+            LiveVoiceTestKit.OpenAiError("invalid_request_error", $"Could not parse HIDDEN-{session.Marker} in the request"));
+
+        await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
+
+        var logs = rig.Log.AllText;
+        Assert.Contains($"http={status}", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("HIDDEN-", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("Could not parse", logs, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(500, "server_error")]
+    [InlineData(503, "service_unavailable")]
+    public async Task ServerFaults_LogTheVendorText_ThatTheyNeverEcho(int status, string code)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        FailProvider(rig, OpenAiHost, (HttpStatusCode)status, LiveVoiceTestKit.OpenAiError(code, "The server had an error while processing your request"));
+
+        await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
+
+        var logs = rig.Log.AllText;
+        Assert.Contains("The server had an error while processing your request", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(LiveVoiceTestKit.OpenAiKey, logs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -335,6 +428,28 @@ public sealed class LiveVoiceFailoverTests
         Assert.False(ex.Retryable);
     }
 
+    [Theory]
+    [InlineData(int.MinValue, 2)]
+    [InlineData(0, 2)]
+    [InlineData(1, 2)]
+    [InlineData(2, 2)]
+    [InlineData(10, 10)]
+    [InlineData(20, 20)]
+    [InlineData(21, 20)]
+    [InlineData(30, 20)]
+    [InlineData(int.MaxValue, 20)]
+    public void ProviderTimeout_IsClampedBetweenTwoAndTwentySeconds_SoItStaysBelowTheBrowsersCreateCallTimeout(
+        int configured,
+        int expectedSeconds)
+    {
+        var options = new LiveVoiceOptions { ProviderRequestTimeoutSeconds = configured };
+
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), options.ProviderRequestTimeout());
+        // The browser's create call gives up after 22 s (lib/api/speaking-live-voice.ts): the server
+        // must always answer with its own 503 before that, or a failover turns into a client timeout.
+        Assert.True(options.ProviderRequestTimeout() < TimeSpan.FromSeconds(22));
+    }
+
     [Fact]
     public async Task TransportFault_MapsToUnavailableWithTheCouldNotBeReachedMessage()
     {
@@ -355,8 +470,12 @@ public sealed class LiveVoiceFailoverTests
     {
         using var rig = LiveVoiceTestKit.Create();
         var session = await SeedAsync(rig);
+        // The handler signals when the provider call is in flight, so the test cancels exactly then
+        // instead of polling on a timer.
+        var providerCallStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Handler.Script = async (_, ct) =>
         {
+            providerCallStarted.TrySetResult();
             await Task.Delay(Timeout.Infinite, ct);
             return ScriptedHttpHandler.Reply(HttpStatusCode.OK, "{}");
         };
@@ -367,10 +486,7 @@ public sealed class LiveVoiceFailoverTests
             session.SessionId,
             new LiveVoiceOpenAiOfferRequest(LiveVoiceTestKit.OfferSdp),
             cts.Token);
-        for (var i = 0; i < 500 && rig.Handler.Requests.Count == 0; i++)
-        {
-            await Task.Delay(10);
-        }
+        await providerCallStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.Single(rig.Handler.Requests);
         cts.Cancel();
 
@@ -708,6 +824,40 @@ public sealed class LiveVoiceFailoverTests
             .Where(t => t.SpeakingSessionId == session.SessionId)
             .ToListAsync();
         Assert.All(stored, t => Assert.Equal("realtime-gemini", t.Provider));
+    }
+
+    [Fact]
+    public async Task ALongUninterruptedSegment_IsClampedNotRejected_SoTheWholeTranscriptIsStillSaved()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var token = await MintGeminiAsync(rig, session);
+
+        // One speaker talking for 3 minutes merges into ONE segment on the client. Rejecting it would
+        // fail the whole save, and a client that fails open on a 4xx would then drop the transcript.
+        var saved = await rig.Service.PersistTranscriptAsync(
+            session.UserId,
+            session.SessionId,
+            new LiveVoiceTranscriptRequest(
+                "gemini",
+                token.ProviderSessionId,
+                new[]
+                {
+                    new LiveVoiceTranscriptSegment("candidate", 1_000, 181_000, "A long, uninterrupted explanation"),
+                    new LiveVoiceTranscriptSegment("patient", int.MaxValue - 10, int.MaxValue, "A segment at the integer limit"),
+                    new LiveVoiceTranscriptSegment("candidate", 5_000, 2_000, "A segment that ends before it starts"),
+                }),
+            CancellationToken.None);
+
+        var stored = await rig.Db.SpeakingTranscripts.AsNoTracking().SingleAsync(t => t.Id == saved.TranscriptId);
+        using var segments = JsonDocument.Parse(stored.SegmentsJson);
+        var timing = segments.RootElement.EnumerateArray()
+            .Select(segment => (segment.GetProperty("startMs").GetInt32(), segment.GetProperty("endMs").GetInt32()))
+            .ToArray();
+        Assert.Equal(
+            new[] { (1_000, 121_000), (int.MaxValue - 10, int.MaxValue), (5_000, 5_000) },
+            timing);
+        Assert.True(saved.WordCount > 0);
     }
 
     [Fact]

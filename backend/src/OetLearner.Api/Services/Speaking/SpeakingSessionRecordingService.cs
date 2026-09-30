@@ -83,6 +83,15 @@ public sealed class SpeakingSessionRecordingService(
                 "Accept the Speaking recording consent before uploading a recording.");
         }
 
+        // A repeat of an upload that already landed (its response was lost) is always answered
+        // recording_already_received, even after the write window below has closed: the client
+        // treats that one 409 as success, and any other 409 as a refusal.
+        var recordingId = RecordingIdFor(sessionId);
+        if (await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recordingId, ct))
+        {
+            return false;
+        }
+
         // Same write window as the live voice transcript: bounded after the role-play ended, so a
         // recording cannot be attached to a long-finished (and graded) session.
         var cardSeconds = await db.RolePlayCards.AsNoTracking()
@@ -94,12 +103,6 @@ public sealed class SpeakingSessionRecordingService(
         {
             throw ApiException.Conflict("live_voice_transcript_window_closed",
                 "The window for uploading this role-play recording has closed.");
-        }
-
-        var recordingId = RecordingIdFor(sessionId);
-        if (await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recordingId, ct))
-        {
-            return false;
         }
 
         var mimeType = (contentType ?? string.Empty).Split(';', 2)[0].Trim().ToLowerInvariant();

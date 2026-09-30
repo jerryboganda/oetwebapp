@@ -27,13 +27,22 @@ public sealed class LiveVoiceOptions
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
     public string GeminiModel { get; set; } = "models/gemini-3.8-live";
 
+    /// <summary>Kept so existing configuration still binds; it no longer has any effect. A Gemini
+    /// token always lives until the role-play's hard stop plus 15 s (at most 1800 s from minting), so
+    /// no value here can cut a conversation short (a 90 s lifetime did on 25 Sep 2026), and a larger
+    /// one can never outlive the hard stop.</summary>
     public int GeminiTokenLifetimeSeconds { get; set; } = 900;
     public int GeminiNewSessionLifetimeSeconds { get; set; } = 60;
 
-    /// <summary>Timeout for one provider session-creation call (clamped 2..30). The learner is
-    /// already inside the timed role-play, so a slow provider must give way to the next
-    /// candidate quickly.</summary>
+    /// <summary>Timeout for one provider session-creation call (clamped 2..20). The learner is
+    /// already inside the timed role-play, so a slow provider must give way to the next candidate
+    /// quickly, and the ceiling stays below the browser's own 22 s create-call timeout so a slow
+    /// provider always ends in the server's 503 (fail over) and never in a client-side timeout.</summary>
     public int ProviderRequestTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>The provider session-creation timeout actually applied: <see cref="ProviderRequestTimeoutSeconds"/>
+    /// clamped to 2..20 s.</summary>
+    public TimeSpan ProviderRequestTimeout() => TimeSpan.FromSeconds(Math.Clamp(ProviderRequestTimeoutSeconds, 2, 20));
 
     /// <summary>Server-side ceiling on one role-play (clamped 180..1800 s). A card's own
     /// <c>RolePlayTimeSeconds</c> above this is capped to it.</summary>

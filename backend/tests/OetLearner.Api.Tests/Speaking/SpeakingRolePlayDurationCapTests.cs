@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -133,7 +134,7 @@ public sealed class SpeakingRolePlayDurationCapTests
     // ── Gemini token expiry ──────────────────────────────────────────
 
     [Fact]
-    public void GeminiTokenTimes_AreTheEarlierOfTheConfiguredLifetimeAndTheHardStopPlusFifteenSeconds()
+    public void GeminiTokenTimes_AreTheEarlierOfTheHardStopPlusFifteenSecondsAndThirtyMinutes()
     {
         var options = new LiveVoiceOptions();
         var window = SpeakingRolePlayLimits.Resolve(T0, 300, options);
@@ -143,21 +144,48 @@ public sealed class SpeakingRolePlayDurationCapTests
         Assert.Equal(T0.AddSeconds(345), atStart.ExpiresAt);
         Assert.Equal(T0.AddSeconds(60), atStart.NewSessionExpiresAt);
 
-        // Minted late: the hard stop, not the configured 900 s, ends the token.
+        // Minted late: the hard stop, not a fixed lifetime, ends the token.
         var late = LiveVoiceService.GeminiTokenTimes(T0.AddSeconds(200), window, options);
         Assert.Equal(T0.AddSeconds(345), late.ExpiresAt);
 
-        // A short configured lifetime still wins, but never below 60 s.
-        options.GeminiTokenLifetimeSeconds = 120;
-        Assert.Equal(T0.AddSeconds(120), LiveVoiceService.GeminiTokenTimes(T0, window, options).ExpiresAt);
-        options.GeminiTokenLifetimeSeconds = 10;
-        Assert.Equal(T0.AddSeconds(60), LiveVoiceService.GeminiTokenTimes(T0, window, options).ExpiresAt);
+        // The configured lifetime can never cut the role-play short (LIVEVOICE__GEMINITOKENLIFETIMESECONDS=90
+        // ended every conversation after ~90 s on 25 Sep 2026), and a longer one never outlives the hard stop.
+        foreach (var lifetime in new[] { int.MinValue, -1, 0, 10, 60, 90, 120, 900, 1800, int.MaxValue })
+        {
+            options.GeminiTokenLifetimeSeconds = lifetime;
+            Assert.Equal(T0.AddSeconds(345), LiveVoiceService.GeminiTokenTimes(T0, window, options).ExpiresAt);
+        }
 
         // The window to open the socket can never outlast the token.
         options.GeminiTokenLifetimeSeconds = 900;
         var nearTheEnd = LiveVoiceService.GeminiTokenTimes(T0.AddSeconds(320), window, options);
         Assert.Equal(T0.AddSeconds(345), nearTheEnd.ExpiresAt);
         Assert.Equal(T0.AddSeconds(345), nearTheEnd.NewSessionExpiresAt);
+
+        // Thirty minutes from minting is the only other bound: it applies to the longest role-play the
+        // server allows (1800 s card + 120 s grace, hard stop 1920 s), minted at its start.
+        var longest = new LiveVoiceOptions { MaxRoleplaySeconds = 1800, HardStopGraceSeconds = 120 };
+        var longWindow = SpeakingRolePlayLimits.Resolve(T0, 1800, longest);
+        Assert.Equal(T0.AddSeconds(1800), LiveVoiceService.GeminiTokenTimes(T0, longWindow, longest).ExpiresAt);
+    }
+
+    [Fact]
+    public async Task GeminiToken_ALowConfiguredLifetime_CanNeverCutTheRolePlayShort()
+    {
+        // 25 Sep 2026: a 90 s lifetime ended every conversation after ~90 s.
+        var options = LiveVoiceTestKit.DefaultOptions();
+        options.GeminiTokenLifetimeSeconds = 90;
+        using var rig = LiveVoiceTestKit.Create(options);
+        var now = rig.Clock.GetUtcNow();
+        var session = await SeedAsync(rig);
+
+        var token = await MintGeminiAsync(rig, session);
+
+        // Started now: hard stop = now + 300 + 30, token = hard stop + 15 = now + 345.
+        Assert.Equal(now.AddSeconds(345), token.ExpiresAt);
+        using var body = JsonDocument.Parse(rig.Handler.Requests.Single().Body!);
+        Assert.Equal(now.AddSeconds(345), ParseTime(body, "expireTime"));
+        Assert.Equal(now.AddSeconds(60), ParseTime(body, "newSessionExpireTime"));
     }
 
     [Fact]
@@ -425,6 +453,40 @@ public sealed class SpeakingRolePlayDurationCapTests
         Assert.Equal(1530, recording.DurationSeconds);
     }
 
+    [Fact]
+    public async Task RecorderUpload_ARepeatAfterTheWindowClosed_StillAnswersAlreadyReceived()
+    {
+        var now = DateTimeOffset.UtcNow;
+        using var rig = LiveVoiceTestKit.Create(now: now);
+        var landed = await LiveVoiceTestKit.SeedReadySessionAsync(
+            rig.Db, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddMinutes(-30), endedAt: now.AddSeconds(-901));
+        rig.Db.SpeakingRecordings.Add(new SpeakingRecording
+        {
+            Id = SpeakingSessionRecordingService.RecordingIdFor(landed.SessionId),
+            SpeakingSessionId = landed.SessionId,
+            MediaAssetId = "smed_landed",
+            Sha256 = string.Empty,
+            CreatedAt = now.AddMinutes(-20),
+        });
+        await rig.Db.SaveChangesAsync();
+        var recordings = new SpeakingSessionRecordingService(
+            rig.Db,
+            new StubFileStorage(),
+            new SpeakingTranscriptionPipeline(rig.Db, null!, NullLogger<SpeakingTranscriptionPipeline>.Instance),
+            Options.Create(new SpeakingComplianceOptions()),
+            NullLogger<SpeakingSessionRecordingService>.Instance,
+            liveVoiceOptions: Options.Create(new LiveVoiceOptions()));
+
+        // The upload landed but its response was lost; the retry arrives after the window closed
+        // (EndedAt + 900 s is one second in the past). The client treats only recording_already_received
+        // as success, so this must not become live_voice_transcript_window_closed.
+        var stored = await recordings.ReceiveAsync(
+            landed.UserId, landed.SessionId, new MemoryStream(new byte[] { 1, 2, 3, 4 }), "audio/webm", 4, 250, CancellationToken.None);
+
+        Assert.False(stored);
+        Assert.Equal(1, await rig.Db.SpeakingRecordings.CountAsync(r => r.SpeakingSessionId == landed.SessionId));
+    }
+
     // ── Clock and detail ─────────────────────────────────────────────
 
     [Fact]
@@ -524,8 +586,46 @@ public sealed class SpeakingRolePlayDurationCapTests
         Assert.Equal(0, afterTimeout);
         var logs = rig.Log.AllText;
         Assert.Contains("hang-up", logs, StringComparison.Ordinal);
+        // A hang-up that did not end the session is a Warning carrying only its status (or error type).
+        Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Warning
+            && e.Text.Contains("hang-up returned HTTP 500", StringComparison.Ordinal)
+            && e.Text.Contains(session.SessionId, StringComparison.Ordinal));
+        Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Warning
+            && e.Text.Contains("HttpRequestException", StringComparison.Ordinal));
+        Assert.DoesNotContain("SECRET-PROVIDER-TEXT", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("connection reset", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(LiveVoiceTestKit.OpenAiKey, logs, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HangUp_LogsTheHttpStatusOfEveryCall_SoAWrongEndpointCannotHideBehindA404()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var first = await MintOpenAiAsync(rig, session);
+        var second = await MintOpenAiAsync(rig, session);
+        rig.Handler.Route(request => request.Uri.AbsolutePath.Contains(first.ProviderSessionId, StringComparison.Ordinal)
+            ? ScriptedHttpHandler.Reply(
+                HttpStatusCode.NotFound,
+                LiveVoiceTestKit.OpenAiError("session_id_not_found", "SECRET-PROVIDER-TEXT"))
+            : ScriptedHttpHandler.Reply(HttpStatusCode.OK, "{}"));
+
+        var ended = await rig.Service.CloseProviderSessionsAsync(session.SessionId, CancellationToken.None);
+
+        // Both count as ended (a 404 means already gone), and BOTH leave a status line at Information.
+        Assert.Equal(2, ended);
+        var hangUpLogs = rig.Log.Entries.Where(e => e.Text.Contains("hang-up", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(2, hangUpLogs.Length);
+        Assert.All(hangUpLogs, entry => Assert.Equal(LogLevel.Information, entry.Level));
+        Assert.Single(hangUpLogs, entry => entry.Text.Contains("HTTP 404", StringComparison.Ordinal));
+        Assert.Single(hangUpLogs, entry => entry.Text.Contains("HTTP 200", StringComparison.Ordinal));
+        // The Speaking session id only: never the key, the provider text or OpenAI's own session id.
+        Assert.All(hangUpLogs, entry => Assert.Contains(session.SessionId, entry.Text, StringComparison.Ordinal));
+        var logs = rig.Log.AllText;
         Assert.DoesNotContain("SECRET-PROVIDER-TEXT", logs, StringComparison.Ordinal);
         Assert.DoesNotContain(LiveVoiceTestKit.OpenAiKey, logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(first.ProviderSessionId, logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(second.ProviderSessionId, logs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -588,7 +688,7 @@ public sealed class SpeakingRolePlayDurationCapTests
     // ── The sweeper ──────────────────────────────────────────────────
 
     [Fact]
-    public async Task Sweep_FinishesAnOverdueRolePlay_AnchorsTheEndAtTheDeadline_AndGradesOnce()
+    public async Task Sweep_FinishesAnOverdueRolePlay_AnchorsTheEndAtTheDeadline_AndDoesNotGradeAbandonedPractice()
     {
         var closer = new RecordingSessionCloser();
         await using var provider = BuildSweeperServices(closer);
@@ -615,9 +715,8 @@ public sealed class SpeakingRolePlayDurationCapTests
             Assert.Equal(start.AddSeconds(300), attempt.SubmittedAt);
             Assert.Equal(300, attempt.ElapsedSeconds);
 
-            var operation = await db.AiOperations.AsNoTracking().SingleAsync(o => o.ResourceId == seeded.SessionId);
-            Assert.Equal("speaking_session", operation.ResourceType);
-            Assert.Equal(AiFeatureCodes.SpeakingGrade, operation.FeatureCode);
+            // Abandoned practice is not graded: no credit hold committed, no free-sample use consumed.
+            Assert.Empty(await db.AiOperations.AsNoTracking().ToListAsync());
 
             var audit = await db.AuditEvents.AsNoTracking().SingleAsync(e => e.Action == "SpeakingRolePlayHardStopped");
             Assert.Equal(seeded.SessionId, audit.ResourceId);
@@ -630,7 +729,7 @@ public sealed class SpeakingRolePlayDurationCapTests
         Assert.Equal(0, await worker.SweepOverdueRolePlaysAsync(now.AddMinutes(1), CancellationToken.None));
         await using var again = provider.CreateAsyncScope();
         var againDb = again.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        Assert.Equal(1, await againDb.AiOperations.CountAsync(o => o.ResourceId == seeded.SessionId));
+        Assert.Equal(0, await againDb.AiOperations.CountAsync());
         Assert.Equal(1, await againDb.AuditEvents.CountAsync(e => e.Action == "SpeakingRolePlayHardStopped"));
         Assert.Single(closer.Closed);
     }
@@ -663,7 +762,7 @@ public sealed class SpeakingRolePlayDurationCapTests
         Assert.Equal(SpeakingSessionState.Prep, await StateOf(inPrep));
         Assert.Equal(SpeakingSessionState.Active, await StateOf(ancient));
         Assert.Equal(SpeakingSessionState.Finished, await StateOf(overdue));
-        Assert.Equal(1, await db.AiOperations.CountAsync());
+        Assert.Equal(0, await db.AiOperations.CountAsync());
     }
 
     [Fact]
@@ -754,13 +853,13 @@ public sealed class SpeakingRolePlayDurationCapTests
 
         var finished = await worker.SweepOverdueRolePlaysAsync(now, CancellationToken.None);
 
-        // The state change and the grading hand-off already happened; only the hang-up failed.
+        // The state change already happened; only the hang-up failed.
         Assert.Equal(2, finished);
         Assert.Equal(2, closer.Closed.Count);
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         Assert.Equal(2, await db.SpeakingSessions.CountAsync(s => s.State == SpeakingSessionState.Finished));
-        Assert.Equal(2, await db.AiOperations.CountAsync());
+        Assert.Equal(0, await db.AiOperations.CountAsync());
     }
 
     [Fact]
@@ -798,6 +897,131 @@ public sealed class SpeakingRolePlayDurationCapTests
 
         Assert.Equal(1, finished);
         Assert.Equal(new[] { child.SessionId }, closer.Closed);
+        // An exam card is graded (unlike abandoned standalone practice): its result is part of the exam.
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var operation = await db.AiOperations.AsNoTracking().SingleAsync(o => o.ResourceId == child.SessionId);
+        Assert.Equal("speaking_session", operation.ResourceType);
+        Assert.Equal(AiFeatureCodes.SpeakingGrade, operation.FeatureCode);
+    }
+
+    [Fact]
+    public async Task SweepOnce_AFailingExamPass_NeverSkipsTheHardStopPassOrTheHangUpPass()
+    {
+        var closer = new RecordingSessionCloser();
+        await using var provider = BuildSweeperServices(closer);
+        var worker = NewWorker(provider);
+        var now = DateTimeOffset.UtcNow;
+        // An unfinished exam makes the exam pass resolve SpeakingExamService, which this provider does
+        // not register, so the exam pass throws before it advances anything.
+        await SeedUnfinishedExamAsync(provider, now);
+        var overdue = await SeedSweepSessionAsync(provider, now, rolePlayStartedAt: now.AddSeconds(-400));
+        var endedEarly = await SeedSweepSessionAsync(
+            provider, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddSeconds(-500), endedAt: now.AddSeconds(-440));
+
+        var examsChanged = await worker.SweepOnceAsync(CancellationToken.None);
+
+        Assert.Equal(0, examsChanged);
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(
+            SpeakingSessionState.Finished,
+            (await db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == overdue.SessionId)).State);
+        // Hung up exactly once each: the finalised one by the hard-stop pass, the other by the hang-up pass.
+        Assert.Equal(
+            new[] { overdue.SessionId, endedEarly.SessionId }.OrderBy(id => id, StringComparer.Ordinal),
+            closer.Closed.OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Sweep_AFailureAfterTheSwap_StillGetsItsProviderSessionsHungUp_ByTheHangUpPass()
+    {
+        var closer = new RecordingSessionCloser();
+        await using var provider = BuildSweeperServices(closer, failGradingHandOff: true);
+        var worker = NewWorker(provider);
+        var now = DateTimeOffset.UtcNow;
+        // An exam card is the only kind the hard stop hands to grading, and the grading queue is down.
+        var child = await SeedSweepSessionAsync(
+            provider,
+            now,
+            rolePlayStartedAt: now.AddSeconds(-400),
+            mode: SpeakingSessionMode.AiExam,
+            examSessionId: "exam-with-a-down-grading-queue");
+
+        var examsChanged = await worker.SweepOnceAsync(CancellationToken.None);
+
+        Assert.Equal(0, examsChanged);
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        // The swap and the audit row committed before the hand-off threw, so the first pass never
+        // sees the session again; the hang-up pass does, because it is Finished and past its hard stop.
+        Assert.Equal(
+            SpeakingSessionState.Finished,
+            (await db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == child.SessionId)).State);
+        Assert.Equal(1, await db.AuditEvents.CountAsync(e => e.Action == "SpeakingRolePlayHardStopped"));
+        Assert.Equal(new[] { child.SessionId }, closer.Closed);
+    }
+
+    [Fact]
+    public async Task HangUpEnded_ClosesAFinishedRolePlayOnce_WhoeverEndedIt_AndOnlyPastItsHardStop()
+    {
+        var closer = new RecordingSessionCloser();
+        await using var provider = BuildSweeperServices(closer);
+        var worker = NewWorker(provider);
+        var now = DateTimeOffset.UtcNow;
+        // Ended by the exam clock at its deadline (no hang-up of its own), now 70 s past the hard stop.
+        var endedByTheExamClock = await SeedSweepSessionAsync(
+            provider,
+            now,
+            SpeakingSessionState.Finished,
+            rolePlayStartedAt: now.AddSeconds(-400),
+            endedAt: now.AddSeconds(-100),
+            mode: SpeakingSessionMode.AiExam,
+            examSessionId: "exam-ended-by-its-clock");
+        // Ended by the learner's /end early: a browser that kept its OpenAI connection open still bills.
+        var endedEarly = await SeedSweepSessionAsync(
+            provider, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddSeconds(-500), endedAt: now.AddSeconds(-440));
+        // Not due yet: inside the grace that lets the client stop and save its own transcript.
+        var inGrace = await SeedSweepSessionAsync(
+            provider, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddSeconds(-300), endedAt: now.AddSeconds(-240));
+        // Still Active: the finalizer's business, not this pass's.
+        await SeedSweepSessionAsync(provider, now, rolePlayStartedAt: now.AddSeconds(-400));
+        // Long past the horizon: a restart must not re-hang-up yesterday.
+        await SeedSweepSessionAsync(
+            provider, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddHours(-2), endedAt: now.AddHours(-2).AddSeconds(60));
+
+        var hungUp = await worker.HangUpEndedRolePlaysAsync(now, CancellationToken.None);
+
+        Assert.Equal(2, hungUp);
+        Assert.Equal(
+            new[] { endedByTheExamClock.SessionId, endedEarly.SessionId }.OrderBy(id => id, StringComparer.Ordinal),
+            closer.Closed.OrderBy(id => id, StringComparer.Ordinal));
+        // Attempted once per process; the one inside its grace only becomes due 30 s after `now`.
+        Assert.Equal(0, await worker.HangUpEndedRolePlaysAsync(now.AddSeconds(5), CancellationToken.None));
+        Assert.Equal(2, closer.Closed.Count);
+        Assert.Equal(1, await worker.HangUpEndedRolePlaysAsync(now.AddSeconds(31), CancellationToken.None));
+        Assert.Contains(inGrace.SessionId, closer.Closed);
+    }
+
+    [Fact]
+    public async Task HangUpEnded_DoesNotRepeatTheHangUpTheSweepJustMade_AndSurvivesAFailingCloser()
+    {
+        var closer = new RecordingSessionCloser();
+        await using var provider = BuildSweeperServices(closer);
+        var worker = NewWorker(provider);
+        var now = DateTimeOffset.UtcNow;
+        var overdue = await SeedSweepSessionAsync(provider, now, rolePlayStartedAt: now.AddSeconds(-400));
+
+        Assert.Equal(1, await worker.SweepOverdueRolePlaysAsync(now, CancellationToken.None));
+        Assert.Equal(0, await worker.HangUpEndedRolePlaysAsync(now, CancellationToken.None));
+        Assert.Equal(new[] { overdue.SessionId }, closer.Closed);
+
+        // A closer that throws is logged, never propagated: the sweep loop must keep running.
+        var later = await SeedSweepSessionAsync(
+            provider, now, SpeakingSessionState.Finished, rolePlayStartedAt: now.AddSeconds(-400), endedAt: now.AddSeconds(-100));
+        closer.Fault = id => id == later.SessionId ? new InvalidOperationException("the provider is down") : null;
+        Assert.Equal(1, await worker.HangUpEndedRolePlaysAsync(now, CancellationToken.None));
+        Assert.Equal(2, closer.Closed.Count);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -863,7 +1087,10 @@ public sealed class SpeakingRolePlayDurationCapTests
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
 
-    private static ServiceProvider BuildSweeperServices(RecordingSessionCloser? closer, LiveVoiceOptions? options = null)
+    private static ServiceProvider BuildSweeperServices(
+        RecordingSessionCloser? closer,
+        LiveVoiceOptions? options = null,
+        bool failGradingHandOff = false)
     {
         var databaseName = $"hard-stop-{Guid.NewGuid():N}";
         var services = new ServiceCollection();
@@ -871,12 +1098,20 @@ public sealed class SpeakingRolePlayDurationCapTests
             .UseInMemoryDatabase(databaseName)
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
         services.AddSingleton<IOptions<LiveVoiceOptions>>(Options.Create(options ?? new LiveVoiceOptions()));
-        services.AddScoped<ISpeakingCanonicalAssessmentService>(sp => new SpeakingCanonicalAssessmentService(
-            sp.GetRequiredService<LearnerDbContext>(),
-            null!,
-            null!,
-            TimeProvider.System,
-            NullLogger<SpeakingCanonicalAssessmentService>.Instance));
+        services.AddScoped<ISpeakingCanonicalAssessmentService>(sp =>
+        {
+            if (failGradingHandOff)
+            {
+                return new GradingQueueDown();
+            }
+
+            return new SpeakingCanonicalAssessmentService(
+                sp.GetRequiredService<LearnerDbContext>(),
+                null!,
+                null!,
+                TimeProvider.System,
+                NullLogger<SpeakingCanonicalAssessmentService>.Instance);
+        });
         services.AddScoped(sp => new SpeakingSessionService(
             sp.GetRequiredService<LearnerDbContext>(),
             canonical: sp.GetRequiredService<ISpeakingCanonicalAssessmentService>(),
@@ -890,6 +1125,51 @@ public sealed class SpeakingRolePlayDurationCapTests
 
     private static SpeakingExamAutoAdvanceWorker NewWorker(ServiceProvider provider)
         => new(provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<SpeakingExamAutoAdvanceWorker>.Instance);
+
+    /// <summary>A non-terminal exam: the exam pass has to resolve <c>SpeakingExamService</c> for it.</summary>
+    private static async Task SeedUnfinishedExamAsync(ServiceProvider provider, DateTimeOffset now)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        db.SpeakingExamSessions.Add(new SpeakingExamSession
+        {
+            Id = $"exam_{Guid.NewGuid():N}",
+            UserId = "exam-owner",
+            CardAId = "exam-card-a",
+            CardBId = "exam-card-b",
+            State = SpeakingExamState.PrepA,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>The grading hand-off is down: the hard stop only ever reaches <c>EnqueueAsync</c>.</summary>
+    private sealed class GradingQueueDown : ISpeakingCanonicalAssessmentService
+    {
+        public string ComputeIdentityHash(
+            string sessionId,
+            string cardId,
+            string transcriptHash,
+            string rubricVersion,
+            string promptVersion)
+            => throw new NotSupportedException();
+
+        public Task<SpeakingFinalizationTicket> EnqueueAsync(string sessionId, CancellationToken ct)
+            => throw new InvalidOperationException("the grading queue is down");
+
+        public Task ExecuteQueuedAsync(string operationId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task AssessNowAsync(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
 
     private static async Task<SeededLiveVoiceSession> SeedSweepSessionAsync(
         ServiceProvider provider,

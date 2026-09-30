@@ -603,11 +603,15 @@ public sealed class SpeakingSessionService(
 
     /// <summary>
     /// Server-side hard stop of an AI role-play the client never ended (closed tab, dead socket, a
-    /// hostile client): once <c>now</c> is past the hard stop the session is finished exactly as the
-    /// learner's own /end would finish it (state, end time anchored to the deadline, elapsed seconds,
-    /// legacy attempt, one canonical grading operation) plus one <c>SpeakingRolePlayHardStopped</c>
-    /// audit event. Returns true only for the caller that won the Active to Finished
-    /// compare-and-swap, so a race with the learner's /end or a second sweep finishes it once.
+    /// hostile client): once <c>now</c> is past the hard stop the session is finished as the learner's
+    /// own /end would finish it (state, end time anchored to the deadline, elapsed seconds, legacy
+    /// attempt) plus one <c>SpeakingRolePlayHardStopped</c> audit event. Only an exam card is handed
+    /// to canonical grading (its exam clock grades it anyway). An abandoned standalone practice
+    /// role-play is NOT graded, so it neither commits its 2-credit hold nor consumes a free-sample use
+    /// (owner rule: abandoned uses never count) until the owner confirms otherwise; a late but alive
+    /// client still gets graded through its own /ai-assess. Returns true only for the caller that won
+    /// the Active to Finished compare-and-swap, so a race with the learner's /end or a second sweep
+    /// finishes it once.
     /// </summary>
     public async Task<bool> FinalizeAtHardStopAsync(string sessionId, DateTimeOffset now, CancellationToken ct)
     {
@@ -696,7 +700,9 @@ public sealed class SpeakingSessionService(
         });
         await db.SaveChangesAsync(ct);
 
-        if (canonical is not null)
+        // ponytail: exam cards only until the owner confirms grading abandoned practice
+        // (docs/speaking/live-voice.md); drop the ExamSessionId test to enable it.
+        if (canonical is not null && session.ExamSessionId is not null)
         {
             await canonical.EnqueueAsync(session.Id, ct);
         }
