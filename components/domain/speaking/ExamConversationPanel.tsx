@@ -31,7 +31,7 @@ export interface ExamConversationPanelProps {
    */
   liveVoiceAvailable?: boolean;
   className?: string;
-  /** Forces one provider and switches automatic failover off (comparison and QA runs); omitted = the server's health order. */
+  /** Forces one provider and switches automatic failover off (comparison and QA runs); omitted = the server's candidate order. */
   requestedProvider?: LiveVoiceProvider;
   /** Receives the finalize hook: live = save transcript; fallback = stop + upload recording. */
   onVoiceStopReady?: (stop: (() => Promise<boolean>) | null) => void;

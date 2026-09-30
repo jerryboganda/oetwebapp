@@ -7,7 +7,7 @@
 // RTCPeerConnection states), the SAVED transcripts exactly as the results page loads them
 // (ordering + cross-card leak checks) and the patient's audio for a listening check.
 // Provider selection: VOICE_PROVIDER pins one provider (the app never fails over then, so every check is strict).
-// Blank = the server's health-ordered candidates. EXPECTED_PRIMARY (openai | gemini, blank = no assertion) is the
+// Blank = the server's candidates (configured primary first; health only filters). EXPECTED_PRIMARY (openai | gemini, blank = no assertion) is the
 // provider the run should try first; it is ignored when VOICE_PROVIDER pins one (metrics.expectedPrimaryIgnored,
 // and its check stays null). FAIL_PRIMARY=true answers that provider's create call with a 503 in the browser (the
 // request never reaches the API, so only the client failover is exercised) and asserts the app fails over to the

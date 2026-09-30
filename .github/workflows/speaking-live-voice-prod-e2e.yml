@@ -36,7 +36,7 @@ on:
         required: false
         default: ''
       voice_provider:
-        description: Live voice provider for this run (blank = the server's health-ordered candidates). A provider set here is pinned - the app never fails over then.
+        description: Live voice provider for this run (blank = the server's candidates: configured primary first, health only filters). A provider set here is pinned - the app never fails over then.
         type: choice
         options: ['', gemini, openai]
         default: ''
