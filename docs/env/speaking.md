@@ -86,6 +86,19 @@ provider, or blocks an active turn.
 | `SPEAKING__WHISPER__BASEURL` | optional | `https://api.openai.com/v1` | OpenAI-compatible Whisper base URL. |
 | `SPEAKING__WHISPER__MODEL` | optional | `whisper-1` | Whisper transcription model. |
 
+## Speaking grading route (Claude subscription sidecar)
+
+Owner directive 2026-09-30: `speaking.grade` tries the dedicated Claude Max sidecar first
+(`writing-claude-sub`, Opus 5.5, effort `high`) and falls back to the default route
+(Anthropic API) when that call fails. Both keys are optional; the defaults apply when unset.
+Chain details and how to revert: [ai-providers.md](../speaking/ai-providers.md).
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `SPEAKING_GRADING_PINNED_PROVIDER` | optional | `writing-claude-sub` | Provider registry code tried first (`Speaking__Grading__PinnedProviderCode`). Set it to an empty value (`SPEAKING_GRADING_PINNED_PROVIDER=`) to turn the pin off; grading is then one plain call on the default route. |
+| `SPEAKING_GRADING_PINNED_MODEL` | optional | `claude-opus-5-5` | Model requested from the pinned provider (`Speaking__Grading__PinnedModel`); empty means the provider row's default model. |
+| `OET_INTERNAL_AI_HOSTS` | yes for the sidecar | `ubag-vps-gateway-1,oet-writing-claude,oet-writing-codex` | Hosts the SSRF guard accepts over plain HTTP. Must include `oet-writing-claude`. Read by the API slots and by `oet-ai-worker`, which runs queued grades. |
+
 ## AWS S3 — Egress + Archive
 
 | Key | Required | Default | Description |

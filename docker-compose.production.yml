@@ -138,8 +138,18 @@ x-learner-api-slot: &learner-api-slot
     # accept the container-DNS http URL. Do NOT add oet-agent-gateway here
     # without verifying the antigravity routes first — allowlisting makes
     # that dormant row callable through the guarded path.
+    # The Writing/Speaking subscription sidecars (oet-writing-claude / oet-writing-codex,
+    # compose project oet-writing-ai) must be listed too: without them the SSRF guard refuses
+    # their plain-HTTP base URLs and every pinned sidecar call fails.
     UBAG_OET_PAT: ${UBAG_OET_PAT:-}
-    OET_INTERNAL_AI_HOSTS: ${OET_INTERNAL_AI_HOSTS:-ubag-vps-gateway-1}
+    OET_INTERNAL_AI_HOSTS: ${OET_INTERNAL_AI_HOSTS:-ubag-vps-gateway-1,oet-writing-claude,oet-writing-codex}
+    # Speaking grading (owner directive 2026-09-30): pin the Claude Max subscription sidecar
+    # first, fall back to the default route (Anthropic API) when that call fails. The
+    # `writing-claude-sub` provider row must be active for the pin to take effect. Note the
+    # provider default uses `-` (not `:-`) so that SPEAKING_GRADING_PINNED_PROVIDER= (set but
+    # empty) really turns the pin off instead of falling back to the default.
+    Speaking__Grading__PinnedProviderCode: ${SPEAKING_GRADING_PINNED_PROVIDER-writing-claude-sub}
+    Speaking__Grading__PinnedModel: ${SPEAKING_GRADING_PINNED_MODEL:-claude-opus-5-5}
     Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
     Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
     Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}
@@ -342,9 +352,13 @@ services:
       retries: 5
 
   # Owner Agent Console (owner directive 2026-09-27; agent-console/CONTRACT.md):
-  # ONLY the two API slots join the internal oet_agent_ctl network and carry the
-  # OwnerAgent__* settings. They are set here, NOT in the &api-env anchor, because
-  # ai-worker merges *api-env and must never be able to reach the sidecar.
+  # ONLY the two API slots carry the OwnerAgent__* settings (including the console
+  # internal token). They are set here, NOT in the &api-env anchor, so ai-worker can
+  # never authenticate to oet-agent-console. The API slots and ai-worker all join the
+  # internal oet_agent_ctl network (see ai-worker): the Writing/Speaking subscription
+  # sidecars (oet-writing-claude / oet-writing-codex) sit on it too, and queued
+  # speaking.grade operations run ONLY in ai-worker, which must reach
+  # oet-writing-claude:8080.
   # Both overrides replace (not extend) the anchor's lists/maps, so `internal`
   # and `<<: *api-env` are repeated explicitly.
   learner-api-blue:
@@ -397,6 +411,14 @@ services:
       <<: *api-env
       OET_RUN_MODE: worker
       Ai__HostedWorkers__Enabled: "true"
+    # Queued speaking.grade operations are executed ONLY here (API slots run no
+    # AiOperationWorker), and Speaking grading is pinned to the Claude subscription
+    # sidecar, which lives on oet_agent_ctl. The worker carries no OwnerAgent__* settings
+    # (no console token), so this grants network reach to the sidecars, not console access.
+    # Replaces the anchor's networks list, so `internal` is repeated explicitly.
+    networks:
+      - internal
+      - oet_agent_ctl
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8080/health/live || exit 1"]
       interval: 30s
