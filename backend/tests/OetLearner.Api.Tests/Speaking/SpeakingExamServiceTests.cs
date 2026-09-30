@@ -128,6 +128,76 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AutoAdvance_EndsTheChildSessionExactlyAtTheCardDeadline()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+        await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await _exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(9), default);
+        await _db.SaveChangesAsync();
+
+        // The exam clock finishes card A at its own deadline (no grace), whenever the exam is read.
+        var childA = await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == tracked.SessionAId);
+        Assert.Equal(SpeakingSessionState.Finished, childA.State);
+        Assert.Equal(tracked.ActiveAStartedAt, childA.RolePlayStartedAt);
+        Assert.Equal(tracked.ActiveAStartedAt!.Value.AddSeconds(300), childA.EndedAt);
+        Assert.Equal(300, childA.ElapsedSeconds);
+    }
+
+    [Fact]
+    public async Task AutoAdvance_CapsAnAbsurdCardTime_AtTheServerCeiling()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 100000);
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+        await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        // 180 s prep + 600 s ceiling + 1 s: card A is over although its card says 100000 s.
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await _exams.AdvanceAsync(tracked, tracked.PrepAStartedAt!.Value.AddSeconds(180 + 600 + 1), default);
+        await _db.SaveChangesAsync();
+
+        Assert.Equal(SpeakingExamState.PrepB, tracked.State);
+        Assert.Equal(tracked.ActiveAStartedAt!.Value.AddSeconds(600), tracked.CardAEndedAt);
+    }
+
+    [Fact]
+    public async Task ExamChild_CannotBeStartedOrEndedThroughTheStandaloneEndpoints_AndTheSweepLeavesItToTheExamClock()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
+        var prepA = await _exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        var sessions = new SpeakingSessionService(_db);
+        var childId = prepA.CurrentSessionId!;
+
+        // Pre-starting the card would open a billed provider session during the 3-minute prep.
+        var start = await Assert.ThrowsAsync<ApiException>(() =>
+            sessions.StartRolePlayAsync(UserId, childId, default));
+        Assert.Equal("speaking_session_exam_managed", start.ErrorCode);
+        Assert.Equal(SpeakingSessionState.Prep, (await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == childId)).State);
+
+        // The exam's own start-card path still works, and the card cannot then be ended out of band.
+        await _exams.StartCardAsync(UserId, exam.ExamId, default);
+        var end = await Assert.ThrowsAsync<ApiException>(() =>
+            sessions.EndSessionAsync(UserId, childId, default));
+        Assert.Equal("speaking_session_exam_managed", end.ErrorCode);
+        Assert.Equal(SpeakingSessionState.Active, (await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == childId)).State);
+
+        // Once the exam clock has finished the child, the hard-stop sweep has nothing left to do.
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await _exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(9), default);
+        await _db.SaveChangesAsync();
+        var endedByTheExam = (await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == childId)).EndedAt;
+        var won = await sessions.FinalizeAtHardStopAsync(childId, DateTimeOffset.UtcNow.AddHours(1), default);
+        Assert.False(won);
+        Assert.Equal(endedByTheExam, (await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == childId)).EndedAt);
+    }
+
+    [Fact]
     public async Task Advance_IsIdempotent_NeverDoubleCharges()
     {
         await SeedWalletAsync(speakingCredits: 5);

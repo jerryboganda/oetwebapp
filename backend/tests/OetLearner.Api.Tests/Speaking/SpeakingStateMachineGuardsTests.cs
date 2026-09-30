@@ -205,6 +205,44 @@ public sealed class SpeakingStateMachineGuardsTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // Guard 3b: an exam card runs on the EXAM's clock. Starting or ending
+    // it through the standalone endpoints would let a candidate open a
+    // billed provider session during prep or cut the card short.
+    // ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task StartRolePlay_OnAnExamChild_Throws409ExamManaged_AndChangesNothing()
+    {
+        const string userId = "learner-state-exam-start";
+        var (_, sessionId) = await SeedSessionAsync(userId, SpeakingSessionState.Prep, examSessionId: "exam-guard-1");
+
+        var thrown = await Assert.ThrowsAsync<ApiException>(() =>
+            _svc.StartRolePlayAsync(userId, sessionId, CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status409Conflict, thrown.StatusCode);
+        Assert.Equal("speaking_session_exam_managed", thrown.ErrorCode);
+        var refreshed = await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == sessionId);
+        Assert.Equal(SpeakingSessionState.Prep, refreshed.State);
+        Assert.Null(refreshed.RolePlayStartedAt);
+    }
+
+    [Fact]
+    public async Task EndSession_OnAnExamChild_Throws409ExamManaged_AndLeavesItActive()
+    {
+        const string userId = "learner-state-exam-end";
+        var (_, sessionId) = await SeedSessionAsync(userId, SpeakingSessionState.Active, examSessionId: "exam-guard-2");
+
+        var thrown = await Assert.ThrowsAsync<ApiException>(() =>
+            _svc.EndSessionAsync(userId, sessionId, CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status409Conflict, thrown.StatusCode);
+        Assert.Equal("speaking_session_exam_managed", thrown.ErrorCode);
+        var refreshed = await _db.SpeakingSessions.AsNoTracking().FirstAsync(s => s.Id == sessionId);
+        Assert.Equal(SpeakingSessionState.Active, refreshed.State);
+        Assert.Null(refreshed.EndedAt);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     // Guard 4: Cross-user access ALWAYS surfaces as not-found (IDOR safe).
     // ─────────────────────────────────────────────────────────────────
 
@@ -238,7 +276,8 @@ public sealed class SpeakingStateMachineGuardsTests : IAsyncLifetime
 
     private async Task<(string userId, string sessionId)> SeedSessionAsync(
         string userId,
-        SpeakingSessionState state)
+        SpeakingSessionState state,
+        string? examSessionId = null)
     {
         // Profession lock (23 Sep 2026): the session owner must be a learner of
         // the card's profession (cards default to nursing).
@@ -293,6 +332,7 @@ public sealed class SpeakingStateMachineGuardsTests : IAsyncLifetime
             Id = sessionId,
             UserId = userId,
             RolePlayCardId = cardId,
+            ExamSessionId = examSessionId,
             Mode = SpeakingSessionMode.AiSelfPractice,
             State = state,
             // Backfill timestamps so the projection has plausible values
