@@ -698,7 +698,8 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
   });
 
   it('a start after a mid-conversation error releases the previous connection first', async () => {
-    const { result } = await mount();
+    // A forced provider never restores itself (see speaking-realtime-recovery.test.tsx), so the error stays.
+    const { result } = await mount('s1', 'openai');
     await startVoice(result);
     const previous = FakePeer.instances[0];
     await act(async () => {
@@ -723,7 +724,8 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     await startVoice(result);
     await candidateSays('Hello');
     await act(async () => {
-      openAiChannel().emit({ type: 'session.closed', reason: 'error' });
+      // The provider ended the session for good (an unrecoverable reason), so nothing restores it.
+      openAiChannel().emit({ type: 'session.closed', reason: 'expired' });
     });
     expect(result.current.connection).toBe('error');
 

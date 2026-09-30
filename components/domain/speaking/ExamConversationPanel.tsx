@@ -46,16 +46,19 @@ interface IndicatorProps {
   /** Live provider and failover flag, exposed as data attributes for the QA harness and support screenshots only. */
   provider?: string | null;
   failedOver?: boolean;
+  /** How many times the live link was restored mid-conversation (only shown when above zero). */
+  recoveries?: number;
 }
 
 /** The single voice-activity indicator. */
-function ActivityIndicator({ active, label, level, provider, failedOver }: IndicatorProps) {
+function ActivityIndicator({ active, label, level, provider, failedOver, recoveries }: IndicatorProps) {
   return (
     <div
       className="flex items-center gap-3"
       data-testid="speaking-mic-indicator"
       data-live-provider={provider ?? undefined}
       data-live-failover={failedOver ? 'true' : undefined}
+      data-live-recoveries={recoveries ? String(recoveries) : undefined}
     >
       <span
         className={cn(
@@ -132,7 +135,7 @@ function LiveVoiceIndicator({ sessionId, requestedProvider, onVoiceStopReady, on
     : voice.connection === 'ending'
       ? 'Saving conversation…'
       : connected
-        ? voice.phase === 'speaking' ? 'Patient speaking' : 'Live — the patient is listening'
+        ? voice.recovering ? 'Reconnecting the patient…' : voice.phase === 'speaking' ? 'Patient speaking' : 'Live — the patient is listening'
         : voice.connection === 'connecting' ? 'Connecting to the AI patient…' : 'Microphone off';
 
   return (
@@ -144,6 +147,7 @@ function LiveVoiceIndicator({ sessionId, requestedProvider, onVoiceStopReady, on
         level={voice.micLevel}
         provider={voice.provider}
         failedOver={voice.failedOver}
+        recoveries={voice.recoveries}
       />
       {voice.error ? <ErrorLine message={voice.error} /> : null}
       {voice.connection === 'error' && voice.micPermissionDenied ? <OpenAppSettingsButton /> : null}

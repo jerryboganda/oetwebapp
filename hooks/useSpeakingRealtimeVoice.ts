@@ -39,6 +39,10 @@ export interface UseSpeakingRealtimeVoiceResult {
   provider: LiveVoiceProvider | null;
   /** True when an earlier provider failed before this one connected. Diagnostics only. */
   failedOver: boolean;
+  /** True while a live link that dropped or went silent is being restored (the conversation continues on the new link). */
+  recovering: boolean;
+  /** How many times the live link was restored in this role-play. Diagnostics and the QA harness only. */
+  recoveries: number;
   audioRef: RefObject<HTMLAudioElement | null>;
   prepare: () => Promise<void>;
   /** Consent (incl. the provider disclosure) is recorded on the Rules + consent step before prep. */
@@ -147,6 +151,74 @@ function asConnectFailure(caught: unknown): unknown {
 const failureCode = (error: unknown) => apiErrorInfo(error)?.code || (error instanceof ProviderConnectError ? 'connect_failed' : 'unknown');
 
 const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/**
+ * Mid-session recovery. A live link that dies after it was live, or a patient that stays silent after the
+ * candidate stopped speaking, is restored on a NEW provider session for the same role-play (the server
+ * replays the saved turns into its instructions). The server allows three provider sessions per role-play:
+ * the first plus two restores. A provider forced with ?voiceProvider= never recovers, so comparison and QA
+ * runs still measure the raw stability of the provider they asked for.
+ */
+export const MAX_RECOVERIES = 2;
+/** The patient normally answers within ~3 s (slowest healthy replies seen ~19 s); the silent sessions of 30 Sep 2026 never answered. */
+export const STALL_MS = 20_000;
+const STALL_CHECK_MS = 1_000;
+/** A dropped WebRTC link that comes back by itself within this time is not a loss. */
+const PEER_DISCONNECT_GRACE_MS = 5_000;
+/** Only a real sentence (not a cough or a click) is something the patient owes an answer to. */
+const MIN_ANSWERABLE_SPEECH_MS = 1_000;
+// GPT-Live's own session.closed reasons: the learner asked (close_requested), the time or content policy
+// ended it (expired, content), or the link died (remote_hangup, connection_lost).
+const UNRECOVERABLE_CLOSE_REASONS = new Set(['close_requested', 'expired', 'content']);
+
+/** A burst of speech on the microphone, in performance.now() milliseconds. */
+export interface SpeechSpan {
+  startMs: number;
+  endMs: number;
+}
+
+// The meter's 0..1 scale is RMS x 3: 0.05 is about -36 dBFS, well above room noise and below quiet speech.
+const SPEECH_LEVEL = 0.05;
+const SPEECH_END_SILENCE_MS = 700;
+const MIN_SPEECH_BURST_MS = 400;
+
+export interface SpeechTracker {
+  /** Feeds one meter sample; returns the burst that just ended (after SPEECH_END_SILENCE_MS of quiet), if any. */
+  update: (level: number, nowMs: number) => SpeechSpan | null;
+  /** The burst in progress, if any. */
+  active: () => { startMs: number } | null;
+  reset: () => void;
+}
+
+/**
+ * Finds the candidate's speech bursts from the microphone level. Gemini gives the candidate's transcript no
+ * timing (every segment was zero-length on 30 Sep 2026, which the grader reads as a capture error), and the
+ * stall watchdog needs to know when the candidate stopped talking.
+ */
+export function createSpeechTracker(): SpeechTracker {
+  let startedAt: number | null = null;
+  let lastLoudAt = 0;
+  return {
+    update(level, nowMs) {
+      if (level >= SPEECH_LEVEL) {
+        if (startedAt === null) startedAt = nowMs;
+        lastLoudAt = nowMs;
+        return null;
+      }
+      if (startedAt === null || nowMs - lastLoudAt < SPEECH_END_SILENCE_MS) return null;
+      const span = { startMs: startedAt, endMs: lastLoudAt };
+      startedAt = null;
+      return span.endMs - span.startMs >= MIN_SPEECH_BURST_MS ? span : null;
+    },
+    active: () => (startedAt === null ? null : { startMs: startedAt }),
+    reset() {
+      startedAt = null;
+      lastLoudAt = 0;
+    },
+  };
+}
+
+type LinkLoss = 'closed' | 'stall';
 
 /** One provider connection attempt: settles exactly once, on the first of live, failure, deadline or cancel. */
 interface ProviderAttempt {
@@ -380,6 +452,8 @@ export function useSpeakingRealtimeVoice(
   const [ended, setEnded] = useState(false);
   const [activeProvider, setActiveProvider] = useState<LiveVoiceProvider | null>(null);
   const [failedOver, setFailedOver] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveries, setRecoveries] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -416,6 +490,22 @@ export function useSpeakingRealtimeVoice(
   const geminiReadyRef = useRef(false);
   const stoppingRef = useRef(false);
   const openAiClosedRef = useRef<(() => void) | null>(null);
+  // Mid-session recovery (see MAX_RECOVERIES). The handlers declared before startRecovery report a lost link
+  // through onLinkLostRef, which says whether a restore took over (false: show the error as before).
+  const recoveringRef = useRef(false);
+  const recoveryCountRef = useRef(0);
+  const firstProviderRef = useRef<LiveVoiceProvider | null>(null);
+  // A provider forced by the page or the server never recovers (comparison and QA runs measure it raw).
+  const pinnedRef = useRef(false);
+  const onLinkLostRef = useRef<(reason: LinkLoss) => boolean>(() => false);
+  const peerGraceTimerRef = useRef<number | undefined>(undefined);
+  // performance.now() of the patient's last output (audio or transcript) and of the end of the candidate's last
+  // real sentence; the candidate's speech bursts come from the microphone level (see createSpeechTracker).
+  const lastPatientOutputAtRef = useRef(0);
+  const candidateSpokeUntilRef = useRef<number | null>(null);
+  const speechTrackerRef = useRef<SpeechTracker>(createSpeechTracker());
+  const candidateSpansRef = useRef<SpeechSpan[]>([]);
+  const assignedBurstStartRef = useRef(-1);
 
   // Per-provider teardown between failover attempts. Handlers are detached BEFORE close(): a WebSocket
   // closes asynchronously, and a stale onclose would flip the next attempt to 'error'. The microphone,
@@ -424,6 +514,7 @@ export function useSpeakingRealtimeVoice(
     attemptRef.current?.fail(new ProviderConnectError('The connection attempt was cancelled.'));
     attemptRef.current = null;
     openAiClosedRef.current = null;
+    window.clearTimeout(peerGraceTimerRef.current);
     geminiReadyRef.current = false;
     playbackSourcesRef.current.forEach((source) => {
       try {
@@ -513,6 +604,7 @@ export function useSpeakingRealtimeVoice(
       if (planned.length === 0) throw new ProviderConnectError('The preflight named no usable provider.');
       setPreflight(result);
       plannedRef.current = planned;
+      pinnedRef.current = Boolean(requestedProvider || result.pinned);
       setConnection('ready');
     } catch (caught) {
       if (run !== prepareRunRef.current) return;
@@ -530,13 +622,15 @@ export function useSpeakingRealtimeVoice(
     text: string,
     exact = false,
     spoken?: { startMs: number; endMs: number },
+    // Where a provider that gives no timing (Gemini) put this speaker's words; never triggers the late-fragment rule.
+    timing?: { startMs: number; endMs: number },
   ) => {
     if (!text.trim()) return;
     const fragment = exact ? text : text.trim();
     const join = (existing: string) => (exact ? existing + fragment : `${existing} ${fragment}`);
     const now = Math.max(0, Math.round(performance.now()));
     if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
-    const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? { startMs: now, endMs: now }, Boolean(spoken));
+    const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? timing ?? { startMs: now, endMs: now }, Boolean(spoken));
     setCaptions((current) => {
       const index = late
         ? current.map((caption) => caption.speaker).lastIndexOf(speaker)
@@ -603,15 +697,34 @@ export function useSpeakingRealtimeVoice(
     }
   }, [queueFlush]);
 
+  // Gemini gives the candidate's transcript no timing (every candidate segment was zero-length on 30 Sep 2026, which
+  // the grader reads as a capture error): the span comes from the microphone bursts instead. A fragment that arrives
+  // after its burst closed takes the closed bursts; one that arrives mid-burst takes the burst so far and that burst
+  // is then not attributed again to the next sentence.
+  const candidateTiming = useCallback((): { startMs: number; endMs: number } => {
+    const now = Math.max(0, Math.round(performance.now()));
+    const closed = candidateSpansRef.current.filter((span) => span.startMs > assignedBurstStartRef.current);
+    candidateSpansRef.current = [];
+    if (closed.length > 0) {
+      return { startMs: Math.round(closed[0].startMs), endMs: Math.round(closed[closed.length - 1].endMs) };
+    }
+    const active = speechTrackerRef.current.active();
+    if (active) {
+      assignedBurstStartRef.current = active.startMs;
+      return { startMs: Math.round(active.startMs), endMs: now };
+    }
+    return { startMs: now, endMs: now };
+  }, []);
+
   // Gemini streams incremental chunks: append, never de-duplicate.
   const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string) => {
     const chunk = text.trim();
     if (!chunk) return;
-    addCaption(speaker, chunk);
+    addCaption(speaker, chunk, false, undefined, speaker === 'candidate' ? candidateTiming() : undefined);
     if (speaker === 'candidate') pendingCandidateRef.current = `${pendingCandidateRef.current} ${chunk}`.trim();
     else pendingPatientRef.current = `${pendingPatientRef.current} ${chunk}`.trim();
     flushIfLong();
-  }, [addCaption, flushIfLong]);
+  }, [addCaption, candidateTiming, flushIfLong]);
 
   const hasTranscriptText = useCallback(
     () => segmentsRef.current.length > 0 || pendingCandidateRef.current.trim() !== '' || pendingPatientRef.current.trim() !== '',
@@ -627,6 +740,7 @@ export function useSpeakingRealtimeVoice(
         pending.fail(new ProviderConnectError('The provider reported an error before going live.'));
         return;
       }
+      if (onLinkLostRef.current('closed')) return;
       setError(LIVE_VOICE_INTERRUPTED);
       setConnection('error');
       return;
@@ -640,6 +754,9 @@ export function useSpeakingRealtimeVoice(
         openAiClosedRef.current?.();
         return;
       }
+      // Only a dead link is restored; the provider's own time or content limit ends the role-play for good.
+      const reason = typeof value.reason === 'string' ? value.reason : '';
+      if (!UNRECOVERABLE_CLOSE_REASONS.has(reason) && onLinkLostRef.current('closed')) return;
       setError(LIVE_VOICE_ENDED);
       setConnection('error');
       return;
@@ -656,6 +773,7 @@ export function useSpeakingRealtimeVoice(
       : type === 'session.output_transcript.delta' ? 'patient' : null;
     const delta = typeof value.delta === 'string' ? value.delta : '';
     if (!speaker || !delta) return;
+    if (speaker === 'patient') lastPatientOutputAtRef.current = performance.now();
     const spoken = typeof value.start_ms === 'number' && typeof value.end_ms === 'number'
       ? { startMs: value.start_ms, endMs: value.end_ms }
       : undefined;
@@ -684,6 +802,7 @@ export function useSpeakingRealtimeVoice(
         pending.fail(new ProviderConnectError('The provider reported an error before going live.'));
         return;
       }
+      if (onLinkLostRef.current('closed')) return;
       setError(LIVE_VOICE_INTERRUPTED);
       setConnection('error');
       return;
@@ -702,6 +821,7 @@ export function useSpeakingRealtimeVoice(
     const outputText = providerTranscriptText(outputTranscription);
     if (inputText) captureTranscript('candidate', inputText);
     if (outputText) {
+      lastPatientOutputAtRef.current = performance.now();
       setPhase('speaking');
       captureTranscript('patient', outputText);
     }
@@ -714,6 +834,7 @@ export function useSpeakingRealtimeVoice(
         const inline = (partRecord.inlineData ?? partRecord.inline_data) as Record<string, unknown> | undefined;
         const data = inline?.data;
         if (typeof data !== 'string') continue;
+        lastPatientOutputAtRef.current = performance.now();
         const outputContext = outputContextRef.current;
         if (!outputContext) continue;
         const buffer = pcmToAudioBuffer(outputContext, data, audioRate(inline?.mimeType ?? inline?.mime_type));
@@ -750,7 +871,14 @@ export function useSpeakingRealtimeVoice(
         const normalized = (value - 128) / 128;
         sum += normalized * normalized;
       }
-      setMicLevel(Math.min(1, Math.sqrt(sum / values.length) * 3));
+      const level = Math.min(1, Math.sqrt(sum / values.length) * 3);
+      setMicLevel(level);
+      const span = speechTrackerRef.current.update(level, performance.now());
+      if (span) {
+        candidateSpansRef.current.push(span);
+        if (candidateSpansRef.current.length > 40) candidateSpansRef.current.shift();
+        if (span.endMs - span.startMs >= MIN_ANSWERABLE_SPEECH_MS) candidateSpokeUntilRef.current = span.endMs;
+      }
       meterFrameRef.current = window.requestAnimationFrame(tick);
     };
     meterFrameRef.current = window.requestAnimationFrame(tick);
@@ -798,15 +926,40 @@ export function useSpeakingRealtimeVoice(
           else if (state === 'failed' || state === 'disconnected' || state === 'closed') attempt.fail(new ProviderConnectError(`The peer connection ${state}.`));
           return;
         }
-        if (state === 'connected') setConnection('connected');
+        if (state === 'connected') {
+          window.clearTimeout(peerGraceTimerRef.current);
+          setConnection('connected');
+        }
         if (!stoppingRef.current && (state === 'failed' || state === 'disconnected')) {
-          setError(LIVE_VOICE_INTERRUPTED);
-          setConnection('error');
+          const lost = () => {
+            if (onLinkLostRef.current('closed')) return;
+            setError(LIVE_VOICE_INTERRUPTED);
+            setConnection('error');
+          };
+          if (state === 'failed') {
+            lost();
+          } else {
+            // 'disconnected' often heals by itself within seconds: only a link that stays down is lost.
+            window.clearTimeout(peerGraceTimerRef.current);
+            peerGraceTimerRef.current = window.setTimeout(() => {
+              if (peerRef.current === peer && peer.connectionState !== 'connected' && !stoppingRef.current) lost();
+            }, PEER_DISCONNECT_GRACE_MS);
+          }
         }
       };
       const dataChannel = peer.createDataChannel('oai-events');
       dataChannelRef.current = dataChannel;
       dataChannel.onopen = () => attempt.live();
+      dataChannel.onclose = () => {
+        if (attempt.pending()) {
+          attempt.fail(new ProviderConnectError('The data channel closed before the session started.'));
+          return;
+        }
+        if (stoppingRef.current) return;
+        if (onLinkLostRef.current('closed')) return;
+        setError(LIVE_VOICE_INTERRUPTED);
+        setConnection('error');
+      };
       dataChannel.onmessage = (event) => {
         try {
           const value = JSON.parse(typeof event.data === 'string' ? event.data : '') as Record<string, unknown>;
@@ -897,7 +1050,7 @@ export function useSpeakingRealtimeVoice(
           attempt.fail(new ProviderConnectError(`The provider socket closed before setup (code ${event.code}).`));
           return;
         }
-        if (!stoppingRef.current) {
+        if (!stoppingRef.current && !onLinkLostRef.current('closed')) {
           setError(LIVE_VOICE_INTERRUPTED);
           setConnection('error');
         }
@@ -945,6 +1098,99 @@ export function useSpeakingRealtimeVoice(
     return { stream, context };
   }, [configureMeter]);
 
+  // Restores a live link that died after it was live, or a patient that stopped answering, on a NEW provider
+  // session for the same role-play; the server gives that session the conversation so far. Returns true when a
+  // restore took over (the caller then shows nothing) and false when the link is lost for good (the caller shows the
+  // error as before). The microphone, its context and the transcript carry on untouched.
+  const startRecovery = useCallback((reason: LinkLoss): boolean => {
+    const stream = streamRef.current;
+    const context = inputContextRef.current;
+    const previous = providerRef.current;
+    if (
+      !previous || !stream || !context || pinnedRef.current || stoppingRef.current || recoveringRef.current
+      || recoveryCountRef.current >= MAX_RECOVERIES
+    ) {
+      return false;
+    }
+    recoveringRef.current = true;
+    recoveryCountRef.current += 1;
+    candidateSpokeUntilRef.current = null;
+    setRecoveries(recoveryCountRef.current);
+    setRecovering(true);
+    const run = runRef.current;
+    const alive = () => runRef.current === run && !stoppingRef.current;
+    console.warn('Live voice link lost; restoring it on a new provider session.', reason, previous);
+
+    void (async () => {
+      let failure: unknown = null;
+      try {
+        // The new session learns the conversation from the turns saved on the server: save the turn in progress first.
+        await queueFlush();
+        if (!alive()) return;
+        resetProviderTransport();
+        // The same provider first (a blip is the common case); after a restore that already failed once, the other one.
+        const others = plannedRef.current.filter((candidate) => candidate !== previous);
+        const order = recoveryCountRef.current > 1 ? [...others, previous] : [previous, ...others];
+        for (const provider of order) {
+          let retriedRateLimit = false;
+          for (;;) {
+            if (!alive()) return;
+            try {
+              const providerSessionId = provider === 'openai'
+                ? await connectOpenAi(stream, alive)
+                : await connectGemini(stream, context, alive);
+              if (!alive()) return;
+              providerRef.current = provider;
+              providerSessionIdRef.current = providerSessionId;
+              lastPatientOutputAtRef.current = performance.now(); // a new link gets a full stall window
+              setActiveProvider(provider);
+              if (provider !== firstProviderRef.current) setFailedOver(true);
+              setError(null);
+              setPhase('listening');
+              setConnection('connected');
+              return;
+            } catch (caught) {
+              if (!alive()) return;
+              resetProviderTransport();
+              failure = caught;
+              if (apiErrorInfo(caught)?.status === 429 && !retriedRateLimit) {
+                retriedRateLimit = true;
+                await delay(RATE_LIMIT_RETRY_DELAY_MS);
+                continue;
+              }
+              break;
+            }
+          }
+          // A definite server answer (time over, session limit) would be given again by the next provider.
+          if (!isProviderFailure(failure)) break;
+        }
+        resetProviderTransport();
+        setError(isClientRejection(failure) ? LIVE_VOICE_ENDED : LIVE_VOICE_INTERRUPTED);
+        setConnection('error');
+      } finally {
+        recoveringRef.current = false;
+        setRecovering(false);
+      }
+    })();
+    return true;
+  }, [connectGemini, connectOpenAi, queueFlush, resetProviderTransport]);
+  useEffect(() => {
+    onLinkLostRef.current = startRecovery;
+  }, [startRecovery]);
+
+  // A patient that never answers: the candidate finished a real sentence and the provider stayed silent.
+  useEffect(() => {
+    if (connection !== 'connected') return undefined;
+    const timer = window.setInterval(() => {
+      const spoke = candidateSpokeUntilRef.current;
+      if (spoke === null || pinnedRef.current || stoppingRef.current || recoveringRef.current) return;
+      if (lastPatientOutputAtRef.current >= spoke || performance.now() - spoke < STALL_MS) return;
+      candidateSpokeUntilRef.current = null; // one trigger per unanswered sentence
+      onLinkLostRef.current('stall');
+    }, STALL_CHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [connection]);
+
   const runStart = useCallback(async (run: number): Promise<boolean> => {
     if (!sessionId) return false;
     const alive = () => runRef.current === run;
@@ -960,6 +1206,14 @@ export function useSpeakingRealtimeVoice(
     setActiveProvider(null);
     setFailedOver(false);
     stoppingRef.current = false;
+    recoveringRef.current = false;
+    recoveryCountRef.current = 0;
+    setRecovering(false);
+    setRecoveries(0);
+    speechTrackerRef.current.reset();
+    candidateSpansRef.current = [];
+    assignedBurstStartRef.current = -1;
+    candidateSpokeUntilRef.current = null;
     setConnection('connecting');
     // A retry must not stack a second microphone, peer or socket on what a failed try left behind.
     closeTransport();
@@ -995,6 +1249,8 @@ export function useSpeakingRealtimeVoice(
           if (!alive()) return false;
           providerRef.current = provider;
           providerSessionIdRef.current = providerSessionId;
+          firstProviderRef.current = provider;
+          lastPatientOutputAtRef.current = performance.now();
           setActiveProvider(provider);
           setFailedOver(index > 0);
           setMicEnabled(true);
@@ -1151,6 +1407,15 @@ export function useSpeakingRealtimeVoice(
     setMicPermissionDenied(false);
     setActiveProvider(null);
     setFailedOver(false);
+    setRecovering(false);
+    setRecoveries(0);
+    recoveringRef.current = false;
+    recoveryCountRef.current = 0;
+    pinnedRef.current = false;
+    speechTrackerRef.current.reset();
+    candidateSpansRef.current = [];
+    assignedBurstStartRef.current = -1;
+    candidateSpokeUntilRef.current = null;
     providerRef.current = null;
     providerSessionIdRef.current = null;
     plannedRef.current = [];
@@ -1189,6 +1454,8 @@ export function useSpeakingRealtimeVoice(
     ended,
     provider: activeProvider,
     failedOver,
+    recovering,
+    recoveries,
     audioRef,
     prepare,
     start,
