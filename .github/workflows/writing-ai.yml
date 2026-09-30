@@ -75,3 +75,62 @@ jobs:
             ghcr.io/${{ github.repository }}-writing-codex:latest
           cache-from: type=gha,scope=writing-codex
           cache-to: type=gha,mode=max,scope=writing-codex
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull and health-gate exact-SHA Writing sidecars
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="/tmp/oet-writing-rollout-${GITHUB_RUN_ID}"
+          REMOTE_COMPOSE="$REMOTE_DIR/docker-compose.writing-ai.yml"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh_opts=(-i ~/.ssh/deploy_key -p 22 -o IdentitiesOnly=yes -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=20)
+          target="root@185.252.233.186"
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$target" "rm -f '$REMOTE_COMPOSE' '$REMOTE_DIR/registry/config.json'; rmdir '$REMOTE_DIR/registry' '$REMOTE_DIR' 2>/dev/null || true" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          ssh "${ssh_opts[@]}" "$target" "umask 077; mkdir -p '$REMOTE_DIR/registry'; cat > '$REMOTE_COMPOSE'; chmod 600 '$REMOTE_COMPOSE'" < docker-compose.writing-ai.yml
+          printf '%s\n' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$target" "docker --config '$REMOTE_DIR/registry' login ghcr.io -u '$GHCR_USER' --password-stdin"
+          ssh "${ssh_opts[@]}" "$target" \
+            "WRITING_CLAUDE_IMAGE='$CLAUDE_IMAGE' WRITING_CODEX_IMAGE='$CODEX_IMAGE' WRITING_COMPOSE_FILE='$REMOTE_COMPOSE' DOCKER_CONFIG='$REMOTE_DIR/registry' bash -s" <<'DEPLOY'
+          set -euo pipefail
+          env_file="/opt/oetwebapp/.deploy/writing-ai.env"
+          test -s "$env_file"
+          previous_claude="$(docker inspect --format '{{.Config.Image}}' oet-writing-claude)"
+          previous_codex="$(docker inspect --format '{{.Config.Image}}' oet-writing-codex)"
+          compose() {
+            docker compose --env-file "$env_file" -f "$WRITING_COMPOSE_FILE" "$@"
+          }
+          compose pull writing-claude writing-codex
+          if ! compose up -d --no-build --no-deps --wait --wait-timeout 120 writing-claude writing-codex; then
+            export WRITING_CLAUDE_IMAGE="$previous_claude" WRITING_CODEX_IMAGE="$previous_codex"
+            compose up -d --no-build --no-deps --wait --wait-timeout 120 writing-claude writing-codex || true
+            exit 1
+          fi
+          test "$(docker inspect --format '{{.Config.Image}}' oet-writing-claude)" = "$WRITING_CLAUDE_IMAGE"
+          test "$(docker inspect --format '{{.Config.Image}}' oet-writing-codex)" = "$WRITING_CODEX_IMAGE"
+          for setting in "WRITING_CLAUDE_IMAGE=$WRITING_CLAUDE_IMAGE" "WRITING_CODEX_IMAGE=$WRITING_CODEX_IMAGE"; do
+            key="${setting%%=*}"
+            if grep -q "^${key}=" "$env_file"; then
+              sed -i "s#^${key}=.*#${setting}#" "$env_file"
+            else
+              printf '%s\n' "$setting" >> "$env_file"
+            fi
+          done
+          install -m 600 "$WRITING_COMPOSE_FILE" /opt/oetwebapp/docker-compose.writing-ai.yml
+          echo "DEPLOYED_CLAUDE_IMAGE=$WRITING_CLAUDE_IMAGE"
+          echo "DEPLOYED_CODEX_IMAGE=$WRITING_CODEX_IMAGE"
+          DEPLOY

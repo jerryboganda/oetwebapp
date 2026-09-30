@@ -32,6 +32,12 @@ x-sidecar-hardening: &sidecar-hardening
   cpus: 1.0
   pids_limit: 256
   oom_score_adj: 700
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 10s
   logging:
     driver: json-file
     options:
