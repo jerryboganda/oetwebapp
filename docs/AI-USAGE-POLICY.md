@@ -451,7 +451,7 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   BYOK credentials or fallback targets. Learner traffic could reach any active
   provider row (explicit provider pin on `/v1/ai/complete` - closed 30 Sep 2026,
   admin-only now; lowest-priority fallback - `AiGatewayService` now skips
-  keyless subscription-sidecar rows; assistant fallback - still open), so
+  keyless subscription-sidecar rows; assistant fallback - closed the same day, see below), so
   registering a subscription there would put learner traffic on the owner's
   personal quota. The Speaking grading pin is the one deliberate exception (owner
   directive 30 Sep 2026, see `docs/speaking/ai-providers.md`).
@@ -521,7 +521,8 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   from `/v1/ai/complete`), and then only for owner-triggered calls.
   Status 30 Sep 2026: the provider pin is closed (admin-only) and the
   `AiGatewayService` fallthrough skips keyless sidecar rows; the
-  `AiAssistantGateway` fallback is **still open**, and `/v1/ai/complete` with
+  `AiAssistantGateway` fallback and the assistant route seeder now skip keyless sidecar rows too;
+  still open: `/v1/ai/complete` with
   `task=GenerateContent` still has no per-user quota or rate limiter.
 
 **Vendor-terms position**
@@ -584,7 +585,9 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
   without a route once the row was active. `AiGatewayService` now skips marker-key rows there: the
   sidecar rows are reached only by an explicit pin (`SpeakingGradeChain`, the Writing pipeline, an
   admin) or a feature route set on purpose. The AI assistant's own default-row selection
-  (`AiAssistantGateway`) is a separate code path and is **not** covered by this change.
+  (`AiAssistantGateway`) had the same lowest-priority pick and got the same marker-key filter in
+  the same PR (a keyless sidecar row is never the assistant's default, and the assistant route seeder
+  never seeds a route onto one).
 - **Provider row key marker:** the registry only hands the seeded marker back as a key while the
   row's `BaseUrl` host is on `OET_INTERNAL_AI_HOSTS`, so an admin re-pointing a sidecar row at a
   vendor URL cannot leave it looking credentialed.
