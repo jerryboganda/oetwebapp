@@ -49,6 +49,25 @@ provider credentials:
    the raw exception message before truncation, so neither
    `LastTestError` (database column) nor the JSON returned by the
    `…/test` endpoint can contain the secret.
+6. **Runtime provider errors keep provider text in one log line only.**
+   When a live provider call returns a non-success status,
+   `AiProviderErrorParser` reduces the body to a failure class, the HTTP
+   status, allow-listed `type` / `code` / request-id tokens and a
+   redacted (before truncation), single-line message of at most 300
+   characters, attached to `AiProviderHttpException.ProviderError`. That
+   message is written to exactly one structured server log line per failed
+   call (`AI provider call failed: ...` in `AiGatewayService`). It never
+   enters `Exception.Message`, an `AiUsageRecord` row (only class-derived
+   codes such as `provider_quota_exhausted` and an allow-listed message),
+   or a client response. For non-first-party hosts (the subscription
+   sidecars) only the head of the message before the first colon, at most
+   60 characters, is kept, because a sidecar can echo CLI output.
+7. **The `subscription-sidecar` marker is not a secret.** The keyless
+   subscription sidecar rows store this literal in `EncryptedApiKey`; the
+   registry returns it as the key (the sidecars ignore it) and the admin
+   probe treats such a row as credentialed. A stored value that is
+   neither the marker nor decryptable makes the probe return status
+   `auth` with a clear message instead of an unhandled error.
 
 ## Code paths
 
@@ -56,6 +75,8 @@ provider credentials:
 | --- | --- |
 | Encryption + projection allow-list + hint shape | `backend/src/OetLearner.Api/Endpoints/AiUsageAdminEndpoints.cs` (provider + account groups) |
 | Connectivity probe + `RedactSecrets` helper | `backend/src/OetLearner.Api/Services/Rulebook/AiProviderConnectionTester.cs` |
+| Runtime provider-error parsing + sanitising | `backend/src/OetLearner.Api/Services/Rulebook/AiProviderError.cs` (tests: `AiProviderErrorParserTests`, `AiProviderHttpExceptionTests`) |
+| The single provider-error log line + usage-row message | `backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService.cs` (`LogProviderFailure`, `SanitiseProviderErrorMessage`) |
 | Encrypted column declaration | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
 
 ## Test evidence
