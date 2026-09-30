@@ -62,7 +62,7 @@ export function createSidecarServer({ engineName, onCompletion, onUsage, complet
         sendJson(res, 200, usage);
         return;
       }
-      if (req.method === 'POST' && url.pathname === completionPath) {
+      if (req.method === 'POST' && (url.pathname === completionPath || `/v1${url.pathname}` === completionPath)) {
         let parsed;
         try {
           parsed = JSON.parse(await readBody(req) || '{}');
