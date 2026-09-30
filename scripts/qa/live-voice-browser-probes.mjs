@@ -41,10 +41,14 @@ export function installProbes(provider) {
     ctx.createMediaStreamSource(stream).connect(analyser);
     watchAnalyser(analyser, list);
   };
+  // Every microphone stream the page opened, so a run can show that one card's tracks ended before the next
+  // card's stream went live (and that a provider failover reused one stream instead of opening another).
+  window.__micStreams = [];
   const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = async (constraints) => {
     const stream = await getUserMedia(constraints);
     window.__micStartedAt ??= Date.now();
+    window.__micStreams.push(stream);
     try { spans(stream, window.__micSpans); } catch { /* best effort */ }
     return stream;
   };
@@ -124,15 +128,20 @@ export function installProbes(provider) {
   // Gemini Live: WebSocket close diagnostics, and the patient plays through Web Audio buffer
   // sources (not a track), so tap those sources for spans and the recording. Only while a
   // Gemini socket is open, so page sounds are never mistaken for the patient.
+  // A failover can open a second socket while the first one's close is still on its way, so count the
+  // open sockets instead of toggling a flag (a late close must not switch off the tap of the live one).
+  let openGeminiSockets = 0;
   const NativeWebSocket = window.WebSocket;
   window.WebSocket = class extends NativeWebSocket {
     constructor(...args) {
       super(...args);
       if (!/generativelanguage/.test(String(args[0]))) return;
+      openGeminiSockets += 1;
       window.__geminiWs = true;
       this.addEventListener('close', (e) => {
         window.__wsdiag.push({ at: Date.now(), type: 'close', code: e.code, reason: e.reason, wasClean: e.wasClean });
-        window.__geminiWs = false;
+        openGeminiSockets -= 1;
+        window.__geminiWs = openGeminiSockets > 0;
       });
       this.addEventListener('error', () => window.__wsdiag.push({ at: Date.now(), type: 'error' }));
     }
