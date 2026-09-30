@@ -113,6 +113,8 @@ public sealed class AiProviderErrorParserTests
     [InlineData(AiProviderErrorDialect.Gemini, 403, GeminiPermissionDenied, AiProviderErrorClass.Auth, "permission_denied", null)]
     [InlineData(AiProviderErrorDialect.Gemini, 503, GeminiUnavailable, AiProviderErrorClass.Overloaded, "unavailable", null)]
     [InlineData(AiProviderErrorDialect.Gemini, 500, GeminiInternal, AiProviderErrorClass.ServerError, "internal", null)]
+    // Anchored on Gemini's own FAILED_PRECONDITION status token (not on free text alone), so it keeps
+    // classifying on HTTP 400 even though message phrases are ignored there.
     [InlineData(AiProviderErrorDialect.Gemini, 400, GeminiBillingPrecondition, AiProviderErrorClass.QuotaExhausted, "failed_precondition", null)]
     public void Parse_ClassifiesVendorErrorBodies(
         AiProviderErrorDialect dialect,
@@ -128,6 +130,94 @@ public sealed class AiProviderErrorParserTests
         Assert.Equal(status, error.HttpStatus);
         Assert.Equal(expectedType, error.Type);
         Assert.Equal(expectedCode, error.Code);
+    }
+
+    // ── Message phrases must not decide the class of a rejected OpenAI / Gemini request ──
+    // The live-voice mint calls carry learner-controlled text (an SDP offer, the instructions) and a
+    // 400/413/415/422 reply can echo it back. A crafted "spend limit" must not hard-open the breaker.
+
+    [Theory]
+    [InlineData(AiProviderErrorDialect.OpenAi, 400)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 413)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 415)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 422)]
+    [InlineData(AiProviderErrorDialect.Gemini, 400)]
+    [InlineData(AiProviderErrorDialect.Gemini, 413)]
+    [InlineData(AiProviderErrorDialect.Gemini, 415)]
+    [InlineData(AiProviderErrorDialect.Gemini, 422)]
+    public void Parse_OpenAiAndGeminiRejectedRequests_IgnoreEchoedQuotaAuthAndOverloadPhrases(
+        AiProviderErrorDialect dialect, int status)
+    {
+        foreach (var echoed in new[]
+                 {
+                     "spend limit", "usage limits", "credit balance is too low", "out of credits",
+                     "exceeded your current quota", "api key not valid", "account has been disabled",
+                     "the model is overloaded",
+                 })
+        {
+            var body = JsonSerializer.Serialize(new
+            {
+                error = new { type = "invalid_request_error", message = $"Invalid SDP. Expect line: v= Got: {echoed}" },
+            });
+
+            var error = AiProviderErrorParser.Parse(dialect, status, body, headers: null, apiKey: null, retainProviderText: false);
+
+            Assert.Equal(AiProviderErrorClass.InvalidRequest, error.Class);
+        }
+    }
+
+    [Theory]
+    [InlineData(AiProviderErrorDialect.OpenAi, 400, "insufficient_quota", "insufficient_quota", AiProviderErrorClass.QuotaExhausted)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 400, "authentication_error", "invalid_api_key", AiProviderErrorClass.Auth)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 422, "overloaded_error", null, AiProviderErrorClass.Overloaded)]
+    [InlineData(AiProviderErrorDialect.Gemini, 400, "invalid_argument", "api_key_invalid", AiProviderErrorClass.Auth)]
+    public void Parse_OpenAiAndGeminiRejectedRequests_StillClassifyFromTheProviderTokens(
+        AiProviderErrorDialect dialect, int status, string type, string? code, AiProviderErrorClass expected)
+    {
+        var body = JsonSerializer.Serialize(new { error = new { type, code, message = "anything at all" } });
+
+        var error = AiProviderErrorParser.Parse(dialect, status, body, headers: null, apiKey: null, retainProviderText: false);
+
+        Assert.Equal(expected, error.Class);
+    }
+
+    [Theory]
+    [InlineData(AiProviderErrorDialect.OpenAi, 429, "You have reached your specified API usage limits.", AiProviderErrorClass.QuotaExhausted)]
+    [InlineData(AiProviderErrorDialect.OpenAi, 500, "The engine is currently overloaded, please try again later", AiProviderErrorClass.Overloaded)]
+    [InlineData(AiProviderErrorDialect.Gemini, 429, "Your monthly spend limit has been reached.", AiProviderErrorClass.QuotaExhausted)]
+    [InlineData(AiProviderErrorDialect.Gemini, 500, "API key not valid. Please pass a valid API key.", AiProviderErrorClass.Auth)]
+    [InlineData(AiProviderErrorDialect.Anthropic, 400, "You have reached your specified API usage limits.", AiProviderErrorClass.QuotaExhausted)]
+    [InlineData(AiProviderErrorDialect.Anthropic, 422, "Your credit balance is too low to access the Anthropic API.", AiProviderErrorClass.QuotaExhausted)]
+    public void Parse_MessagePhrasesStillDecideTheClass_ForAnthropicAndForStatusesThatCannotEchoTheRequest(
+        AiProviderErrorDialect dialect, int status, string message, AiProviderErrorClass expected)
+    {
+        var body = JsonSerializer.Serialize(new { error = new { message } });
+
+        var error = AiProviderErrorParser.Parse(dialect, status, body, headers: null, apiKey: null, retainProviderText: true);
+
+        Assert.Equal(expected, error.Class);
+    }
+
+    [Theory]
+    [InlineData(1960)]
+    [InlineData(1985)]
+    [InlineData(1990)]
+    public void SanitizeMessage_RedactsBeforeItCutsTheRawText(int secretStart)
+    {
+        // The 2000 character raw cap used to run BEFORE redaction: a secret starting just before it was cut
+        // to a fragment too short for any pattern, and a run of whitespace ahead of it (collapsed later)
+        // let that fragment through the 300 character cap.
+        const string apiKey = "zq9-secret-key-abcdef123456";
+        const string patternSecret = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789";
+
+        foreach (var secret in new[] { apiKey, patternSecret })
+        {
+            var sanitised = AiProviderErrorParser.SanitizeMessage(new string(' ', secretStart) + secret, apiKey, headOnly: false);
+
+            Assert.NotNull(sanitised);
+            Assert.DoesNotContain("zq9", sanitised);
+            Assert.DoesNotContain("sk-ant", sanitised);
+        }
     }
 
     [Theory]

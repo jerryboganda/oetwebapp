@@ -2,13 +2,21 @@
 //
 // Both sidecars are THIN wrappers around an already-authenticated CLI
 // (Claude Code or Codex) running headless inside the container. They spawn
-// one short-lived process per request, never persist candidate content to
-// disk, and translate the CLI's stream-json output into the wire shape the
-// .NET backend expects.
+// one short-lived process per request and translate the CLI's JSON output
+// into the wire shape the .NET backend expects.
 //
-// Security rules (mirrors agent-console):
-//  - The CLI's tool use is DISABLED (no file/shell tools); it only sees the
-//    prompt text we pass on argv. Candidate letters never touch the FS.
+// Security rules (mirrors agent-console), per sidecar:
+//  - Claude (claude/server.mjs): every built-in tool is removed (--tools ""),
+//    session persistence is off (--no-session-persistence), auto-memory is off
+//    (CLAUDE_CODE_DISABLE_AUTO_MEMORY=1, passed through runCli's `env`) and the
+//    prompt travels on STDIN, so a graded prompt and reply are not written to
+//    the CLI's session store. Other CLI bookkeeping under CLAUDE_CONFIG_DIR
+//    (credential refresh, caches) is outside those switches.
+//  - Codex (codex/server.mjs): read-only sandbox and approval policy `never`;
+//    the prompt travels on argv. It does NOT have the Claude switches above, and
+//    whether `codex exec` keeps session/rollout files on disk is unverified, so
+//    do not assume candidate content stays off disk there. Speaking has no Codex
+//    leg; it carries Writing letters only.
 //  - A per-engine mutex serializes requests (subscription CLIs are not
 //    concurrency-safe on a shared credential set).
 //  - Quota / rate-limit text is normalised into a machine-readable

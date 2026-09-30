@@ -6,8 +6,12 @@
 //   POST /v1/messages  →  Anthropic Messages response shape
 //   GET  /usage        →  quota snapshot for the subscription selector
 //
-// The CLI runs with tools disabled and effort pinned by env (WRITING_CLAUDE_EFFORT).
-// No candidate content is written to disk: the prompt travels on argv only.
+// The CLI runs with every built-in tool removed (--tools ""), session persistence off
+// (--no-session-persistence) and auto-memory off (CLAUDE_CODE_DISABLE_AUTO_MEMORY=1), so a graded
+// prompt and reply are not written to $CLAUDE_CONFIG_DIR/projects/-tmp on the volume shared with
+// the owner console. Effort is pinned by env (WRITING_CLAUDE_EFFORT). The prompt travels on stdin,
+// never on argv. Any other bookkeeping the CLI keeps under CLAUDE_CONFIG_DIR (credential refresh,
+// caches) is outside those switches. The Codex sidecar is different: see codex/server.mjs.
 
 import { createSidecarServer } from '../shared/http.mjs';
 import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
@@ -84,17 +88,28 @@ async function complete(body) {
     // subscription is not burned on an empty grade. The retry is reported via
     // the `x-effort-fallback` field in the response so the backend can see it.
     const attempt = async (effort) => {
-      // `-p` with no positional arg reads the prompt from stdin. Tools disabled so
-      // the model only reads the prompt and answers — no FS/shell access.
+      // `-p` with no positional arg reads the prompt from stdin. `--tools ""` removes every
+      // built-in tool (`--allowedTools` only pre-approves tools, it never removes them), so the
+      // model only reads the prompt and answers: no FS/shell access. `--no-session-persistence`
+      // stops print mode writing prompt + reply to $CLAUDE_CONFIG_DIR/projects/-tmp/<id>.jsonl on
+      // the volume shared with the owner console.
       const args = [
         '-p',
         '--output-format', 'json',
         '--model', model,
         '--effort', effort,
+        '--no-session-persistence',
+        '--tools', '',
         '--allowedTools', '',
       ];
 
-      const result = await runCli('claude', args, { timeoutMs: TIMEOUT_MS, input: prompt });
+      const result = await runCli('claude', args, {
+        timeoutMs: TIMEOUT_MS,
+        input: prompt,
+        // cwd is always /tmp, so an auto-memory dir would be ONE store shared by every learner
+        // and by Writing and Speaking alike.
+        env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' },
+      });
       const combined = `${result.stdout}\n${result.stderr}`;
       if (result.code !== 0 && looksLikeQuotaExceeded(combined)) {
         throw new QuotaExceededError(`Claude subscription quota/rate limit: ${combined.slice(-400)}`);

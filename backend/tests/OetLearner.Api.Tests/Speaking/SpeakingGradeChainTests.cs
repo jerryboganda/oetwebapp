@@ -185,6 +185,8 @@ public sealed class SpeakingGradeChainTests
             new AiQuotaDeniedException("quota_denied", "AI quota exceeded."),
             new AiBudgetExhaustedException("global_budget_exhausted"),
             new AiOperationDuplicateResultUnavailableException("op-1", AiOperationState.Leased, null),
+            // A recent Completed twin means the work already happened: failing over would double-spend.
+            new AiOperationDuplicateResultUnavailableException("op-2", AiOperationState.Completed, "usage-1"),
             new AiOperationConflictException("speaking.assess:s-1"),
             new AiOperationInFlightException("speaking.assess:s-1"),
             new PromptNotGroundedException("SystemPrompt is empty."),
@@ -202,6 +204,113 @@ public sealed class SpeakingGradeChainTests
             Assert.Same(refusal, thrown);
             Assert.Single(gateway.Requests);
         }
+    }
+
+    [Fact]
+    public async Task IndeterminatePinnedDuplicate_FallsBackToTheOriginalUnpinnedRequest()
+    {
+        // A dropped sidecar connection leaves the pinned operation Indeterminate for good and the
+        // coordinator then refuses every identical pinned request as a duplicate. Level 2 is a
+        // different provider and a different operation, so it must still run.
+        var stuck = new AiOperationDuplicateResultUnavailableException("op-1", AiOperationState.Indeterminate, null);
+        var gateway = new RecordingGateway(request =>
+        {
+            if (!string.IsNullOrEmpty(request.Provider)) throw stuck;
+            return Ok(request);
+        });
+        var template = Template();
+        var logger = new CapturingLogger();
+
+        var result = await SpeakingGradeChain.CompleteAsync(gateway, template, Pinned(), logger, default);
+
+        Assert.Equal(2, gateway.Requests.Count);
+        Assert.Equal(PinnedProvider, gateway.Requests[0].Provider);
+        Assert.Same(template, gateway.Requests[1]);
+        Assert.Equal(string.Empty, result.ResolvedProvider);
+        Assert.Contains("operation_indeterminate", Assert.Single(logger.Entries).Message);
+    }
+
+    [Fact]
+    public async Task DuplicateRefusalAtTheDefaultLevel_IsRethrown()
+    {
+        // The default level is the last leg: an Indeterminate twin there has nowhere left to fail over to.
+        var stuck = new AiOperationDuplicateResultUnavailableException("op-3", AiOperationState.Indeterminate, null);
+        var gateway = new RecordingGateway(request =>
+        {
+            if (!string.IsNullOrEmpty(request.Provider)) throw new HttpRequestException("connection refused");
+            throw stuck;
+        });
+
+        var thrown = await Assert.ThrowsAnyAsync<Exception>(() =>
+            SpeakingGradeChain.CompleteAsync(gateway, Template(), Pinned(), NullLogger.Instance, default));
+
+        Assert.Same(stuck, thrown);
+        Assert.Equal(2, gateway.Requests.Count);
+    }
+
+    [Fact]
+    public async Task PinnedAttemptThatOutlivesItsBudget_IsCancelled_AndFailsOverToTheDefaultRoute()
+    {
+        // A sidecar lane that never drains: only the chain's own budget can end the pinned call.
+        var gateway = new HangingPinnedGateway();
+        var options = new SpeakingGradingOptions
+        {
+            PinnedProviderCode = PinnedProvider,
+            PinnedModel = PinnedModel,
+            PinnedTimeoutSeconds = 1,
+        };
+        var template = Template();
+        var logger = new CapturingLogger();
+
+        var result = await SpeakingGradeChain.CompleteAsync(gateway, template, options, logger, default);
+
+        Assert.Equal(2, gateway.Requests.Count);
+        Assert.Equal(PinnedProvider, gateway.Requests[0].Provider);
+        Assert.Same(template, gateway.Requests[1]);
+        Assert.Equal(string.Empty, result.ResolvedProvider);
+        Assert.True(gateway.PinnedCallWasCancelled);
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("timeout", warning.Message);
+    }
+
+    [Fact]
+    public async Task CallerCancellationDuringThePinnedCall_IsNotFailedOver()
+    {
+        // The pinned call is still waiting when the caller walks away: that is a decision, not a
+        // provider failure, so it must propagate instead of starting the default route.
+        var gateway = new HangingPinnedGateway();
+        using var cts = new CancellationTokenSource();
+
+        var pending = SpeakingGradeChain.CompleteAsync(gateway, Template(), Pinned(), NullLogger.Instance, cts.Token);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.Single(gateway.Requests);
+    }
+
+    [Theory]
+    [InlineData(0, null)]
+    [InlineData(-30, null)]
+    [InlineData(1, 1)]
+    [InlineData(900, 900)]
+    [InlineData(1500, 1500)]
+    [InlineData(99999, 1500)]
+    public void PinnedBudget_ZeroOrLessMeansNoCap_AndTheRestIsClampedToTheCeiling(int configured, int? expectedSeconds)
+    {
+        var budget = SpeakingGradeChain.PinnedBudget(new SpeakingGradingOptions { PinnedTimeoutSeconds = configured });
+
+        Assert.Equal(expectedSeconds.HasValue, budget.HasValue);
+        if (expectedSeconds is { } seconds)
+            Assert.Equal(TimeSpan.FromSeconds(seconds), budget!.Value);
+    }
+
+    [Fact]
+    public void PinnedBudget_DefaultsToFifteenMinutes()
+    {
+        var budget = SpeakingGradeChain.PinnedBudget(new SpeakingGradingOptions());
+
+        Assert.Equal(TimeSpan.FromMinutes(15), budget!.Value);
     }
 
     [Fact]
@@ -243,6 +352,42 @@ public sealed class SpeakingGradeChainTests
             Requests.Add(request);
             await Task.Yield();
             return respond(request);
+        }
+    }
+
+    /// <summary>The pinned call never answers (it waits on its token); the default route answers at once.</summary>
+    private sealed class HangingPinnedGateway : IAiGatewayService
+    {
+        public List<AiGatewayRequest> Requests { get; } = new();
+
+        /// <summary>True once the pinned call saw its token cancelled (by the chain's budget or the caller).</summary>
+        public bool PinnedCallWasCancelled { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => throw new NotSupportedException();
+
+        public async Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Requests.Add(request);
+            if (!string.IsNullOrEmpty(request.Provider))
+            {
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    PinnedCallWasCancelled = ct.IsCancellationRequested;
+                    throw;
+                }
+            }
+
+            return new AiGatewayResult
+            {
+                Completion = "{}",
+                ResolvedProvider = request.Provider,
+                ResolvedModel = request.Model,
+            };
         }
     }
 

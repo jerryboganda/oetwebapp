@@ -151,10 +151,15 @@ x-learner-api-slot: &learner-api-slot
     # Speaking grading (owner directive 2026-09-30): pin the Claude Max subscription sidecar
     # first, fall back to the default route (Anthropic API) when that call fails. The
     # `writing-claude-sub` provider row must be active for the pin to take effect. Note the
-    # provider default uses `-` (not `:-`) so that SPEAKING_GRADING_PINNED_PROVIDER= (set but
-    # empty) really turns the pin off instead of falling back to the default.
+    # provider and model defaults use `-` (not `:-`) so that SPEAKING_GRADING_PINNED_PROVIDER= (set
+    # but empty) really turns the pin off and SPEAKING_GRADING_PINNED_MODEL= (set but empty) really
+    # means "the provider row's default model" instead of falling back to the defaults.
+    # PinnedTimeoutSeconds is the wall-clock budget for the whole pinned call (sidecar queue wait,
+    # CLI run and gateway retries); on expiry grading falls back to the default route. 0 = no cap,
+    # values above 1500 are clamped.
     Speaking__Grading__PinnedProviderCode: ${SPEAKING_GRADING_PINNED_PROVIDER-writing-claude-sub}
-    Speaking__Grading__PinnedModel: ${SPEAKING_GRADING_PINNED_MODEL:-claude-opus-5-5}
+    Speaking__Grading__PinnedModel: ${SPEAKING_GRADING_PINNED_MODEL-claude-opus-5-5}
+    Speaking__Grading__PinnedTimeoutSeconds: ${SPEAKING_GRADING_PINNED_TIMEOUT_SECONDS:-900}
     Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
     Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
     Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}

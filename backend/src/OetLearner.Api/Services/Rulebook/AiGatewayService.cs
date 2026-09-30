@@ -275,7 +275,11 @@ public sealed class AiGatewayService(
 
         // No explicit pin → consult the text-chat provider registry to honor
         // the active highest-priority row's dialect. Voice/OCR rows share the
-        // registry but cannot service grounded chat completions.
+        // registry but cannot service grounded chat completions. The keyless
+        // subscription sidecar rows (marker key, FailoverPriority 1 and 2) are
+        // never a default: they are reachable only by an explicit pin or a route
+        // set on purpose, so activating writing-claude-sub cannot make the Claude
+        // Max lane the fallthrough for every unrouted feature.
         if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && providerRegistry is not null)
         {
             try
@@ -283,6 +287,7 @@ public sealed class AiGatewayService(
                 var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
                     .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
                     .Where(row => !string.IsNullOrWhiteSpace(row.EncryptedApiKey))
+                    .Where(row => !OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.IsMarkerKey(row.EncryptedApiKey))
                     .OrderBy(row => row.FailoverPriority)
                     .FirstOrDefault();
                 if (topRow is not null)

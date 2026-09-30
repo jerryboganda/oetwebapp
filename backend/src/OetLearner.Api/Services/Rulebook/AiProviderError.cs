@@ -171,7 +171,10 @@ public static class AiProviderErrorParser
 
     /// <summary>
     /// Builds an <see cref="AiProviderError"/> from a non-success response. Never throws: any
-    /// parse problem degrades to a status-only classification with a null message.
+    /// parse problem degrades to a status-only classification with a null message. For the OpenAI
+    /// and Gemini dialects the message phrases (credit balance, usage limits, ...) are ignored on
+    /// HTTP 400, 413, 415 and 422 because those replies can echo learner-controlled request content;
+    /// see <see cref="PhraseRulesApply"/>.
     /// </summary>
     /// <param name="retainProviderText">True only for first-party vendor hosts. When false only
     /// the text before the first colon (at most 60 characters) is kept, so a sidecar's
@@ -205,7 +208,8 @@ public static class AiProviderErrorParser
         var codeToken = ToToken(env.Code);
         var gemini = dialect == AiProviderErrorDialect.Gemini || env.QuotaIds.Count > 0 || env.GeminiReason is not null;
         var errorClass = ClassifyCore(
-            httpStatus, typeToken, codeToken, env.Message, ToToken(env.GeminiReason), env.QuotaIds, gemini);
+            httpStatus, typeToken, codeToken, env.Message, ToToken(env.GeminiReason), env.QuotaIds, gemini,
+            phraseRules: PhraseRulesApply(dialect, httpStatus));
 
         return new AiProviderError(
             errorClass,
@@ -282,7 +286,7 @@ public static class AiProviderErrorParser
     }
 
     /// <summary>
-    /// Redacts (before truncating), optionally reduces to the head before the first colon,
+    /// Redacts (before any truncation), optionally reduces to the head before the first colon,
     /// removes control characters and angle brackets, collapses whitespace and caps the text
     /// at 300 characters. Fails closed (null) if redaction cannot finish.
     /// </summary>
@@ -291,8 +295,13 @@ public static class AiProviderErrorParser
         if (string.IsNullOrWhiteSpace(raw)) return null;
         try
         {
-            var text = raw.Length > MaxRawMessageChars ? raw[..MaxRawMessageChars] : raw;
-            text = AiProviderConnectionTester.RedactSecrets(text, apiKey) ?? string.Empty;
+            // Redact the WHOLE text first: cutting to MaxRawMessageChars before redacting could leave a
+            // secret that straddles the cut as a fragment shorter than the 20 characters the patterns need
+            // (or as a partial literal key) and let it reach the output. Running it over the whole text
+            // is cheap: the parser never reads a body over 64 KiB, and the redaction regex has a 50 ms
+            // timeout that fails closed below.
+            var text = AiProviderConnectionTester.RedactSecrets(raw, apiKey) ?? string.Empty;
+            if (text.Length > MaxRawMessageChars) text = text[..MaxRawMessageChars];
             if (headOnly)
             {
                 var colon = text.IndexOf(':');
@@ -310,6 +319,19 @@ public static class AiProviderErrorParser
         }
     }
 
+    /// <summary>
+    /// False when the message text must not decide the class: an OpenAI or Gemini "the request was
+    /// rejected" reply (HTTP 400, 413, 415 or 422) can echo request content, and on the live-voice
+    /// calls that content is learner-controlled (an SDP offer, the instructions), so a crafted fragment
+    /// such as "spend limit" could otherwise hard-open the shared provider breaker for every learner.
+    /// Those classes come from the status and the provider's own type / code tokens instead.
+    /// Anthropic keeps its phrases (its 400 credit-balance error IS a message), as do statuses
+    /// 402, 429 and 5xx.
+    /// </summary>
+    private static bool PhraseRulesApply(AiProviderErrorDialect dialect, int status)
+        => !(dialect is AiProviderErrorDialect.OpenAi or AiProviderErrorDialect.Gemini
+             && status is 400 or 413 or 415 or 422);
+
     private static AiProviderErrorClass ClassifyCore(
         int status,
         string? type,
@@ -317,7 +339,8 @@ public static class AiProviderErrorParser
         string? message,
         string? geminiReason,
         IReadOnlyList<string> quotaIds,
-        bool gemini)
+        bool gemini,
+        bool phraseRules = true)
     {
         // R1: quota / billing. A decisive quota token wins even next to a rate token (the
         // sidecar reports code quota_exceeded with type rate_limit_error).
@@ -337,8 +360,13 @@ public static class AiProviderErrorParser
             && ContainsPhrase(message, "billing"))
             return AiProviderErrorClass.QuotaExhausted;
 
+        // Free-text phrase rules (quota, auth, overloaded) read this; see PhraseRulesApply. The Gemini
+        // failed_precondition rule above is anchored on the provider's own status token, so it keeps
+        // reading the message.
+        var phraseText = phraseRules ? message : null;
+
         var rateGuard = perMinute || Has(RateGuardTokens, type, code);
-        if (!rateGuard && ContainsAnyPhrase(message, gemini ? GeminiQuotaPhrases : QuotaPhrases))
+        if (!rateGuard && ContainsAnyPhrase(phraseText, gemini ? GeminiQuotaPhrases : QuotaPhrases))
             return AiProviderErrorClass.QuotaExhausted;
 
         // R2: credentials.
@@ -346,11 +374,11 @@ public static class AiProviderErrorParser
             || Has(AuthTokens, type, code)
             || string.Equals(geminiReason, "api_key_invalid", StringComparison.OrdinalIgnoreCase)
             || string.Equals(geminiReason, "api_key_expired", StringComparison.OrdinalIgnoreCase)
-            || ContainsAnyPhrase(message, AuthPhrases))
+            || ContainsAnyPhrase(phraseText, AuthPhrases))
             return AiProviderErrorClass.Auth;
 
         // R3: capacity.
-        if (status is 503 or 529 || Has(OverloadedTokens, type, code) || ContainsPhrase(message, "overloaded"))
+        if (status is 503 or 529 || Has(OverloadedTokens, type, code) || ContainsPhrase(phraseText, "overloaded"))
             return AiProviderErrorClass.Overloaded;
 
         // R4: rate limit.
