@@ -130,7 +130,7 @@ public sealed class LiveVoiceProviderHealthTests
         Assert.Equal(LiveVoiceBreakerTransition.None, soft.Transition);
         var openAi = state.Snapshot(options).Providers.Single(p => p.Provider == LiveVoiceProviders.OpenAi);
         Assert.Equal(6, openAi.Failures);
-        Assert.Equal(5, openAi.FailuresByClass["invalid_request"]);
+        Assert.Equal(5, openAi.FailuresByClass[AiProviderErrorClass.InvalidRequest.ToCode()]);
     }
 
     [Fact]
@@ -217,6 +217,19 @@ public sealed class LiveVoiceProviderHealthTests
     }
 
     // ── Candidates and availability ──────────────────────────────────
+
+    [Theory]
+    [InlineData("openai", "openai")]
+    [InlineData(" OpenAI ", "openai")]
+    [InlineData("openai-realtime", "openai")]
+    [InlineData("realtime", "openai")]
+    [InlineData("gemini", "gemini")]
+    [InlineData("gemini-live", "gemini")]
+    [InlineData("anthropic", "")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    public void NormalizeProvider_MapsTheKnownAliases_AndRejectsEverythingElse(string? value, string expected)
+        => Assert.Equal(expected, LiveVoiceOptions.NormalizeProvider(value));
 
     [Fact]
     public void Candidates_PutThePrimaryFirst_AndTheOtherSecond()
@@ -320,7 +333,7 @@ public sealed class LiveVoiceProviderHealthTests
         var json = JsonSerializer.Serialize(state.Snapshot(options), new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Contains("\"state\":\"open\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"class\":\"quota_exhausted\"", json, StringComparison.Ordinal);
+        Assert.Contains($"\"class\":\"{AiProviderErrorClass.QuotaExhausted.ToCode()}\"", json, StringComparison.Ordinal);
         Assert.Contains("\"providerType\":\"insufficient_quota\"", json, StringComparison.Ordinal);
         Assert.Contains("\"reason\":\"http_401_auth\"", json, StringComparison.Ordinal);
         // The free-text "code" is not a token, so it is dropped rather than shown.

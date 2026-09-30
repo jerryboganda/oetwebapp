@@ -160,6 +160,20 @@ public sealed class LiveVoiceFailoverTests
     }
 
     [Fact]
+    public async Task Preflight_LeavesOutAProviderThatIsNotVerified_AndNeverCallsIt()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        rig.State.Set(LiveVoiceProviders.OpenAi, false, "http_404_invalid_request");
+
+        var preflight = await PreflightAsync(rig, session);
+
+        Assert.Equal(LiveVoiceProviders.Gemini, preflight.Provider);
+        Assert.Equal(new[] { LiveVoiceProviders.Gemini }, preflight.Candidates!);
+        Assert.Empty(rig.Handler.Requests);
+    }
+
+    [Fact]
     public async Task Preflight_WithNoConfiguredProvider_IsNotConfiguredAndNotRetryable()
     {
         using var rig = LiveVoiceTestKit.Create(new LiveVoiceOptions());
@@ -209,7 +223,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal(GenericUnavailable, ex.Message);
         Assert.Empty(await SessionRowsAsync(rig, session));
         Assert.True(rig.State.IsOpen(LiveVoiceProviders.OpenAi));
-        Assert.Equal("quota_exhausted", Health(rig, LiveVoiceProviders.OpenAi).LastFailure!.Class);
+        Assert.Equal(AiProviderErrorClass.QuotaExhausted.ToCode(), Health(rig, LiveVoiceProviders.OpenAi).LastFailure!.Class);
 
         // The browser's next call: preflight now leads with Gemini, and the Gemini leg works.
         var next = await PreflightAsync(rig, session);
@@ -278,9 +292,9 @@ public sealed class LiveVoiceFailoverTests
         }
 
         Assert.False(rig.State.IsOpen(LiveVoiceProviders.OpenAi));
-        Assert.Equal(3, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass["invalid_request"]);
+        Assert.Equal(3, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass[AiProviderErrorClass.InvalidRequest.ToCode()]);
         var logs = rig.Log.AllText;
-        Assert.Contains("class=invalid_request", logs, StringComparison.Ordinal);
+        Assert.Contains($"class={AiProviderErrorClass.InvalidRequest.ToCode()}", logs, StringComparison.Ordinal);
         Assert.Contains(rig.Log.Entries, e => e.Level == LogLevel.Error);
         Assert.DoesNotContain("HIDDEN-", logs, StringComparison.Ordinal);
         Assert.Empty(await CircuitEventsAsync(rig));
@@ -298,7 +312,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal("live_voice_provider_timeout", ex.ErrorCode);
         Assert.Equal("The realtime voice provider did not respond in time.", ex.Message);
         Assert.False(ex.Retryable);
-        Assert.Equal(1, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass["network"]);
+        Assert.Equal(1, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass[AiProviderErrorClass.Network.ToCode()]);
         Assert.Empty(await SessionRowsAsync(rig, session));
     }
 
@@ -333,7 +347,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal("live_voice_provider_unavailable", ex.ErrorCode);
         Assert.Equal("The realtime voice provider could not be reached.", ex.Message);
         Assert.False(ex.Retryable);
-        Assert.Equal(1, Health(rig, LiveVoiceProviders.Gemini).FailuresByClass["network"]);
+        Assert.Equal(1, Health(rig, LiveVoiceProviders.Gemini).FailuresByClass[AiProviderErrorClass.Network.ToCode()]);
     }
 
     [Fact]
@@ -379,7 +393,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal("live_voice_provider_invalid_response", openAi.ErrorCode);
         Assert.Equal("The realtime voice provider returned an invalid session response.", openAi.Message);
         Assert.False(openAi.Retryable);
-        Assert.Equal(1, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass["server_error"]);
+        Assert.Equal(1, Health(rig, LiveVoiceProviders.OpenAi).FailuresByClass[AiProviderErrorClass.ServerError.ToCode()]);
 
         FailProvider(rig, GeminiHost, HttpStatusCode.OK, "this is not json");
         var gemini = await Assert.ThrowsAsync<ApiException>(() => MintGeminiAsync(rig, session));
@@ -454,7 +468,7 @@ public sealed class LiveVoiceFailoverTests
         var ex = await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
 
         var logs = rig.Log.AllText;
-        Assert.Contains("class=auth", logs, StringComparison.Ordinal);
+        Assert.Contains($"class={AiProviderErrorClass.Auth.ToCode()}", logs, StringComparison.Ordinal);
         Assert.Contains("http=401", logs, StringComparison.Ordinal);
         Assert.Contains("code=invalid_api_key", logs, StringComparison.Ordinal);
         foreach (var secret in new[]
@@ -486,7 +500,7 @@ public sealed class LiveVoiceFailoverTests
         await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, session));
 
         var logs = rig.Log.AllText;
-        Assert.Contains("class=quota_exhausted", logs, StringComparison.Ordinal);
+        Assert.Contains($"class={AiProviderErrorClass.QuotaExhausted.ToCode()}", logs, StringComparison.Ordinal);
         Assert.Contains("http=429", logs, StringComparison.Ordinal);
         Assert.Contains("code=insufficient_quota", logs, StringComparison.Ordinal);
         Assert.Contains("exceeded your current quota", logs, StringComparison.Ordinal);
@@ -522,7 +536,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal(LiveVoiceProviders.OpenAi, opened.ResourceId);
         using (var details = JsonDocument.Parse(opened.Details!))
         {
-            Assert.Equal("quota_exhausted", details.RootElement.GetProperty("kind").GetString());
+            Assert.Equal(AiProviderErrorClass.QuotaExhausted.ToCode(), details.RootElement.GetProperty("kind").GetString());
             Assert.Equal(429, details.RootElement.GetProperty("httpStatus").GetInt32());
             Assert.Equal("insufficient_quota", details.RootElement.GetProperty("providerCode").GetString());
             Assert.NotEqual(JsonValueKind.Null, details.RootElement.GetProperty("openUntil").ValueKind);
@@ -744,6 +758,54 @@ public sealed class LiveVoiceFailoverTests
         Assert.False(turnB.Duplicate);
         Assert.Equal(cardA.SessionId, turnA.SessionId);
         Assert.Equal(cardB.SessionId, turnB.SessionId);
+
+        // Each session's latest transcript holds only its own words.
+        await rig.Service.PersistTranscriptAsync(
+            cardA.UserId,
+            cardA.SessionId,
+            new LiveVoiceTranscriptRequest(
+                "openai",
+                offerA.ProviderSessionId,
+                new[] { new LiveVoiceTranscriptSegment("candidate", 0, 500, "Only card A speaks here") }),
+            CancellationToken.None);
+        await rig.Service.PersistTranscriptAsync(
+            cardB.UserId,
+            cardB.SessionId,
+            new LiveVoiceTranscriptRequest(
+                "openai",
+                offerB.ProviderSessionId,
+                new[] { new LiveVoiceTranscriptSegment("candidate", 0, 500, "Only card B speaks here") }),
+            CancellationToken.None);
+        var latest = await rig.Db.SpeakingTranscripts.AsNoTracking().Where(t => t.IsLatest).ToListAsync();
+        Assert.Equal(2, latest.Count);
+        Assert.Contains("Only card A", latest.Single(t => t.SpeakingSessionId == cardA.SessionId).SegmentsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("card B", latest.Single(t => t.SpeakingSessionId == cardA.SessionId).SegmentsJson, StringComparison.Ordinal);
+        Assert.Contains("Only card B", latest.Single(t => t.SpeakingSessionId == cardB.SessionId).SegmentsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("card A", latest.Single(t => t.SpeakingSessionId == cardB.SessionId).SegmentsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASessionIdTheServerNeverIssued_IsRejected_ForTurnsAndTranscript()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        await MintGeminiAsync(rig, session);
+
+        var turn = await Assert.ThrowsAsync<ApiException>(() => rig.Service.PersistTurnAsync(
+            session.UserId,
+            session.SessionId,
+            new LiveVoiceTurnRequest("gemini", "auth_tokens/forged", "Hello", "Hi", "voice-turn:1", 1),
+            CancellationToken.None));
+        var blank = await Assert.ThrowsAsync<ApiException>(() => rig.Service.PersistTurnAsync(
+            session.UserId,
+            session.SessionId,
+            new LiveVoiceTurnRequest("gemini", " ", "Hello", "Hi", "voice-turn:1", 1),
+            CancellationToken.None));
+
+        Assert.Equal("live_voice_provider_session_mismatch", turn.ErrorCode);
+        Assert.Equal(StatusCodes.Status409Conflict, turn.StatusCode);
+        Assert.Equal("live_voice_provider_session_required", blank.ErrorCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, blank.StatusCode);
     }
 
     private static int MaxLength<T>(string property)
