@@ -95,15 +95,25 @@ jobs:
             id: row.id, state: row.state, featureCode: row.featureCode, createdAt: row.createdAt,
             updatedAt: row.updatedAt, hasResult: Boolean(row.resultRef),
           }))));
+          if (matches.length === 0) {
+            console.log('RECENT_WRITING_OPERATIONS', JSON.stringify(operations.rows.slice(0, 30).map(row => ({
+              resourceId: row.resourceId, state: row.state, createdAt: row.createdAt, hasResult: Boolean(row.resultRef),
+            }))));
+          }
+          const errorSignals = ['model_not_found', 'unsupported_model', 'invalid_model', 'not supported', 'does not exist',
+            'quota_exceeded', 'insufficient_quota', 'credentials_missing', 'unauthorized', 'invalid_api_key',
+            'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'spawn', 'ENOENT', 'not logged in', 'codex_error',
+            'invalid_grant', '401', '403', '404', '429', '502', '503'];
           console.log('WRITING_USAGE', JSON.stringify(usage.rows.filter(row => userIds.size === 0 || userIds.has(row.userId)).slice(0, 30).map(row => ({
             id: row.id, providerId: row.providerId, model: row.model, outcome: row.outcome,
             errorCode: row.errorCode, latencyMs: row.latencyMs, retryCount: row.retryCount,
             promptTokens: row.promptTokens, completionTokens: row.completionTokens, createdAt: row.createdAt,
+            errorSignals: errorSignals.filter(signal => String(row.errorMessage ?? '').toLowerCase().includes(signal.toLowerCase())),
           }))));
           console.log('PROVIDER_CIRCUITS', JSON.stringify(circuits.rows.filter(row => row.kind === 'provider').map(row => ({
             key: row.key, state: row.state, failureCount: row.failureCount, lastFailureCode: row.lastFailureCode,
           }))));
-          console.log('BUDGETS', JSON.stringify(budgets.map(row => ({
+          console.log('BUDGETS', JSON.stringify(budgets.rows.map(row => ({
             scope: row.scope, periodKey: row.periodKey,
             exhausted: row.limit > 0 && row.reserved + row.committed >= row.limit,
           }))));
