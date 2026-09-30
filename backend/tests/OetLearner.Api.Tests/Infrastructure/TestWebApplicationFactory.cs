@@ -149,6 +149,19 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             }
             services.AddSingleton<IAiModelProvider, TestAiModelProvider>();
 
+            // The Writing pipeline pins subscription-backed provider codes
+            // (writing-claude-sub / anthropic / writing-codex-sub) that this
+            // host does not register, so grading would fail "not configured".
+            // The stub keeps the feature-route default (the provider above).
+            for (var i = services.Count - 1; i >= 0; i--)
+            {
+                if (services[i].ServiceType == typeof(OetLearner.Api.Services.Writing.IWritingSubscriptionSelector))
+                {
+                    services.RemoveAt(i);
+                }
+            }
+            services.AddSingleton<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector, TestWritingSubscriptionSelector>();
+
             // Register BackgroundJobProcessor as a directly-resolvable singleton
             // so tests can call its internal ProcessOnceAsync to deterministically
             // drain queued jobs (the hosted-service tick is stripped above to
@@ -1077,6 +1090,20 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             client.DefaultRequestHeaders.Add("X-OET-Device-Id", "test-web-application-factory-device");
         }
     }
+}
+
+/// <summary>Test stand-in for the Writing provider selector: an empty provider
+/// code means "feature-route default" (the deterministic test provider). A test
+/// can set <see cref="ProviderCode"/> to an unregistered code to exercise the
+/// failover chain's failure mapping, and must restore it afterwards.</summary>
+public sealed class TestWritingSubscriptionSelector : OetLearner.Api.Services.Writing.IWritingSubscriptionSelector
+{
+    public string ProviderCode { get; set; } = "";
+
+    public Task<OetLearner.Api.Services.Writing.WritingSubscriptionDecision> DecideAsync(CancellationToken ct)
+        => Task.FromResult(new OetLearner.Api.Services.Writing.WritingSubscriptionDecision(ProviderCode, "", "test", null, IsFallback: false));
+
+    public Task RecordClaudeQuotaSignalAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplicationFactory

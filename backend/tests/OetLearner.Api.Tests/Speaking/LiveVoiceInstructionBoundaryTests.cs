@@ -96,6 +96,7 @@ public sealed class LiveVoiceInstructionBoundaryTests
         Assert.Contains("NEVER DELEGATE, CHECK, LOOK UP, SEARCH, OR USE TOOLS", text, StringComparison.Ordinal);
         Assert.Contains("YOU DO NOT KNOW THE DIAGNOSIS", text, StringComparison.Ordinal);
         Assert.Contains("TEACH-BACK: when asked to say in your own words", text, StringComparison.Ordinal);
+        Assert.Contains("NEVER PUT WORDS IN THE CANDIDATE'S MOUTH", text, StringComparison.Ordinal);
         // Rule text precedes the card data label; no card content leaks above it.
         Assert.True(text.IndexOf("RULE_57", StringComparison.Ordinal) < text.IndexOf("FOR CONTEXT ONLY", StringComparison.Ordinal));
     }

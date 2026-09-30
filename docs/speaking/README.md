@@ -21,6 +21,7 @@ Plan: `~/.claude/plans/1-oet-speaking-module-sequential-candy.md`.
 - [Content model](content-model.md)
 - [Scoring](scoring.md)
 - [AI provider matrix](ai-providers.md)
+- [Live voice agent (AI patient)](live-voice.md)
 - [LiveKit](livekit.md)
 - [Compliance](compliance.md)
 - [Glossary](glossary.md)

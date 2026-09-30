@@ -10,6 +10,10 @@ Source-of-truth registration in `backend/src/OetLearner.Api/Services/Seeding/Spe
 | `drill.draft.v1` | Anthropic | `claude-sonnet-4-6` | ephemeral | OpenAI `gpt-4o` |
 | `speaking.drill.score.v1` | Anthropic | `claude-haiku-4-5` | ephemeral | OpenAI `gpt-4o-mini` |
 
+> **Since Sept 2026** (the table above predates it): Speaking grading (`speaking.grade`) runs on Anthropic
+> `claude-sonnet-5` with maximum reasoning, and the live AI patient is OpenAI GPT-Live (default) or Gemini Live.
+> See [live-voice.md](./live-voice.md).
+
 ## Provider env keys
 
 See `docs/env/speaking.md`.

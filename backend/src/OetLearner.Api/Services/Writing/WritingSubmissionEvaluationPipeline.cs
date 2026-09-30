@@ -1359,21 +1359,24 @@ public sealed class WritingSubmissionEvaluationPipeline(
         //   L3 Codex subscription (gpt-6-sol)
         // Every hop stays inside ONE coordinated AiOperation, so the learner's
         // credit is debited exactly once and no duplicate grade is persisted.
-        if (subscriptionSelector is not null)
+        // Both paths sit inside the one try so the refusal mapping below (402 /
+        // 409 / 503) covers the failover chain too, not just the single call.
+        try
         {
-            result = await GradeWithFailoverAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, freeSampleGrant, ct);
-        }
-        else
-        {
-            // Tests construct the pipeline without the selector — keep the
-            // historical single-call behaviour (feature-route default, no pin).
-            var decision = new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
-            try
+            if (subscriptionSelector is not null)
             {
+                result = await GradeWithFailoverAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, freeSampleGrant, ct);
+            }
+            else
+            {
+                // Tests construct the pipeline without the selector — keep the
+                // historical single-call behaviour (feature-route default, no pin).
+                var decision = new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
                 result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
             }
-            catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
-            {
+        }
+        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
+        {
             // No-charge-on-failure: the gateway throws before debiting, so no
             // credit was consumed. Surface a clean, modal-ready signal instead
             // of masking it as a generic service error (spec §9 — balance = 0).
@@ -1432,7 +1435,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
         {
             logger.LogWarning(ex, "Writing rubric AI call failed for submission {SubmissionId}", submission.Id);
             throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
-        }
         }
 
         var rubric = ParseRubric(result);
