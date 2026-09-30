@@ -1474,6 +1474,17 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// duplicate-in-flight) is NEVER treated as a failover trigger — those bubble
     /// up unchanged so the caller's existing catch blocks keep their semantics.
     /// </summary>
+    /// <summary>Steps the resource version when failover moves to a DIFFERENT provider.
+    /// The control-plane resource slot is keyed on (…, resourceVersion, promptVersion,
+    /// rulebookVersion) and rejects a second operation that reuses one slot with a
+    /// divergent payload. A different provider produces a different request hash, so
+    /// reusing the L1 version on L2/L3 makes the control plane throw
+    /// AiOperationConflictException (a non-failoverable 409 the candidate sees). Each
+    /// provider hop therefore gets its own slot; the credit reservation is keyed on the
+    /// business reference, so this is still ONE logical grading and ONE debit.</summary>
+    private static int? NextFailoverResourceVersion(int? resourceVersion)
+        => (resourceVersion ?? 1) + 1000;
+
     private async Task<AiGatewayResult> GradeWithFailoverAsync(
         WritingSubmission submission,
         WritingScenario? scenario,
@@ -1510,8 +1521,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
             await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
 
         // ── Level 2: Claude API (pay-as-you-go) — only relevant when we started on the subscription ──
+        // Step the resource version: a different provider is a divergent payload on the
+        // slot, which the control plane rejects as a conflict. One logical grading, new slot.
         if (startedOnSubscription && decision.ProviderCode != WritingSubscriptionProviders.ClaudeApi)
         {
+            var apiResourceVersion = NextFailoverResourceVersion(resourceVersion);
             try
             {
                 var apiDecision = new WritingSubscriptionDecision(
@@ -1520,7 +1534,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     "failover_claude_api",
                     decision.UtilizationPct,
                     IsFallback: true);
-                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, apiDecision, ct, freeSampleGrant);
+                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, apiResourceVersion, prompt, apiDecision, ct, freeSampleGrant);
             }
             catch (Exception ex) when (IsFailoverable(ex))
             {
@@ -1531,16 +1545,17 @@ public sealed class WritingSubmissionEvaluationPipeline(
             }
         }
 
-        // ── Level 3: Codex subscription (last resort) ──
+        // ── Level 3: Codex subscription (last resort) — fresh slot again ──
         if (decision.ProviderCode != WritingSubscriptionProviders.Codex)
         {
+            var codexResourceVersion = NextFailoverResourceVersion(NextFailoverResourceVersion(resourceVersion));
             var codexDecision = new WritingSubscriptionDecision(
                 WritingSubscriptionProviders.Codex,
                 WritingSubscriptionProviders.CodexModel,
                 startedOnSubscription ? "failover_codex_after_api" : "failover_codex",
                 decision.UtilizationPct,
                 IsFallback: true);
-            return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, codexDecision, ct, freeSampleGrant);
+            return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, codexResourceVersion, prompt, codexDecision, ct, freeSampleGrant);
         }
 
         // We started on Codex (forced) and it already failed twice.
