@@ -1,9 +1,13 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -34,8 +38,49 @@ public static class AiOperationsAdminEndpoints
         group.MapPost("/budgets/override", CreateBudgetOverrideAsync);
         group.MapGet("/circuits", ListCircuitsAsync);
         group.MapPost("/circuits/{key}/reset", ResetCircuitAsync);
+        group.MapGet("/live-voice/health", GetLiveVoiceHealth);
+        group.MapPost("/live-voice/{provider}/reset", ResetLiveVoiceProviderAsync);
 
         return app;
+    }
+
+    /// <summary>
+    /// Live voice provider health: per provider the catalog probe, the breaker fed by real session
+    /// creations, the last failure class and counters. Never keys, URLs, tokens or provider messages.
+    /// </summary>
+    private static IResult GetLiveVoiceHealth(
+        LiveVoiceProviderProbeState state,
+        IOptions<LiveVoiceOptions> options)
+        => Results.Ok(state.Snapshot(options.Value));
+
+    private static async Task<IResult> ResetLiveVoiceProviderAsync(
+        string provider,
+        LiveVoiceProviderProbeState state,
+        LearnerDbContext db,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var normalized = LiveVoiceOptions.NormalizeProvider(provider);
+        if (normalized.Length == 0)
+        {
+            return new ApiErrorResult(400, "live_voice_provider_invalid", "provider must be openai or gemini.");
+        }
+
+        var wasOpen = state.Reset(normalized);
+        var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            ActorName = http.User.FindFirstValue(ClaimTypes.Name) ?? actorId,
+            Action = "LiveVoiceProviderCircuitReset",
+            ResourceType = "LiveVoiceProvider",
+            ResourceId = normalized,
+            Details = JsonSerializer.Serialize(new { wasOpen }),
+        });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { provider = normalized, breaker = state.BreakerState(normalized), wasOpen });
     }
 
     private static async Task<IResult> ListOperationsAsync(

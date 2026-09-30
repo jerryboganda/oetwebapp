@@ -1114,11 +1114,14 @@ builder.Services.AddHttpClient("LiveVoiceProvider", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(20);
 });
-builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceProviderProbeState>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceProviderProbe>();
+// Health state is registered everywhere (the ai-worker's hard-stop sweep hangs up provider
+// sessions through LiveVoiceService); the probe loop only runs where learners start sessions.
+OetLearner.Api.Services.Speaking.LiveVoiceProviderProbe.Register(builder.Services, oetRunModeIsWorker);
 builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryQueue>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceContentReadinessService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ILiveVoiceProviderSessionCloser>(
+    sp => sp.GetRequiredService<OetLearner.Api.Services.Speaking.LiveVoiceService>());
 // $0 full-corpus Speaking compatibility harness (admin, rolled back, canned grader).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingCorpusCompatibilityService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryWorker>();
