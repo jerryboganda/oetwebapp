@@ -111,6 +111,8 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/ai/budgets/override", "POST", "AdminAiConfig")]
     [InlineData("/v1/admin/ai/circuits", "GET", "AdminAiConfig")]
     [InlineData("/v1/admin/ai/circuits/{key}/reset", "POST", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/live-voice/health", "GET", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/live-voice/{provider}/reset", "POST", "AdminAiConfig")]
     [InlineData("/v1/admin/placement/health", "GET", "AdminReviewOps")]
     [InlineData("/v1/admin/placement/inventory", "GET", "AdminReviewOps")]
     [InlineData("/v1/admin/placement/review/queue", "GET", "AdminReviewOps")]

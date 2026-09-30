@@ -23,7 +23,8 @@ public sealed class SpeakingSessionRecordingService(
     SpeakingTranscriptionPipeline transcription,
     IOptions<SpeakingComplianceOptions> complianceOptions,
     ILogger<SpeakingSessionRecordingService> logger,
-    IOptions<StorageOptions>? storageOptions = null)
+    IOptions<StorageOptions>? storageOptions = null,
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
 {
     private static readonly Dictionary<string, string> ExtensionByMime = new(StringComparer.Ordinal)
     {
@@ -82,6 +83,19 @@ public sealed class SpeakingSessionRecordingService(
                 "Accept the Speaking recording consent before uploading a recording.");
         }
 
+        // Same write window as the live voice transcript: bounded after the role-play ended, so a
+        // recording cannot be attached to a long-finished (and graded) session.
+        var cardSeconds = await db.RolePlayCards.AsNoTracking()
+            .Where(c => c.Id == session.RolePlayCardId)
+            .Select(c => c.RolePlayTimeSeconds)
+            .FirstOrDefaultAsync(ct);
+        var voiceOptions = liveVoiceOptions?.Value;
+        if (!SpeakingRolePlayLimits.IsWithinWriteWindow(session, cardSeconds, DateTimeOffset.UtcNow, voiceOptions))
+        {
+            throw ApiException.Conflict("live_voice_transcript_window_closed",
+                "The window for uploading this role-play recording has closed.");
+        }
+
         var recordingId = RecordingIdFor(sessionId);
         if (await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recordingId, ct))
         {
@@ -117,7 +131,12 @@ public sealed class SpeakingSessionRecordingService(
 
         var now = DateTimeOffset.UtcNow;
         var retentionDays = Math.Max(1, complianceOptions.Value.RetentionDaysDefault);
-        var duration = durationSeconds is > 0 ? durationSeconds.Value : 0;
+        // The declared length is client-supplied and nothing decodes the audio here, so it is only
+        // trusted up to the longest a role-play plus its flush window can be.
+        var longestPossible = SpeakingRolePlayLimits.CeilingSeconds(voiceOptions)
+            + SpeakingRolePlayLimits.GraceSeconds(voiceOptions)
+            + SpeakingRolePlayLimits.FlushSeconds(voiceOptions);
+        var duration = durationSeconds is > 0 ? Math.Min(durationSeconds.Value, longestPossible) : 0;
         db.MediaAssets.Add(new MediaAsset
         {
             Id = mediaAssetId,

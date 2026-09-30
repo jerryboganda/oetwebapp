@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
@@ -15,7 +17,8 @@ namespace OetLearner.Api.Services.Speaking;
 public sealed class SpeakingSimulationV11EvidenceCaptureService(
     LearnerDbContext db,
     IFileStorage storage,
-    ILogger<SpeakingSimulationV11EvidenceCaptureService> logger)
+    ILogger<SpeakingSimulationV11EvidenceCaptureService> logger,
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
 {
     private const double MinimumAsrConfidence = 0.60;
     private static readonly Regex FillerRegex = new(
@@ -376,7 +379,8 @@ public sealed class SpeakingSimulationV11EvidenceCaptureService(
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == session.RolePlayCardId, ct);
         var prepSeconds = card?.PrepTimeSeconds is > 0 ? card.PrepTimeSeconds : 180;
-        var rolePlaySeconds = card?.RolePlayTimeSeconds is > 0 ? card.RolePlayTimeSeconds : 300;
+        // The same capped time the live voice guards and the sweeper enforce.
+        var rolePlaySeconds = SpeakingRolePlayLimits.EffectiveSeconds(card?.RolePlayTimeSeconds ?? 0, liveVoiceOptions?.Value);
         var prepDeadline = session.PrepStartedAt?.AddSeconds(prepSeconds);
         var rolePlayDeadline = session.RolePlayStartedAt?.AddSeconds(rolePlaySeconds);
         var now = DateTimeOffset.UtcNow;

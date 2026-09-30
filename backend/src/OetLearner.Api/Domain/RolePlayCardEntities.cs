@@ -207,7 +207,9 @@ public class RolePlayCard
     public int PrepTimeSeconds { get; set; } = 180;
 
     /// <summary>Speaking window. Defaults to 300s (the OET ~5-minute
-    /// role-play). Hard-capped by `SpeakingSession` auto-end logic.</summary>
+    /// role-play). Capped at `LiveVoiceOptions.MaxRoleplaySeconds` by
+    /// `SpeakingRolePlayLimits`, which the live voice guards, the clock and
+    /// the hard-stop sweeper all use.</summary>
     public int RolePlayTimeSeconds { get; set; } = 300;
 
     /// <summary>Patient's emotional state (e.g. "worried", "anxious",

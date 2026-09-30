@@ -45,7 +45,6 @@ public sealed class SpeakingExamService(
     IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
 {
     private const int DefaultPrepSeconds = 180;
-    private const int DefaultDiscussionSeconds = 300;
 
     /// <summary>Idle exams stuck in intro/prep past this window are expired by
     /// the sweeper so they cannot linger forever.</summary>
@@ -920,7 +919,9 @@ public sealed class SpeakingExamService(
             .Select(c => new { c.PrepTimeSeconds, c.RolePlayTimeSeconds })
             .FirstOrDefaultAsync(ct);
         var prep = card?.PrepTimeSeconds is > 0 ? card!.PrepTimeSeconds : DefaultPrepSeconds;
-        var disc = card?.RolePlayTimeSeconds is > 0 ? card!.RolePlayTimeSeconds : DefaultDiscussionSeconds;
+        // The discussion is capped like a standalone role-play, so an absurd card value cannot
+        // hold the whole exam (and a live provider session) open for hours.
+        var disc = SpeakingRolePlayLimits.EffectiveSeconds(card?.RolePlayTimeSeconds ?? 0, liveVoiceOptions?.Value);
         return (prep, disc);
     }
 

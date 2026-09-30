@@ -48,7 +48,7 @@ browser is allowed to request microphone access.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `LIVEVOICE__PRIMARYPROVIDER` | yes | `openai` | `openai` or `gemini`; a session uses one disclosed provider. |
+| `LIVEVOICE__PRIMARYPROVIDER` | yes | `openai` | `openai` or `gemini`. The provider tried first for a new session; when its circuit is open (or it is unconfigured or unverified) the other configured provider is offered instead. A single session runs on one provider. |
 | `LIVEVOICE__OPENAIAPIKEY` | yes for OpenAI | — | Server-only OpenAI Realtime credential. |
 | `LIVEVOICE__OPENAIBASEURL` | yes for OpenAI | `https://api.openai.com/v1/live/sessions` | OpenAI Realtime session broker endpoint. |
 | `LIVEVOICE__OPENAIMODELSBASEURL` | yes for OpenAI | `https://api.openai.com/v1/models` | Model catalog endpoint used by the live account probe. |
@@ -58,6 +58,11 @@ browser is allowed to request microphone access.
 | `LIVEVOICE__GEMINIMODELSBASEURL` | yes for Gemini | `https://generativelanguage.googleapis.com/v1beta/models` | Model catalog endpoint used by the live account probe. |
 | `LIVEVOICE__GEMINIMODEL` | yes for Gemini | `models/gemini-3.8-live` | Gemini Live model enabled on the account. |
 | `LIVEVOICE__GEMINIWEBSOCKETBASEURL` | yes for Gemini | constrained Live WebSocket | Browser WebSocket endpoint used with the short-lived token. |
+| `LIVEVOICE__PROVIDERREQUESTTIMEOUTSECONDS` | optional | `10` | Timeout (2-30) for one provider session-creation call. A slower provider is counted as a failure and the next candidate is tried. |
+| `LIVEVOICE__MAXROLEPLAYSECONDS` | optional | `600` | Server-side ceiling (180-1800) on one role-play; a card's own time above it is capped. |
+| `LIVEVOICE__HARDSTOPGRACESECONDS` | optional | `30` | Slack (0-120) after the role-play deadline before the server force-ends it, grades it and hangs up the provider session. |
+| `LIVEVOICE__TRANSCRIPTFLUSHGRACESECONDS` | optional | `900` | How long (60-3600) after a role-play ended a late transcript, turn or recording is still accepted, until grading takes the transcript. |
+| `LIVEVOICE__MAXPROVIDERSESSIONSPERROLEPLAY` | optional | `3` | Provider sessions (1-10) one role-play may open; retries, reloads and failover all count, refused creations do not. |
 | `LIVEVOICE__RETENTIONDAYS` | optional | `30` | Bounded retention for live voice transcript and connection audit data. |
 
 ## TypeSafe SystemOne / Jev

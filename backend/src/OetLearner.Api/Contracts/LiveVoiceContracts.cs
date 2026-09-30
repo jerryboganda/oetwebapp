@@ -1,6 +1,12 @@
 namespace OetLearner.Api.Contracts;
 
-/// <summary>Provider disclosure returned before the browser requests microphone access.</summary>
+/// <summary>
+/// Provider disclosure returned before the browser requests microphone access.
+/// <c>Provider</c> is always <c>Candidates[0]</c>. <c>Candidates</c> is the
+/// server-ordered list of providers the browser may try, in order, when a
+/// session creation is refused. <c>Pinned</c> means the caller asked for one
+/// provider explicitly: a single candidate and no failover.
+/// </summary>
 public sealed record LiveVoicePreflightResponse(
     string Provider,
     string ProviderDisplayName,
@@ -8,18 +14,22 @@ public sealed record LiveVoicePreflightResponse(
     string Disclosure,
     int RetentionDays,
     string SessionId,
-    string RolePlayCardId);
+    string RolePlayCardId,
+    IReadOnlyList<string>? Candidates = null,
+    bool Pinned = false);
 
 /// <summary>Browser WebRTC offer forwarded to the OpenAI Realtime session broker.</summary>
 public sealed record LiveVoiceOpenAiOfferRequest(
     string Sdp,
     string? ClientSessionId = null);
 
+/// <summary><c>HardStopAt</c> is when the server force-ends this role-play (deadline plus grace).</summary>
 public sealed record LiveVoiceOpenAiOfferResponse(
     string Provider,
     string Model,
     string ProviderSessionId,
-    string AnswerSdp);
+    string AnswerSdp,
+    DateTimeOffset HardStopAt);
 
 /// <summary>Short-lived Gemini Live credential. The API key never leaves the server.</summary>
 public sealed record LiveVoiceGeminiTokenResponse(
@@ -27,7 +37,8 @@ public sealed record LiveVoiceGeminiTokenResponse(
     string Model,
     string ProviderSessionId,
     string WebSocketUrl,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset HardStopAt);
 
 /// <summary>
 /// A completed pair of provider transcripts. Partial provider events stay in
