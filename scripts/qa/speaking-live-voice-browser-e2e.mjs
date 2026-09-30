@@ -14,11 +14,19 @@
 // other one (exactly one call to each, per card).
 // Which provider served is what each card's panel reports (data-live-provider): metrics.servedProvider. Transcripts,
 // usage and the split check are attributed to it, never to "some data-channel event exists".
+// Fault injection (mid-session recovery runs), blank = off: FAULT_DROP_AT_S=<s> kills the live provider connection from
+// inside the page <s> seconds after the candidate microphone tape starts (Gemini: its WebSocket is closed; OpenAI: the
+// 'oai-events' data channel is closed); FAULT_STALL_AT_S=<s> makes the provider go silent instead (every server message is
+// swallowed until the app builds a new transport). DROP wins when both are set. Only the first live conversation is hit
+// (practice, or exam Card A). Both are rejected with VOICE_PROVIDER (a pinned provider never recovers, so the run would only
+// kill the session) and with FAIL_PRIMARY. Result: metrics.fault, metrics.recoveries (the panel's data-live-recoveries) and
+// checks.recoveredAsRequested (>= 1 recovery on the panel, the patient spoke again after the recovery session was asked
+// for, and the panel did not end in the error state).
 // Run by .github/workflows/speaking-live-voice-prod-e2e.yml (never locally).
 import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
 import { installProbes } from './live-voice-browser-probes.mjs';
-import { createServedRecord } from './live-voice-served-provider.mjs';
+import { createServedRecord, parseFault, recoveredAsRequested } from './live-voice-served-provider.mjs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
 const {
@@ -26,6 +34,7 @@ const {
   SPEAK_SECONDS = '', VOICE_PROVIDER = '', MODE = 'practice',
   SCRIPT_NAME = '', VOICE = '', SCRIPT_FILE = '',
   EXPECTED_PRIMARY = '', FAIL_PRIMARY = '',
+  FAULT_DROP_AT_S = '', FAULT_STALL_AT_S = '',
 } = process.env;
 const CALL_OF = { openai: 'openai/offer', gemini: 'gemini/token' };
 const failPrimary = FAIL_PRIMARY === 'true';
@@ -48,6 +57,17 @@ const scriptText = SCRIPT_FILE && fs.existsSync(SCRIPT_FILE) ? fs.readFileSync(S
 // speech + 10 s. Capped at 280: the app's own 5:00 clock starts before the live indicator and
 // auto-finalises the session, which would remove the Finish button.
 const speakSeconds = Math.min(280, Number(SPEAK_SECONDS) || Math.ceil((timeline.at(-1)?.end ?? 100) + 10));
+// Fault injection (see the header). Validated here, before any provider is billed. An exam card ends by itself at 5:00.
+const fault = parseFault({
+  dropAt: FAULT_DROP_AT_S, stallAt: FAULT_STALL_AT_S, pinnedProvider: VOICE_PROVIDER, failPrimary,
+  maxAtSeconds: MODE === 'exam' ? 280 : speakSeconds,
+});
+if (fault.stallIgnored) log(`FAULT_STALL_AT_S=${FAULT_STALL_AT_S} is ignored: FAULT_DROP_AT_S wins (one fault per run).`);
+// Rule of thumb, not a limit: the app notices a stall 20 s after the candidate stopped talking, then mints a new session
+// and the patient has to speak again; a dropped link is noticed at once.
+if (fault.kind && MODE !== 'exam' && fault.atSeconds + (fault.kind === 'stall' ? 40 : 15) > speakSeconds) {
+  log(`WARNING: a ${fault.kind} at ${fault.atSeconds} s leaves little of the ${speakSeconds} s conversation for the app to recover in (recoveredAsRequested may be red for that reason alone). Fire it earlier or raise SPEAK_SECONDS.`);
+}
 
 const browser = await chromium.launch({
   args: [
@@ -90,6 +110,8 @@ const gemini = { usage: [], audioChunks: [], audioAt: [], words: [], errors: [] 
 // Bodies are never kept (the answer carries the SDP, the token URL carries the access token): status, the app's
 // error code and hardStopAt only.
 const providerCalls = [];
+// When each create call was made (epoch ms), parallel to providerCalls: the first one after a fault is the recovery session.
+const providerCallAt = [];
 const providerAttempts = [];
 const attemptOf = new Map();
 page.on('request', (r) => {
@@ -97,6 +119,7 @@ page.on('request', (r) => {
   if (!m) return;
   const attempt = { call: m[1], status: null, code: null, hardStopAt: null };
   providerCalls.push(m[1]);
+  providerCallAt.push(Date.now());
   providerAttempts.push(attempt);
   attemptOf.set(r, attempt);
 });
@@ -183,11 +206,34 @@ page.on('response', async (r) => {
 // Snapshot the page's audio spans and data-channel events every few seconds,
 // keyed by document, so nothing is lost when a card or the results page loads.
 const snapshots = {};
+// What the live panel showed, per card ('roleplay' | 'cardA' | 'cardB'), sampled with every snapshot while that card is live
+// (liveCard): the recovery count (data-live-recoveries, only present above zero) and whether it showed the error alert. The
+// error state is not judged once the card is being saved (a failed save is another failure).
+const panelSeen = {};
+let liveCard = null;
+const notePanel = (panel) => {
+  if (!panel || !liveCard) return;
+  const seen = (panelSeen[liveCard] ??= { recoveries: 0, error: null });
+  seen.recoveries = Math.max(seen.recoveries, panel.recoveries);
+  if (!/Saving conversation|Conversation saved/.test(panel.label)) seen.error = panel.alert;
+};
 const snapshot = async () => {
   const s = await page.evaluate(() => ({
     docId: window.__docId, events: window.__voiceEvents ?? [], mic: window.__micSpans ?? [], patient: window.__patientSpans ?? [],
     rtc: window.__rtcStates ?? [], ws: window.__wsdiag ?? [],
+    fault: window.__lvFault ? { swallowed: window.__lvFault.swallowed } : null,
+    panel: (() => {
+      const el = document.querySelector('[data-testid="speaking-mic-indicator"]');
+      if (!el) return null;
+      const root = el.closest('[data-testid="speaking-conversation-panel"]') ?? el.parentElement;
+      return {
+        recoveries: Number(el.getAttribute('data-live-recoveries')) || 0,
+        label: el.textContent ?? '',
+        alert: Boolean(root?.querySelector('[role="alert"]')),
+      };
+    })(),
   })).catch(() => null);
+  notePanel(s?.panel);
   if (s?.docId && (s.events.length || s.mic.length)) snapshots[s.docId] = s;
 };
 const snapshotTimer = setInterval(snapshot, 3_000);
@@ -339,12 +385,53 @@ const shot = (name) => page.screenshot({ path: `${out}/${name}.png`, fullPage: t
 const metrics = {
   mode: MODE, provider: VOICE_PROVIDER || 'primary', expectedPrimary: EXPECTED_PRIMARY || null, expectedPrimaryIgnored, failPrimary,
   cardId: CARD_ID, speakSeconds,
+  // Fault injection: kind 'drop' | 'stall' | null (off); atSeconds after the candidate tape started; firedAt (epoch ms) and
+  // provider are what the page really hit (null until it fired); recoveredAt = the first provider create call after it,
+  // when the panel reports a recovery; swallowed = server messages hidden from the app by a stall; error only when no
+  // live transport was found to hit.
+  fault: { kind: fault.kind, atSeconds: fault.atSeconds, firedAt: null, provider: null, recoveredAt: null, swallowed: null, stallIgnored: fault.stallIgnored },
   script: SCRIPT_NAME, voice: VOICE, runId: process.env.GITHUB_RUN_ID ?? null, startedAt: new Date().toISOString(),
 };
 const cardText = {};
 let failed = null;
 
+// The fault fires once, in the first live conversation (practice, or exam Card A): from the candidate tape start (the
+// microphone opening, the same origin the latency numbers use) + atSeconds.
+let faultScheduled = false;
+let faultTimer = null;
+let faultFired = Promise.resolve();
+async function fireFault(label) {
+  const hint = metrics[`${label}Panel`]?.provider ?? null;
+  const hit = await page.evaluate(({ kind, hint }) => {
+    const f = window.__lvFault;
+    const live = f?.live() ?? { gemini: 0, openai: 0 };
+    const provider = hint && live[hint] ? hint : live.gemini ? 'gemini' : live.openai ? 'openai' : null;
+    if (!f || !provider) return { provider: null, live };
+    if (kind === 'stall') f.stallOn();
+    else if (provider === 'gemini') f.dropGemini();
+    else f.dropOpenAi();
+    return { provider, live, at: Date.now() };
+  }, { kind: fault.kind, hint }).catch((error) => ({ provider: null, error: String(error).slice(0, 300) }));
+  if (!hit.provider) {
+    metrics.fault.error = hit.error ?? `no live provider transport to ${fault.kind} ${JSON.stringify(hit.live)}`;
+    log('FAULT NOT APPLIED:', metrics.fault.error);
+    return;
+  }
+  metrics.fault.firedAt = hit.at;
+  metrics.fault.provider = hit.provider;
+  log(`FAULT ${fault.kind} applied to the ${hit.provider} transport`);
+}
+async function scheduleFault(label) {
+  if (!fault.kind || faultScheduled) return;
+  faultScheduled = true;
+  const micStartedAt = (await page.evaluate(() => window.__micStartedAt).catch(() => null)) ?? Date.now();
+  const wait = Math.max(0, micStartedAt + fault.atSeconds * 1000 - Date.now());
+  log(`fault ${fault.kind}: firing in ${(wait / 1000).toFixed(1)} s (${fault.atSeconds} s after the microphone tape started)`);
+  faultTimer = setTimeout(() => { faultFired = fireFault(label); }, wait);
+}
+
 async function startLive(label) {
+  liveCard = label;
   await page.getByTestId('speaking-mic-indicator').waitFor({ timeout: 60_000 });
   const start = page.getByRole('button', { name: 'Start speaking' });
   // Auto-start may already be connecting (button shown but disabled); click only when needed.
@@ -372,6 +459,7 @@ async function startLive(label) {
   };
   metrics[`${label}MicStreams`] = await page.evaluate(() => (window.__micStreams ?? []).map((s) => s.getTracks().map((t) => t.readyState))).catch(() => null);
   log(`${label}: live voice connected`, JSON.stringify(metrics[`${label}Panel`]));
+  await scheduleFault(label);
 }
 
 async function waitForGrade(label, minutes) {
@@ -457,6 +545,7 @@ try {
       // Each card ends automatically at 5:00; Card B's prep (or the results) follows.
       if (card === 'A') await page.getByRole('button', { name: /start the discussion now/i }).waitFor({ timeout: 7 * 60_000 });
       else await page.waitForURL(/\/speaking\/exam\/[^/]+\/results/, { timeout: 7 * 60_000 });
+      liveCard = null;
       log(`card ${card} finished; provider calls so far: ${providerCalls.join(', ')}`);
       await shot(`3-after-card-${card}`);
     }
@@ -511,6 +600,7 @@ try {
     const before = await readLive();
     metrics.micStartedAt = before.micStartedAt;
     await snapshot();
+    liveCard = null;
     log('provider calls:', providerCalls.join(', ') || '(none)', '| data-channel events:', before.events.length);
     if (VOICE_PROVIDER && !providerCalls.includes(VOICE_PROVIDER === 'openai' ? 'openai/offer' : 'gemini/token')) {
       throw new Error(`Expected the ${VOICE_PROVIDER} provider, saw: ${providerCalls.join(', ') || 'none'}`);
@@ -550,6 +640,9 @@ try {
   failed = error;
   await shot('failure').catch(() => undefined);
 } finally {
+  // A fault that has not fired by now never will; one that is firing right now settles first.
+  clearTimeout(faultTimer);
+  await faultFired;
   await snapshot().catch(() => undefined);
   clearInterval(snapshotTimer);
   const docs = Object.values(snapshots);
@@ -614,6 +707,29 @@ try {
   const c = metrics.conversation;
   const closedAt = (from) => openAiEvents.some((e) => e.type === 'session.closed' && e.__at >= from && e.__at - from < 20_000)
     || stability.socketCloses.some((t) => t >= from && t - from < 20_000);
+  // Mid-session recovery, as each card's panel reported it (recoveries: null = the panel was never read; exam: the total,
+  // with recoveriesA / recoveriesB per card). The fault hit the first live conversation only, so that card's panel decides.
+  const counted = Object.values(panelSeen);
+  metrics.recoveries = counted.length ? counted.reduce((sum, p) => sum + p.recoveries, 0) : null;
+  if (MODE === 'exam') {
+    metrics.recoveriesA = panelSeen.cardA?.recoveries ?? null;
+    metrics.recoveriesB = panelSeen.cardB?.recoveries ?? null;
+  }
+  const faultedPanel = panelSeen[MODE === 'exam' ? 'cardA' : 'roleplay'];
+  const faultMetrics = metrics.fault;
+  // The recovery session is the first create call after the fault, but only when the panel reports a recovery (without one
+  // the next call is something else: an exam's Card B).
+  faultMetrics.recoveredAt = faultMetrics.firedAt && (faultedPanel?.recoveries ?? 0) >= 1
+    ? (providerCallAt.find((t) => t > faultMetrics.firedAt) ?? null)
+    : null;
+  faultMetrics.swallowed = fault.kind ? Math.max(0, ...docs.map((d) => d.fault?.swallowed ?? 0)) : null;
+  // Every moment the patient produced something: the start of each audible span, each transcript delta. Judged from the
+  // recovery session's creation on, so what the old (dropped or stalled) transport still carried cannot count.
+  const patientAt = [
+    ...docs.flatMap((d) => d.patient).map(([start]) => start),
+    ...gemini.words.filter((w) => w.who === 'patient').map((w) => w.at),
+    ...events.filter((e) => e.type === 'session.output_transcript.delta').map((e) => e.__at),
+  ];
   metrics.checks = {
     // The first provider the app tried is the one this run expected (an unpinned run with EXPECTED_PRIMARY set). Null
     // when nothing was expected, and when VOICE_PROVIDER pins one: then EXPECTED_PRIMARY is ignored
@@ -628,6 +744,11 @@ try {
         && JSON.stringify(providerCalls) === JSON.stringify(Array.from({ length: panels.length }, () => [primaryCall, secondaryCall]).flat())
         && panels.every((p) => p?.provider === secondaryName && p.failedOver === true)
       : null,
+    // FAULT_DROP_AT_S / FAULT_STALL_AT_S: the fault fired, the faulted card's panel reports >= 1 recovery, the patient spoke
+    // again after the recovery session was asked for, and the panel did not end in the error state. Null without a fault.
+    recoveredAsRequested: recoveredAsRequested({
+      fault: faultMetrics, recoveries: faultedPanel?.recoveries ?? null, errorShown: faultedPanel?.error ?? null, patientAt,
+    }),
     // Exam: each card carries its slot letter, never a printed source-card number (both cards can print the same one).
     // innerText is uppercased by CSS, hence /i.
     cardLabelsBySlot: MODE === 'exam' && cardText.A && cardText.B

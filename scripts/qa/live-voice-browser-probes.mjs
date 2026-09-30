@@ -8,6 +8,8 @@
 //  - a recording of the patient's audio (webm/opus) for the owner's listening test;
 //  - GPT-Live data-channel events and RTCPeerConnection state changes;
 //  - Gemini WebSocket close code / reason / wasClean.
+// And, only when the harness calls it (FAULT_DROP_AT_S / FAULT_STALL_AT_S), window.__lvFault: kill or silence the live
+// provider transport from inside the page, for the mid-session recovery runs.
 export function installProbes(provider) {
   window.__voiceEvents = [];
   window.__audioOnsets = [];
@@ -18,6 +20,51 @@ export function installProbes(provider) {
   window.__rtcStates = [];
   window.__wsdiag = [];
   window.__geminiWs = false;
+
+  // Fault injection. Inert until the harness calls it.
+  //  live()         how many provider transports are open now: { gemini: sockets, openai: 'oai-events' data channels }
+  //  dropGemini()   closes the newest open Gemini WebSocket (its close event is what the app listens to)
+  //  dropOpenAi()   closes the newest open 'oai-events' data channel (peer.close() alone fires no event locally)
+  //  stallOn()      from now on swallows every server -> client message, and silences the patient's WebRTC audio, like a
+  //                 provider that went silent (Gemini's audio rides in its messages, so swallowing them is enough there)
+  //  stallOff()     ends the stall; it also ends by itself when the app builds a NEW transport (the recovered session)
+  // Each drop returns 1 when it closed something, else 0. stalled / swallowed are readable on the object.
+  const sockets = [];
+  const channels = [];
+  const remoteTracks = [];
+  const fault = {
+    stalled: false,
+    swallowed: 0,
+    live: () => ({ gemini: sockets.filter((s) => s.readyState === 1).length, openai: channels.filter((c) => c.readyState === 'open').length }),
+    dropGemini: () => {
+      const socket = sockets.findLast((s) => s.readyState === 1);
+      if (!socket) return 0;
+      socket.__lvDropped = true;
+      socket.close();
+      return 1;
+    },
+    dropOpenAi: () => {
+      const channel = channels.findLast((c) => c.readyState === 'open');
+      if (!channel) return 0;
+      channel.close();
+      return 1;
+    },
+    stallOn: () => {
+      fault.stalled = true;
+      remoteTracks.forEach((track) => { track.enabled = false; });
+    },
+    stallOff: () => { fault.stalled = false; },
+  };
+  window.__lvFault = fault;
+  // Registered first on every provider transport, so stopImmediatePropagation() hides a message from the app's
+  // onmessage handler and from the recording listeners below alike (a swallowed message never happened).
+  const swallow = (e) => {
+    if (!fault.stalled) return;
+    fault.swallowed += 1;
+    e.stopImmediatePropagation();
+  };
+  // A new provider transport means the app recovered (or failed over): the stall is over.
+  const newTransport = () => { fault.stalled = false; };
 
   // Speech spans from the audio itself (barge-in, talk-over, silence and latency checks).
   const watchAnalyser = (analyser, list) => {
@@ -101,7 +148,11 @@ export function installProbes(provider) {
   window.RTCPeerConnection = class extends Native {
     constructor(...args) {
       super(...args);
-      this.addEventListener('track', (e) => watchRemote(e.streams[0] ?? new MediaStream([e.track])));
+      newTransport();
+      this.addEventListener('track', (e) => {
+        remoteTracks.push(e.track);
+        watchRemote(e.streams[0] ?? new MediaStream([e.track]));
+      });
       this.addEventListener('connectionstatechange', () => window.__rtcStates.push({ at: Date.now(), state: this.connectionState }));
       this.addEventListener('iceconnectionstatechange', () => window.__rtcStates.push({ at: Date.now(), ice: this.iceConnectionState }));
     }
@@ -109,6 +160,8 @@ export function installProbes(provider) {
   const createDataChannel = Native.prototype.createDataChannel;
   Native.prototype.createDataChannel = function (...args) {
     const channel = createDataChannel.apply(this, args);
+    if (channel.label === 'oai-events') channels.push(channel);
+    channel.addEventListener('message', swallow);
     channel.addEventListener('message', (e) => {
       try {
         const event = { ...JSON.parse(e.data), __at: Date.now() };
@@ -136,10 +189,14 @@ export function installProbes(provider) {
     constructor(...args) {
       super(...args);
       if (!/generativelanguage/.test(String(args[0]))) return;
+      sockets.push(this);
+      newTransport();
+      this.addEventListener('message', swallow);
       openGeminiSockets += 1;
       window.__geminiWs = true;
       this.addEventListener('close', (e) => {
-        window.__wsdiag.push({ at: Date.now(), type: 'close', code: e.code, reason: e.reason, wasClean: e.wasClean });
+        // injected: the close was the harness's own fault injection, not the provider's.
+        window.__wsdiag.push({ at: Date.now(), type: 'close', code: e.code, reason: e.reason, wasClean: e.wasClean, ...(this.__lvDropped ? { injected: true } : {}) });
         openGeminiSockets -= 1;
         window.__geminiWs = openGeminiSockets > 0;
       });
