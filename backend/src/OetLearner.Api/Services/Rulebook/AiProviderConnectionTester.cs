@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -100,18 +101,42 @@ public sealed class AiProviderConnectionTester(
             .FirstOrDefaultAsync(p => p.Code == providerCode, ct)
             ?? throw new InvalidOperationException($"Unknown AI provider code '{providerCode}'.");
 
-        var protector = dataProtection.CreateProtector("AiProvider.PlatformKey.v1");
-        var apiKey = string.IsNullOrEmpty(provider.EncryptedApiKey)
-            ? string.Empty
-            : protector.Unprotect(provider.EncryptedApiKey);
-
-        var result = await ProbeAsync(provider, apiKey, ct, deep);
+        var apiKey = TryReadApiKey(provider.EncryptedApiKey);
+        var result = apiKey is null
+            ? UndecryptableKeyResult()
+            : await ProbeAsync(provider, apiKey, ct, deep);
         provider.LastTestedAt = result.TestedAt;
         provider.LastTestStatus = result.Status;
         provider.LastTestError = result.ErrorMessage;
         provider.UpdatedAt = result.TestedAt;
         await db.SaveChangesAsync(ct);
         return result;
+    }
+
+    private const string UndecryptableKeyMessage =
+        "The stored API key could not be decrypted. Re-enter the key in the provider settings.";
+
+    private AiProviderTestResult UndecryptableKeyResult()
+        => new(AiProviderTestStatuses.Auth, UndecryptableKeyMessage, 0, clock.GetUtcNow());
+
+    /// <summary>
+    /// Plaintext key for a stored value: empty when none is stored, the literal marker itself for
+    /// keyless subscription sidecar rows (the sidecar ignores it, so the probe runs like a real
+    /// call), and null when the ciphertext cannot be decrypted (rotated Data Protection keys, a
+    /// hand-edited row). Callers turn null into a clear status instead of an unhandled 500.
+    /// </summary>
+    private string? TryReadApiKey(string? encryptedApiKey)
+    {
+        if (string.IsNullOrEmpty(encryptedApiKey)) return string.Empty;
+        if (WritingSubscriptionProviderDefaults.IsMarkerKey(encryptedApiKey)) return encryptedApiKey;
+        try
+        {
+            return dataProtection.CreateProtector("AiProvider.PlatformKey.v1").Unprotect(encryptedApiKey);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<AiProviderTestResult> TestAccountAsync(string providerId, string accountId, CancellationToken ct, bool deep = false)
@@ -122,12 +147,10 @@ public sealed class AiProviderConnectionTester(
             .FirstOrDefaultAsync(a => a.Id == accountId && a.ProviderId == providerId, ct)
             ?? throw new InvalidOperationException($"Unknown AI provider account '{accountId}'.");
 
-        var protector = dataProtection.CreateProtector("AiProvider.PlatformKey.v1");
-        var apiKey = string.IsNullOrEmpty(account.EncryptedApiKey)
-            ? string.Empty
-            : protector.Unprotect(account.EncryptedApiKey);
-
-        var result = await ProbeAsync(provider, apiKey, ct, deep);
+        var apiKey = TryReadApiKey(account.EncryptedApiKey);
+        var result = apiKey is null
+            ? UndecryptableKeyResult()
+            : await ProbeAsync(provider, apiKey, ct, deep);
         account.LastTestedAt = result.TestedAt;
         account.LastTestStatus = result.Status;
         account.LastTestError = result.ErrorMessage;
@@ -156,18 +179,15 @@ public sealed class AiProviderConnectionTester(
         var startedAt = clock.GetUtcNow();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var protector = dataProtection.CreateProtector("AiProvider.PlatformKey.v1");
-        var apiKey = string.IsNullOrEmpty(provider.EncryptedApiKey)
-            ? string.Empty
-            : protector.Unprotect(provider.EncryptedApiKey);
-
-        if (string.IsNullOrWhiteSpace(apiKey))
+        var apiKey = TryReadApiKey(provider.EncryptedApiKey);
+        if (apiKey is null || string.IsNullOrWhiteSpace(apiKey))
         {
-            steps.Add(new AiModelTestStep("credential", "No API key configured.", false));
+            var credentialMessage = apiKey is null ? UndecryptableKeyMessage : "No API key configured.";
+            steps.Add(new AiModelTestStep("credential", credentialMessage, false));
             stopwatch.Stop();
             return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Auth,
-                "No API key configured.",
+                credentialMessage,
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt, model, steps));
         }

@@ -40,6 +40,14 @@ public static class WritingSubscriptionProviderDefaults
     /// <summary>Hosts that must appear in OET_INTERNAL_AI_HOSTS for these rows'
     /// plain-HTTP internal base URLs to pass the SSRF guard.</summary>
     public const string RequiredInternalHosts = "oet-writing-claude,oet-writing-codex";
+
+    /// <summary>Literal stored in <c>AiProvider.EncryptedApiKey</c> of the keyless subscription
+    /// sidecar rows. It is NOT Data Protection ciphertext and not a secret: the sidecars ignore
+    /// the key header, so the registry hands it back as the key instead of failing to decrypt.</summary>
+    public const string MarkerKey = "subscription-sidecar";
+
+    public static bool IsMarkerKey(string? storedKey)
+        => string.Equals(storedKey, MarkerKey, StringComparison.Ordinal);
 }
 
 /// <summary>Idempotent startup seeder for the two Writing subscription provider rows.</summary>
@@ -63,7 +71,7 @@ public static class WritingSubscriptionProviderSeeder
                 // Marker only — the sidecar authenticates with the subscription,
                 // not a key. Present so the route key-guard + probe treat the row
                 // as credentialed.
-                EncryptedApiKey = "subscription-sidecar",
+                EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey,
                 ApiKeyHint = "claude-max-5x",
                 AllowedModelsCsv = WritingSubscriptionProviderDefaults.ClaudeModel,
                 PricePer1kPromptTokens = 0m,
@@ -88,7 +96,7 @@ public static class WritingSubscriptionProviderSeeder
                 Category = AiProviderCategory.TextChat,
                 BaseUrl = WritingSubscriptionProviderDefaults.CodexBaseUrl,
                 DefaultModel = WritingSubscriptionProviderDefaults.CodexModel,
-                EncryptedApiKey = "subscription-sidecar",
+                EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey,
                 ApiKeyHint = "codex-chatgpt",
                 AllowedModelsCsv = WritingSubscriptionProviderDefaults.CodexModel,
                 PricePer1kPromptTokens = 0m,

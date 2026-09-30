@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Services;
@@ -70,6 +71,58 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
         Assert.False(called);
         Assert.Contains("No API key", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task UndecryptableStoredKey_ReturnsAuthWithAClearMessage_InsteadOfThrowing()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var row = await db.AiProviders.FirstAsync(p => p.Code == "copilot");
+        row.EncryptedApiKey = "definitely-not-ciphertext";
+        await db.SaveChangesAsync();
+        var called = false;
+        var tester = NewTester(db, _ => { called = true; return Task.FromResult(BuildResponse(HttpStatusCode.OK)); });
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.False(called);
+        Assert.Contains("could not be decrypted", result.ErrorMessage);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Auth, persisted.LastTestStatus);
+    }
+
+    [Fact]
+    public async Task SubscriptionSidecarMarkerKey_IsProbedLikeACredentialedRow()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
+        try
+        {
+            await using var db = new LearnerDbContext(_options);
+            await SeedProviderAsync(
+                db, "secret-key-1234567890", baseUrl: "http://oet-writing-claude:8080", dialect: AiProviderDialect.Anthropic);
+            var row = await db.AiProviders.FirstAsync(p => p.Code == "copilot");
+            // Exactly what WritingSubscriptionProviderSeeder stores: a literal marker, not ciphertext.
+            row.EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey;
+            await db.SaveChangesAsync();
+            HttpRequestMessage? captured = null;
+            var tester = NewTester(db, request =>
+            {
+                captured = request;
+                return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+            });
+
+            var result = await tester.TestProviderAsync("copilot", default);
+
+            Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+            Assert.NotNull(captured);
+            Assert.Equal("http://oet-writing-claude:8080/v1/messages", captured!.RequestUri!.ToString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
     }
 
     [Theory]

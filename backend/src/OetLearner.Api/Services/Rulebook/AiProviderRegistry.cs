@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -61,6 +62,9 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
     {
         var p = await FindByCodeAsync(providerCode, ct);
         if (p is null || string.IsNullOrEmpty(p.EncryptedApiKey)) return null;
+        // Keyless subscription sidecar rows store a literal marker, not ciphertext; the sidecar
+        // ignores the key header, so hand the marker back instead of failing to decrypt it.
+        if (WritingSubscriptionProviderDefaults.IsMarkerKey(p.EncryptedApiKey)) return p.EncryptedApiKey;
         try { return _protector.Unprotect(p.EncryptedApiKey); }
         catch { return null; }
     }
@@ -439,6 +443,16 @@ public sealed class AnthropicProvider(
         return null;
     }
 
+    /// <summary>
+    /// True only for first-party Anthropic hosts, whose error text is vendor text we may log. Any
+    /// other host (the subscription sidecar, a proxy, an unknown gateway) can echo request
+    /// fragments or CLI output, so only the head of its message is kept.
+    /// </summary>
+    internal static bool RetainsVendorText(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+           && (uri.Host.Equals("anthropic.com", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".anthropic.com", StringComparison.OrdinalIgnoreCase));
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var held = false;
@@ -573,11 +587,21 @@ public sealed class AnthropicProvider(
         using var _response = response;
         if (!response.IsSuccessStatusCode)
         {
+            var status = (int)response.StatusCode;
+            // The body is parsed into allow-listed tokens plus a redacted, capped text and never
+            // enters the exception Message (post-mortem INC-2026-CLAUDE-01).
             throw new AiProviderHttpException(
                 "Anthropic",
-                (int)response.StatusCode,
+                status,
                 response.ReasonPhrase,
-                ReadRetryAfter(response));
+                ReadRetryAfter(response),
+                AiProviderErrorParser.Parse(
+                    AiProviderErrorDialect.Anthropic,
+                    status,
+                    body,
+                    response.Headers,
+                    apiKey,
+                    retainProviderText: RetainsVendorText(baseUrl)));
         }
 
         using var doc = JsonDocument.Parse(body);

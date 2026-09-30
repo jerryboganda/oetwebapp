@@ -37,9 +37,12 @@ public sealed class AiCircuitBreakerStore(
     public static readonly TimeSpan ProviderFailureWindow = TimeSpan.FromSeconds(60);
     public const int ProviderFailureThreshold = 5;
 
+    // "quota_exhausted" / "auth" are the gateway's class codes for typed provider failures (billing
+    // exhausted, credential rejected): retrying in a minute cannot help, so open at once. A typed
+    // "invalid_request" is deliberately NOT here: one bad request must not shut a shared provider.
     private static readonly HashSet<string> ImmediateOpenCodes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "401", "403", "402", "invalid_model", "invalid_config",
+        "401", "403", "402", "invalid_model", "invalid_config", "quota_exhausted", "auth",
     };
 
     public async Task<bool> AllowAsync(string kind, string key, CancellationToken ct)
