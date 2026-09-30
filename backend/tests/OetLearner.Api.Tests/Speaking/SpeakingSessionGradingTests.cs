@@ -475,10 +475,265 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         Assert.True(await SpeakingCreditSettlement.IsCreditFundedAsync(_db, session, default));
     }
 
+    // ── Classic assessor: reply contract, provenance and the grading chain ──
+
+    private async Task<string> SeedFinishedSessionWithTranscriptAsync()
+    {
+        var sessions = new SpeakingSessionService(_db, compliance: BuildCompliance());
+        var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
+        await sessions.FinishWarmupAsync(UserId, created.SessionId, default);
+        await sessions.StartRolePlayAsync(UserId, created.SessionId, default);
+        await sessions.EndSessionAsync(UserId, created.SessionId, default);
+        SeedTranscript(created.SessionId);
+        return created.SessionId;
+    }
+
+    private SpeakingAiAssessmentService BuildAssessor(
+        IAiGatewayService gateway,
+        SpeakingGradingOptions? gradingOptions = null)
+        => new(
+            _db,
+            gateway,
+            NullLogger<SpeakingAiAssessmentService>.Instance,
+            gradingOptions: gradingOptions is null ? null : Options.Create(gradingOptions));
+
+    private static object Crit(int score) => new { score, rationale = "ok", evidenceQuotes = Array.Empty<string>() };
+
+    private static Dictionary<string, object> FullCriteria() => new()
+    {
+        ["intelligibility"] = Crit(5),
+        ["fluency"] = Crit(5),
+        ["appropriateness"] = Crit(5),
+        ["grammarExpression"] = Crit(5),
+        ["relationshipBuilding"] = Crit(3),
+        ["patientPerspective"] = Crit(2),
+        ["structure"] = Crit(2),
+        ["informationGathering"] = Crit(2),
+        ["informationGiving"] = Crit(2),
+    };
+
+    private static string ReplyWith(Dictionary<string, object> criterionScores) => JsonSerializer.Serialize(new
+    {
+        criterionScores,
+        readinessBand = "exam_ready",
+        overallSummary = "Strong, organised communication.",
+        confidenceBand = "high",
+    });
+
+    [Fact]
+    public async Task Assessor_ReplyMissingACriterion_IsUnparseable_AndNothingIsPersisted()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var criteria = FullCriteria();
+        criteria.Remove("informationGiving");
+        var gateway = new SwitchableAiGateway { Completion = ReplyWith(criteria) };
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => BuildAssessor(gateway).RunAssessmentAsync(sessionId, default));
+
+        // Previously the absent criterion scored 0 and the grade was stored as if it were real.
+        Assert.Equal("speaking_ai_unparseable", ex.ErrorCode);
+        Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
+    [Fact]
+    public async Task Assessor_ReplyWithANonNumericScore_IsUnparseable()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var criteria = FullCriteria();
+        criteria["fluency"] = new { score = "n/a", rationale = "ok", evidenceQuotes = Array.Empty<string>() };
+        var gateway = new SwitchableAiGateway { Completion = ReplyWith(criteria) };
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => BuildAssessor(gateway).RunAssessmentAsync(sessionId, default));
+
+        Assert.Equal("speaking_ai_unparseable", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Assessor_ReplyUsingTheSystemPromptSpellings_IsAcceptedAndStoredUnderTheCanonicalCodes()
+    {
+        // The grounded system prompt names these two criteria grammar / providingStructure;
+        // the JSON template says grammarExpression / structure. A model may follow either.
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var criteria = FullCriteria();
+        criteria.Remove("grammarExpression");
+        criteria.Remove("structure");
+        criteria["grammar"] = Crit(4);
+        criteria["providingStructure"] = Crit(1);
+        var gateway = new SwitchableAiGateway { Completion = ReplyWith(criteria) };
+
+        var projection = await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(4, row.GrammarExpression);
+        Assert.Equal(1, row.Structure);
+        Assert.Contains("grammarExpression", row.PerCriterionRationalesJson);
+        Assert.Contains("structure", row.PerCriterionRationalesJson);
+        Assert.DoesNotContain("providingStructure", row.PerCriterionRationalesJson);
+        Assert.Equal(4, projection.CriterionScores["grammarExpression"].Score);
+        Assert.Equal(1, projection.CriterionScores["structure"].Score);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Assessor_WhenBothSpellingsArePresent_TheCanonicalOneWinsInEitherOrder(bool aliasFirst)
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var criteria = new Dictionary<string, object>();
+        if (aliasFirst) criteria["grammar"] = Crit(1);
+        foreach (var (code, value) in FullCriteria()) criteria[code] = value;
+        if (!aliasFirst) criteria["grammar"] = Crit(1);
+        var gateway = new SwitchableAiGateway { Completion = ReplyWith(criteria) };
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(5, row.GrammarExpression);
+    }
+
+    [Fact]
+    public async Task Assessor_BareNumberScores_AreAccepted()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var criteria = FullCriteria();
+        criteria["fluency"] = 4;
+        var gateway = new SwitchableAiGateway { Completion = ReplyWith(criteria) };
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(4, row.Fluency);
+    }
+
+    [Fact]
+    public async Task Assessor_AcceptsTheMockProvidersSpeakingReply()
+    {
+        // Dev and smoke stacks grade through MockAiProvider: its Speaking reply must satisfy the
+        // stricter nine-criterion contract, or those flows would start failing with 409.
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var mockReply = await new MockAiProvider().CompleteAsync(
+            new AiProviderRequest { SystemPrompt = "**This call concerns SPEAKING** — universal 350/500 pass mark." },
+            default);
+        var gateway = new SwitchableAiGateway { Completion = mockReply.Text };
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
+    [Fact]
+    public async Task Assessor_StoresTheProviderAndModelThatActuallyRan()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway { ResolvedProvider = "writing-claude-sub", ResolvedModel = "claude-opus-5-5" };
+
+        var projection = await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal("writing-claude-sub", row.Provider);
+        Assert.Equal("claude-opus-5-5", row.ModelId);
+        Assert.Equal("writing-claude-sub", projection.Provider);
+        Assert.Equal("claude-opus-5-5", projection.ModelId);
+    }
+
+    [Fact]
+    public async Task Assessor_ProvenanceIsTruncatedToTheColumnLimits()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway
+        {
+            ResolvedProvider = new string('p', 40),
+            ResolvedModel = new string('m', 120),
+        };
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(32, row.Provider.Length);
+        Assert.Equal(96, row.ModelId.Length);
+    }
+
+    [Fact]
+    public async Task Assessor_ProvenanceFallsBackToTheLegacyConstantsWhenTheGatewayReportsNothing()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+
+        await BuildAssessor(new SwitchableAiGateway()).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal("ai_gateway", row.Provider);
+        Assert.Equal("gateway-default", row.ModelId);
+    }
+
+    [Fact]
+    public async Task Assessor_WithAPinnedProvider_GradesOnThePinnedLevelInOneCall()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway { ResolvedProvider = "writing-claude-sub", ResolvedModel = "claude-opus-5-5" };
+        var options = new SpeakingGradingOptions { PinnedProviderCode = "writing-claude-sub", PinnedModel = "claude-opus-5-5" };
+
+        await BuildAssessor(gateway, options).RunAssessmentAsync(sessionId, default);
+
+        var call = Assert.Single(gateway.Requests);
+        Assert.Equal("writing-claude-sub", call.Provider);
+        Assert.Equal("claude-opus-5-5", call.Model);
+        Assert.Equal(AiFeatureCodes.SpeakingGrade, call.FeatureCode);
+    }
+
+    [Fact]
+    public async Task Assessor_WhenThePinnedLevelFails_GradesOnTheDefaultRoute_AndStoresThatProvider()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway
+        {
+            ResolvedProvider = "anthropic",
+            ResolvedModel = "claude-sonnet-5",
+            FailWhen = request => string.IsNullOrEmpty(request.Provider)
+                ? null
+                : new AiProviderHttpException("Anthropic", 502, "Bad Gateway"),
+        };
+        var options = new SpeakingGradingOptions { PinnedProviderCode = "writing-claude-sub", PinnedModel = "claude-opus-5-5" };
+
+        await BuildAssessor(gateway, options).RunAssessmentAsync(sessionId, default);
+
+        Assert.Equal(2, gateway.Requests.Count);
+        Assert.Equal("writing-claude-sub", gateway.Requests[0].Provider);
+        Assert.Equal(string.Empty, gateway.Requests[1].Provider);
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal("anthropic", row.Provider);
+        Assert.Equal("claude-sonnet-5", row.ModelId);
+    }
+
+    [Fact]
+    public async Task Assessor_WhenBothLevelsFail_StillSurfacesTheGenericRetryableError()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway { Fail = true };
+        var options = new SpeakingGradingOptions { PinnedProviderCode = "writing-claude-sub", PinnedModel = "claude-opus-5-5" };
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => BuildAssessor(gateway, options).RunAssessmentAsync(sessionId, default));
+
+        Assert.Equal("speaking_ai_unavailable", ex.ErrorCode);
+        Assert.Equal(2, gateway.Requests.Count);
+        Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
     private sealed class SwitchableAiGateway : IAiGatewayService
     {
         public bool Fail { get; set; }
         public Action? OnComplete { get; set; }
+
+        /// <summary>Raw model reply; null means the valid nine-criterion reply.</summary>
+        public string? Completion { get; set; }
+
+        /// <summary>What the "gateway" reports as the provider/model that served the call.</summary>
+        public string ResolvedProvider { get; set; } = string.Empty;
+        public string ResolvedModel { get; set; } = string.Empty;
+
+        /// <summary>Throws the returned exception for a request (used to fail only the pinned level).</summary>
+        public Func<AiGatewayRequest, Exception?>? FailWhen { get; set; }
+
+        public List<AiGatewayRequest> Requests { get; } = new();
 
         public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context) => new()
         {
@@ -498,15 +753,19 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
 
         public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
         {
+            Requests.Add(request);
             if (Fail) throw new InvalidOperationException("provider unreachable");
+            if (FailWhen?.Invoke(request) is { } failure) throw failure;
             OnComplete?.Invoke();
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(new AiGatewayResult
             {
-                Completion = ValidAssessmentJson(),
+                Completion = Completion ?? ValidAssessmentJson(),
                 Metadata = request.Prompt!.Metadata,
                 RulebookVersion = request.Prompt!.Metadata.RulebookVersion,
                 AppliedRuleIds = request.Prompt!.Metadata.AppliedRuleIds,
+                ResolvedProvider = ResolvedProvider,
+                ResolvedModel = ResolvedModel,
             });
         }
     }

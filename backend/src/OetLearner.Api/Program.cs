@@ -162,6 +162,7 @@ builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuratio
 builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
+builder.Services.Configure<SpeakingGradingOptions>(builder.Configuration.GetSection(SpeakingGradingOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveVoiceOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveVoiceOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.FeatureFlagOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.FeatureFlagOptions.SectionName));

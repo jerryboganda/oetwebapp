@@ -80,7 +80,12 @@ Key properties:
 - **Separate compose project** (`docker-compose.agent-console.yml`, project
   `oet-agent-console`). Main deploys (`deploy.yml` → `auto-deploy-ghcr.sh`)
   never recreate it; they only ensure the `oet_agent_ctl` network exists.
-  Only the API slots `oet-api-blue` / `oet-api-green` join `oet_agent_ctl`.
+  The API slots `oet-api-blue` / `oet-api-green` and `oet-ai-worker` join
+  `oet_agent_ctl` (the Writing/Speaking subscription sidecars `oet-writing-claude`
+  / `oet-writing-codex` sit on it as well; queued `speaking.grade` operations run
+  only in `oet-ai-worker` and must reach `oet-writing-claude:8080`). Only the API
+  slots carry the internal token and `OwnerAgent__*` settings: `oet-ai-worker` can
+  reach the console's network port but cannot authenticate to it.
 - **No published ports, internal-only networks.** The sidecar has no
   internet route of its own; all outbound HTTP(S) goes through
   `oet-agent-egress` (allowlist; anything else becomes an approval card).
@@ -329,7 +334,9 @@ docker network inspect oet_agent_ctl --format '{{range .Containers}}{{.Name}} {{
 
 - Four `oet-agent-*` containers, all `healthy`, **empty Ports column**.
 - `/healthz` → `{"ok":true,...,"activeTurns":0,"draining":false}`.
-- `oet_agent_ctl` members: `oet-agent-console` and the live API slot(s) only.
+- `oet_agent_ctl` members: `oet-agent-console`, the live API slot(s), `oet-ai-worker`
+  and the Writing/Speaking subscription sidecars (`oet-writing-claude`,
+  `oet-writing-codex`) only.
 - As a non-owner admin, `GET /v1/owner-agent/status` → 403; `/me` →
   `{"isOwner":false}`.
 - As the owner: open `/admin/agent-console` → unlock (password + TOTP) →
@@ -767,8 +774,10 @@ authenticate.
 
 **Containers:** `oet-agent-console`, `oet-agent-egress`,
 `oet-agent-dockerproxy`, `oet-agent-dbproxy` (compose project
-`oet-agent-console`). **Networks:** `oet_agent_ctl` (internal; API slots ↔
-sidecar :8410), `oet_agent_net` (internal; sidecar ↔ proxies). **Volumes**
+`oet-agent-console`). **Networks:** `oet_agent_ctl` (internal; API slots and
+`oet-ai-worker` ↔ sidecars: console :8410 for the API slots, the Writing/Speaking
+subscription sidecars :8080 for the API slots and the worker), `oet_agent_net`
+(internal; sidecar ↔ proxies). **Volumes**
 (external): `oet_agent_home`, `oet_agent_workspace`, `oet_agent_sessions`;
 never `docker volume rm` them — `protect-production-data.sh` blocks it.
 **Images:** `ghcr.io/jerryboganda/oetwebapp-agent-console{,-egress,-dockerproxy}:<sha>`

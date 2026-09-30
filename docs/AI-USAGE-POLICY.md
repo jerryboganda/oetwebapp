@@ -527,3 +527,38 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   is **paused, not cancelled** — "$0 marginal cost" holds only while it
   stays paused. Codex is the fallback engine. Sources and quotes: runbook →
   "Vendor terms".
+
+### Owner directive 2026-09-30 — subscription route extended to `speaking.grade`
+
+The rules above govern the **owner's personal console engines** and remain in force for them.
+Two dedicated subscription sidecars (`oet-writing-claude`, `oet-writing-codex`) were already
+registered as `AiProvider` rows for Writing grading by the 2026-09-29 owner directive
+([`docs/ops/WRITING-AI-PROVIDERS.md`](ops/WRITING-AI-PROVIDERS.md)); that directive supersedes
+the "never `AiProvider` rows / never learner-triggered traffic" isolation rule for those two
+rows. On 2026-09-30 the owner extended the same route to Speaking grading:
+
+- **What:** `speaking.grade` (classic and v1.1 assessors) tries the `writing-claude-sub` row
+  (Claude Opus 5.5, effort `high`) first, and falls back to the default route (Anthropic API)
+  when that call fails. Implemented by `SpeakingGradeChain`; configured by
+  `Speaking__Grading__PinnedProviderCode` / `Speaking__Grading__PinnedModel` (empty provider =
+  off). Details and revert: [`docs/speaking/ai-providers.md`](speaking/ai-providers.md).
+- **Still under this policy (§0, §12):** the call goes through the coordinator and the gateway:
+  grounding enforced, one `AiUsageRecord` per physical call (priced `0.00` on the sidecar row),
+  kill switch, feature policy, platform budget reservation and the provider circuit breaker all
+  apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
+  taken at card reveal is committed once, after a grade exists.
+- **Shared allowance and lane:** the sidecar runs one request at a time and shares the Claude
+  Max allowance (and the `oet_agent_home` login) with Writing and the console, so Speaking and
+  Writing grades queue behind each other. Anthropic sizes Max limits for ordinary individual
+  use: a vendor-side suspension would take Writing and Speaking subscription grading down
+  together, and the automatic fallback to the API route is what keeps Speaking grading alive.
+- **Learner data:** Speaking transcripts are sent to Anthropic through the CLI under the
+  subscription's terms; the "Data protection" rules above apply, and confirming that model
+  training is off on the dedicated account is the owner's check. The sidecar spawns one CLI
+  process per request with tools disabled and writes no candidate content itself; whether the
+  CLI keeps session transcripts on the shared credential volume has **not** been verified and
+  is an open item.
+- **Open item — provider pin:** `POST /v1/ai/complete` lets any authenticated caller name an
+  active provider row, so while `writing-claude-sub` is active a caller could put their own
+  request on the subscription lane (plan and quota gates still apply). Closing that leak path
+  is outstanding work under "Rule for any future non-owner use".

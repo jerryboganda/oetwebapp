@@ -31,6 +31,15 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+// One line per failed request so `docker logs` explains a 502/429: method, path, status, error
+// code and duration ONLY. err.message can carry a tail of the CLI output (model text, prompt
+// quotes, learner content), so it is never logged here; a duration near the CLI timeout means
+// the engine timed out.
+function logFailure(engineName, req, url, status, code, startedAt) {
+  // eslint-disable-next-line no-console
+  console.error(`[writing-ai:${engineName}] ${req.method} ${url.pathname} -> ${status} ${code} in ${Date.now() - startedAt}ms`);
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.engineName            e.g. "claude" | "codex"
@@ -42,6 +51,7 @@ function sendJson(res, status, obj) {
 export function createSidecarServer({ engineName, onCompletion, onUsage, completionPath, port = 8080 }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
+    const startedAt = Date.now();
     try {
       if (req.method === 'GET' && url.pathname === '/healthz') {
         sendJson(res, 200, { ok: true, engine: engineName });
@@ -67,9 +77,11 @@ export function createSidecarServer({ engineName, onCompletion, onUsage, complet
       sendJson(res, 404, { error: { code: 'not_found', message: 'Unknown route' } });
     } catch (err) {
       if (err instanceof QuotaExceededError || err?.quotaExceeded) {
+        logFailure(engineName, req, url, 429, 'quota_exceeded', startedAt);
         sendJson(res, 429, { error: { code: 'quota_exceeded', message: err.message, type: 'rate_limit_error' } });
         return;
       }
+      logFailure(engineName, req, url, 502, 'engine_error', startedAt);
       sendJson(res, 502, { error: { code: 'engine_error', message: String(err?.message || err) } });
     }
   });

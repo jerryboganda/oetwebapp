@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.Json;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests.Services;
 
@@ -113,6 +114,100 @@ public sealed class AiRetryPolicyTests
             requestLikelySent: true);
 
         Assert.Equal(AiRetryDisposition.Terminal, result.Disposition);
+    }
+
+    private static AiProviderHttpException Typed(
+        int status,
+        AiProviderErrorClass errorClass,
+        TimeSpan? retryAfter = null,
+        TimeSpan? headerRetryAfter = null)
+        => new(
+            "Anthropic",
+            status,
+            "reason",
+            headerRetryAfter,
+            new AiProviderError(errorClass, status, null, null, null, null, retryAfter));
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(429)]
+    public void Classify_TypedQuotaExhausted_IsQuarantineWithNoRetries(int status)
+    {
+        // Anthropic reports "credit balance is too low" as 400, the sidecar reports exhausted quota as 429.
+        var result = AiRetryPolicy.Classify(Typed(status, AiProviderErrorClass.QuotaExhausted), requestLikelySent: true);
+
+        Assert.Equal(AiRetryDisposition.Quarantine, result.Disposition);
+        Assert.Equal(0, result.MaxRetries);
+        Assert.False(result.AllowLocalRepair);
+    }
+
+    [Fact]
+    public void Classify_TypedAuth_IsQuarantine()
+    {
+        var result = AiRetryPolicy.Classify(Typed(400, AiProviderErrorClass.Auth), requestLikelySent: true);
+
+        Assert.Equal(AiRetryDisposition.Quarantine, result.Disposition);
+        Assert.Equal(0, result.MaxRetries);
+    }
+
+    [Fact]
+    public void Classify_TypedQuotaExhausted_InsideAWrapperException_IsStillQuarantine()
+    {
+        var wrapped = new InvalidOperationException("wrapper", Typed(400, AiProviderErrorClass.QuotaExhausted));
+
+        Assert.Equal(AiRetryDisposition.Quarantine, AiRetryPolicy.Classify(wrapped, requestLikelySent: true).Disposition);
+    }
+
+    [Fact]
+    public void Classify_TypedOverloaded529_IsRetry()
+    {
+        var result = AiRetryPolicy.Classify(Typed(529, AiProviderErrorClass.Overloaded), requestLikelySent: true);
+
+        Assert.Equal(AiRetryDisposition.Retry, result.Disposition);
+        Assert.Equal(AiRetryPolicy.MaxProviderRetries, result.MaxRetries);
+    }
+
+    [Fact]
+    public void Classify_TypedInvalidRequest400_IsTerminal()
+    {
+        var result = AiRetryPolicy.Classify(Typed(400, AiProviderErrorClass.InvalidRequest), requestLikelySent: true);
+
+        Assert.Equal(AiRetryDisposition.Terminal, result.Disposition);
+    }
+
+    [Fact]
+    public void Classify_TypedRateLimited_HonoursTheProviderRetryAfter()
+    {
+        var result = AiRetryPolicy.Classify(
+            Typed(429, AiProviderErrorClass.RateLimited, headerRetryAfter: TimeSpan.FromSeconds(6)),
+            requestLikelySent: true);
+
+        Assert.Equal(AiRetryDisposition.Retry, result.Disposition);
+        Assert.NotNull(result.SuggestedDelay);
+        Assert.True(result.SuggestedDelay >= TimeSpan.FromSeconds(6));
+    }
+
+    [Fact]
+    public void Classify_TypedRateLimited_FallsBackToTheParsedProviderErrorRetryAfter()
+    {
+        // Gemini reports the wait in RetryInfo, not in a header.
+        var result = AiRetryPolicy.Classify(
+            Typed(429, AiProviderErrorClass.RateLimited, retryAfter: TimeSpan.FromSeconds(9)),
+            requestLikelySent: true);
+
+        Assert.True(result.SuggestedDelay >= TimeSpan.FromSeconds(9));
+    }
+
+    [Fact]
+    public void Classify_RetryAfterBeyondTheCap_IsCapped()
+    {
+        var result = AiRetryPolicy.Classify(
+            Typed(429, AiProviderErrorClass.RateLimited, headerRetryAfter: TimeSpan.FromHours(2)),
+            requestLikelySent: true);
+
+        // The cap plus at most the deterministic jitter (5% at the first attempt).
+        Assert.True(result.SuggestedDelay >= AiRetryPolicy.MaxHonouredRetryAfter);
+        Assert.True(result.SuggestedDelay < AiRetryPolicy.MaxHonouredRetryAfter * 1.1);
     }
 
     [Fact]
