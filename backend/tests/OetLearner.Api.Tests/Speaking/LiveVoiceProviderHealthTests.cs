@@ -26,7 +26,7 @@ public sealed class LiveVoiceProviderHealthTests
         return (new LiveVoiceProviderProbeState(clock), clock);
     }
 
-    private static void Fail(
+    private static LiveVoiceBreakerChange Fail(
         LiveVoiceProviderProbeState state,
         AiProviderErrorClass errorClass,
         string provider = LiveVoiceProviders.OpenAi,
