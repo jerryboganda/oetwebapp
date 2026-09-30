@@ -67,6 +67,15 @@ public interface IAiOperationStore
     Task<AiOperation?> FindByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct);
 
     Task<AiOperation?> FindByResourceSlotAsync(string resourceSlotKey, CancellationToken ct);
+
+    /// <summary>Delete the operation owning <paramref name="resourceSlotKey"/> ONLY when it is a
+    /// proven safe-failure (FailedTerminal / Cancelled / BlockedBudget) that produced no result
+    /// and was never billed. Returns true when a stale row was removed, freeing the slot for a
+    /// fresh attempt. A Completed / InFlight / Indeterminate owner is NEVER deleted — those may
+    /// have been billed or hold a real result, so they must keep their slot (the double-billing
+    /// guard this index exists for). This is the unblock path for the retry-storm deadlock where
+    /// a fresh submission collides with a ghost of a previous failed attempt.</summary>
+    Task<bool> DeleteIfSafeFailureAsync(string resourceSlotKey, CancellationToken ct);
 }
 
 public sealed class AiOperationStore : IAiOperationStore
@@ -142,6 +151,16 @@ public sealed class AiOperationStore : IAiOperationStore
 
         await using var scope = _scopeFactory!.CreateAsyncScope();
         return await FindByResourceSlotCoreAsync(
+            scope.ServiceProvider.GetRequiredService<LearnerDbContext>(), resourceSlotKey, ct);
+    }
+
+    public async Task<bool> DeleteIfSafeFailureAsync(string resourceSlotKey, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(resourceSlotKey)) return false;
+        if (_fixedDb is not null) return await DeleteIfSafeFailureCoreAsync(_fixedDb, resourceSlotKey, ct);
+
+        await using var scope = _scopeFactory!.CreateAsyncScope();
+        return await DeleteIfSafeFailureCoreAsync(
             scope.ServiceProvider.GetRequiredService<LearnerDbContext>(), resourceSlotKey, ct);
     }
 
@@ -230,6 +249,21 @@ public sealed class AiOperationStore : IAiOperationStore
     private static Task<AiOperation?> FindByResourceSlotCoreAsync(
         LearnerDbContext db, string resourceSlotKey, CancellationToken ct)
         => db.AiOperations.AsNoTracking().FirstOrDefaultAsync(o => o.ResourceSlotKey == resourceSlotKey, ct);
+
+    private static async Task<bool> DeleteIfSafeFailureCoreAsync(
+        LearnerDbContext db, string resourceSlotKey, CancellationToken ct)
+    {
+        // State-conditional delete: only a proven safe-failure row is removed, and the
+        // predicate is enforced in SQL so a concurrent transition to a non-safe state
+        // makes the delete a no-op (a row that just Completed is never removed).
+        var deleted = await db.AiOperations
+            .Where(o => o.ResourceSlotKey == resourceSlotKey
+                && (o.State == AiOperationState.FailedTerminal
+                    || o.State == AiOperationState.Cancelled
+                    || o.State == AiOperationState.BlockedBudget))
+            .ExecuteDeleteAsync(ct);
+        return deleted > 0;
+    }
 
     /// <summary>
     /// Attributes a unique violation to one of the two constraints we own, or

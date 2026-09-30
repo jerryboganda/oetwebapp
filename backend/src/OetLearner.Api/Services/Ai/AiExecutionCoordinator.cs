@@ -174,6 +174,27 @@ public sealed class AiExecutionCoordinator(
                 // A DIFFERENT payload owns this business slot. Auto-bumping here
                 // would let two divergent payloads both run against one
                 // resource, which is exactly what the slot index exists to stop.
+                //
+                // BUT: when the slot owner is a proven SAFE FAILURE (FailedTerminal /
+                // Cancelled / BlockedBudget — produced no result, never billed), it is a
+                // ghost of a previous failed attempt, not live work. Deleting it frees the
+                // slot so the candidate's fresh submission actually grades instead of
+                // deadlocking on the ghost (production 30 Sep 2026: a writing submission
+                // collided with 12 FailedTerminal rows from a retry storm and never ran).
+                var freed = await store.DeleteIfSafeFailureAsync(resourceSlotKey, ct);
+                if (freed)
+                {
+                    logger?.LogInformation(
+                        "AI operation replay: feature {FeatureCode} resource {ResourceId} removed a safe-failure slot ghost; inserting a fresh attempt.",
+                        featureCode, request.ResourceId);
+                    var retry = await store.TryInsertAsync(operation, ct);
+                    if (retry.Outcome == AiOperationInsertOutcome.Inserted)
+                    {
+                        return await RunOwnedOperationAsync(retry.Operation, request, ct);
+                    }
+                    // A live caller won the race while we cleared the ghost — fall through
+                    // to the normal resolution path for the surviving owner.
+                }
                 throw new AiOperationConflictException(idempotencyKey);
             }
 

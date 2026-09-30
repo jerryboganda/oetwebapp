@@ -17,6 +17,7 @@ import {
   getWritingHighlights,
   getWritingMockSession,
   getWritingScenario,
+  getWritingSubmission,
   putWritingDraftV2,
   putWritingHighlights,
   submitWritingMock,
@@ -161,6 +162,10 @@ export default function WritingPaperSessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  // True once the letter is accepted and the backend is grading it. Freezes the
+  // editor + timer and drives the grading/progress overlay until the grade lands.
+  const [grading, setGrading] = useState(false);
+  const [gradingFailed, setGradingFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   // Case Notes highlights, lifted so they persist across the reading window and
@@ -397,11 +402,26 @@ export default function WritingPaperSessionPage() {
           });
           setSubmissionId(result.id ?? null);
         }
-        // Freeze in place — do NOT navigate away (spec: locked booklet + link).
+        // Freeze in place — do NOT navigate away. The letter is now being
+        // graded; show the grading state and poll until the result is ready.
         setSubmitted(true);
+        setGrading(true);
+        setGradingFailed(false);
         setPhase('completed');
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('writing.paper.error.submit'));
+        const code = (err as { code?: string } | null)?.code;
+        // A 409 'already being graded' / a transient 429 are NOT hard failures —
+        // the letter was accepted and is being graded. Keep the grading state and
+        // let the poller surface the result; never bounce the candidate back to an
+        // editable, re-submittable letter.
+        if (code === 'writing_rubric_already_in_progress' || (err as { status?: number } | null)?.status === 429) {
+          setSubmitted(true);
+          setGrading(true);
+          setGradingFailed(false);
+          setPhase('completed');
+          return;
+        }
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.paper.error.submit')));
         setSubmitting(false);
       }
     },
@@ -411,6 +431,52 @@ export default function WritingPaperSessionPage() {
   const handleSubmit = useCallback(() => {
     void doSubmit(textRef.current, wordCountRef.current);
   }, [doSubmit]);
+
+  // ── Grading: poll the submission until the grade lands, then go to results ──
+  // The letter is accepted once; the backend grades it (Claude Max → Claude API →
+  // Codex). The candidate never re-submits or manually retries — this poll surfaces
+  // the result as soon as it is ready. A 409/429 during polling is transient
+  // (still grading), never an error to show.
+  useEffect(() => {
+    if (!grading || !submissionId) return;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 75; // ~5 minutes at the 4s interval below
+
+    const tick = async () => {
+      attempts += 1;
+      try {
+        const sub = await getWritingSubmission(submissionId);
+        if (cancelled) return;
+        const status = (sub as { status?: string } | null)?.status;
+        if (status === 'graded' || status === 'completed') {
+          setGrading(false);
+          window.location.assign(resultsHref);
+          return;
+        }
+        if (status === 'failed') {
+          setGrading(false);
+          setGradingFailed(true);
+          return;
+        }
+      } catch {
+        // transient network / 429 while grading — keep polling
+      }
+      if (!cancelled && attempts < MAX_ATTEMPTS) {
+        window.setTimeout(tick, 4000);
+      } else if (!cancelled) {
+        // Grading is taking longer than expected — keep the honest state, not an error.
+        setGrading(false);
+        setGradingFailed(true);
+      }
+    };
+
+    const timer = window.setTimeout(tick, 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [grading, submissionId, resultsHref]);
 
   // Auto-submit + lock when the writing window expires.
   const expiredRef = useRef(false);
@@ -476,6 +542,44 @@ export default function WritingPaperSessionPage() {
         highlights={pdfHighlights}
         onHighlightsChange={setPdfHighlights}
       />
+
+      {/* Grading overlay: once the letter is accepted, the editor + timer are
+          frozen and the candidate watches a clear grading state until the result
+          is ready. The poller navigates to results automatically. A genuine
+          failure shows a candidate-friendly message with a way through. */}
+      {grading && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm"
+        >
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="mt-6 max-w-md px-6 text-center text-lg font-medium">
+            Your letter has been submitted successfully and is now being graded.
+          </p>
+          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted-foreground">
+            This may take up to 5 minutes. Please do not close this page.
+          </p>
+        </div>
+      )}
+
+      {gradingFailed && !grading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
+          <p className="max-w-md px-6 text-center text-lg font-medium">
+            Grading did not complete.
+          </p>
+          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted-foreground">
+            Your letter is saved. You can view the result or try grading it again — no
+            extra credit is used.
+          </p>
+          <a
+            href={resultsHref}
+            className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
+          >
+            Check my result
+          </a>
+        </div>
+      )}
     </>
   );
 }

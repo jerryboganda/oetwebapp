@@ -210,6 +210,47 @@ public sealed class AiExecutionCoordinatorReplayTests : IAsyncDisposable
         Assert.Equal(1, await db.AiOperations.AsNoTracking().CountAsync());
     }
 
+    /// <summary>
+    /// Regression for the 30 Sep 2026 production deadlock: a candidate's writing
+    /// submission hit a "different request already registered" 409 and never graded.
+    /// A provider-failure retry storm had left MULTIPLE FailedTerminal operations on
+    /// consecutive resource-version slots for the same submission; each replay bump
+    /// collided with the NEXT ghost's slot, so the walk exhausted its rounds and
+    /// returned the FailedTerminal op as a duplicate — without ever calling a provider.
+    ///
+    /// The fix (AiExecutionCoordinator conflict branch): when a slot's owner is a
+    /// proven safe-failure, the ghost is deleted and the fresh attempt inserts, so
+    /// grading actually runs. This test plants two FailedTerminal ghosts on slots
+    /// v1 and v2 and proves a fresh request runs to completion.
+    /// </summary>
+    [Fact]
+    public async Task SafeFailureSlotGhosts_FromARetryStorm_AreClearedSoGradingRuns()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var core = new CountingCore { ThrowOnCall = true };
+        var coordinator = NewCoordinator(db, core);
+
+        // Build the storm: two failed attempts on slots v1 and v2 (as the retry loop
+        // leaves behind). Both must land in FailedTerminal.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.ExecuteAsync(BuildRequest(), default));                 // slot v1
+        var ghosted = BuildRequest();
+        ghosted.ResourceVersion = 2;
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.ExecuteAsync(ghosted, default));                        // slot v2
+
+        Assert.Equal(2, await db.AiOperations.AsNoTracking().CountAsync(o => o.State == AiOperationState.FailedTerminal));
+
+        // A fresh candidate submission (back on slot v1) must clear the ghost and RUN.
+        core.ThrowOnCall = false;
+        var result = await coordinator.ExecuteAsync(BuildRequest(), default);
+
+        Assert.False(result.WasDuplicate);
+        Assert.NotNull(result.GatewayResult);
+        Assert.Equal(AiOperationState.Completed, result.Operation.State);
+        Assert.True(core.Calls >= 3); // the two storm failures + this real run
+    }
+
     // ── Decision table ──────────────────────────────────────────────────────────
 
     [Theory]

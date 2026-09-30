@@ -437,7 +437,13 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 2,
             Window = TimeSpan.FromMinutes(1),
-            QueueLimit = 0,
+            // Queue a small number of waiters instead of hard-rejecting with 429. A hanging
+            // or retried grading submit must WAIT for a slot, not surface "Too many requests"
+            // to the candidate (production 30 Sep 2026: a candidate's retry after a stalled
+            // grade hit this limiter and showed a raw 429). Still bounded — PermitLimit 2/min
+            // plus a short queue keeps the anti-abuse ceiling intact.
+            QueueLimit = 3,
+            QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
         });
     });
     options.AddPolicy("AiInteractive", httpContext =>
