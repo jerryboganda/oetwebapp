@@ -1,0 +1,42 @@
+{
+ "letterId": "WC3A74B35F",
+ "profession": "nursing",
+ "letterType": "LT-TR",
+ "title": "Nursing - Ms Bethany Tailor",
+ "writingTask": "‘Using the information given inthe case notes, write a letter to the regelving nurse at the\nJong:term care home where the patient will go following discharge, Maria DICoccio,\nProudhurst Mental Health Home, 231 Brightfield Avenue, Proudhurst.\n{In your answer\n‘+\n• Expand the relevant notes Into key sentences\n‘+\n• Do not use note form\n• Use letter format\n‘The body of the letter should be approximately 180-200 words.",
+ "todayDate": null,
+ "wordGuide": [
+  180,
+  200
+ ],
+ "caseNotes": [
+  "Patient is Ms Bethany Tailor, a 35-year-old patient in the psychiatric ward.",
+  "Next of kin: Henry Tailor (father, 65) and Barbara Tailor (mother, 58).",
+  "Admitted 01 March 2018, discharged 18 March 2018.",
+  "Diagnosis: schizophrenia.",
+  "Past medical history: hypertension secondary to fibromuscular dysplasia.",
+  "Past medical history: primary hypothyroidism, treated with Levothyroxine 88mcg daily.",
+  "Social background: unemployed, on disability allowance for schizophrenia.",
+  "History of polysubstance abuse, mainly cocaine and alcohol; last used cocaine 28/02/18.",
+  "Self-admitted on 01/03/2018 with decompensated schizophrenia.",
+  "Not compliant with medications prior to admission.",
+  "Admitted for auditory command hallucinations telling her to harm herself.",
+  "Visual hallucinations of shadow figures with grinning faces.",
+  "Delusion of personal connections to various political leaders.",
+  "On 01/03/2018, agitated and aggressive, responding to internal stimuli, with thought blocking and latency.",
+  "Commenced on antipsychotic medication (risperidone).",
+  "By 10/03/2018, patient had ceased reporting auditory or visual hallucinations.",
+  "Less disorganised thinking, with no signs of thought blocking or latency.",
+  "Able to minimise delusions and focus on activities of daily living.",
+  "Nursing management included assessing for objective signs of psychosis and redirecting the patient from delusions.",
+  "Ensuring medication compliance was a nursing priority.",
+  "Nursing management also aimed to help maintain behavioural control and provide therapy where possible.",
+  "Good progress made; noted that this chronic mental illness can decompensate if the patient is not on medications or is abusing substances.",
+  "Insight is good; judgment is fair.",
+  "Discharge plan: discharge on Risperidone 4mg nightly by mouth.",
+  "Risperidone 1mg available twice daily as required for agitation or psychosis.",
+  "Discharge back to her apartment, with follow-up arranged at Proudhurst Mental Health Clinic."
+ ],
+ "candidateLetter": "Maria DiCoccio\nProudhurst Mental Health Home\nProudhurst\n\nHi Maria,\n\nRe: Bethany Tailor\n\nI am writing this letter about my patient Bethany Tailor. She was in our psychiatric ward. She have schizophrenia and she is 35 years old. Her father Henry is 65 years old and her mother Barbara is 58 years old.\n\nShe self admited on 01/03/2018 because of decompensated schizophrenia. Before this she was not taking her medicine. She was hearing crazy voices telling her to harm herself and she tried to harm herself before she came. Also she saw shadow figures with grinning faces and she believed she had personal connections to various political leaders. On the first day she was totally out of it, agitated and aggressive and responding to internal stimuli with thought blocking and latency. We started her on risperidone. In the ward we assessed her for objective signs of psychosis, redirected her from her delusions, helped her to maintain behavioural control and gave her therapy where possible. Making sure she took her medicine was our priority. By 10/03/2018 she stopped reporting halucinations. Now her hallucinations and delusions are all gone and her thinking is less disorganised with no thought blocking or latency, and she can focus on her daily activities. Insight good, judgement fair.\n\nDiagnosis - schizophrenia.\n\nShe go back to her apartment on 18/03/2018 on risperidone 2mg at night. Its very important that she keeps taking her medicine because her illness can get worse if she stops it. Honestly I am really worried about her. So please look after her.\n\nPMH - hypertension secondary to fibromuscular dysplasia.\n\nThanks a lot!!\nBest regards,\nNurse\n",
+ "isCleanControl": false
+}

@@ -1,0 +1,129 @@
+{
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "findings": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "ruleId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "severity": {
+      "type": "string",
+      "enum": [
+       "critical",
+       "major",
+       "minor"
+      ]
+     },
+     "quote": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "fixSuggestion": {
+      "type": "string"
+     },
+     "criterionCode": {
+      "type": "string",
+      "enum": [
+       "purpose",
+       "content",
+       "conciseness_clarity",
+       "genre_style",
+       "organisation_layout",
+       "language"
+      ]
+     },
+     "isOmission": {
+      "type": "boolean"
+     },
+     "sourceEvidence": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "ruleId",
+     "severity",
+     "quote",
+     "message",
+     "fixSuggestion",
+     "criterionCode",
+     "isOmission",
+     "sourceEvidence"
+    ]
+   }
+  },
+  "criteriaScores": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "purpose": {
+     "type": "integer"
+    },
+    "content": {
+     "type": "integer"
+    },
+    "conciseness_clarity": {
+     "type": "integer"
+    },
+    "genre_style": {
+     "type": "integer"
+    },
+    "organisation_layout": {
+     "type": "integer"
+    },
+    "language": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "purpose",
+    "content",
+    "conciseness_clarity",
+    "genre_style",
+    "organisation_layout",
+    "language"
+   ]
+  },
+  "estimatedScaledScore": {
+   "type": "integer"
+  },
+  "estimatedGrade": {
+   "type": "string"
+  },
+  "passed": {
+   "type": "boolean"
+  },
+  "overallConfidence": {
+   "type": "string",
+   "enum": [
+    "high",
+    "medium",
+    "low"
+   ]
+  },
+  "advisory": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "findings",
+  "criteriaScores",
+  "estimatedScaledScore",
+  "estimatedGrade",
+  "passed",
+  "overallConfidence",
+  "advisory"
+ ]
+}
