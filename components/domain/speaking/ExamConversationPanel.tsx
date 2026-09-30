@@ -192,6 +192,7 @@ function RecorderIndicator({ sessionId, onVoiceStopReady, onSpeakingStarted }: E
     uploading: 'Uploading your recording…',
     uploaded: 'Recording received',
     upload_failed: 'Recording kept on this device',
+    rejected: 'Recording could not be saved',
     error: 'Microphone off',
   }[recorder.status];
 

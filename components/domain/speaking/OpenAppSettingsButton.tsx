@@ -16,7 +16,7 @@ export function OpenAppSettingsButton({ className }: { className?: string }) {
   if (unavailable) {
     return (
       <p className="text-xs text-muted">
-        Open your device Settings → Apps → OET with Dr Ahmed Hesham → Permissions → Microphone, choose Allow, then come back and press Start recording.
+        Open your device Settings → Apps → OET with Dr Ahmed Hesham → Permissions → Microphone, choose Allow, then come back and try again.
       </p>
     );
   }

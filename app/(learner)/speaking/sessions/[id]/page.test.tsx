@@ -173,6 +173,41 @@ describe('Active Speaking session (recorder fallback)', () => {
     expect(mockEnd).toHaveBeenCalledTimes(1);
   });
 
+  it('moves on without claiming the recording was received when the server will never take it', async () => {
+    const user = userEvent.setup();
+    mockUpload.mockRejectedValueOnce(apiError(409, 'live_voice_transcript_window_closed'));
+    render(<SpeakingSessionRecordingPage />);
+    await screen.findByText('Recording — speak to the patient');
+
+    await user.click(screen.getByRole('button', { name: 'Finish & submit' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Submit now' }));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/speaking/sessions/sess-1/results'));
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Recording received')).not.toBeInTheDocument();
+    expect(screen.getByText('Recording could not be saved')).toBeInTheDocument();
+  });
+
+  it('keeps the recording for a retry when the sign-in has expired (401): auth expiry is not a permanent refusal', async () => {
+    const user = userEvent.setup();
+    mockUpload.mockRejectedValueOnce(apiError(401, 'not_authenticated'));
+    render(<SpeakingSessionRecordingPage />);
+    await screen.findByText('Recording — speak to the patient');
+
+    await user.click(screen.getByRole('button', { name: 'Finish & submit' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Submit now' }));
+
+    expect(await screen.findByText('Upload failed — Retry upload')).toBeInTheDocument();
+    expect(mockEnd).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/speaking/sessions/sess-1/results'));
+    expect(mockUpload).toHaveBeenCalledTimes(2);
+    expect(mockUpload.mock.calls[1][1]).toBe(mockUpload.mock.calls[0][1]);
+  });
+
   it('asks for Rules + consent (no timed modal) when an older session has no consent yet', async () => {
     mockGetSession.mockResolvedValue({ ...SESSION, consentAccepted: false });
     render(<SpeakingSessionRecordingPage />);

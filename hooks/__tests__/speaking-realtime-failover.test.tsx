@@ -59,6 +59,9 @@ class FakeNode {
 
 class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
+  // WebKit and WebViews can leave resume() pending: it answers only when releaseResume() runs.
+  static holdResume = false;
+  static releaseResume: (() => void) | null = null;
   sampleRate = 48_000;
   currentTime = 0;
   destination = {};
@@ -67,7 +70,10 @@ class FakeAudioContext {
     FakeAudioContext.instances.push(this);
   }
   resume() {
-    return Promise.resolve();
+    if (!FakeAudioContext.holdResume) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      FakeAudioContext.releaseResume = resolve;
+    });
   }
   close() {
     this.closed = true;
@@ -310,6 +316,8 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     FakeSocket.instances = [];
     FakeSocket.mode = 'ready';
     FakeAudioContext.instances = [];
+    FakeAudioContext.holdResume = false;
+    FakeAudioContext.releaseResume = null;
     vi.stubGlobal('RTCPeerConnection', FakePeer);
     vi.stubGlobal('WebSocket', FakeSocket);
     vi.stubGlobal('AudioContext', FakeAudioContext);
@@ -735,8 +743,39 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(result.current.connection).toBe('error');
     expect(result.current.micPermissionDenied).toBe(true);
     expect(result.current.error).toMatch(/microphone permission was blocked/i);
+    // The live control is "Start speaking"; the shared microphone copy says "Start recording".
+    expect(result.current.error).toMatch(/press Start speaking again/);
+    expect(result.current.error).not.toMatch(/Start recording/);
     expect(mockOffer).not.toHaveBeenCalled();
     expect(mockToken).not.toHaveBeenCalled();
+  });
+
+  it.each(['stop', 'unmount'] as const)('a microphone opened while the audio context is still resuming is released by %s', async (how) => {
+    FakeAudioContext.holdResume = true;
+    const { result, unmount } = await mount();
+
+    let started!: Promise<boolean>;
+    await act(async () => {
+      started = result.current.start();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(streams).toHaveLength(1);
+    expect(streams[0].tracks[0].stop).not.toHaveBeenCalled();
+
+    if (how === 'stop') expect(await stopVoice(result)).toBe(true);
+    else unmount();
+
+    // resume() has still not answered, yet the microphone and its context are already released.
+    expect(streams[0].tracks[0].stop).toHaveBeenCalled();
+    expect(FakeAudioContext.instances[0].closed).toBe(true);
+
+    await act(async () => {
+      FakeAudioContext.releaseResume?.();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(await started).toBe(false);
+    expect(mockOffer).not.toHaveBeenCalled();
+    expect(FakePeer.instances).toHaveLength(0);
   });
 
   it('stop() resolves true when the server will never take the transcript, false when a retry is worthwhile', async () => {
@@ -760,6 +799,23 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(mockTranscript).toHaveBeenCalledTimes(2);
   });
 
+  it('stop() keeps the transcript for a retry when the sign-in has expired (401): the same request succeeds after re-auth', async () => {
+    const { result } = await mount();
+    await startVoice(result);
+    await candidateSays('Hello');
+
+    mockTranscript.mockRejectedValueOnce(new ApiError(401, 'not_authenticated', 'Unauthorized', false));
+    expect(await stopVoice(result)).toBe(false);
+    expect(result.current.connection).toBe('error');
+    expect(result.current.error).toBe('Your session expired. Please sign in again.');
+    expect(result.current.ended).toBe(false);
+
+    expect(await stopVoice(result)).toBe(true);
+    expect(mockTranscript).toHaveBeenCalledTimes(2);
+    expect(mockTranscript.mock.calls[1]).toEqual(mockTranscript.mock.calls[0]);
+    expect(result.current.ended).toBe(true);
+  });
+
   it('retries the same transcript after a transient failure and then saves it', async () => {
     const { result } = await mount();
     await startVoice(result);
@@ -775,6 +831,39 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(mockTranscript.mock.calls[1]).toEqual(mockTranscript.mock.calls[0]);
     expect(result.current.ended).toBe(true);
     expect(result.current.connection).toBe('ended');
+  });
+
+  it('a turn row that cannot be saved mid-conversation is advisory: no learner error, no unhandled rejection, code-only log', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      mockTurn.mockRejectedValue(new ApiError(503, 'internal_server_error', 'Server encountered an issue.', true));
+      const { result } = await mount();
+      await startVoice(result);
+      await candidateSays('How can I help you today');
+      await act(async () => {
+        openAiChannel().emit({ type: 'session.output_transcript.delta', delta: 'My chest hurts', start_ms: 500, end_ms: 900 });
+      });
+      // The candidate speaks again after the patient: the finished turn is saved in the background.
+      await act(async () => {
+        openAiChannel().emit({ type: 'session.input_transcript.delta', delta: 'Since when?', start_ms: 1_000, end_ms: 1_400 });
+      });
+      await flush();
+
+      expect(mockTurn).toHaveBeenCalledTimes(1);
+      expect(result.current.error).toBeNull();
+      expect(unhandled).toEqual([]);
+      expect(JSON.stringify(warn.mock.calls)).toContain('internal_server_error');
+
+      // The whole transcript is still saved when the conversation ends.
+      expect(await stopVoice(result)).toBe(true);
+      expect(mockTranscript).toHaveBeenCalledTimes(1);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
   });
 
   it('a turn that cannot be saved does not keep the transcript from being saved', async () => {

@@ -233,10 +233,11 @@ describe('isProviderFailure', () => {
 
 describe('isClientRejection', () => {
   it('is true only for a 4xx the server will give again for the same request', () => {
-    for (const status of [400, 401, 403, 404, 409, 422]) {
+    for (const status of [400, 403, 404, 409, 422]) {
       expect(isClientRejection(new ApiError(status, 'code', 'message', false)), String(status)).toBe(true);
     }
-    for (const status of [0, 408, 429, 500, 503]) {
+    // 401 is an expired sign-in: the same request succeeds after re-auth, so it is never a permanent rejection.
+    for (const status of [0, 401, 408, 429, 500, 503]) {
       expect(isClientRejection(new ApiError(status, 'code', 'message', true)), String(status)).toBe(false);
     }
     expect(isClientRejection(new Error('plain'))).toBe(false);

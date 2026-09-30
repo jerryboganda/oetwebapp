@@ -245,6 +245,45 @@ describe('Speaking exam page', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Upload failed — Retry upload');
     });
 
+    it('never drops a recording when a later poll reports live voice back: the card keeps the mode it started in', async () => {
+      const stopA = vi.fn().mockResolvedValue(false);
+      stopBySession['sess-a'] = stopA;
+      mockGetExam
+        .mockResolvedValueOnce(exam({ liveVoiceAvailable: false }))
+        .mockResolvedValueOnce(exam({ liveVoiceAvailable: true }))
+        .mockResolvedValue({ ...cardB(), liveVoiceAvailable: true });
+      await renderPage();
+
+      // The next poll reports the same card with live voice back, and the page renders it before the card ends.
+      await flush(3_000);
+      await flush(12_000);
+
+      expect(stopA).toHaveBeenCalledTimes(4);
+      expect(screen.getByTestId('panel-sess-a')).toBeInTheDocument();
+      expect(screen.queryByTestId('panel-sess-b')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Upload failed — Retry upload');
+    });
+
+    it('a live card still moves on after the third failed save when a later poll reports live voice unavailable', async () => {
+      const stopA = vi.fn().mockResolvedValue(false);
+      stopBySession['sess-a'] = stopA;
+      mockGetExam
+        .mockResolvedValueOnce(exam({ liveVoiceAvailable: true }))
+        .mockResolvedValueOnce(exam({ liveVoiceAvailable: false }))
+        .mockResolvedValue({ ...cardB(), liveVoiceAvailable: false });
+      await renderPage();
+
+      // The next poll reports the same card with live voice unavailable, and the page renders it before the card ends.
+      await flush(3_000);
+      await flush(3_000);
+      expect(screen.getByRole('alert')).toHaveTextContent('The live voice transcript could not be saved. Retrying before moving to the next card.');
+
+      await flush(6_000);
+      expect(stopA).toHaveBeenCalledTimes(3);
+      expect(screen.getByTestId('panel-sess-b')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
     it('opens the results once the last card is saved', async () => {
       stopBySession['sess-b'] = vi.fn().mockResolvedValue(true);
       mockGetExam

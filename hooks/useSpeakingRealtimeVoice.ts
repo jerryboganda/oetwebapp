@@ -120,10 +120,14 @@ export function isProviderFailure(error: unknown): boolean {
   return info !== null && (info.status === 0 || info.status === 408 || info.status >= 500);
 }
 
-/** A 4xx the server will give again for the same request (not a timeout, not the rate limit): retrying cannot help. */
+/**
+ * A 4xx the server will give again for the same request: retrying cannot help. Not a sign-in expiry (401: the same
+ * request succeeds after re-auth), a timeout (408) or the rate limit (429).
+ */
 export function isClientRejection(error: unknown): boolean {
   const info = apiErrorInfo(error);
-  return info !== null && info.status >= 400 && info.status < 500 && info.status !== 408 && info.status !== 429;
+  return info !== null && info.status >= 400 && info.status < 500
+    && info.status !== 401 && info.status !== 408 && info.status !== 429;
 }
 
 // A definite server answer (consent missing, time over, ...) is shown as written; a provider or
@@ -575,17 +579,18 @@ export function useSpeakingRealtimeVoice(
     if (turn) await persistLiveVoiceTurn(sessionId, turn);
   }, [sessionId, takePendingTurn]);
 
+  // The per-turn rows are advisory (stop() saves the whole transcript), so a row that will not save is logged, never
+  // shown to the learner and never thrown: every caller is fire-and-forget. The chain therefore never rejects.
   const queueFlush = useCallback(() => {
     const turn = takePendingTurn();
-    flushPromiseRef.current = flushPromiseRef.current
-      .catch(() => undefined)
-      .then(async () => {
-        if (turn) await persistLiveVoiceTurn(sessionId, turn);
-      })
-      .catch((caught) => {
-        setError(learnerMessage(caught, 'The voice transcript could not be saved.'));
-        throw caught;
-      });
+    flushPromiseRef.current = flushPromiseRef.current.then(async () => {
+      if (!turn) return;
+      try {
+        await persistLiveVoiceTurn(sessionId, turn);
+      } catch (caught) {
+        console.warn('Live voice turn row not saved.', failureCode(caught));
+      }
+    });
     return flushPromiseRef.current;
   }, [sessionId, takePendingTurn]);
 
@@ -904,30 +909,37 @@ export function useSpeakingRealtimeVoice(
   }, [configureGeminiInput, handleGeminiMessage, sessionId]);
 
   // Asks for the microphone once for the whole start (every failover attempt reuses it). Null when the
-  // run was cancelled meanwhile; whatever this call opened is released before returning.
+  // run was cancelled meanwhile; whatever this call opened is released before returning. The stream and its
+  // context are registered the moment a live run owns them, so stop() and unmount release the microphone even
+  // while AudioContext.resume() has not answered (it can stay pending on WebKit and WebViews).
   const acquireMic = useCallback(async (alive: () => boolean): Promise<{ stream: MediaStream; context: AudioContext } | null> => {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('This browser cannot capture audio. Use an updated Chrome, Edge, Safari or the mobile app.');
     }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
     let context: AudioContext | null = null;
+    // Releases only what this call opened; a ref is cleared only while it still points at it (a newer run may own it).
+    const release = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      void context?.close().catch(() => undefined);
+      if (streamRef.current === stream) streamRef.current = null;
+      if (context && inputContextRef.current === context) inputContextRef.current = null;
+    };
     try {
       if (alive()) {
+        streamRef.current = stream;
         context = new AudioContext();
+        inputContextRef.current = context;
         await context.resume();
       }
     } catch (caught) {
-      stream.getTracks().forEach((track) => track.stop());
-      void context?.close().catch(() => undefined);
+      release();
       throw caught;
     }
     if (!context || !alive()) {
-      stream.getTracks().forEach((track) => track.stop());
-      void context?.close().catch(() => undefined);
+      release();
       return null;
     }
-    streamRef.current = stream;
-    inputContextRef.current = context;
     configureMeter(stream, context);
     return { stream, context };
   }, [configureMeter]);
@@ -959,7 +971,8 @@ export function useSpeakingRealtimeVoice(
       closeTransport();
       const micError = describeMicrophoneError(caught);
       setMicPermissionDenied(micError.permissionDenied);
-      setError(micError.message);
+      // The shared microphone copy names "Start recording"; the control on this panel is "Start speaking".
+      setError(micError.message.replace('Start recording', 'Start speaking'));
       setConnection('error');
       return false;
     }

@@ -100,8 +100,18 @@ export default function SpeakingExamPage() {
   const liveRoomSessionRef = useRef<string | null>(null);
   const liveRoomRef = useRef<CreateLiveRoomResponse | null>(null);
   const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
+  // The mode ExamConversationPanel latched when this card mounted. The panel keeps it for the whole card although
+  // every poll re-reads liveVoiceAvailable, so a failed save is judged by this, never by the latest poll.
+  const cardModeRef = useRef<{ sessionId: string | null; live: boolean } | null>(null);
   const handleVoiceStopReady = useCallback((stop: (() => Promise<boolean>) | null) => {
     voiceStopRef.current = stop;
+    // The panel registers in the commit that mounts it, so examRef still holds the DTO it latched from.
+    // A re-registration inside the same card (a new stop identity) keeps the first value.
+    const current = examRef.current;
+    const sessionId = current?.currentSessionId ?? null;
+    if (stop && cardModeRef.current?.sessionId !== sessionId) {
+      cardModeRef.current = { sessionId, live: Boolean(current?.liveVoiceAvailable) };
+    }
   }, []);
 
   useEffect(() => {
@@ -130,7 +140,12 @@ export default function SpeakingExamPage() {
         const saved = await voiceStopRef.current?.() ?? true;
         if (!saved) {
           failedFlushesRef.current += 1;
-          const live = Boolean(previous?.liveVoiceAvailable);
+          // The mode this card's panel latched at mount, not the latest poll's flag: provider health flips at
+          // runtime, and a recording must never be dropped because a later poll said live voice was back.
+          const mode = cardModeRef.current;
+          const live = mode && mode.sessionId === (previous?.currentSessionId ?? null)
+            ? mode.live
+            : Boolean(previous?.liveVoiceAvailable);
           // A transcript that will not save must not strand the learner on a card the exam clock has
           // already closed: after a few tries the exam moves on. A recording is never dropped.
           if (!live || failedFlushesRef.current < MAX_FAILED_TRANSCRIPT_FLUSHES) {

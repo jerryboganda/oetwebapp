@@ -80,6 +80,22 @@ describe('ExamConversationPanel — one mic / voice-activity control', () => {
     expect(mockVoice).not.toHaveBeenCalled();
   });
 
+  it('recorder fallback: a recording the server refused is never called received, shows the server message and offers no Start control', () => {
+    mockRecorder.mockReturnValue({
+      status: 'rejected',
+      error: 'The window for uploading this role-play recording has closed.',
+      level: 0,
+      start: vi.fn(),
+      stop: vi.fn(),
+    });
+    render(<ExamConversationPanel sessionId="s1" liveVoiceAvailable={false} />);
+
+    expect(screen.getByText('Recording could not be saved')).toBeInTheDocument();
+    expect(screen.queryByText('Recording received')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The window for uploading this role-play recording has closed.');
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('keeps the live indicator when a later poll reports live voice unavailable (a probe flake must not swap it mid-card)', () => {
     mockVoice.mockReturnValue(liveVoice());
     const { rerender } = render(<ExamConversationPanel sessionId="s1" liveVoiceAvailable />);
