@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
-import { getWritingSubmission, getWritingSubmissionGrade, retryWritingGrade } from '@/lib/writing/api';
+import { getWritingSubmission, retryWritingGrade } from '@/lib/writing/api';
 import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
 import type { WritingSubmissionDto } from '@/lib/writing/types';
@@ -29,9 +29,9 @@ function stepIndexForStatus(status: WritingSubmissionDto['status']): number {
     case 'queued':
       return 0;
     case 'preflight':
-      return 1;
+      return 0;
     case 'grading':
-      return 2;
+      return 1;
     case 'graded':
       return STEPS.length - 1;
     default:
@@ -95,29 +95,45 @@ export default function WritingSubmissionGradingPage() {
 
   useEffect(() => {
     if (!submissionId) return;
+    let cancelled = false;
+    let polling = false;
     const d = connectWritingSubmissionStream(submissionId, {
       onGradeReady: () => {
+        if (cancelled) return;
         router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
       },
       onStatusChange: (s) => {
+        if (cancelled) return;
         if (s === 'connected') setStatusMessage(t('writing.submissions.grading.listening'));
         if (s === 'disconnected') setStatusMessage(t('writing.submissions.grading.reconnecting'));
       },
       onError: () => {
+        if (cancelled) return;
         setStatusMessage(t('writing.submissions.grading.polling'));
       },
     });
     // Polling fallback in case SignalR is unreachable.
     const timer = window.setInterval(() => {
-      void getWritingSubmissionGrade(submissionId)
-        .then(() => {
-          router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
+      if (polling) return;
+      polling = true;
+      void getWritingSubmission(submissionId)
+        .then((s) => {
+          if (cancelled) return;
+          setSubmission(s);
+          if (s.status === 'graded') {
+            router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
+          }
         })
-        .catch(() => {
-          /* not graded yet */
+        .catch((err) => {
+          if (cancelled) return;
+          setError(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.grading.error.load')));
+        })
+        .finally(() => {
+          polling = false;
         });
     }, 5000);
     return () => {
+      cancelled = true;
       d.close();
       window.clearInterval(timer);
     };
@@ -127,7 +143,7 @@ export default function WritingSubmissionGradingPage() {
 
   return (
     <>
-      <div className="space-y-6" aria-busy>
+      <div className="space-y-6" aria-busy={!failed && submission?.status !== 'graded'}>
         <LearnerPageHero
           eyebrow={t('writing.submissions.grading.eyebrow')}
           icon={Sparkles}
@@ -162,7 +178,7 @@ export default function WritingSubmissionGradingPage() {
           </Card>
         ) : null}
 
-        <Card padding="lg" aria-live="polite" role="status">
+        {!failed ? <Card padding="lg" aria-live="polite" role="status">
           <CardContent>
             <p className="text-sm text-muted">{statusMessage}</p>
             <ol className="mt-4 space-y-3" aria-label={t('writing.submissions.grading.pipelineLabel')}>
@@ -193,7 +209,7 @@ export default function WritingSubmissionGradingPage() {
               </Button>
             </div>
           </CardContent>
-        </Card>
+        </Card> : null}
       </div>
     </>
   );
