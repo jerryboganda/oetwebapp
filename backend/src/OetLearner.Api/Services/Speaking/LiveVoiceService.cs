@@ -840,11 +840,14 @@ public sealed class LiveVoiceService(
 
         // Error where an operator has to act: quota, credentials, or a request the provider will
         // never accept whoever the learner is (an unknown model or URL, an unsupported media type).
-        // A 400/422 is shaped by the learner's own browser (a malformed SDP), so it is a Warning like
-        // everything the breaker and the next candidate absorb: one learner must not be able to
-        // raise Error-level alerts at will.
+        // An OpenAI 400/422 is shaped by the learner's own browser (a malformed SDP), so it is a Warning
+        // like everything the breaker and the next candidate absorb: one learner must not be able to
+        // raise Error-level alerts at will. The Gemini token body is built entirely on the server, so a
+        // Gemini 400/422 is always our own request or configuration (the 25 Sep 2026 class) and needs
+        // an operator.
         var operatorMustAct = failure.Class is AiProviderErrorClass.QuotaExhausted or AiProviderErrorClass.Auth
-            || (failure.Class == AiProviderErrorClass.InvalidRequest && failure.HttpStatus is not (400 or 422));
+            || (failure.Class == AiProviderErrorClass.InvalidRequest
+                && (provider != LiveVoiceProviders.OpenAi || failure.HttpStatus is not (400 or 422)));
         var level = operatorMustAct ? LogLevel.Error : LogLevel.Warning;
         logger.Log(
             level,

@@ -355,6 +355,27 @@ public sealed class LiveVoiceFailoverTests
 
     [Theory]
     [InlineData(400)]
+    [InlineData(422)]
+    public async Task AGeminiInvalidRequest_LogsAtError_BecauseTheTokenBodyIsBuiltOnTheServer(int status)
+    {
+        // Unlike OpenAI's offer (which carries the learner's SDP), the Gemini token request has no
+        // learner input: a 400/422 means our own body or configuration is wrong for every learner.
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        FailProvider(
+            rig,
+            GeminiHost,
+            (HttpStatusCode)status,
+            "{\"error\":{\"code\":" + status + ",\"message\":\"Invalid value\",\"status\":\"INVALID_ARGUMENT\"}}");
+
+        await Assert.ThrowsAsync<ApiException>(() => MintGeminiAsync(rig, session));
+
+        var failureLog = Assert.Single(rig.Log.Entries, e => e.Text.Contains("session creation failed", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Error, failureLog.Level);
+    }
+
+    [Theory]
+    [InlineData(400)]
     [InlineData(404)]
     [InlineData(413)]
     [InlineData(415)]
