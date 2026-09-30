@@ -606,6 +606,22 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Assessor_AcceptsTheMockProvidersSpeakingReply()
+    {
+        // Dev and smoke stacks grade through MockAiProvider: its Speaking reply must satisfy the
+        // stricter nine-criterion contract, or those flows would start failing with 409.
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var mockReply = await new MockAiProvider().CompleteAsync(
+            new AiProviderRequest { SystemPrompt = "**This call concerns SPEAKING** — universal 350/500 pass mark." },
+            default);
+        var gateway = new SwitchableAiGateway { Completion = mockReply.Text };
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
+    [Fact]
     public async Task Assessor_StoresTheProviderAndModelThatActuallyRan()
     {
         var sessionId = await SeedFinishedSessionWithTranscriptAsync();
