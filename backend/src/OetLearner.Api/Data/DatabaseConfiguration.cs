@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Data;
@@ -52,9 +53,30 @@ public static class DatabaseConfiguration
         // `<->` / `<=>` / `<#>` operator expressions. Harmless when the DB
         // does not yet have the `vector` extension installed — the connection
         // still works, only queries that touch a Vector column will fail.
-        optionsBuilder.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
+        optionsBuilder.UseNpgsql(WithPoolCap(connectionString), npgsql => npgsql.UseVector());
         optionsBuilder.ConfigureWarnings(w =>
             w.Ignore(RelationalEventId.PendingModelChangesWarning));
+    }
+
+    // Npgsql's default Maximum Pool Size is 100 PER PROCESS and Postgres' default
+    // max_connections is 100 for ALL of them: both API slots (blue/green) and the
+    // ai-worker share one database. A single request burst in one process could
+    // therefore take every slot and turn every endpoint in every process into
+    // `53300: sorry, too many clients already` (seen in production on 30 Sep 2026).
+    // Three processes x 25 leaves the database ~20 slots of headroom, and a burst
+    // now queues inside its own pool (Npgsql's 15 s acquire timeout) instead.
+    // An explicit `Maximum Pool Size` (or alias) in the connection string wins.
+    private const int DefaultMaxPoolSize = 25;
+
+    private static string WithPoolCap(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        // True only when the string itself sets the keyword (or its MaxPoolSize alias).
+        if (!builder.ShouldSerialize("Maximum Pool Size"))
+        {
+            builder.MaxPoolSize = DefaultMaxPoolSize;
+        }
+        return builder.ConnectionString;
     }
 
     private static bool IsSqliteConnectionString(string connectionString)

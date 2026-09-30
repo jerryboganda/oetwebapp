@@ -670,16 +670,24 @@ export type ListeningIntegrityEventType =
   | 'auto_submit'
   | (string & {});
 
+// Fire-and-forget telemetry (every blur / focus / click / audio tick), so it must
+// never use the client's default retry-on-5xx/409 with fixed 1 s / 3 s delays: on
+// 30 Sep 2026 a burst of conflicts was replayed in synchronised waves and used up
+// every database connection. A dropped event is fine; a retry storm is not.
 export const recordListeningIntegrityEvent = (
   attemptId: string,
   eventType: ListeningIntegrityEventType,
   details?: string,
   occurredAt = new Date().toISOString(),
 ) =>
-  api<void>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/integrity-events`, {
-    method: 'POST',
-    body: JSON.stringify({ eventType, details, occurredAt }),
-  });
+  apiClient.request<void>(
+    `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/integrity-events`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ eventType, details, occurredAt }),
+    },
+    { maxRetries: 0 },
+  );
 
 export const submitListeningAttempt = (attemptId: string, answers?: Record<string, string | null>) =>
   api<ListeningReviewDto>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/submit`, {

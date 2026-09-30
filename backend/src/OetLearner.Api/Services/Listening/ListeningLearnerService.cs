@@ -1427,7 +1427,11 @@ public sealed class ListeningLearnerService(
         CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
-        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        // Relational providers write through the targeted UPDATEs below, so the
+        // attempt is only read (untracked). The in-memory test provider has no
+        // ExecuteUpdate and keeps the tracked save.
+        var targetedWrites = db.Database.IsRelational();
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: targetedWrites, ct);
         var attempt = relationalAttempt is null
             ? await GetAttemptOwnedByUserAsync(userId, attemptId, ct)
             : null;
@@ -1458,34 +1462,46 @@ public sealed class ListeningLearnerService(
         const string adminReviewReason = "audio_playback_error";
         if (relationalAttempt is not null)
         {
-            relationalAttempt.LastActivityAt = now;
-            if (requiresAdminReview)
-            {
-                relationalAttempt.RequiresAdminReview = true;
-                relationalAttempt.AdminReviewReason ??= adminReviewReason;
-                relationalAttempt.AdminReviewFlaggedAt ??= now;
-            }
             // §17.11 — audio lifecycle events also append to the per-attempt
             // audio cue timeline (the column already exists). Append, never
             // overwrite, so the full replay log accumulates across sections.
-            if (eventType is "audio_started" or "audio_progress" or "audio_ended")
-            {
-                relationalAttempt.AudioCueTimelineJson = AppendAudioCueTimelineEntry(
+            var cueTimelineJson = eventType is "audio_started" or "audio_progress" or "audio_ended"
+                ? AppendAudioCueTimelineEntry(
                     relationalAttempt.AudioCueTimelineJson,
                     cue: eventType,
                     atMs: cuePointMs,
                     occurredAt: request.OccurredAt ?? now,
                     section: section,
-                    questionIndex: questionIndex);
-            }
-            // A genuine playback start proves the earlier audio_error was
-            // transient (e.g. an autoplay-policy rejection), so release the
-            // review hold and let the learner submit normally.
-            if (eventType == "audio_started" && relationalAttempt.AdminReviewReason == adminReviewReason)
+                    questionIndex: questionIndex)
+                : null;
+
+            if (targetedWrites)
             {
-                relationalAttempt.RequiresAdminReview = false;
-                relationalAttempt.AdminReviewReason = null;
-                relationalAttempt.AdminReviewFlaggedAt = null;
+                await TouchAttemptForIntegrityEventAsync(
+                    db, userId, attemptId, now, cueTimelineJson,
+                    raiseHold: requiresAdminReview,
+                    releaseHold: eventType == "audio_started",
+                    adminReviewReason, ct);
+            }
+            else
+            {
+                relationalAttempt.LastActivityAt = now;
+                if (requiresAdminReview)
+                {
+                    relationalAttempt.RequiresAdminReview = true;
+                    relationalAttempt.AdminReviewReason ??= adminReviewReason;
+                    relationalAttempt.AdminReviewFlaggedAt ??= now;
+                }
+                if (cueTimelineJson is not null)
+                {
+                    relationalAttempt.AudioCueTimelineJson = cueTimelineJson;
+                }
+                if (eventType == "audio_started" && relationalAttempt.AdminReviewReason == adminReviewReason)
+                {
+                    relationalAttempt.RequiresAdminReview = false;
+                    relationalAttempt.AdminReviewReason = null;
+                    relationalAttempt.AdminReviewFlaggedAt = null;
+                }
             }
         }
         else if (attempt is not null)
@@ -1538,6 +1554,60 @@ public sealed class ListeningLearnerService(
             }),
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Writes one integrity event's footprint onto the attempt row with
+    /// targeted UPDATEs that never carry the <c>RowVersion</c> predicate.
+    /// Fire-and-forget telemetry must not lose a race with autosave / section /
+    /// heartbeat writes, which bump that <c>[ConcurrencyCheck]</c> token: the old
+    /// tracked save (which never bumped it) threw
+    /// <see cref="DbUpdateConcurrencyException"/> → a retryable 409 → synchronised
+    /// client retries → every database connection in use (production, 30 Sep
+    /// 2026). Same pattern as the Reading annotation autosave; it only touches
+    /// columns no other writer owns. <paramref name="raiseHold"/> flags the attempt
+    /// for admin review (keeping an existing reason / flag time);
+    /// <paramref name="releaseHold"/> clears a hold only while it is still the
+    /// <paramref name="holdReason"/> hold — never one set for another reason.</summary>
+    internal static async Task TouchAttemptForIntegrityEventAsync(
+        LearnerDbContext db,
+        string userId,
+        string attemptId,
+        DateTimeOffset now,
+        string? cueTimelineJson,
+        bool raiseHold,
+        bool releaseHold,
+        string holdReason,
+        CancellationToken ct)
+    {
+        await db.ListeningAttempts
+            .Where(a => a.Id == attemptId && a.UserId == userId)
+            .ExecuteUpdateAsync(set =>
+            {
+                set.SetProperty(a => a.LastActivityAt, now);
+                if (cueTimelineJson is not null)
+                {
+                    set.SetProperty(a => a.AudioCueTimelineJson, cueTimelineJson);
+                }
+                if (raiseHold)
+                {
+                    set.SetProperty(a => a.RequiresAdminReview, true);
+                    set.SetProperty(a => a.AdminReviewReason, a => a.AdminReviewReason ?? holdReason);
+                    set.SetProperty(a => a.AdminReviewFlaggedAt, a => a.AdminReviewFlaggedAt ?? now);
+                }
+            }, ct);
+
+        // A genuine playback start proves the earlier audio_error was transient
+        // (e.g. an autoplay-policy rejection), so release the review hold and let
+        // the learner submit normally.
+        if (releaseHold)
+        {
+            await db.ListeningAttempts
+                .Where(a => a.Id == attemptId && a.UserId == userId && a.AdminReviewReason == holdReason)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(a => a.RequiresAdminReview, false)
+                    .SetProperty(a => a.AdminReviewReason, (string?)null)
+                    .SetProperty(a => a.AdminReviewFlaggedAt, (DateTimeOffset?)null), ct);
+        }
     }
 
     // §17.11 — full recognised event-type set: existing OET@Home integrity

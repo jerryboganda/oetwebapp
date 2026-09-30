@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -323,5 +324,173 @@ public class ListeningAttemptEventLoggingTests
         // Every event also lands as its own AuditEvent row.
         var auditCount = await db.AuditEvents.CountAsync(e => e.Action == "ListeningIntegrityEvent");
         Assert.Equal(4, auditCount);
+    }
+
+    // ── Relational write path (SQLite) ───────────────────────────────────────
+    // Production incident 30 Sep 2026: the player posts an integrity event for every
+    // blur / focus / click / audio tick. The tracked save carried the attempt's
+    // RowVersion [ConcurrencyCheck] although it never bumped it, so any autosave or
+    // section update landing between the read and the write made it throw
+    // DbUpdateConcurrencyException -> 409 { retryable: true }; the browser retried
+    // twice, and the retry waves used up every database connection. This is
+    // best-effort telemetry and must never lose that race. The in-memory provider
+    // cannot express it (no ExecuteUpdate, no token enforcement), hence SQLite.
+
+    private sealed class RelationalDb : IAsyncDisposable
+    {
+        private readonly SqliteConnection _connection = new("DataSource=:memory:");
+
+        public RelationalDb()
+        {
+            _connection.Open();
+            Options = new DbContextOptionsBuilder<LearnerDbContext>().UseSqlite(_connection).Options;
+            using var db = Create();
+            db.Database.EnsureCreated();
+        }
+
+        public DbContextOptions<LearnerDbContext> Options { get; }
+
+        public LearnerDbContext Create() => new(Options);
+
+        public ValueTask DisposeAsync() => _connection.DisposeAsync();
+    }
+
+    private const string RelationalUserId = "learner-rv";
+    private const string RelationalAttemptId = "lat-rv";
+
+    private static async Task SeedBareAttemptAsync(LearnerDbContext db, string? holdReason = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = RelationalUserId,
+            DisplayName = "Learner rv",
+            Email = "learner-rv@example.test",
+            AccountStatus = "active",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = RelationalAttemptId,
+            UserId = RelationalUserId,
+            PaperId = "paper-rv",
+            StartedAt = now.AddMinutes(-10),
+            LastActivityAt = now.AddMinutes(-5),
+            Mode = ListeningAttemptMode.Home,
+            RowVersion = 1,
+            RequiresAdminReview = holdReason is not null,
+            AdminReviewReason = holdReason,
+            AdminReviewFlaggedAt = holdReason is null ? null : now.AddMinutes(-3),
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static Task RecordAsync(LearnerDbContext db, string eventType, string? details = null)
+        => new ListeningLearnerService(db, new AllowAllContentEntitlementService()).RecordIntegrityEventAsync(
+            RelationalUserId,
+            RelationalAttemptId,
+            new ListeningIntegrityEventRequest(eventType, details, DateTimeOffset.UtcNow),
+            default);
+
+    [Fact]
+    public async Task RecordIntegrityEvent_Relational_SurvivesAnAutosaveBumpingRowVersionMidFlight()
+    {
+        await using var rel = new RelationalDb();
+        await using var db = rel.Create();
+        await SeedBareAttemptAsync(db);
+
+        // This request's context already tracks the attempt at RowVersion 1 ...
+        var seen = await db.ListeningAttempts.SingleAsync();
+        var activityBefore = seen.LastActivityAt;
+        // ... when an autosave from another request commits RowVersion 2.
+        await using (var autosave = rel.Create())
+        {
+            var row = await autosave.ListeningAttempts.SingleAsync();
+            row.RowVersion++;
+            await autosave.SaveChangesAsync();
+        }
+
+        await RecordAsync(db, "audio_started", "{\"cuePointMs\":1000}");
+
+        await using var check = rel.Create();
+        var after = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+        Assert.Equal(2, after.RowVersion); // the autosave's bump is left alone
+        Assert.True(after.LastActivityAt > activityBefore);
+        Assert.Contains("audio_started", after.AudioCueTimelineJson);
+        Assert.Equal(1, await check.AuditEvents.CountAsync(e => e.Action == "ListeningIntegrityEvent"));
+    }
+
+    [Fact]
+    public async Task RecordIntegrityEvent_Relational_TimelineKeepsOnlyTheLatestProgressAndIgnoresOtherEvents()
+    {
+        await using var rel = new RelationalDb();
+        await using var db = rel.Create();
+        await SeedBareAttemptAsync(db);
+
+        await RecordAsync(db, "audio_started", "{\"cuePointMs\":1000}");
+        await RecordAsync(db, "audio_progress", "{\"cuePointMs\":5000}");
+        await RecordAsync(db, "audio_progress", "{\"cuePointMs\":6500}");
+        await RecordAsync(db, "window_blur");
+
+        await using var check = rel.Create();
+        var after = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+        using var doc = JsonDocument.Parse(after.AudioCueTimelineJson!);
+        var entries = doc.RootElement.EnumerateArray().ToList();
+        Assert.Equal(["audio_started", "audio_progress"], entries.Select(e => e.GetProperty("cue").GetString()));
+        Assert.Equal(6500, entries[1].GetProperty("atMs").GetInt32());
+        Assert.Equal(4, await check.AuditEvents.CountAsync(e => e.Action == "ListeningIntegrityEvent"));
+    }
+
+    [Fact]
+    public async Task RecordIntegrityEvent_Relational_AudioErrorHoldsAndAPlaybackStartReleasesIt()
+    {
+        await using var rel = new RelationalDb();
+        await using var db = rel.Create();
+        await SeedBareAttemptAsync(db);
+
+        await RecordAsync(db, "audio_error");
+        DateTimeOffset? flaggedAt;
+        await using (var check = rel.Create())
+        {
+            var held = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+            Assert.True(held.RequiresAdminReview);
+            Assert.Equal("audio_playback_error", held.AdminReviewReason);
+            flaggedAt = held.AdminReviewFlaggedAt;
+            Assert.NotNull(flaggedAt);
+        }
+
+        // A second error keeps the original flag time instead of moving it.
+        await RecordAsync(db, "audio_error");
+        await using (var check = rel.Create())
+        {
+            var held = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+            Assert.Equal(flaggedAt, held.AdminReviewFlaggedAt);
+        }
+
+        await RecordAsync(db, "audio_started", "{\"cuePointMs\":0}");
+        await using (var check = rel.Create())
+        {
+            var released = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+            Assert.False(released.RequiresAdminReview);
+            Assert.Null(released.AdminReviewReason);
+            Assert.Null(released.AdminReviewFlaggedAt);
+        }
+    }
+
+    [Fact]
+    public async Task RecordIntegrityEvent_Relational_NeverReleasesOrRewritesAHoldItDidNotRaise()
+    {
+        await using var rel = new RelationalDb();
+        await using var db = rel.Create();
+        await SeedBareAttemptAsync(db, holdReason: "scored_media_failure");
+
+        await RecordAsync(db, "audio_error");
+        await RecordAsync(db, "audio_started", "{\"cuePointMs\":0}");
+
+        await using var check = rel.Create();
+        var after = await check.ListeningAttempts.AsNoTracking().SingleAsync();
+        Assert.True(after.RequiresAdminReview);
+        Assert.Equal("scored_media_failure", after.AdminReviewReason);
     }
 }
