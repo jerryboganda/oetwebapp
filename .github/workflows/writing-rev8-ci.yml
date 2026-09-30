@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      review_json:
+        description: "Optional sanitized software-review state and typed Jev choice questions (no letters or secrets)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +40,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  software-review:
+    name: Jev typed software review (AI Gateway)
+    if: ${{ inputs.review_json != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install isolated review SDK
+        run: npm install --prefix "$RUNNER_TEMP/jev-review" --no-package-lock --no-save ai@7.0.107
+      - name: Evaluate and validate typed judgments
+        working-directory: ${{ runner.temp }}/jev-review
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          REVIEW_JSON: ${{ inputs.review_json }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { experimental_evaluate } from 'ai';
+          if (!process.env.AI_GATEWAY_API_KEY) throw new Error('AI Gateway key is unavailable');
+          const request = JSON.parse(process.env.REVIEW_JSON);
+          if (!request.state || !request.questions) throw new Error('Review state and questions are required');
+          for (const question of Object.values(request.questions)) {
+            if (question.type !== 'choice' || !question.instructions || !question.criteria) {
+              throw new Error('Only explicit typed choice questions are supported');
+            }
+          }
+          const result = await experimental_evaluate({
+            model: 'typesafe-ai/jev',
+            state: request.state,
+            questions: request.questions,
+            abortSignal: AbortSignal.timeout(30000),
+          });
+          console.log(JSON.stringify({ model: 'typesafe-ai/jev', answers: result.answers }));
+          for (const [id, question] of Object.entries(request.questions)) {
+            const answer = result.answers[id];
+            if (answer?.type !== 'choice' || !Object.hasOwn(question.criteria, answer.choice)
+                || !Number.isFinite(answer.confidence) || answer.confidence < 0.75
+                || !Number.isFinite(answer.probabilities?.[answer.choice])
+                || answer.probabilities[answer.choice] < 0.8
+                || answer.choice === 'insufficient_evidence') {
+              throw new Error(`Uncertain or invalid judgment for ${id}; decision paused`);
+            }
+          }
+          NODE
+
   rulebooks:
     name: Canonical Writing rulebooks (build + --check)
     runs-on: ubuntu-latest
