@@ -94,7 +94,7 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task SubscriptionSidecarMarkerKey_IsProbedLikeACredentialedRow()
+    public async Task SubscriptionSidecarMarkerKey_IsProbedThroughTheSidecarHealthRoute()
     {
         Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-writing-claude,oet-writing-codex");
         try
@@ -115,9 +115,11 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
 
             var result = await tester.TestProviderAsync("copilot", default);
 
+            // A GET on /healthz, not a completion: no subscription quota burnt, no wait on the serial lane.
             Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
             Assert.NotNull(captured);
-            Assert.Equal("http://oet-writing-claude:8080/v1/messages", captured!.RequestUri!.ToString());
+            Assert.Equal(HttpMethod.Get, captured!.Method);
+            Assert.Equal("http://oet-writing-claude:8080/healthz", captured.RequestUri!.ToString());
         }
         finally
         {

@@ -706,6 +706,15 @@ public sealed class AiProviderConnectionTester(
     {
         var baseUrl = provider.BaseUrl ?? string.Empty;
 
+        // Keyless subscription sidecar rows: probe the sidecar's own health route. A real
+        // completion would burn subscription quota, queue behind running grades on the sidecar's
+        // single lane and outlive the 15 s probe timeout.
+        if (provider.Category == AiProviderCategory.TextChat
+            && WritingSubscriptionProviderDefaults.IsMarkerKey(apiKey))
+        {
+            return new ProbePlan(BuildBearerGetProbe(TrimBase(baseUrl) + "/healthz", apiKey), null);
+        }
+
         // ── Text chat / contextual LLM ──────────────────────────────────────
         if (provider.Category == AiProviderCategory.TextChat)
         {

@@ -99,9 +99,9 @@ Claude hits its limit.
 - **Keyless rows:** the seeded rows store the literal marker `subscription-sidecar` (not
   ciphertext) as their key. The provider registry hands that marker back as the key, so a
   row works as seeded once it is active: no re-keying in `/admin/ai-providers` is needed.
-  The admin **Test** button probes the sidecar with a real one-token request, which queues
-  behind any running grade on the serial lane and can report "Request timed out." while the
-  sidecar is busy.
+  The admin **Test** button on such a row calls the sidecar's `GET /healthz` (network path,
+  SSRF allowlist and container liveness), not a completion, so it burns no subscription quota
+  and never waits on the serial lane; CLI login state is checked with the smoke commands in §2.
 - **Network:** the sidecars are on `oet_agent_ctl`; `oet-api-blue`/`green` **and `oet-ai-worker`**
   join it (the worker executes queued grades). See `OWNER-AGENT-CONSOLE.md`.
 - **Feature routes** for the six writing codes are seeded to

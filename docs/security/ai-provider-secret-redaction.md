@@ -65,8 +65,9 @@ provider credentials:
 7. **The `subscription-sidecar` marker is not a secret.** The keyless
    subscription sidecar rows store this literal in `EncryptedApiKey`; the
    registry returns it as the key (the sidecars ignore it) and the admin
-   probe treats such a row as credentialed. A stored value that is
-   neither the marker nor decryptable makes the probe return status
+   probe treats such a row as credentialed, probing the sidecar's
+   `GET /healthz` rather than running a completion. A stored value that
+   is neither the marker nor decryptable makes the probe return status
    `auth` with a clear message instead of an unhandled error.
 
 ## Code paths
