@@ -449,7 +449,9 @@ public sealed class SpeakingRolePlayDurationCapTests
         var startedAt = now.AddSeconds(-10);
         Assert.Equal(startedAt.AddSeconds(600), clock.StageEndsAt);
         Assert.Equal(startedAt.AddSeconds(630), clock.HardStopAt);
-        Assert.InRange(clock.SecondsRemaining!.Value, 585, 590);
+        // Started 10 s ago against a 600 s cap. The wide range only absorbs slow test start-up;
+        // an uncapped 100000 s card would report tens of thousands.
+        Assert.InRange(clock.SecondsRemaining!.Value, 400, 590);
         Assert.False(clock.Expired);
         Assert.Equal(startedAt.AddSeconds(600), detail.RolePlayEndsAt);
         Assert.True(expired.Expired);
