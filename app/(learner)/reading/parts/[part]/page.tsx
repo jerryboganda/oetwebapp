@@ -143,7 +143,7 @@ export default function ReadingPartPracticePage() {
       <LearnerPageHero
         eyebrow={`Part ${part}`}
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title={meta.title}
         description={meta.description}
       />

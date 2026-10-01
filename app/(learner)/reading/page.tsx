@@ -187,7 +187,7 @@ export default function ReadingHome() {
       <LearnerPageHero
         eyebrow="Module focus"
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title="OET Reading"
         description="Practice each part separately or attempt the full reading exam under official timing."
         highlights={heroHighlights}

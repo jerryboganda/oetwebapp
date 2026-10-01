@@ -59,7 +59,7 @@ export default function ListeningStatsPage() {
     <>
       <LearnerPageHero
         icon={BarChart3}
-        accent="purple"
+        accent="listening"
         title="Listening Analytics"
         description="Track your sub-skill mastery (L1–L8) and accent confidence over time."
       />

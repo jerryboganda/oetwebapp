@@ -63,7 +63,7 @@ export default function ReadingStatsPage() {
       <LearnerPageHero
         eyebrow="Reading"
         icon={TrendingUp}
-        accent="blue"
+        accent="reading"
         title="Reading Analytics"
         description="Track your progress, activity, and skill development."
       />

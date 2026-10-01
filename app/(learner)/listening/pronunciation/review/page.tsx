@@ -321,7 +321,7 @@ export default function PronunciationReviewPage() {
       <LearnerPageHero
         eyebrow="SM-2 Spaced Repetition"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="Pronunciation Review"
         description=""
       />

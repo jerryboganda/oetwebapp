@@ -215,7 +215,7 @@ export default function DictationDrillPage() {
       <LearnerPageHero
         eyebrow="Phase 4 · Listening pathway"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="Dictation Drills"
         description="Train your ear and your spelling at the same time. Dictation uses the same strict marking contract as Listening: only the canonical answer or an explicitly authorised variant receives credit."
       />

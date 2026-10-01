@@ -155,7 +155,7 @@ export default function ListeningFullExamPage() {
       <LearnerPageHero
         eyebrow="Full exam"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="Full Listening Exam"
         description="Open a Listening series folder, then start a published Atlas or Nova exam. Audio plays once. You can submit at any time; you cannot jump freely between Parts A, B, and C."
       />

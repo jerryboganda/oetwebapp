@@ -45,7 +45,7 @@ export default function ListeningLessonsPage() {
     <>
       <LearnerPageHero
         icon={GraduationCap}
-        accent="purple"
+        accent="listening"
         title="Foundation Lessons"
         description="8 bite-sized lessons covering each Listening sub-skill (L1–L8). Each lesson runs ~30 min: watch, read, drill × 3, then a mini-quiz."
       />

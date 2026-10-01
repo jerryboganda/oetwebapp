@@ -208,7 +208,7 @@ export default function ReadingPracticePage() {
         title="Practice Hub"
         description="Untimed practice on papers you've already unlocked, plus quick mixed-Part warm-ups."
         icon={Sparkles}
-        accent="blue"
+        accent="reading"
       />
 
       {errorMsg ? <InlineAlert variant="error">{errorMsg}</InlineAlert> : null}
@@ -258,7 +258,7 @@ export default function ReadingPracticePage() {
                     card={{
                       kind: 'navigation',
                       sourceType: 'frontend_navigation',
-                      accent: 'blue',
+                      accent: 'reading',
                       eyebrow: 'READING',
                       eyebrowIcon: BookOpen,
                       title: paper.title,

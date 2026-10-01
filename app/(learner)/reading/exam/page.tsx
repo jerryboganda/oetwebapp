@@ -120,7 +120,7 @@ export default function ReadingFullExamPage() {
       <LearnerPageHero
         eyebrow="Full exam"
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title="Full Reading Exam"
         description="Open a book folder, then start a published full exam. Each exam is 60 minutes, 42 questions, with Part A hard-locked and Parts B+C sharing a 45-minute window."
       />

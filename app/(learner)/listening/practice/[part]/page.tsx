@@ -139,7 +139,7 @@ export default function ListeningPartPracticePage() {
       <LearnerPageHero
         eyebrow={`Part ${part}`}
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title={meta.title}
         description={meta.description}
       />

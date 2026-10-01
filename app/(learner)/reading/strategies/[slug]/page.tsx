@@ -84,7 +84,7 @@ export default function StrategyDetailPage() {
       <LearnerPageHero
         eyebrow="Reading strategies"
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title={data.strategy.title}
         description={`${data.strategy.estimatedReadMinutes} min read`}
         footer={(

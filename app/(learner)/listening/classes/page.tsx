@@ -332,7 +332,7 @@ export default function ListeningTeacherClassesPage() {
     <>
       <LearnerPageHero
         icon={Users}
-        accent="purple"
+        accent="listening"
         title="Teacher Class Analytics"
         description="View class progress and learner breakdowns."
         aside={pageState === 'ready' ? (

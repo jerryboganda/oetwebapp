@@ -89,7 +89,7 @@ export default function ListeningLessonPage() {
       <LearnerPageHero
         eyebrow={`Sub-skill ${lesson.skillCode}`}
         icon={GraduationCap}
-        accent="purple"
+        accent="listening"
         title={lesson.title}
         description={`~${lesson.estimatedMinutes} min`}
       />

@@ -60,7 +60,7 @@ export default function ListeningTestRulesPage() {
       <LearnerPageHero
         eyebrow="Listening Test Rules"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="How the OET Listening sub-test works"
         description="A two-minute brief covering exam timing, item types, and the computer-based rules you must follow. Read this before your first real attempt."
       />

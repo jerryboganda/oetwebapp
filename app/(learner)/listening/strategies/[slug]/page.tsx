@@ -95,7 +95,7 @@ export default function ListeningStrategyDetailPage() {
       <LearnerPageHero
         eyebrow={strategy.category.replace('_', ' ')}
         icon={Lightbulb}
-        accent="purple"
+        accent="listening"
         title={strategy.title}
         description={`~${strategy.estimatedReadMinutes} min read`}
       />

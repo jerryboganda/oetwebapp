@@ -74,7 +74,7 @@ export default function QuestionDiscussionPage() {
   // The breadcrumb's "Reading" crumb is the way back, so no back link above the header.
   return (
     <>
-      <LearnerPageHero icon={MessageCircle} accent="blue" title="Discussion" description="" />
+      <LearnerPageHero icon={MessageCircle} accent="reading" title="Discussion" description="" />
 
       {/* Comments list. A failed load is its own state: it used to sit on top of
           "Be the first to comment!", which told the learner the thread was empty. */}

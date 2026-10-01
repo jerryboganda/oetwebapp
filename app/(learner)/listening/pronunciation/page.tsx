@@ -159,7 +159,7 @@ export default function PronunciationHubPage() {
       <LearnerPageHero
         eyebrow="SM-2 Spaced Repetition"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="Pronunciation Library"
         description="Train your ear on healthcare vocabulary. Listen, repeat, and let SM-2 schedule the next review for maximum retention."
       />

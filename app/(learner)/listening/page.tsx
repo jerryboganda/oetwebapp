@@ -289,7 +289,7 @@ export default function ListeningHome() {
       <LearnerPageHero
         eyebrow="Module focus"
         icon={Headphones}
-        accent="purple"
+        accent="listening"
         title="OET Listening"
         description="Practice each part separately or attempt the full listening exam under official timing."
         highlights={heroHighlights}

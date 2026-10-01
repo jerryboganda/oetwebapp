@@ -139,7 +139,7 @@ export default function SkillTreePage() {
       <LearnerPageHero
         eyebrow="Reading"
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title="Reading Skill Tree"
         description="8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness."
       />

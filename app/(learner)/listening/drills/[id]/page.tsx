@@ -47,7 +47,7 @@ function ListeningDrillContent() {
           <LearnerPageHero
             eyebrow="Listening Drill"
             icon={Headphones}
-            accent="purple"
+            accent="listening"
             title={drill.title}
             description={drill.description}
             highlights={[

@@ -53,7 +53,7 @@ export default function ListeningStrategiesPage() {
     <>
       <LearnerPageHero
         icon={Lightbulb}
-        accent="purple"
+        accent="listening"
         title="Strategy Library"
         description="Curated tactics for note-taking, gist, inference, time management, accents, and exam day."
       />

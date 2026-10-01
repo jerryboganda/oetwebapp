@@ -91,7 +91,7 @@ export default function StrategiesPage() {
       <LearnerPageHero
         eyebrow="Reading strategies"
         icon={BookOpen}
-        accent="blue"
+        accent="reading"
         title="Strategy Library"
         description="Evidence-based reading strategies to improve accuracy and speed in OET Part A, B, and C."
       />

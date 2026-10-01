@@ -132,7 +132,7 @@ export default function ListeningPathwayPage() {
       <LearnerPageHero
         eyebrow="Listening pathway"
         icon={CalendarDays}
-        accent="purple"
+        accent="listening"
         title="Your listening roadmap"
         description="A personalised schedule of focus skills, accent practice, and mock tests."
         highlights={pathway ? [
