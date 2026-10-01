@@ -306,6 +306,33 @@
       margin-top: 2rem;
     }
   }
+
+  /* CelebrationBurst (components/ui/celebration-burst.tsx): each particle flies
+     out along --angle, spins and fades. Transform/opacity only. */
+  .celebration-particle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--size);
+    height: calc(var(--size) * 1.6);
+    margin: calc(var(--size) * -0.8) 0 0 calc(var(--size) * -0.5);
+    background: var(--color);
+    animation: celebration-particle 900ms var(--ease-enter) var(--delay) both;
+  }
+
+  @keyframes celebration-particle {
+    0% {
+      opacity: 1;
+      transform: rotate(var(--angle)) translateY(0) rotate(0deg) scale(1);
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(var(--angle)) translateY(calc(var(--distance) * -1)) rotate(var(--spin)) scale(0.6);
+    }
+  }
 }
 
 @layer utilities {
@@ -313,11 +340,6 @@
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     touch-action: manipulation;
-  }
-
-  .gpu-accelerated {
-    transform: translateZ(0);
-    will-change: transform;
   }
 
   .font-display {
@@ -578,19 +600,6 @@
     --pressable-transition-duration: 160ms;
     --pressable-active-scale: 0.985;
     --page-enter-duration: 280ms;
-  }
-
-  /* Desktop dense surfaces: subtler hover for table rows and data-dense cards */
-  html[data-runtime-kind='desktop'] tr.hoverable-row:hover {
-    background-color: rgba(124, 58, 237, 0.04);
-    transition: background-color 0.16s var(--ease-standard);
-  }
-
-  html[data-runtime-kind='desktop'] .card-hover-subtle:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-clinical);
-    transition: transform 0.16s var(--ease-standard),
-                box-shadow 0.16s var(--ease-standard);
   }
 
   html[data-runtime-kind='capacitor-native'] {

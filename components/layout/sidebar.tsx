@@ -282,7 +282,7 @@ function NavSection({
                 className={cn(
                   'pressable group relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
@@ -450,7 +450,7 @@ export function Sidebar({
               href={getWorkspaceSettingsHref(activeWorkspaceRole)}
               prefetch={false}
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
+              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary"
             >
               <Settings className="h-4 w-4" aria-hidden="true" />
               Settings
@@ -460,7 +460,7 @@ export function Sidebar({
             <a
               href="mailto:support@oetwithdrhesham.co.uk?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
+              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary"
             >
               <HelpCircle className="h-4 w-4" aria-hidden="true" />
               Help & Support

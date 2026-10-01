@@ -98,7 +98,11 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - `spring.pop` (ζ ≈ 0.6) is reserved for presses, badges and celebrations. Never put bounce on per-row list reveals, which must stay cheap while scrolling.
 - **Reveals happen in view.** `MotionSection`/`MotionItem`/`MotionList`/`MotionPage` animate once, when scrolled into view (`whileInView`, default viewport), so below-the-fold content doesn't finish animating off-screen. `layout` animation is opt-in.
 - **Animate only `transform` and `opacity`**, never layout properties.
-- **Hover:** a lift of at most 1px, gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`).
+- **Hover:** a lift of at most 2px (`hoverable:-translate-y-0.5` on interactive cards), gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`, which Link CTAs rendered through `Button asChild` also get).
+- **Hover tints are state layers:** `hover:bg-primary/8` (`/15` in dark mode) with primary text. Never a solid primary fill on rows, tabs, pills or nav items.
+- **Progress** fills slide with a transform (never animate `width`), and rings draw in from empty on first paint via `@starting-style`.
+- **Numbers that matter** (scores, raw marks, streaks, XP) may count up with `CountUp`: once, when in view, from the real value only.
+- **Wins** (target grade met, streak up, achievement unlocked) may fire `CelebrationBurst`. Use it once per event per session, never decoratively, never on exam/live routes, and pair it with a success haptic in the mobile app.
 - **Active indicators** (tabs, sidebar, bottom nav) use a shared-layout `layoutId`. Scope each instance's id with `useId`.
 - **Reduced motion is mandatory.**
   - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.

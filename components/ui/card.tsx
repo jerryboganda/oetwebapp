@@ -32,8 +32,8 @@ export function cardClassName({
   return cn(
     'rounded-2xl border border-border bg-surface text-navy shadow-sm',
     paddingStyles[padding],
-    hoverable && 'transition-[border-color,box-shadow,transform] duration-200',
-    hoverable && 'hover:border-border-hover hover:shadow-clinical',
+    hoverable && 'transition-[border-color,box-shadow,transform] duration-200 ease-standard',
+    hoverable && 'hover:border-border-hover hover:shadow-clinical hoverable:-translate-y-0.5 active:translate-y-0 motion-reduce:transform-none',
     interactive && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
   );
 }

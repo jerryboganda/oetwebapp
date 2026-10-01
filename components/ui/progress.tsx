@@ -1,7 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { motion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
+import { getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
 
 /* ─── Linear Progress Bar ─── */
 interface ProgressBarProps {
@@ -24,6 +25,7 @@ const colorStyles: Record<string, string> = {
 
 export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, size = 'sm', color = 'primary', className }: ProgressBarProps) {
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   return (
     <div className={cn('w-full', className)}>
       {(label || showValue) && (
@@ -33,18 +35,20 @@ export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, siz
         </div>
       )}
       <div
-        className={cn('w-full bg-border/30 dark:bg-border/30 rounded-full overflow-hidden shadow-inner', size === 'sm' ? 'h-2' : 'h-3')}
+        className={cn('w-full bg-border/30 dark:bg-border/30 rounded-full overflow-hidden shadow-inner rtl:-scale-x-100', size === 'sm' ? 'h-2' : 'h-3')}
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={ariaLabel ?? label}
       >
+        {/* A full-width fill slid into the clipped track: transform-only, so it
+            stays on the compositor and keeps its rounded leading edge. */}
         <motion.div
-          className={cn('h-full rounded-full', colorStyles[color])}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', stiffness: 100, damping: 20, mass: 0.8 }}
+          className={cn('h-full w-full rounded-full', colorStyles[color])}
+          initial={{ x: '-100%' }}
+          animate={{ x: `${pct - 100}%` }}
+          transition={getProgressFillTransition(reducedMotion)}
         />
       </div>
     </div>
@@ -75,7 +79,8 @@ export function CircularProgress({ value, size = 120, strokeWidth = 8, label, su
           <circle
             cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-            className="transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
+            style={{ ['--ring-empty' as string]: `${circumference}px` }}
+            className="transition-[stroke-dashoffset] duration-700 ease-out starting:[stroke-dashoffset:var(--ring-empty)] motion-reduce:transition-none"
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center flex-col">
