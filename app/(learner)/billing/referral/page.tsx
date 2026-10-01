@@ -187,7 +187,7 @@ export default function ReferralPage() {
             },
           ].map((s) => (
             <li key={s.step} className={cn(cardClassName({ padding: 'md' }), 'text-center')}>
-              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold tabular-nums text-white dark:bg-violet-700">
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold tabular-nums text-white dark:bg-primary-700">
                 {s.step}
               </div>
               <p className="text-sm font-bold text-navy">{s.title}</p>

@@ -131,7 +131,7 @@ export function RecordingPlayer({
                     onClick={() => setSummaryLang(lang)}
                     className={cn(
                       'min-h-11 px-3 transition-colors first:rounded-s-full last:rounded-e-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                      summaryLang === lang ? 'bg-primary text-white dark:bg-violet-700' : 'text-muted hover:text-navy',
+                      summaryLang === lang ? 'bg-primary text-white dark:bg-primary-700' : 'text-muted hover:text-navy',
                     )}
                   >
                     {lang.toUpperCase()}
@@ -174,7 +174,7 @@ export function RecordingPlayer({
                     className={cn(
                       'mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
                       checkedItems.has(i)
-                        ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                        ? 'border-primary bg-primary text-white dark:bg-primary-700'
                         : 'border-border bg-background group-hover:border-primary/60',
                     )}
                   >
