@@ -62,10 +62,10 @@ jobs:
           node-version: 22
       - name: Verify persisted grade report and idempotent retry
         env:
-          ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
-          QA_EMAIL: ${{ secrets.WRITING_REV8_QA_EMAIL }}
-          QA_PASSWORD: ${{ secrets.WRITING_REV8_QA_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_ADMIN_PASSWORD }}
+          QA_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_EMAIL }}
+          QA_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_PASSWORD }}
         run: node scripts/qa/writing-grading-live.mjs
 
   production-diagnostics:

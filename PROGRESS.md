@@ -1,6 +1,14 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
+
+## Current Checkpoint - Writing grading failure recovery
+
+- Fixed misleading exemplar progress and failure visibility without refresh; focused UI/backend Actions checks passed.
+- Diagnosed Codex HTTP 404: seeded root BaseUrl posts `/chat/completions`, while the sidecar accepted only `/v1/chat/completions`. The shared handler accepts both routes; red/green protocol evidence is in runs `36785645083` / `36785869736`.
+- Verified sidecar rollout and main deploy at `63751c35bc0b87e70445340c25c433620fd44786` in `36786478009` / `36786477912`; credential volumes preserved.
+- Preserved concurrent Speaking PR #305. Latest HEAD `ea039f209930c47536c87466599845b06b093717`: final main deploy `36809780621` and authorized Codex-only QA `36809805030` remain pending.
+- User authorized one subscription-only QA assessment and incident-specific Jev waiver; paid Writing APIs remain forbidden. Original user submission untouched. Current task details live in `.github/agent-state.local.md`.
 
 ## Current Checkpoint - UBAG provider board: per-model full-pipeline test (2026-09-07)
 
