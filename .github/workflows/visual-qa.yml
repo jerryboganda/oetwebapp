@@ -93,6 +93,14 @@ jobs:
           tests/e2e/writing-v2/mocks.spec.ts
           --project=chromium-learner --workers=1 --retries=0
 
+      # The API's own log, so a page that renders an error state in the crawl can be
+      # traced to its exception (the ephemeral stack carries no real secrets).
+      - name: Capture stack logs
+        if: always()
+        run: |
+          mkdir -p output/playwright/stack
+          docker compose -f docker-compose.desktop.yml logs --no-color > output/playwright/stack/docker-compose.log 2>&1 || true
+
       - name: Upload screenshots and report
         if: always()
         uses: actions/upload-artifact@v4
