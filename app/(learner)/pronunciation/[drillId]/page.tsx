@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Headphones, Mic } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchPronunciationDrill, type PronunciationDrillSummary } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -58,65 +60,75 @@ export default function PronunciationDrillPage() {
     };
   }, [drillId]);
 
+  if (!drillId || (!loading && (error || !drill))) {
+    return (
+      <EmptyState
+        icon={<Mic className="h-7 w-7" aria-hidden="true" />}
+        title={!drillId ? 'Missing pronunciation drill id.' : (error ?? 'Pronunciation drill not found.')}
+        action={{ label: 'Back to pronunciation', href: '/pronunciation' }}
+      />
+    );
+  }
+
+  if (loading || !drill) {
+    return (
+      <>
+        <Skeleton className="h-36 rounded-2xl" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-40 rounded-2xl" />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      <Link href="/pronunciation" className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-navy">
-        <ArrowLeft className="h-4 w-4" /> Back to pronunciation
-      </Link>
+      <LearnerPageHero
+        eyebrow={`${drill.difficulty} · ${drill.focus}`}
+        title={drill.label}
+        description={`Target phoneme: ${drill.targetPhoneme}`}
+        icon={Mic}
+        aside={(
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/pronunciation">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+              Back to pronunciation
+            </Link>
+          </Button>
+        )}
+      />
 
-      {!drillId ? (
-        <InlineAlert variant="warning">Missing pronunciation drill id.</InlineAlert>
-      ) : loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
-      ) : error || !drill ? (
-        <InlineAlert variant="warning">{error ?? 'Pronunciation drill not found.'}</InlineAlert>
-      ) : (
-        <div className="space-y-5">
-          <Card className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="mb-2 flex flex-wrap gap-2">
-                  <Badge variant="outline">{drill.difficulty}</Badge>
-                  <Badge variant="muted">{drill.focus}</Badge>
-                </div>
-                <h1 className="text-2xl font-bold text-navy">{drill.label}</h1>
-                <p className="mt-1 text-sm text-muted">Target phoneme: {drill.targetPhoneme}</p>
-              </div>
-              <Mic className="h-8 w-8 text-primary" />
-            </div>
-          </Card>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="p-5">
-              <h2 className="text-sm font-semibold text-navy">Example words</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {words.length > 0 ? words.map((word) => <Badge key={word} variant="outline">{word}</Badge>) : <p className="text-sm text-muted">No example words are published for this drill yet.</p>}
-              </div>
-            </Card>
-            <Card className="p-5">
-              <h2 className="text-sm font-semibold text-navy">Practice sentences</h2>
-              <div className="mt-3 space-y-2">
-                {sentences.length > 0 ? sentences.map((sentence) => <p key={sentence} className="text-sm text-muted">{sentence}</p>) : <p className="text-sm text-muted">No practice sentences are published for this drill yet.</p>}
-              </div>
-            </Card>
+      <MotionSection className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card padding="lg">
+          <h2 className="text-base font-bold text-navy">Example words</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {words.length > 0 ? words.map((word) => <Badge key={word} variant="outline">{word}</Badge>) : <p className="text-sm text-muted">No example words are published for this drill yet.</p>}
           </div>
+        </Card>
+        <Card padding="lg">
+          <h2 className="text-base font-bold text-navy">Practice sentences</h2>
+          <div className="mt-3 space-y-2">
+            {sentences.length > 0 ? sentences.map((sentence) => <p key={sentence} className="text-sm text-muted">{sentence}</p>) : <p className="text-sm text-muted">No practice sentences are published for this drill yet.</p>}
+          </div>
+        </Card>
+      </MotionSection>
 
-          <Card className="p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-navy">Minimal-pair discrimination</h2>
-                <p className="mt-1 text-sm text-muted">Train your ear before recording a scored attempt.</p>
-              </div>
-              <Button variant="outline" asChild>
-<Link href={`/pronunciation/discrimination/${encodeURIComponent(drill.id)}`}><Headphones className="h-4 w-4" /> Open discrimination</Link>
-</Button>
+      <MotionSection>
+        <Card padding="lg">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-navy">Minimal-pair discrimination</h2>
+              <p className="mt-1 text-sm text-muted">Train your ear before recording a scored attempt.</p>
             </div>
-          </Card>
-        </div>
-      )}
+            <Button variant="outline" asChild>
+              <Link href={`/pronunciation/discrimination/${encodeURIComponent(drill.id)}`}>
+                <Headphones className="h-4 w-4" aria-hidden="true" /> Open discrimination
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      </MotionSection>
     </>
   );
 }
