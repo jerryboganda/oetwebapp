@@ -182,6 +182,8 @@ export default function MockSetup() {
   const [entitlementSummary, setEntitlementSummary] = useState<MockEntitlementSummary | null>(null);
   const [entitlementSummaryLoading, setEntitlementSummaryLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  // Two places, two meanings: a failed load shows at the top, a failed start or booking beside the Start bar.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [bookingAt, setBookingAt] = useState('');
   const [booking, setBooking] = useState(false);
@@ -229,7 +231,7 @@ export default function MockSetup() {
           || result.professions[0]?.id;
         if (preferred) setProfession(preferred);
       })
-      .catch(() => setStartError('Failed to load mock setup options.'))
+      .catch(() => setLoadError('Failed to load mock setup options.'))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -443,7 +445,8 @@ export default function MockSetup() {
                 const totalForPct = item.granted > 0 ? item.granted : Math.max(1, item.consumed + item.remaining);
                 const usedPct = Math.min(100, Math.round((item.consumed / totalForPct) * 100));
                 const exhausted = item.granted > 0 && item.remaining <= 0;
-                const low = !exhausted && item.remaining <= 1;
+                // Only a real grant can run low; a never-granted bucket is neutral, not a warning.
+                const low = item.granted > 0 && !exhausted && item.remaining <= 1;
                 return (
                   <div
                     key={item.mockType}
@@ -500,7 +503,7 @@ export default function MockSetup() {
         </div>
       ) : null}
 
-      {!loading && startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
+      {!loading && loadError ? <InlineAlert variant="error">{loadError}</InlineAlert> : null}
 
       {!loading ? (
         <>
