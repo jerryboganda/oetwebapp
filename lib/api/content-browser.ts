@@ -3,6 +3,7 @@
  * extracted from `lib/api.ts`. Re-exported there, so `@/lib/api`
  * imports keep working.
  */
+import type { ContentPackage, PaginatedResponse } from '@/lib/types/content-hierarchy';
 import { apiRequest } from './client';
 
 export async function fetchContentPrograms(params?: { type?: string; language?: string; page?: number; pageSize?: number }) {
@@ -30,8 +31,8 @@ type RawPackage = Record<string, unknown> & { comparisonFeatures?: unknown; comp
  * column (`comparisonFeaturesJson`), while `ContentPackage` promises a
  * `comparisonFeatures` array. Parse it here so every caller gets the array.
  */
-function withComparisonFeatures(pkg: RawPackage) {
-  if (Array.isArray(pkg.comparisonFeatures)) return pkg;
+function withComparisonFeatures(pkg: RawPackage): ContentPackage {
+  if (Array.isArray(pkg.comparisonFeatures)) return pkg as unknown as ContentPackage;
   let comparisonFeatures: string[] = [];
   try {
     const parsed: unknown = JSON.parse(typeof pkg.comparisonFeaturesJson === 'string' ? pkg.comparisonFeaturesJson : '[]');
@@ -39,20 +40,20 @@ function withComparisonFeatures(pkg: RawPackage) {
   } catch {
     // A malformed column means no features, not a crashed page.
   }
-  return { ...pkg, comparisonFeatures };
+  return { ...pkg, comparisonFeatures } as unknown as ContentPackage;
 }
 
-export async function fetchContentPackages(params?: { type?: string; page?: number; pageSize?: number }) {
+export async function fetchContentPackages(params?: { type?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<ContentPackage>> {
   const p = new URLSearchParams();
   if (params?.type) p.set('type', params.type);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   const qs = p.toString();
-  const response = await apiRequest<{ items?: RawPackage[] } & Record<string, unknown>>(`/v1/packages${qs ? `?${qs}` : ''}`);
-  return Array.isArray(response?.items) ? { ...response, items: response.items.map(withComparisonFeatures) } : response;
+  const response = await apiRequest<Omit<PaginatedResponse<ContentPackage>, 'items'> & { items?: RawPackage[] }>(`/v1/packages${qs ? `?${qs}` : ''}`);
+  return { ...response, items: Array.isArray(response?.items) ? response.items.map(withComparisonFeatures) : [] };
 }
 
-export async function fetchContentPackage(packageId: string) {
+export async function fetchContentPackage(packageId: string): Promise<ContentPackage | null> {
   const pkg = await apiRequest<RawPackage | null>(`/v1/packages/${encodeURIComponent(packageId)}`);
   return pkg ? withComparisonFeatures(pkg) : pkg;
 }

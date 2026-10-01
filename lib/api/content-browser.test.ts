@@ -19,8 +19,7 @@ describe('content packages client', () => {
 
     const response = await fetchContentPackages();
 
-    const items = (response.items ?? []) as Array<{ comparisonFeatures: string[] }>;
-    expect(items.map((pkg) => pkg.comparisonFeatures)).toEqual([
+    expect(response.items.map((pkg) => pkg.comparisonFeatures)).toEqual([
       ['Full mocks', 'Tutor review'],
       [],
       [],
