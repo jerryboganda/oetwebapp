@@ -265,7 +265,8 @@ public partial class LearnerService
                 priority = "medium",
                 title = $"Tutor review ready: {pr.r.SubtestCode}",
                 subtitle = "Review your personalized feedback",
-                actionUrl = $"/feedback/{pr.r.Id}",
+                // The learner reads a completed review on its submission (there is no /feedback route).
+                actionUrl = $"/submissions/{pr.a.Id}",
                 subtestCode = pr.r.SubtestCode
             });
         }
@@ -314,7 +315,8 @@ public partial class LearnerService
                     priority = "medium",
                     title = $"Practice {weakSubtest.SubtestCode} — your weakest area",
                     subtitle = $"Average score: {weakAverage:F0}/500",
-                    actionUrl = $"/practice/{weakSubtest.SubtestCode}",
+                    // The sub-test's own hub (there is no /practice/{subtest} route).
+                    actionUrl = $"/{weakSubtest.SubtestCode.ToLowerInvariant()}",
                     subtestCode = weakSubtest.SubtestCode
                 });
             }
