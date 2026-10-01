@@ -268,7 +268,7 @@ export default function WritingAnalyticsPage() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {latestGrade && (
                       <div className="rounded-2xl border border-border bg-background-light p-4">
-                        <div className="text-xs font-bold uppercase tracking-wider text-muted">Estimated grade</div>
+                        <div className="eyebrow text-muted">Estimated grade</div>
                         <div className="mt-1 flex items-baseline gap-2">
                           <span className="text-3xl font-bold text-navy">{latestGrade.gradeRange}</span>
                           <span className="text-sm text-muted">({latestGrade.scoreRange})</span>
@@ -278,7 +278,7 @@ export default function WritingAnalyticsPage() {
                     )}
                     {latestPurpose && (
                       <div className="rounded-2xl border border-border bg-background-light p-4">
-                        <div className="text-xs font-bold uppercase tracking-wider text-muted">Purpose score</div>
+                        <div className="eyebrow text-muted">Purpose score</div>
                         <div className="mt-1 flex items-baseline gap-2">
                           <span className="text-3xl font-bold text-navy">
                             {latestPurpose.score}<span className="text-sm text-muted">/{latestPurpose.maxScore}</span>

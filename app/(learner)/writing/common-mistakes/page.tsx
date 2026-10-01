@@ -59,7 +59,7 @@ export default function WritingCommonMistakesPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm">
           <fieldset className="flex flex-wrap items-center gap-2" aria-label={t('writing.mistakes.library.filters.legend')}>
             <legend className="sr-only">{t('writing.mistakes.library.filters.legend')}</legend>
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">
+            <span className="eyebrow text-muted">
               <Filter className="mr-1 inline h-3 w-3" aria-hidden="true" /> {t('writing.mistakes.library.filters.skillLabel')}
             </span>
             <button
@@ -83,7 +83,7 @@ export default function WritingCommonMistakesPage() {
             ))}
           </fieldset>
 
-          <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
+          <label className="flex items-center gap-2 eyebrow text-muted">
             {t('writing.mistakes.library.filters.categoryLabel')}
             <select
               value={category}

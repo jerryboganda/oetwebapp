@@ -160,7 +160,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
   return (
     <div className="mt-3 rounded-xl border border-border bg-background-light p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <span className="eyebrow text-muted">
           Practice spelling
         </span>
         <button

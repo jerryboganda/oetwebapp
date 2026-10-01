@@ -81,7 +81,7 @@ export function OrderingDrillComponent({ drill, onGraded }: OrderingDrillProps) 
                     </button>
                   </div>
                   <div className="flex-1">
-                    <div className="text-xs uppercase tracking-wide text-muted mb-1">
+                    <div className="eyebrow text-muted mb-1">
                       Paragraph {idx + 1}
                     </div>
                     <p className="text-sm">{item.text}</p>

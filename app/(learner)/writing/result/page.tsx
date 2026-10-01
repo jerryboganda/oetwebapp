@@ -127,15 +127,15 @@ function WritingResultContent() {
 
         <MotionSection delayIndex={1} className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
           <Card className="border-border bg-background-light p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Exam Family</p>
+            <p className="eyebrow text-muted">Exam Family</p>
             <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
           </Card>
           <Card className="border-border bg-background-light p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Confidence</p>
+            <p className="eyebrow text-muted">Confidence</p>
             <p className="mt-2 text-base font-bold text-navy">{result.confidenceLabel}</p>
           </Card>
           <Card className="border-border bg-background-light p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Provenance</p>
+            <p className="eyebrow text-muted">Provenance</p>
             <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
           </Card>
         </MotionSection>
@@ -153,7 +153,7 @@ function WritingResultContent() {
           <Card className="border-border bg-surface p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-primary">Correction workflow</p>
+                <p className="eyebrow text-primary">Correction workflow</p>
                 <h2 className="mt-2 text-xl font-black text-navy">Use feedback as a rewrite cycle, not as a final score</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
                   The writing module follows the intended teacher-correction path: review the six criteria, inspect anchored comments, rewrite the letter in learning mode, then request tutor review for final readiness decisions.

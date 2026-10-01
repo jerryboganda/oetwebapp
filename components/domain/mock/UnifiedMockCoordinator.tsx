@@ -268,7 +268,7 @@ export function UnifiedMockCoordinator({
                 </div>
 
                 <div>
-                  <span className="text-2xs font-bold uppercase tracking-wider text-muted">
+                  <span className="eyebrow text-muted">
                     Sub-Test {idx + 1}
                   </span>
                   <h3 className="text-base font-bold text-navy">{section.title || meta.title}</h3>
@@ -402,7 +402,7 @@ export function UnifiedMockCoordinator({
                 </div>
 
                 <div className="space-y-2 rounded-xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">
+                  <p className="eyebrow text-muted">
                     Sub-Test Protocol & Invariants
                   </p>
                   <ul className="list-disc space-y-1.5 pl-4 text-xs text-foreground">

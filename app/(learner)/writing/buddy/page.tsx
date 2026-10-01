@@ -239,7 +239,7 @@ export default function WritingBuddyPage() {
                 <header className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-bold text-navy">{pair.partnerDisplayName}</h2>
-                    <p className="text-xs uppercase tracking-wider text-muted">
+                    <p className="eyebrow text-muted">
                       {pair.profession} · matched at band {pair.matchedAtBand}
                     </p>
                   </div>
@@ -249,7 +249,7 @@ export default function WritingBuddyPage() {
                 </header>
 
                 <section aria-label="Conversation" className="rounded-2xl border border-border bg-background p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
+                  <div className="mb-2 flex items-center gap-2 eyebrow text-muted">
                     <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Conversation
                   </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto" role="log" aria-live="polite">
@@ -274,7 +274,7 @@ export default function WritingBuddyPage() {
                 </section>
 
                 <form onSubmit={onSendMessage} className="space-y-2" aria-label="Send a buddy message">
-                  <label htmlFor="buddy-message" className="block text-xs font-bold uppercase tracking-wider text-muted">
+                  <label htmlFor="buddy-message" className="block eyebrow text-muted">
                     Message · {sentToday}/{MESSAGES_PER_DAY} sent today
                   </label>
                   <textarea
@@ -309,7 +309,7 @@ export default function WritingBuddyPage() {
                   both halves are in.
                 </p>
                 <form onSubmit={onSubmitCheckIn} className="space-y-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                  <label className="block eyebrow text-muted">
                     Highlight
                     <textarea
                       value={checkInDraft.highlight}
@@ -318,7 +318,7 @@ export default function WritingBuddyPage() {
                       className="mt-1 w-full rounded-xl border border-border bg-background p-2 text-sm text-navy"
                     />
                   </label>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                  <label className="block eyebrow text-muted">
                     Challenge
                     <textarea
                       value={checkInDraft.challenge}
@@ -327,7 +327,7 @@ export default function WritingBuddyPage() {
                       className="mt-1 w-full rounded-xl border border-border bg-background p-2 text-sm text-navy"
                     />
                   </label>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                  <label className="block eyebrow text-muted">
                     Goal for next week
                     <textarea
                       value={checkInDraft.goalNextWeek}

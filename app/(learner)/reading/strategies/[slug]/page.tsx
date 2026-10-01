@@ -145,7 +145,7 @@ export default function StrategyDetailPage() {
             {/* Related strategies */}
             {data.strategy.relatedSlugs.length > 0 && (
               <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Related strategies</h2>
+                <h2 className="eyebrow text-muted">Related strategies</h2>
                 <ul className="space-y-1">
                   {data.strategy.relatedSlugs.map((related) => (
                     <li key={related}>

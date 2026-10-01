@@ -219,7 +219,7 @@ export default function VideoDetailPage() {
                     <LockKeyhole className="h-7 w-7" aria-hidden="true" />
                   </span>
                   <div className="space-y-1.5">
-                    <p className="text-2xs font-bold uppercase tracking-[0.22em] text-violet-300">
+                    <p className="eyebrow text-violet-300">
                       Premium lesson
                     </p>
                     <h2 className="text-lg font-bold text-white">Unlock the full Video Library</h2>
@@ -318,7 +318,7 @@ export default function VideoDetailPage() {
               </dl>
               {video.tags.length > 0 && (
                 <div className="mt-1 border-t border-border/60 pt-3">
-                  <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.18em] text-muted">Topics</p>
+                  <p className="mb-2 eyebrow text-muted">Topics</p>
                   <div className="flex flex-wrap gap-1.5">
                     {video.tags.map((tag) => (
                       <span

@@ -231,7 +231,7 @@ export default function ReadingHome() {
         <MotionSection delayIndex={0}>
           <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+              <p className="eyebrow text-primary">
                 Choose how to practice
               </p>
               <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
@@ -382,7 +382,7 @@ function ReadingSecondaryDashboard({
             {recentResults.map((result) => (
               <li key={result.attemptId}>
                 <article className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
-                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 tile-label text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
                     {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
                   </span>
                   <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>
@@ -436,7 +436,7 @@ function DashboardPanelHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
-        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+        <p className="flex items-center gap-1.5 eyebrow text-primary">
           <Icon className="h-3.5 w-3.5" aria-hidden />
           {eyebrow}
         </p>

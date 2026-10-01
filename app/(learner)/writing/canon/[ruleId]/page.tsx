@@ -82,11 +82,11 @@ export default function WritingCanonRuleDetailPage() {
             </header>
             <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
               <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.detection')}</dt>
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.detection')}</dt>
                 <dd className="mt-1 font-bold text-navy capitalize">{rule.detectionType}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.letterTypes')}</dt>
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.letterTypes')}</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {rule.appliesToLetterTypes.length > 0
                     ? rule.appliesToLetterTypes.map((lt) => <Badge key={lt} variant="muted" size="sm">{lt}</Badge>)
@@ -94,7 +94,7 @@ export default function WritingCanonRuleDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.professions')}</dt>
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.professions')}</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {rule.appliesToProfessions.length > 0
                     ? rule.appliesToProfessions.map((p) => <Badge key={p} variant="info" size="sm" className="capitalize">{p}</Badge>)

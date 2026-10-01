@@ -373,7 +373,7 @@ export function LearnerDashboardDetails({
               </div>
 
               <div>
-                <p className="mb-2 text-2xs font-bold uppercase tracking-wider text-muted">This Week</p>
+                <p className="mb-2 eyebrow text-muted">This Week</p>
                 <div className="grid grid-cols-7 gap-1.5">
                   {engagement.weeklyActivity.map((day, index, all) => {
                     const isToday = index === all.length - 1;

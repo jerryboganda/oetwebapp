@@ -267,7 +267,7 @@ function NavSection({
 
   return (
     <motion.div className="mb-4" layout={!reducedMotion}>
-      <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted">{label}</div>
+      <div className="mb-2 px-2 eyebrow text-muted">{label}</div>
       <motion.ul className="flex flex-col gap-1" layout={!reducedMotion}>
         {items.map((item, index) => {
           const active = item.href === activeHref;

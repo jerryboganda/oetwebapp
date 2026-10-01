@@ -84,7 +84,7 @@ export function AttemptToolbar({
           {attempt.isUntimed ? (
             <div className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2">
               <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Untimed Practice — no timer</span>
+              <span className="eyebrow text-muted">Untimed Practice — no timer</span>
             </div>
           ) : (
             <div
@@ -95,7 +95,7 @@ export function AttemptToolbar({
               aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
             >
               <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
+              <span className="eyebrow text-muted">{timerLabel}</span>
               <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
             </div>
           )}
@@ -229,7 +229,7 @@ export function ReadingA11ySettings({
       >
         {policy.fontScaleUserControl ? (
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Font size</p>
+            <p className="eyebrow text-muted">Font size</p>
             <div className="flex items-center gap-1">
               {[90, 100, 110, 125].map((value) => (
                 <button

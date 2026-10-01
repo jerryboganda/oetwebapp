@@ -643,7 +643,7 @@ export default function ListeningReviewPage() {
                               <Volume2 className="h-3.5 w-3.5" aria-hidden /> Play
                             </button>
                           ) : null}
-                          <p className="text-xs font-black uppercase tracking-widest text-muted">{extract.kind}</p>
+                          <p className="eyebrow text-muted">{extract.kind}</p>
                         </div>
                       </div>
                       <p className="mt-2 text-muted">{extract.accentCode ?? 'Accent not specified'}</p>
@@ -719,7 +719,7 @@ export default function ListeningReviewPage() {
                             className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}`}
                           >
                             <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
-                            <p className="mt-2 text-xs font-black uppercase tracking-widest">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
+                            <p className="mt-2 eyebrow">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
                             {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
                           </div>
                         ))}
@@ -763,7 +763,7 @@ export default function ListeningReviewPage() {
                   if (!Array.isArray(perQ) || perQ.length === 0) return null;
                   return (
                     <div className="mt-4">
-                      <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">
+                      <h3 className="mb-3 eyebrow text-muted">
                         Per-Question Comments
                       </h3>
                       <div className="space-y-2">
@@ -794,7 +794,7 @@ export default function ListeningReviewPage() {
                   if (!Array.isArray(areas) || areas.length === 0) return null;
                   return (
                     <div className="mt-4">
-                      <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">
+                      <h3 className="mb-2 eyebrow text-muted">
                         Recommended Practice Areas
                       </h3>
                       <div className="flex flex-wrap gap-2">

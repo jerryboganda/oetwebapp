@@ -62,7 +62,7 @@ export default function ScoreCalculatorPage() {
                 <thead className="bg-background-light">
                   <tr>
                     {['OET Grade', 'OET Score', 'IELTS', 'PTE Academic', 'CEFR'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wider">
+                      <th key={h} className="px-4 py-3 text-left eyebrow text-muted">
                         {h}
                       </th>
                     ))}

@@ -134,7 +134,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-4">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <span className="eyebrow text-muted">
             How many words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -157,7 +157,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-3">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <span className="eyebrow text-muted">
             Which words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">

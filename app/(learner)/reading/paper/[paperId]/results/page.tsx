@@ -587,7 +587,7 @@ function ReviewItemDetails({
               className="rounded-xl border border-border bg-background-light p-3"
               data-testid={`reading-box-explanation-${key}`}
             >
-              <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Explanation ({key})</p>
+              <p className="eyebrow text-muted">Explanation ({key})</p>
               <p className="mt-1 text-sm leading-6 text-navy dark:text-white">{text}</p>
             </div>
           ))}
@@ -595,7 +595,7 @@ function ReviewItemDetails({
       ) : null}
       {item.evidenceSentence ? (
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-400/30 dark:bg-blue-950/20" data-testid="reading-source-evidence">
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">Source evidence</p>
+          <p className="eyebrow text-blue-700 dark:text-blue-300">Source evidence</p>
           <p className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{item.evidenceSentence}</p>
         </div>
       ) : null}
@@ -642,7 +642,7 @@ function GroundedReadingExplanation({
     <div className="mt-4 rounded-xl border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-400/30 dark:bg-primary-950/20" data-testid="reading-grounded-ai">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-primary-700 dark:text-primary-300">Grounded AI explanation</p>
+          <p className="eyebrow text-primary-700 dark:text-primary-300">Grounded AI explanation</p>
           <p className="mt-1 text-xs text-muted">Advisory only; it cannot change your marks.</p>
         </div>
         {!result ? (

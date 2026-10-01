@@ -146,7 +146,7 @@ export default function PackagesPage() {
                       >
                         {websitePackage ? (
                           <>
-                            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
+                            <p className="eyebrow text-muted">
                               Package {websitePackage.packageNo}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-1.5">

@@ -213,7 +213,7 @@ function ExpertReviewRequestContent() {
                 >
                   <h3 className="text-sm font-bold text-navy mb-1">{opt.label}</h3>
                   <p className="text-xs text-primary font-bold mb-2">{opt.time}</p>
-                  <p className="text-xs text-muted font-bold uppercase tracking-widest">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
+                  <p className="eyebrow text-muted">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
                 </button>
               ))}
             </div>
@@ -231,7 +231,7 @@ function ExpertReviewRequestContent() {
                 <h3 className="text-sm font-bold text-navy">Use Review Credits</h3>
                 <p className="text-xs text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
               </div>
-              <div className="text-xs font-bold text-primary uppercase tracking-widest">
+              <div className="eyebrow text-primary">
                 -{selectedCost} Credit{selectedCost > 1 ? 's' : ''}
               </div>
             </div>
@@ -260,7 +260,7 @@ function ExpertReviewRequestContent() {
           </Button>
 
           {selectedFocus.length === 0 && (
-            <p className="text-center text-xs font-bold text-warning uppercase tracking-widest">
+            <p className="text-center eyebrow text-warning">
               Please select at least one focus area
             </p>
           )}

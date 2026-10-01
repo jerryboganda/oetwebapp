@@ -81,7 +81,7 @@ export function AiPreAnalysisPanel({
       {/* Estimated bands */}
       <div className="mt-3 rounded-xl border border-border bg-surface/80 p-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Estimated bands</p>
+          <p className="eyebrow text-muted">Estimated bands</p>
           <p className="text-sm font-black text-navy">
             {pa.estimatedBandLabel} · raw {pa.estimatedRawTotal}/38
           </p>
@@ -99,7 +99,7 @@ export function AiPreAnalysisPanel({
       {/* Coverage + word count */}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-xl border border-border bg-surface/80 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Word count</p>
+          <p className="eyebrow text-muted">Word count</p>
           <p className="mt-1 text-sm text-navy">
             <span className="font-black">{pa.wordCount}</span> words ·{' '}
             <span className={pa.withinWordGuide ? 'text-success' : 'text-error'}>
@@ -108,7 +108,7 @@ export function AiPreAnalysisPanel({
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface/80 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Key-content coverage</p>
+          <p className="eyebrow text-muted">Key-content coverage</p>
           <div className="mt-1.5 flex items-center gap-2">
             <div
               className="h-2 flex-1 overflow-hidden rounded-full bg-background-light"
@@ -130,7 +130,7 @@ export function AiPreAnalysisPanel({
       {/* Missing / irrelevant / language notes */}
       {pa.missingKeyContent.length > 0 ? (
         <div className="mt-3 rounded-xl border border-error/30 bg-error/5 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-error">
+          <p className="flex items-center gap-1.5 eyebrow text-error">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> Missing key content ({pa.missingKeyContent.length})
           </p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-sm text-navy">
@@ -141,7 +141,7 @@ export function AiPreAnalysisPanel({
 
       {pa.detectedIrrelevantContent.length > 0 ? (
         <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-warning">
+          <p className="eyebrow text-warning">
             Detected irrelevant content ({pa.detectedIrrelevantContent.length})
           </p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-sm text-navy">
@@ -152,7 +152,7 @@ export function AiPreAnalysisPanel({
 
       {pa.languageNotes.length > 0 ? (
         <div className="mt-3 rounded-xl border border-border bg-surface/80 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Language notes</p>
+          <p className="eyebrow text-muted">Language notes</p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-sm text-navy">
             {pa.languageNotes.map((note, i) => <li key={i}>{note}</li>)}
           </ul>
@@ -161,7 +161,7 @@ export function AiPreAnalysisPanel({
 
       {Object.keys(pa.suggestedCriterionFeedback ?? {}).length > 0 ? (
         <details className="mt-3 rounded-xl border border-border bg-surface/80 p-3">
-          <summary className="cursor-pointer text-xs font-bold uppercase tracking-wider text-muted">
+          <summary className="cursor-pointer eyebrow text-muted">
             Suggested per-criterion feedback
           </summary>
           <ul className="mt-2 space-y-1.5">

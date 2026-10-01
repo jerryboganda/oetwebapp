@@ -55,7 +55,7 @@ export default function WritingPathwayPage() {
               <article key={week.weekNumber} className="rounded-xl border border-border bg-background p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-muted">Week {week.weekNumber}</p>
+                    <p className="eyebrow text-muted">Week {week.weekNumber}</p>
                     <h2 className="text-base font-bold text-navy capitalize">{week.phase}</h2>
                   </div>
                   <Badge variant={week.isCompleted ? 'success' : week.weekNumber === pathway?.currentWeek ? 'warning' : 'muted'} size="sm">

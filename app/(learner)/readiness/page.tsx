@@ -156,7 +156,7 @@ export default function ReadinessCenter() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-5 h-5 text-primary" />
-                <span className="text-xs font-bold uppercase tracking-widest text-muted">Overall readiness</span>
+                <span className="eyebrow text-muted">Overall readiness</span>
               </div>
               <div className="flex items-baseline gap-2 mb-1">
                 <h2 className="text-5xl font-bold">{Math.round(data.overallReadiness ?? 0)}</h2>
@@ -187,7 +187,7 @@ export default function ReadinessCenter() {
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
                 <AlertTriangle className="w-4 h-4" />
               </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-muted">Risk factors</span>
+              <span className="eyebrow text-muted">Risk factors</span>
             </div>
             <div className="space-y-3">
               {riskFactors.length === 0 ? (
@@ -312,20 +312,20 @@ export default function ReadinessCenter() {
                 <div className="flex items-start gap-3">
                   <TrendingUp className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-xs font-bold text-navy uppercase tracking-widest mb-1">Recent trend</h4>
+                    <h4 className="eyebrow text-navy mb-1">Recent trend</h4>
                     <p className="text-xs text-muted leading-relaxed">{data.evidence.recentTrend}</p>
                   </div>
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
+              <div className="mt-4 flex items-center justify-between tile-label text-muted">
                 <span className="inline-flex items-center gap-1"><Info className="w-3 h-3" /> Updated</span>
                 <span>{new Date(data.evidence.lastUpdated).toLocaleDateString()}</span>
               </div>
-              <div className="mt-3 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
+              <div className="mt-3 flex items-center justify-between tile-label text-muted">
                 <span>Confidence</span>
                 <span className="text-navy">{data.confidenceLevel ?? 'Low'}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between text-3xs font-bold text-muted uppercase tracking-widest">
+              <div className="mt-1 flex items-center justify-between tile-label text-muted">
                 <span>Data points</span>
                 <span className="text-navy">{data.dataPointCount ?? 0}</span>
               </div>

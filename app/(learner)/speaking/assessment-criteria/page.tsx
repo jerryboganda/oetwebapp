@@ -61,13 +61,13 @@ export default function SpeakingAssessmentCriteriaPage() {
             <table className="w-full min-w-[420px] border-collapse text-left text-sm">
               <thead>
                 <tr className="bg-lavender/60 text-navy">
-                  <th scope="col" className="w-14 px-4 py-3 text-xs font-black uppercase tracking-wider">
+                  <th scope="col" className="w-14 px-4 py-3 eyebrow">
                     No.
                   </th>
-                  <th scope="col" className="px-4 py-3 text-xs font-black uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 eyebrow">
                     Criterion
                   </th>
-                  <th scope="col" className="w-28 px-4 py-3 text-right text-xs font-black uppercase tracking-wider">
+                  <th scope="col" className="w-28 px-4 py-3 text-right eyebrow">
                     Scale
                   </th>
                 </tr>
@@ -104,7 +104,7 @@ export default function SpeakingAssessmentCriteriaPage() {
                 <div className="space-y-3">
                   {criterion.bands.map((band) => (
                     <div key={band.band} className="rounded-xl border border-border bg-surface p-3">
-                      <p className="text-2xs font-black uppercase tracking-wider text-muted">Band {band.band}</p>
+                      <p className="eyebrow text-muted">Band {band.band}</p>
                       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-navy/90">
                         {band.descriptors.map((descriptor) => (
                           <li key={`${criterion.id}-${band.band}-${descriptor}`}>{descriptor}</li>
@@ -125,7 +125,7 @@ export default function SpeakingAssessmentCriteriaPage() {
               <Card key={criterion.id} padding="md" className="h-full">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wider text-muted">{criterion.letter}</p>
+                    <p className="eyebrow text-muted">{criterion.letter}</p>
                     <h3 className="text-base font-bold text-navy">{criterion.name}</h3>
                   </div>
                   <Badge variant="muted" size="sm">

@@ -239,7 +239,7 @@ export function TutorCuePanel({
           <ResistancePill resistance={resistance} />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Opening response
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
@@ -266,7 +266,7 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Cue prompts
             </h4>
             <p className="mt-1 text-xs text-muted">
@@ -334,7 +334,7 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Closing cue
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
@@ -346,7 +346,7 @@ export function TutorCuePanel({
 
           {script.layLanguageTriggers && script.layLanguageTriggers.length > 0 ? (
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <h4 className="eyebrow text-muted">
                 Lay-language triggers
               </h4>
               <ul className="mt-1 flex flex-wrap gap-1.5">

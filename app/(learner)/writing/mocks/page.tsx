@@ -108,7 +108,7 @@ export default function WritingMocksCataloguePage() {
           <CardContent>
             <div className="grid gap-5 sm:grid-cols-2">
               <fieldset>
-                <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">
+                <legend className="mb-2 eyebrow text-muted">
                   How would you like to sit it?
                 </legend>
                 <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam surface">
@@ -144,7 +144,7 @@ export default function WritingMocksCataloguePage() {
               </fieldset>
 
               <fieldset className={cn(surface === 'paper' && 'opacity-50')} aria-disabled={surface === 'paper'}>
-                <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Conditions</legend>
+                <legend className="mb-2 eyebrow text-muted">Conditions</legend>
                 <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam conditions">
                   {([
                     { value: 'strict' as const, label: 'Strict mock', hint: 'Exam rules: no paste, locked timing.' },

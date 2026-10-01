@@ -33,7 +33,7 @@ export function TimeUsedSummary({ totalMilliseconds, sections, description }: Ti
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-muted">Detailed analytics</p>
+          <p className="eyebrow text-muted">Detailed analytics</p>
           <h2 id="time-used-summary-title" className="mt-1 text-base font-black text-navy">Time used</h2>
         </div>
         <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-bold text-muted">
@@ -46,7 +46,7 @@ export function TimeUsedSummary({ totalMilliseconds, sections, description }: Ti
       <div className="mt-4 overflow-hidden rounded-xl border border-border">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Time used by section and total</caption>
-          <thead className="bg-background-light text-xs font-black uppercase tracking-wider text-muted">
+          <thead className="bg-background-light eyebrow text-muted">
             <tr>
               <th scope="col" className="px-4 py-3">Section</th>
               <th scope="col" className="px-4 py-3 text-right">Time used</th>

@@ -349,7 +349,7 @@ export default function ProgressDashboard() {
               className="rounded-2xl border border-white/10 bg-background-dark p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
               <div className="mb-6 relative z-10">
-                <p className="text-xs font-black uppercase tracking-widest text-white/70 mb-2">Tutor Review Turnaround</p>
+                <p className="eyebrow text-white/70 mb-2">Tutor Review Turnaround</p>
                 <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
                 <p className="text-sm text-white/80 mt-1">
                   Tutor review should feel like part of the same learner system, with clear operational expectations.
@@ -363,7 +363,7 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="mt-6 bg-white/10 rounded-2xl p-5 border border-white/15 inline-block">
-                <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">Avg Turnaround</h3>
+                <h3 className="eyebrow text-white/80 mb-1">Avg Turnaround</h3>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-black">{progressSummary?.reviewUsage.averageTurnaroundHours ?? 'Pending'}</span>
                   <span className="text-sm font-bold text-white/80">hours</span>

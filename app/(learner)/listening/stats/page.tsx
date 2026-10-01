@@ -110,7 +110,7 @@ export default function ListeningStatsPage() {
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-navy">Week {w.weekNumber}</span>
-                  <span className="text-xs uppercase tracking-wide text-muted">{w.phase}</span>
+                  <span className="eyebrow text-muted">{w.phase}</span>
                 </div>
                 <p className="text-muted">{w.notes}</p>
                 <p className="mt-1 text-xs text-muted">~{w.dailyMinutes} min/day</p>

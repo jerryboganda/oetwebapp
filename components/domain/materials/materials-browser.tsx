@@ -391,7 +391,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
 
           {visibleFolders.length > 0 && (
             <div className="space-y-2">
-              <p className="px-1 text-2xs font-bold uppercase tracking-wider text-muted">
+              <p className="px-1 eyebrow text-muted">
                 {atRoot ? 'Sections' : 'Folders'}
                 <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
                   {visibleFolders.length}
@@ -408,7 +408,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
           {visibleFiles.length > 0 && (
             <div className="space-y-2">
               {visibleFolders.length > 0 && (
-                <p className="px-1 pt-2 text-2xs font-bold uppercase tracking-wider text-muted">
+                <p className="px-1 pt-2 eyebrow text-muted">
                   Files
                   <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/70">
                     {visibleFiles.length}

@@ -78,7 +78,7 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
           <div className="flex items-center gap-3 min-w-0">
             <Gauge className={cn('w-7 h-7 shrink-0', tone.text)} aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wider font-bold text-muted">Readiness</p>
+              <p className="eyebrow text-muted">Readiness</p>
               <div className="flex items-baseline gap-2">
                 <span className={cn('text-4xl font-extrabold tabular-nums', tone.text)}>{safeScore}</span>
                 <span className="text-xs font-bold text-muted">/ 100</span>

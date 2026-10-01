@@ -139,13 +139,13 @@ function AnalyticsPanel({
     <div className="mt-3 space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="eyebrow text-muted">
             Attempts (last {analytics.days}d)
           </p>
           <p className="mt-1 text-2xl font-bold text-navy">{analytics.attemptCount}</p>
         </div>
         <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Avg Score</p>
+          <p className="eyebrow text-muted">Avg Score</p>
           <p className="mt-1 text-2xl font-bold text-navy">
             {analytics.averageScore !== null && analytics.averageScore !== undefined
               ? analytics.averageScore.toFixed(1)
@@ -156,20 +156,20 @@ function AnalyticsPanel({
 
       {analytics.learners && analytics.learners.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="mb-2 eyebrow text-muted">
             Per-learner breakdown
           </p>
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[360px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-background-light">
-                  <th className="py-2 pl-3 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pl-3 pr-3 eyebrow text-muted">
                     Learner
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pr-3 eyebrow text-muted">
                     Attempts
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pr-3 eyebrow text-muted">
                     Avg Score
                   </th>
                 </tr>

@@ -61,7 +61,7 @@ export function PartAStrictTimer({
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-warning" aria-hidden />
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-warning">Reading Part A strict timer</p>
+            <p className="eyebrow text-warning">Reading Part A strict timer</p>
             <p className="text-sm text-muted">This section locks automatically when the window ends.</p>
           </div>
         </div>

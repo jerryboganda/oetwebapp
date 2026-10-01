@@ -93,7 +93,7 @@ export default function ListeningStrategiesPage() {
               key={s.id}
               className="rounded-2xl border border-border bg-surface p-5 shadow-sm flex flex-col"
             >
-              <span className="text-xs uppercase tracking-wide text-muted">{s.category.replace('_', ' ')}</span>
+              <span className="eyebrow text-muted">{s.category.replace('_', ' ')}</span>
               <h2 className="mt-1 font-semibold text-navy">{s.title}</h2>
               <p className="mt-1 text-xs text-muted">~{s.estimatedReadMinutes} min read</p>
               <div className="mt-2 flex items-center gap-2 text-xs">

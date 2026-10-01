@@ -202,7 +202,7 @@ export function LearnerPageHero({
             </div>
           ) : null}
             <div className="min-w-0">
-              {eyebrow ? <p className="mb-0.5 text-3xs font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
+              {eyebrow ? <p className="mb-0.5 tile-label text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
               <h1 className="text-balance text-lg font-bold leading-tight tracking-tight text-navy sm:text-3xl">{title}</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
@@ -242,7 +242,7 @@ export function LearnerSurfaceCard({
           <div className="flex items-start justify-between gap-3">
             <div>
               {card.eyebrow ? (
-                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold uppercase tracking-wider sm:text-xs', palette.eyebrow)}>
+                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 eyebrow sm:text-xs', palette.eyebrow)}>
                   {EyebrowIcon ? <EyebrowIcon className="w-3.5 h-3.5" /> : null}
                   {card.eyebrow}
                 </div>

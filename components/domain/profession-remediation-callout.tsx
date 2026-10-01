@@ -42,11 +42,11 @@ export default function ProfessionRemediationCallout({
               <p className="text-xs text-muted mb-3 leading-relaxed">{tip.description}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-lg bg-danger/5 border border-danger/10 p-3">
-                  <p className="text-2xs font-bold uppercase tracking-wider text-danger mb-1">Weak example</p>
+                  <p className="eyebrow text-danger mb-1">Weak example</p>
                   <p className="text-xs text-navy italic leading-relaxed">{tip.exampleWeak}</p>
                 </div>
                 <div className="rounded-lg bg-success/5 border border-success/10 p-3">
-                  <p className="text-2xs font-bold uppercase tracking-wider text-success mb-1">Strong example</p>
+                  <p className="eyebrow text-success mb-1">Strong example</p>
                   <p className="text-xs text-navy leading-relaxed">{tip.exampleStrong}</p>
                 </div>
               </div>

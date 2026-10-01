@@ -196,7 +196,7 @@ export function LearnerSpeakingAnalyticsDashboard({
       <Card className="bg-surface p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">
+            <p className="eyebrow text-muted">
               Estimated speaking band
             </p>
             <p className="mt-2 text-4xl font-bold text-navy dark:text-white">

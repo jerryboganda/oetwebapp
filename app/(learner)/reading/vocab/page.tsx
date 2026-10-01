@@ -111,7 +111,7 @@ export default function VocabHubPage() {
                   className={`flex flex-col gap-2 rounded-xl border px-5 py-4 ${accentMap[accent]}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                    <span className="eyebrow opacity-70">
                       {label}
                     </span>
                     <Icon className="h-4 w-4 opacity-60" aria-hidden />

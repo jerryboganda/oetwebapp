@@ -278,7 +278,7 @@ export default function SpeakingResultSummary() {
     <>
       <div className="space-y-6">
         <section className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Speaking Results</p>
+          <p className="eyebrow text-muted">Speaking Results</p>
           <h1 className="text-3xl font-black tracking-tight text-navy">Performance Summary</h1>
           <p className="max-w-2xl text-sm text-muted">
             Review your estimated range, strongest signals, and the next action to keep your speaking momentum moving.
@@ -295,25 +295,25 @@ export default function SpeakingResultSummary() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Exam Family</p>
+            <p className="eyebrow text-muted">Exam Family</p>
             <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Confidence</p>
+            <p className="eyebrow text-muted">Confidence</p>
             <p className="mt-2 text-base font-bold text-navy">{result.confidenceLabel}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Provenance</p>
+            <p className="eyebrow text-muted">Provenance</p>
             <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Strongest</p>
+            <p className="eyebrow text-muted">Strongest</p>
             <p className="mt-2 text-base font-bold text-navy">
               {strongestCriterion ? criterionLabel(strongestCriterion.criterionCode) : 'More evidence needed'}
             </p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Next focus</p>
+            <p className="eyebrow text-muted">Next focus</p>
             <p className="mt-2 text-base font-bold text-navy">
               {weakestCriterion ? criterionLabel(weakestCriterion.criterionCode) : 'Phrasing drill'}
             </p>
@@ -342,12 +342,12 @@ export default function SpeakingResultSummary() {
                 }
               >
                 <span className="text-2xl font-black text-navy dark:text-white">{result.estimatedScaledScore}</span>
-                <span className="mt-0.5 text-3xs font-bold uppercase tracking-widest text-muted">/ 500</span>
+                <span className="mt-0.5 tile-label text-muted">/ 500</span>
               </ResultGauge>
             ) : null}
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
-                <span className="text-xs font-bold text-muted uppercase tracking-widest">Estimated Score Range</span>
+                <span className="eyebrow text-muted">Estimated Score Range</span>
                 <Badge variant={result.confidence === 'High' ? 'success' : result.confidence === 'Medium' ? 'warning' : 'danger'} size="sm">
                   {result.confidence} Band
                 </Badge>
@@ -445,7 +445,7 @@ export default function SpeakingResultSummary() {
                   if (items.length === 0) return null;
                   return (
                     <div key={family} className="rounded-2xl border border-border p-4">
-                      <p className="text-2xs uppercase tracking-[0.18em] text-muted mb-3">
+                      <p className="eyebrow text-muted mb-3">
                         {family === 'linguistic' ? 'Linguistic (0–6)' : 'Clinical communication (0–3)'}
                       </p>
                       <ul className="space-y-3">
@@ -545,7 +545,7 @@ export default function SpeakingResultSummary() {
                   ['Overall', pronunciationInsight.overall],
                 ].map(([label, value]) => (
                   <div key={label as string} className="rounded-2xl border border-border p-3">
-                    <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
+                    <div className="eyebrow text-muted">{label}</div>
                     <div className="mt-1 font-mono text-xl font-semibold text-navy">{Math.round(value as number)}</div>
                   </div>
                 ))}
@@ -579,7 +579,7 @@ export default function SpeakingResultSummary() {
             <div className="flex items-center gap-4">
               <TrendingUp className="w-8 h-8 text-primary shrink-0" aria-hidden />
               <div>
-                <div className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Recommended Next Drill</div>
+                <div className="eyebrow text-primary mb-1">Recommended Next Drill</div>
                 <h3 className="text-xl font-black mb-2">{result.nextDrill.title}</h3>
                 <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
               </div>

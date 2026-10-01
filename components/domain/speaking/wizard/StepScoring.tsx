@@ -98,7 +98,7 @@ export function StepScoring() {
                 }`}
               >
                 <span>{opt.label}</span>
-                <span className="text-3xs font-bold uppercase tracking-widest text-muted">{opt.band}</span>
+                <span className="tile-label text-muted">{opt.band}</span>
               </button>
             );
           })}

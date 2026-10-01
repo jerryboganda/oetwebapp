@@ -200,7 +200,7 @@ export default function BrowseVocabularyPage() {
         </div>
         {recallSets.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Practice collection:</span>
+            <span className="eyebrow text-muted">Practice collection:</span>
             <button
               type="button"
               aria-pressed={recallSet === ''}

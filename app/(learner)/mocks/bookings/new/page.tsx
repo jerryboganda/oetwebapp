@@ -326,7 +326,7 @@ export default function NewMockBookingPage() {
             <div className="space-y-4">
               {speakingBundles.length > 0 ? (
                 <div>
-                  <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">Speaking bundles</p>
+                  <p className="mb-2 eyebrow text-muted">Speaking bundles</p>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {speakingBundles.map((bundle) => (
                       <button

@@ -230,11 +230,11 @@ export function WritingEditorV2({
       )}
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-3xs uppercase tracking-wider font-bold text-muted">
+        <span className="tile-label text-muted">
           {mode}
           {disabled ? ' · read-only' : ''}
         </span>
-        <span className="text-3xs uppercase tracking-wider font-bold text-muted">
+        <span className="tile-label text-muted">
           {effectiveSpellCheck ? 'Spell-check on' : 'Spell-check off'}
         </span>
       </div>
@@ -454,7 +454,7 @@ function useAnnotationOverlay(annotations: WritingEditorAnnotation[]): ReactNode
       >
         {annotations.map((a, idx) => (
           <li key={`${a.charStart}-${a.charEnd}-${idx}`} className="leading-snug">
-            <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5">{a.type}</span>
+            <span className="tile-label mr-1.5">{a.type}</span>
             {a.ruleId ? <span className="font-bold mr-1">[{a.ruleId}]</span> : null}
             <span>{a.note}</span>
             <span className="text-white/60 ml-2 tabular-nums">

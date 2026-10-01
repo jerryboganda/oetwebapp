@@ -38,13 +38,13 @@ export function ToneDrillComponent({ drill, onGraded }: ToneDrillProps) {
           <div className="space-y-4">
             {drill.items.map((item) => (
               <div key={item.id} className="rounded-lg border border-border p-3">
-                <div className="text-xs uppercase tracking-wide text-muted mb-1">Informal</div>
+                <div className="eyebrow text-muted mb-1">Informal</div>
                 <p className="text-sm bg-background-light px-2 py-1 rounded mb-3">
                   {item.informal}
                 </p>
                 <label
                   htmlFor={`tone-${item.id}`}
-                  className="block text-xs uppercase tracking-wide text-muted mb-1"
+                  className="block eyebrow text-muted mb-1"
                 >
                   Professional version
                 </label>

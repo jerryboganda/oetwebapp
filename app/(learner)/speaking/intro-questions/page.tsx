@@ -53,7 +53,7 @@ export default function SpeakingIntroQuestionsPage() {
         />
 
         <Card padding="md" className="border-warning/30 bg-warning/10">
-          <p className="text-xs font-black uppercase tracking-widest text-navy">
+          <p className="eyebrow text-navy">
             Candidate rule
           </p>
           <p className="mt-1.5 text-sm leading-6 text-navy">
@@ -76,7 +76,7 @@ export default function SpeakingIntroQuestionsPage() {
                   {item.no}. {item.question}
                 </h2>
               </div>
-              <p className="mt-3 text-xs font-black uppercase tracking-wider text-primary">
+              <p className="mt-3 eyebrow text-primary">
                 Sample answer — personalise the bracketed details:
               </p>
               <p className="mt-1.5 text-sm leading-7 text-navy/85">

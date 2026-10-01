@@ -269,7 +269,7 @@ export function TimeAnalyticsBreakdown({
                   key={`${q.sectionId || 'section'}-${q.itemId || idx}`}
                   className={`rounded-xl border p-3 ${toneClasses}`}
                 >
-                  <p className="text-3xs font-black uppercase tracking-widest text-muted">
+                  <p className="tile-label text-muted">
                     {q.subtest || 'Question'}
                   </p>
                   <p className="mt-1 text-sm font-black text-navy truncate">
@@ -280,11 +280,11 @@ export function TimeAnalyticsBreakdown({
                       {formatDuration(q.secondsSpent)}
                     </span>
                     {correct ? (
-                      <span className="text-3xs font-black uppercase tracking-widest text-success">
+                      <span className="tile-label text-success">
                         Correct
                       </span>
                     ) : wrong ? (
-                      <span className="text-3xs font-black uppercase tracking-widest text-danger">
+                      <span className="tile-label text-danger">
                         Incorrect
                       </span>
                     ) : null}

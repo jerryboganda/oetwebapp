@@ -84,7 +84,7 @@ function StrategyCard({ guide, compact = false }: { guide: StrategyGuideListItem
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              <p className="eyebrow text-primary">
                 {formatLabel(guide.subtestCode)} / {formatLabel(guide.category)}
               </p>
               <h3 className={cn('mt-2 font-bold text-navy', compact ? 'text-base' : 'text-lg')}>{guide.title}</h3>

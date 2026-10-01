@@ -89,7 +89,7 @@ export default function InterleavedPracticePage() {
                     <Lightbulb className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Why this mix works</p>
+                    <p className="eyebrow text-muted">Why this mix works</p>
                     <p className="mt-1 text-sm leading-6 text-muted">{session.scienceBasis}</p>
                     <div className="mt-3 flex flex-wrap gap-2 text-sm text-navy">
                       <span className="rounded-full bg-background-light px-3 py-1 font-semibold"><strong>{session.taskCount}</strong> tasks</span>
@@ -116,7 +116,7 @@ export default function InterleavedPracticePage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">#{task.order}</span>
+                          <span className="eyebrow text-muted">#{task.order}</span>
                           <h4 className="truncate text-sm font-semibold text-navy">{task.title}</h4>
                           {task.isWeakArea && <Badge variant="danger" className="text-3xs">Weak area</Badge>}
                         </div>

@@ -40,13 +40,13 @@ export function ExpansionDrillComponent({ drill, onGraded }: ExpansionDrillProps
           <div className="space-y-4">
             {drill.targets.map((target) => (
               <div key={target.id} className="rounded-lg border border-border p-3">
-                <div className="text-xs uppercase tracking-wide text-muted mb-1">Note form</div>
+                <div className="eyebrow text-muted mb-1">Note form</div>
                 <p className="text-sm font-mono bg-background-light px-2 py-1 rounded mb-3">
                   {target.noteForm}
                 </p>
                 <label
                   htmlFor={`expansion-${target.id}`}
-                  className="block text-xs uppercase tracking-wide text-muted mb-1"
+                  className="block eyebrow text-muted mb-1"
                 >
                   Your sentence
                 </label>

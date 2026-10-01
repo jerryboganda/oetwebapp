@@ -124,7 +124,7 @@ export default function CompanionPage() {
       <div className="flex flex-col gap-4">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+            <p className="flex items-center gap-1.5 eyebrow text-primary">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               {t('companion.page.eyebrow')}
             </p>

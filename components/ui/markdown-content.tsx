@@ -42,7 +42,7 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
           return <h5 key={key} className={cn(headingClasses, 'text-sm')}>{renderInline(block.text, `${key}-inline`)}</h5>;
         case 6:
         default:
-          return <h6 key={key} className={cn(headingClasses, 'text-xs uppercase tracking-[0.14em]')}>{renderInline(block.text, `${key}-inline`)}</h6>;
+          return <h6 key={key} className={cn(headingClasses, 'eyebrow')}>{renderInline(block.text, `${key}-inline`)}</h6>;
       }
     }
     case 'paragraph':

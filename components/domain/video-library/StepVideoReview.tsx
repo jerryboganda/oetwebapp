@@ -145,7 +145,7 @@ export function StepVideoReview() {
       <div className="grid gap-2 rounded-2xl border border-border bg-background-light p-4 sm:grid-cols-2 lg:grid-cols-3">
         {summary.map((s) => (
           <div key={s.label}>
-            <p className="text-3xs font-bold uppercase tracking-widest text-muted">{s.label}</p>
+            <p className="tile-label text-muted">{s.label}</p>
             <p className="truncate text-sm text-navy">{s.value}</p>
           </div>
         ))}
@@ -173,7 +173,7 @@ export function StepVideoReview() {
 
         {gate && (gate.errors.length > 0 || gate.warnings.length > 0) ? (
           <div className="space-y-1.5 border-t border-border pt-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Server publish gate</p>
+            <p className="eyebrow text-muted">Server publish gate</p>
             {gate.errors.map((message) => (
               <p key={message} className="flex items-center gap-2 text-sm text-red-700">
                 <X className="h-4 w-4 shrink-0" /> {message}

@@ -153,7 +153,7 @@ export function BCQuestionRenderer({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="info">Q{questionNumber}</Badge>
-          <span className="text-xs font-black uppercase tracking-widest text-muted">
+          <span className="eyebrow text-muted">
             {partLabel}
           </span>
         </div>

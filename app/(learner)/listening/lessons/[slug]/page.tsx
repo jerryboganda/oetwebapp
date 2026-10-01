@@ -84,7 +84,7 @@ export default function ListeningLessonPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+        <span className="eyebrow text-primary">
           Sub-skill {lesson.skillCode}
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-navy">{lesson.title}</h1>

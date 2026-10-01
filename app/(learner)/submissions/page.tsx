@@ -295,7 +295,7 @@ function SubmissionHistoryInner() {
                           <h2 className="text-lg font-bold text-navy leading-tight">{sub.taskName}</h2>
                         </div>
                         <div className="sm:text-right bg-background-light sm:bg-transparent p-3 sm:p-0 rounded-xl border border-border sm:border-none">
-                          <div className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Score Estimate</div>
+                          <div className="eyebrow text-muted mb-1">Score Estimate</div>
                           <div className={`text-xl font-black ${sub.scoreEstimate === 'Pending' ? 'text-muted' : 'text-navy'}`}>
                             {sub.scoreEstimate}
                           </div>

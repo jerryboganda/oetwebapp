@@ -449,7 +449,7 @@ export default function MockSetup() {
                         </p>
                       </div>
                       {exhausted ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 text-3xs font-black uppercase tracking-widest text-danger">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 tile-label text-danger">
                           <Lock className="h-3 w-3" /> Exhausted
                         </span>
                       ) : null}
@@ -595,7 +595,7 @@ export default function MockSetup() {
               ) : null}
               <MotionCollapse open={isSubShape(mockType)}>
                 <div className="pt-5">
-                  <p className="mb-3 text-xs font-black uppercase tracking-widest text-muted">Which sub-test?</p>
+                  <p className="mb-3 eyebrow text-muted">Which sub-test?</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {(Object.keys(SUBTEST_META) as MockSubType[]).map((id) => {
                       const meta = SUBTEST_META[id];
@@ -681,17 +681,17 @@ export default function MockSetup() {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {bundle.releasePolicy ? (
-                          <span className="rounded-md bg-warning/10 px-2 py-1 text-2xs font-black uppercase tracking-widest text-warning">
+                          <span className="rounded-md bg-warning/10 px-2 py-1 eyebrow text-warning">
                             {bundle.releasePolicy.replace(/_/g, ' ')}
                           </span>
                         ) : null}
                         {bundle.sourceStatus ? (
-                          <span className="rounded-md bg-background-light px-2 py-1 text-2xs font-black uppercase tracking-widest text-muted">
+                          <span className="rounded-md bg-background-light px-2 py-1 eyebrow text-muted">
                             {bundle.sourceStatus.replace(/_/g, ' ')}
                           </span>
                         ) : null}
                         {bundle.sections.map((section) => (
-                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 text-2xs font-black uppercase tracking-widest text-muted">
+                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 eyebrow text-muted">
                             {section.subtest} / {section.timeLimitMinutes}m
                           </span>
                         ))}
@@ -741,7 +741,7 @@ export default function MockSetup() {
                     ['Review after submit', modePolicy.reviewAfterSubmission ? 'Released' : 'Hidden'],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-xl bg-surface px-3 py-2">
-                      <p className="text-3xs font-black uppercase tracking-widest text-muted">{label}</p>
+                      <p className="tile-label text-muted">{label}</p>
                       <p className="mt-1 text-sm font-bold text-navy">{value}</p>
                     </div>
                   ))}
@@ -749,7 +749,7 @@ export default function MockSetup() {
               </div>
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Delivery mode</p>
+                  <p className="eyebrow text-muted">Delivery mode</p>
                   <div className="mt-3 grid gap-2">
                     {(options?.deliveryModes?.length ? options.deliveryModes : [
                       { id: 'computer' as const, label: 'On-screen (computer)' },
@@ -770,7 +770,7 @@ export default function MockSetup() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Strictness preset</p>
+                  <p className="eyebrow text-muted">Strictness preset</p>
                   <div className="mt-3 grid gap-2">
                     {(options?.strictnessOptions?.length ? options.strictnessOptions : [
                       { id: 'learning' as const, label: 'Learning', description: 'Pause, replay, and hints allowed.' },
@@ -804,7 +804,7 @@ export default function MockSetup() {
                   <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
                   <p className="mt-1 text-xs text-muted">Use the official timing for each section automatically.</p>
                   {mode === 'exam' ? (
-                    <p className="mt-2 flex items-center gap-1 text-3xs font-black uppercase tracking-widest text-danger">
+                    <p className="mt-2 flex items-center gap-1 tile-label text-danger">
                       <Info className="h-3 w-3" /> Required in exam mode
                     </p>
                   ) : null}
@@ -837,13 +837,13 @@ export default function MockSetup() {
               />
               <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Official-style route</p>
+                  <p className="eyebrow text-muted">Official-style route</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {MOCK_EXAM_FLOW_STAGES.map((stage) => (
                       <div key={stage.id} className="rounded-xl bg-surface p-3">
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-sm font-bold text-navy">{stage.label}</p>
-                          <span className="shrink-0 rounded-full bg-background-light px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-muted">
+                          <span className="shrink-0 rounded-full bg-background-light px-2 py-0.5 tile-label text-muted">
                             {stage.duration}
                           </span>
                         </div>
@@ -854,7 +854,7 @@ export default function MockSetup() {
                 </div>
 
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Selected bundle policy</p>
+                  <p className="eyebrow text-muted">Selected bundle policy</p>
                   {selectedBundle ? (
                     <div className="mt-4 space-y-3">
                       {selectedBundlePolicies.map((policy) => (
@@ -886,7 +886,7 @@ export default function MockSetup() {
                 description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />
-              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 text-3xs font-black uppercase tracking-widest text-warning">
+              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label text-warning">
                 {availableCredits} credits available
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -908,7 +908,7 @@ export default function MockSetup() {
                     >
                       <p className="text-sm font-bold text-navy">{option.label}</p>
                       <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
-                      <p className="mt-3 text-2xs font-black uppercase tracking-widest text-muted">
+                      <p className="mt-3 eyebrow text-muted">
                         {option.cost} credit{option.cost === 1 ? '' : 's'}
                       </p>
                     </button>

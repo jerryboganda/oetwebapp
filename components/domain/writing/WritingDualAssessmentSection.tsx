@@ -131,7 +131,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
     <Card className="border-border bg-surface p-6">
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Dual assessment</p>
+          <p className="eyebrow text-muted">Dual assessment</p>
           <h2 className="mt-1 text-lg font-bold text-navy">AI estimate vs. tutor (expert) score</h2>
           <p className="mt-1 text-xs text-muted">
             Both are advisory. Only an OET test centre can issue an official score.
@@ -150,7 +150,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
       <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-background-light text-xs uppercase tracking-wider text-muted">
+            <tr className="bg-background-light eyebrow text-muted">
               <th scope="col" className="px-4 py-2 text-left font-semibold">Criterion</th>
               <th scope="col" className="px-4 py-2 text-center font-semibold">
                 <span className="inline-flex items-center gap-1.5">
@@ -200,7 +200,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
 
       {data.tutor && data.tutor.overallFeedback && (
         <div className="mt-4 rounded-xl border border-success/30 bg-success/10 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-success">
+          <p className="eyebrow text-success">
             Tutor feedback: {data.tutor.tutorName}
           </p>
           <p className="mt-2 whitespace-pre-line text-sm text-navy">{data.tutor.overallFeedback}</p>

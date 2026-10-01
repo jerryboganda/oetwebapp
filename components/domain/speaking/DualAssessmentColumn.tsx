@@ -259,7 +259,7 @@ export function DualAssessmentColumn({
           <>
             {/* Scaled score + readiness band */}
             <div className="flex flex-col items-start gap-2 rounded-2xl border border-border bg-background-light/60 p-4">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <span className="eyebrow text-muted">
                 Estimated scaled score
               </span>
               <div className="flex items-baseline gap-3">
@@ -281,13 +281,13 @@ export function DualAssessmentColumn({
             {/* Overall summary (AI) or feedback markdown (Tutor) */}
             {isAiAssessment(assessment) && assessment.overallSummary && (
               <div className="rounded-xl border border-border bg-surface p-3 text-sm leading-relaxed text-navy">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Summary</p>
+                <p className="mb-1 eyebrow text-muted">Summary</p>
                 <p>{assessment.overallSummary}</p>
               </div>
             )}
             {isTutorAssessment(assessment) && assessment.overallFeedbackMarkdown && (
               <div className="rounded-xl border border-border bg-surface p-3 text-sm leading-relaxed text-navy">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Tutor feedback</p>
+                <p className="mb-1 eyebrow text-muted">Tutor feedback</p>
                 <p className="whitespace-pre-line">{assessment.overallFeedbackMarkdown}</p>
               </div>
             )}
@@ -296,7 +296,7 @@ export function DualAssessmentColumn({
             {showFullCriteria ? (
               <>
                 <section aria-label="Linguistic criteria">
-                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  <h4 className="mb-2 eyebrow text-muted">
                     Linguistic Criteria (0–6)
                   </h4>
                   <div className="flex flex-col gap-2">
@@ -319,7 +319,7 @@ export function DualAssessmentColumn({
 
                 {/* Clinical communication criteria (0-3) */}
                 <section aria-label="Clinical communication criteria">
-                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+                  <h4 className="mb-2 eyebrow text-muted">
                     Clinical Communication (0–3)
                   </h4>
                   <div className="flex flex-col gap-2">
@@ -347,7 +347,7 @@ export function DualAssessmentColumn({
               <div className="grid gap-3 md:grid-cols-2">
                 {assessment.strengths.length > 0 && (
                   <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/40 p-3 dark:border-emerald-800/40 dark:bg-emerald-950/20">
-                    <h5 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                    <h5 className="mb-1.5 eyebrow text-emerald-800 dark:text-emerald-300">
                       Strengths
                     </h5>
                     <ul className="ml-4 list-disc space-y-1 text-sm text-navy">
@@ -359,7 +359,7 @@ export function DualAssessmentColumn({
                 )}
                 {assessment.improvements.length > 0 && (
                   <div className="rounded-xl border border-amber-200/60 bg-amber-50/40 p-3 dark:border-amber-800/40 dark:bg-amber-950/20">
-                    <h5 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                    <h5 className="mb-1.5 eyebrow text-amber-800 dark:text-amber-300">
                       Areas to improve
                     </h5>
                     <ul className="ml-4 list-disc space-y-1 text-sm text-navy">

@@ -259,20 +259,20 @@ export default function FreezePage() {
                 <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Freeze ID</p>
+                      <p className="eyebrow text-muted">Freeze ID</p>
                       <p className="mt-1 text-sm font-semibold text-navy">{currentFreeze.id}</p>
                     </div>
-                    <span className="rounded-full bg-warning/10 px-2 py-0.5 text-3xs font-medium uppercase tracking-wide text-warning">
+                    <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning">
                       {currentFreeze.status}
                     </span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Starts</p>
+                      <p className="eyebrow text-muted">Starts</p>
                       <p className="mt-1 text-sm text-navy">{currentFreeze.startedAt ? new Date(currentFreeze.startedAt).toLocaleString() : currentFreeze.scheduledStartAt ? new Date(currentFreeze.scheduledStartAt).toLocaleString() : 'Pending'}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Ends</p>
+                      <p className="eyebrow text-muted">Ends</p>
                       <p className="mt-1 text-sm text-navy">{currentFreeze.endedAt ? new Date(currentFreeze.endedAt).toLocaleString() : 'Not set'}</p>
                     </div>
                   </div>
@@ -291,7 +291,7 @@ export default function FreezePage() {
               )}
 
               <div className="rounded-2xl border border-border bg-surface p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Eligibility</p>
+                <p className="eyebrow text-muted">Eligibility</p>
                 <p className="mt-2 text-sm text-navy">
                   {eligibility.eligible === false
                     ? eligibility.reason ?? eligibilityMessages[0] ?? 'This account is not eligible under the current policy.'

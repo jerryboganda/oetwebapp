@@ -48,7 +48,7 @@ function JsonSummary({ value }: { value: Record<string, unknown> }) {
     <dl className="grid gap-2 sm:grid-cols-2">
       {entries.map(([key, item]) => (
         <div key={key} className="rounded-lg border border-border bg-background-light px-3 py-2">
-          <dt className="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <dt className="eyebrow text-muted">
             {key.replace(/([A-Z])/g, ' $1')}
           </dt>
           <dd className="mt-1 text-sm text-navy">
@@ -166,7 +166,7 @@ function CriterionCard({
       </div>
       {criterion.evidence.length > 0 ? (
         <div className="mt-4 space-y-2 border-t border-border pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Source-linked evidence</p>
+          <p className="eyebrow text-muted">Source-linked evidence</p>
           {criterion.evidence.map((evidence, index) => (
             <div
               key={`${criterion.criterionCode}-${index}-${evidence.turnNumber ?? 'unlinked'}`}
@@ -244,7 +244,7 @@ function CardBreakdownCard({
       </div>
       {tutorOverride ? (
         <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-success">Human tutor revision</p>
+          <p className="eyebrow text-success">Human tutor revision</p>
           <p className="mt-1 text-sm font-semibold text-navy">{tutorOverride.estimatedPracticeScore} / 500 · range {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>
           <p className="mt-1 text-xs text-navy">{tutorOverride.reason}</p>
         </div>
@@ -365,7 +365,7 @@ export function SpeakingSimulationV11ReportView({
                 : 'This attempt has no estimated score because the authoritative audio, transcript, or assessment pipeline could not be verified. The issue must be reviewed or the controlled retake path used.'}
             </p>
             {response.technicalReviewCode ? (
-              <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-warning">
+              <p className="mt-2 eyebrow text-warning">
                 Reason: {response.technicalReviewCode}
               </p>
             ) : null}
@@ -399,7 +399,7 @@ export function SpeakingSimulationV11ReportView({
       <Card className="overflow-hidden border-border bg-surface">
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{title}</p>
+            <p className="eyebrow text-primary">{title}</p>
             <h1 className="mt-1 text-2xl font-bold text-navy">AI Estimated Practice Score</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
               This is a calibrated practice estimate based on the released v1.1 rubric and source-linked evidence.
@@ -448,7 +448,7 @@ export function SpeakingSimulationV11ReportView({
 
       {tutorOverride ? (
         <Card className="border-success/30 bg-success/10 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-success">Human tutor revision</p>
+          <p className="eyebrow text-success">Human tutor revision</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="text-xl font-bold text-navy">{tutorOverride.estimatedPracticeScore} / 500</p>
             <p className="text-sm text-navy">Reviewed range: {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>

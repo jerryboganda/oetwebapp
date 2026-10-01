@@ -55,7 +55,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
       className={cn('flex h-full flex-col overflow-hidden', presentation.featured && 'ring-2 ring-primary/40 shadow-clinical')}
     >
       {presentation.featured ? (
-        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white">
+        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 eyebrow text-white">
           <Sparkles className="h-3.5 w-3.5" /> {presentation.badgeLabel || 'Most popular'}
         </div>
       ) : null}
@@ -73,7 +73,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         </div>
         <div>
           <h3 className="text-lg font-bold leading-snug text-navy">{websitePackage?.name ?? plan.name}</h3>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 eyebrow text-muted">
             {websitePackage ? (
               websitePackage.metaChips.map((chip) => <span key={chip}>{chip}</span>)
             ) : (

@@ -79,7 +79,7 @@ export function RelevanceDrillComponent({ drill, onGraded }: RelevanceDrillProps
                     className="rounded-lg border border-border p-3 flex flex-col sm:flex-row sm:items-center gap-3"
                   >
                     <div className="flex-1">
-                      <div className="text-xs text-muted uppercase tracking-wide">
+                      <div className="eyebrow text-muted">
                         {note.category}
                       </div>
                       <div className="text-sm">{note.text}</div>

@@ -2328,7 +2328,7 @@ function PlayerContent() {
                       translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
-                      <span className="mr-1 text-3xs font-black uppercase tracking-widest text-muted">
+                      <span className="mr-1 tile-label text-muted">
                         Jump to
                       </span>
                       {navigationQuestions.map((question) => {
@@ -2446,7 +2446,7 @@ function PlayerContent() {
                                       role="tablist"
                                       aria-label="Question selector"
                                     >
-                                      <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                                      <span className="eyebrow text-muted mr-1">Questions:</span>
                                       {questions.map((q, idx) => {
                                         const isActive = idx === activeIdx;
                                         const isAnswered = Boolean((answers[q.id] ?? '').trim());

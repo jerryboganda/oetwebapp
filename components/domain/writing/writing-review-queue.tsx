@@ -87,7 +87,7 @@ export function WritingReviewQueue({
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface p-3 shadow-sm">
         <fieldset className="flex flex-wrap items-center gap-2" aria-label="Filter queue">
           <legend className="sr-only">Filter queue</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">Status:</span>
+          <span className="eyebrow text-muted">Status:</span>
           {STATUSES.map((s) => (
             <button
               key={s.id || 'all'}
@@ -110,7 +110,7 @@ export function WritingReviewQueue({
           <div className="overflow-x-auto">
             <table className="w-full text-sm" aria-label="Writing tutor review queue">
               <thead>
-                <tr className="border-b border-border bg-background-light/50 text-xs font-semibold uppercase tracking-wider text-muted">
+                <tr className="border-b border-border bg-background-light/50 eyebrow text-muted">
                   <th className="px-4 py-3 text-left">Submission</th>
                   <th className="px-4 py-3 text-left">Profession</th>
                   <th className="px-4 py-3 text-left">Letter</th>

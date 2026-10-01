@@ -49,7 +49,7 @@ export default function VocabStatsPage() {
       <div className="space-y-6 sm:space-y-10">
         <div className="flex items-center justify-between">
           <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+            <p className="mb-0.5 eyebrow text-primary-500">
               Spaced Repetition
             </p>
             <h1 className="text-2xl font-bold text-navy">
@@ -158,7 +158,7 @@ export default function VocabStatsPage() {
 function StatCard({ label, value, colorClass }: { label: string; value: number | string; colorClass: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-5 py-4">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+      <p className="mb-1 eyebrow text-muted">
         {label}
       </p>
       <p className={`text-3xl font-bold ${colorClass}`}>{value}</p>

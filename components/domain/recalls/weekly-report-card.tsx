@@ -60,7 +60,7 @@ export function WeeklyReportCard() {
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-xl border border-border bg-background-light p-3">
-            <div className="text-xs uppercase tracking-wide text-muted">{s.label}</div>
+            <div className="eyebrow text-muted">{s.label}</div>
             <div className="mt-1 font-mono text-lg font-semibold text-navy">{s.value}</div>
           </div>
         ))}

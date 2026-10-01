@@ -113,7 +113,7 @@ export default function RecallsHomePage() {
                     {t.icon}
                   </div>
                   <div className="flex-1">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted">{t.eyebrow}</div>
+                    <div className="eyebrow text-muted">{t.eyebrow}</div>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="font-semibold text-navy">{t.title}</span>
                       {t.badge && (

@@ -89,7 +89,7 @@ export default function WritingReviseSubmissionPage() {
           <div className="flex items-center gap-3">
             <RefreshCw className="h-5 w-5 text-amber-600" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.submissions.revise.eyebrow')}</p>
+              <p className="eyebrow text-muted">{t('writing.submissions.revise.eyebrow')}</p>
               <h1 className="text-base font-bold text-navy">{original ? t('writing.submissions.revise.heroTitle', { mode: original.mode }) : t('writing.submissions.revise.heroTitleLoading')}</h1>
               {grade ? <p className="mt-1 text-xs text-muted">{t('writing.submissions.revise.originalBand')} <Badge variant="muted" size="sm">{grade.bandLabel}</Badge></p> : null}
             </div>

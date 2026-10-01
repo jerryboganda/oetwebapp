@@ -414,7 +414,7 @@ export default function SpeakingExamResultsPage() {
                     {card.assessment.estimatedScaledScore}
                   </span>
                   <span className="text-sm text-muted">/ 500</span>
-                  <span className="ml-auto text-xs uppercase tracking-wide text-muted">
+                  <span className="ml-auto eyebrow text-muted">
                     Band: {bandLabel(card.assessment.readinessBand)}
                   </span>
                 </div>

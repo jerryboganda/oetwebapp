@@ -315,7 +315,7 @@ export default function ReferralPage() {
             <dl className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
                 <Users className="mx-auto mb-1.5 h-5 w-5 text-info" aria-hidden="true" />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                <dt className="eyebrow text-muted">
                   Friends referred
                 </dt>
                 <dd className="mt-1 text-2xl font-black text-navy">{info.referralsMade}</dd>
@@ -325,14 +325,14 @@ export default function ReferralPage() {
                   className="mx-auto mb-1.5 h-5 w-5 text-success"
                   aria-hidden="true"
                 />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                <dt className="eyebrow text-muted">
                   Credits earned
                 </dt>
                 <dd className="mt-1 text-2xl font-black text-navy">{info.creditsEarned}</dd>
               </div>
               <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
                 <Gift className="mx-auto mb-1.5 h-5 w-5 text-primary" aria-hidden="true" />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                <dt className="eyebrow text-muted">
                   Per referral
                 </dt>
                 <dd className="mt-1 text-2xl font-black text-navy">{info.referrerCreditAmount}</dd>

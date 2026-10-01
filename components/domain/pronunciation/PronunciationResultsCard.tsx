@@ -76,7 +76,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-muted">Projected OET Speaking band</div>
+            <div className="eyebrow text-muted">Projected OET Speaking band</div>
             <div className="text-2xl font-semibold text-navy">
               {props.projectedSpeakingScaled}/500 · Grade {props.projectedSpeakingGrade}
             </div>
@@ -143,7 +143,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
           {(feedback.strengths?.length ?? 0) > 0 && (
             <div className="mt-3">
-              <div className="text-xs uppercase tracking-[0.15em] text-muted">Strengths</div>
+              <div className="eyebrow text-muted">Strengths</div>
               <ul className="mt-1 space-y-1 text-sm text-navy">
                 {feedback.strengths!.map((s, i) => (
                   <li key={i} className="flex items-start gap-2">
@@ -157,7 +157,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
           {(feedback.improvements?.length ?? 0) > 0 && (
             <div className="mt-3">
-              <div className="text-xs uppercase tracking-[0.15em] text-muted">Work on next</div>
+              <div className="eyebrow text-muted">Work on next</div>
               <ul className="mt-1 space-y-2 text-sm text-navy">
                 {feedback.improvements!.map((imp, i) => (
                   <li key={`${imp.ruleId}-${i}`} className="rounded-2xl border border-border bg-surface p-3">
@@ -210,7 +210,7 @@ function ScoreTile({
         highlight ? 'border-primary/50 bg-primary/5' : 'border-border bg-surface'
       }`}
     >
-      <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
+      <div className="eyebrow text-muted">{label}</div>
       <div className={`mt-1 font-mono text-2xl font-semibold ${tintForScore(value)}`}>
         {Math.round(value)}
       </div>
@@ -225,7 +225,7 @@ function ScoreTile({
 function StatTile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-      <div className="text-2xs uppercase tracking-[0.15em] text-muted">{label}</div>
+      <div className="eyebrow text-muted">{label}</div>
       <div className="mt-1 font-mono text-lg font-semibold text-navy">{value}</div>
       <div className="text-2xs text-muted">{hint}</div>
     </div>

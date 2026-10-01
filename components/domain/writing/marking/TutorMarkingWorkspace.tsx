@@ -342,7 +342,7 @@ export function TutorMarkingWorkspace({
           <Card padding="md">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
+                <p className="flex items-center gap-1.5 eyebrow text-muted">
                   <FileText className="h-3.5 w-3.5" aria-hidden="true" /> Task
                 </p>
                 <h2 className="mt-1 text-base font-bold text-navy">{task.title}</h2>
@@ -363,7 +363,7 @@ export function TutorMarkingWorkspace({
 
           {/* Writing task instruction + recipient + fixed instructions */}
           <Card padding="md">
-            <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
+            <p className="flex items-center gap-1.5 eyebrow text-muted">
               <Mail className="h-3.5 w-3.5" aria-hidden="true" /> Writing task
             </p>
             {task.taskPromptMarkdown ? (
@@ -371,7 +371,7 @@ export function TutorMarkingWorkspace({
             ) : null}
             {task.fixedInstructions.length > 0 ? (
               <div className="mt-2">
-                <p className="text-2xs font-bold uppercase tracking-wider text-muted">In your answer</p>
+                <p className="eyebrow text-muted">In your answer</p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-navy">
                   {task.fixedInstructions.map((ins, i) => <li key={i}>{ins}</li>)}
                 </ul>
@@ -392,7 +392,7 @@ export function TutorMarkingWorkspace({
           {/* Case notes — real question-paper PDF when available. */}
           {task.stimulusPdfDownloadPath ? (
             <Card padding="md">
-              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
+              <p className="flex items-center gap-1.5 eyebrow text-muted">
                 <NotebookText className="h-3.5 w-3.5" aria-hidden="true" /> Case notes
               </p>
               <div className="mt-2 h-[60vh] overflow-hidden rounded-lg border border-border">
@@ -450,7 +450,7 @@ export function TutorMarkingWorkspace({
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
               <RubricPanel draft={scoreDraft} onChange={setScoreDraft} aiSuggestion={suggestionSource} />
               <div>
-                <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted">Live profile</p>
+                <p className="mb-1 eyebrow text-muted">Live profile</p>
                 <CriteriaRadar scores={radarScores} />
               </div>
             </div>

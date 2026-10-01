@@ -67,7 +67,7 @@ export default function SubmissionComparisonPage() {
                 <section className="grid gap-6 md:grid-cols-2">
                   {[comparison.left, comparison.right].map((side, index) => (
                     <div key={side?.attemptId ?? index} className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">{index === 0 ? 'Baseline attempt' : 'Comparison attempt'}</p>
+                      <p className="eyebrow text-muted">{index === 0 ? 'Baseline attempt' : 'Comparison attempt'}</p>
                       <h2 className="mt-3 text-xl font-black text-navy">{side?.subtest ?? 'Unknown subtest'}</h2>
                       <p className="mt-2 text-sm text-muted">Attempt id: {side?.attemptId}</p>
                       <p className="mt-4 text-3xl font-black text-primary">{side?.scoreRange || 'Pending'}</p>

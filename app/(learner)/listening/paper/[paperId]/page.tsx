@@ -798,7 +798,7 @@ function IntroCard({
       <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{title}</h1>
       {preflight ? (
         <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left" data-testid="listening-preflight-summary">
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-muted">Confirm your test</h2>
+          <h2 className="eyebrow text-muted">Confirm your test</h2>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs font-semibold uppercase text-muted">Candidate</dt>
@@ -1228,7 +1228,7 @@ function ActiveSubSectionPanel({
                 role="tablist"
                 aria-label="Question jump navigation"
               >
-                <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                <span className="eyebrow text-muted mr-1">Questions:</span>
                 {questionList.map((q, idx) => {
                   const isActive = idx === activeQuestionIndex;
                   const isAnswered = Boolean((answers[q.id] ?? '').trim());

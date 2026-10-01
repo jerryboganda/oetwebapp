@@ -297,7 +297,7 @@ export default function SpeakingSessionRecordingPage() {
     <div className="flex min-h-[100dvh] flex-col bg-background-light">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">Speaking · Role-play</p>
+          <p className="eyebrow text-muted">Speaking · Role-play</p>
           <h1 className="truncate text-base font-bold text-foreground sm:text-lg">{session.card.scenarioTitle}</h1>
         </div>
         {secondsLeft !== null ? (

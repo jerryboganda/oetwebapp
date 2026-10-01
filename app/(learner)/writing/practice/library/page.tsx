@@ -132,7 +132,7 @@ export default function WritingPracticeLibraryPage() {
         <fieldset className="grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm md:grid-cols-2" aria-label={t('writing.practice.library.filters.legend')}>
           <legend className="sr-only">{t('writing.practice.library.filters.legend')}</legend>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
+          <label className="flex flex-col gap-1 eyebrow text-muted">
             {t('writing.practice.library.filters.letterType')}
             <select
               value={letterType ?? ''}
@@ -146,7 +146,7 @@ export default function WritingPracticeLibraryPage() {
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
+          <label className="flex flex-col gap-1 eyebrow text-muted">
             {t('writing.practice.library.filters.search')}
             <span className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />

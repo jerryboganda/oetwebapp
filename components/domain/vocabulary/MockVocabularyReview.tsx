@@ -73,7 +73,7 @@ export function MockVocabularyReview({
   if (loading) {
     return (
       <Card className="rounded-3xl border-primary/20 bg-primary/5 p-6 shadow-sm">
-        <div className="text-xs font-black uppercase tracking-widest text-primary">Words to Review</div>
+        <div className="eyebrow text-primary">Words to Review</div>
         <div className="mt-2 h-16 animate-pulse rounded bg-primary/10" />
       </Card>
     );
@@ -87,7 +87,7 @@ export function MockVocabularyReview({
         <div className="mb-4 flex items-start gap-3">
           <BookOpen className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <div className="flex-1">
-            <div className="mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
+            <div className="mb-1 flex items-center gap-2 eyebrow text-primary">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Words to Review
             </div>

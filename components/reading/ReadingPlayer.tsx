@@ -158,7 +158,7 @@ function PassagePanel({
     <div className="relative flex flex-col">
       {/* Floating annotation toolbar */}
       <div className="mb-3 flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 shadow-sm">
-        <span className="mr-2 text-xs font-semibold text-muted uppercase tracking-wide">Annotate</span>
+        <span className="mr-2 eyebrow text-muted">Annotate</span>
         {tools.map(({ tool, label, icon: Icon, active }) => {
           const isActive = activeTool === tool;
           return (
@@ -181,7 +181,7 @@ function PassagePanel({
           );
         })}
         {activeTool ? (
-          <span className="ml-2 text-3xs font-semibold uppercase tracking-wide text-primary" aria-live="polite">
+          <span className="ml-2 tile-label text-primary" aria-live="polite">
             {activeTool} on
           </span>
         ) : null}
@@ -264,7 +264,7 @@ function QuestionCard({
     >
       {/* Q counter + mark */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+        <span className="eyebrow text-muted">
           Q{number}
         </span>
         <button

@@ -112,7 +112,7 @@ export default function WritingAskToolPage() {
           <CardContent>
             <h2 className="text-base font-bold text-navy">{t('writing.tools.ask.loadHeading')}</h2>
             <div className="mt-2 flex flex-wrap items-end gap-2">
-              <label className="flex flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
+              <label className="flex flex-1 flex-col gap-1 eyebrow text-muted">
                 {t('writing.tools.ask.submissionIdLabel')}
                 <input
                   type="text"

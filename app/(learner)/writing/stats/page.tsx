@@ -147,7 +147,7 @@ export default function WritingStatsPage() {
                 <h2 className="text-base font-bold text-navy">{t('writing.stats.letterTypes.heading')}</h2>
                 <table className="mt-3 w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
+                    <tr className="border-b border-border eyebrow text-muted">
                       <th className="py-2 text-left font-bold">{t('writing.stats.letterTypes.colType')}</th>
                       <th className="text-right font-bold">{t('writing.stats.letterTypes.colAttempts')}</th>
                       <th className="text-right font-bold">{t('writing.stats.letterTypes.colAverageBand')}</th>

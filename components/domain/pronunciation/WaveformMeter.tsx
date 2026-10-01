@@ -52,7 +52,7 @@ export function WaveformMeter({
         })}
       </div>
       <div className="flex w-24 shrink-0 flex-col items-end text-right">
-        <div className="text-xs uppercase tracking-[0.15em] text-muted">
+        <div className="eyebrow text-muted">
           {isRecording ? 'Recording' : 'Ready'}
         </div>
         <div className="font-mono text-lg font-semibold text-navy" aria-live="polite">

@@ -421,7 +421,7 @@ export default function WritingPracticeSessionPage() {
           <div className="flex items-center gap-3">
             <PenTool className="h-5 w-5 text-amber-600" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.practice.session.eyebrow')}</p>
+              <p className="eyebrow text-muted">{t('writing.practice.session.eyebrow')}</p>
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.practice.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-1">

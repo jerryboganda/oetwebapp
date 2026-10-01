@@ -392,7 +392,7 @@ export default function SpeakingExamPage() {
             >
               {formatMmSs(secondsLeft)}
             </div>
-            <div className="text-2xs uppercase tracking-wide text-muted">
+            <div className="eyebrow text-muted">
               {isPrep ? 'Preparation' : 'Discussion'}
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function SpeakingExamPage() {
       {/* ── Intro (unscored) ─────────────────────────────────────────────── */}
       {state === 'intro' && (
         <section className="rounded-2xl border border-border bg-surface p-6">
-          <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
+          <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 eyebrow text-sky-700">
             Not scored
           </span>
           <h2 className="mt-3 text-lg font-semibold text-foreground">Introduction</h2>
@@ -423,7 +423,7 @@ export default function SpeakingExamPage() {
             ready, begin Part 2.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-background-light p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <p className="eyebrow text-muted">
               You may be asked questions like these
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">

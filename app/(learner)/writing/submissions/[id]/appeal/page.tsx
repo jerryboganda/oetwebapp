@@ -161,19 +161,19 @@ export default function WritingAppealPage() {
             ) : (
               <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
                 <div>
-                  <dt className="text-xs uppercase tracking-wider text-muted">Band</dt>
+                  <dt className="eyebrow text-muted">Band</dt>
                   <dd className="text-xl font-bold">{grade.bandLabel}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wider text-muted">Raw total</dt>
+                  <dt className="eyebrow text-muted">Raw total</dt>
                   <dd className="text-xl font-bold">{grade.rawTotal} / 38</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wider text-muted">Confidence</dt>
+                  <dt className="eyebrow text-muted">Confidence</dt>
                   <dd className="font-bold">{grade.confidenceFlag}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wider text-muted">Model</dt>
+                  <dt className="eyebrow text-muted">Model</dt>
                   <dd className="font-mono text-xs">{grade.modelUsed}</dd>
                 </div>
               </dl>
@@ -191,7 +191,7 @@ export default function WritingAppealPage() {
                 the second examiner knows what to focus on.
               </p>
               <form onSubmit={onSubmit} className="space-y-4" aria-label="Score appeal request">
-                <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                <label className="block eyebrow text-muted">
                   Reason for appeal
                   <textarea
                     required
@@ -254,19 +254,19 @@ export default function WritingAppealPage() {
               {appeal.secondOpinionRawTotal != null ? (
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-xs uppercase tracking-wider text-muted">Original</p>
+                    <p className="eyebrow text-muted">Original</p>
                     <p className="text-3xl font-bold">{appeal.originalRawTotal}</p>
                     <p className="text-xs text-muted">raw / 38</p>
                   </div>
                   <div className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-xs uppercase tracking-wider text-muted">Second opinion</p>
+                    <p className="eyebrow text-muted">Second opinion</p>
                     <p className="text-3xl font-bold">{appeal.secondOpinionRawTotal}</p>
                     <p className={`text-xs ${deltaRaw != null && Math.abs(deltaRaw) > 3 ? 'text-amber-700' : 'text-muted'}`}>
                       {deltaRaw == null ? 'raw / 38' : `${deltaRaw >= 0 ? '+' : ''}${deltaRaw} vs original`}
                     </p>
                   </div>
                   <div className={`rounded-2xl border p-4 ${wasAdjusted ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/20' : 'border-border bg-background'}`}>
-                    <p className="text-xs uppercase tracking-wider text-muted">Final on record</p>
+                    <p className="eyebrow text-muted">Final on record</p>
                     <p className="text-3xl font-bold">{finalRaw ?? appeal.originalRawTotal}</p>
                     <p className="text-xs text-muted">
                       {wasAdjusted

@@ -47,7 +47,7 @@ export function CatalogCompareMatrix({ plans, config }: CatalogCompareMatrixProp
       {open ? (
         <div className="overflow-x-auto border-t border-border">
           <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-background-light text-left text-xs font-semibold uppercase tracking-wide text-muted">
+            <thead className="bg-background-light text-left eyebrow text-muted">
               <tr>
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Category</th>
@@ -63,7 +63,7 @@ export function CatalogCompareMatrix({ plans, config }: CatalogCompareMatrixProp
                 <tr key={plan.code} className="hover:bg-background-light/60">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-navy">{plan.name}</div>
-                    <div className="text-2xs uppercase tracking-wider text-muted">{professionLabel(config, plan.profession)}</div>
+                    <div className="eyebrow text-muted">{professionLabel(config, plan.profession)}</div>
                   </td>
                   <td className="px-4 py-3 text-muted">{categoryLabel(config, plan.productCategory)}</td>
                   <td className="px-4 py-3 text-muted">{formatAccessDuration(plan.accessDurationDays)}</td>

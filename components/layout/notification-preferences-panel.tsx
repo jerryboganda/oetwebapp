@@ -69,7 +69,7 @@ function PreferenceToggle({
       </div>
       <span
         className={cn(
-          'inline-flex min-w-10 shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-[0.12em]',
+          'inline-flex min-w-10 shrink-0 items-center justify-center rounded-full px-2 py-0.5 tile-label',
           checked ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted',
         )}
       >
@@ -209,7 +209,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
 
       {showChannelsSection ? (
         <section className="space-y-2">
-          <h3 className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Delivery channels</h3>
+          <h3 className="eyebrow text-muted">Delivery channels</h3>
           <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             {showInApp ? (
               <PreferenceToggle
@@ -249,7 +249,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
 
       {showQuietInputs ? (
       <section className="space-y-2">
-        <h3 className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Timezone &amp; quiet hours</h3>
+        <h3 className="eyebrow text-muted">Timezone &amp; quiet hours</h3>
         <div className="grid gap-2.5 sm:grid-cols-3">
           <Input
             label="Timezone"
@@ -318,7 +318,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Per-event delivery overrides</h3>
+            <h3 className="eyebrow text-muted">Per-event delivery overrides</h3>
             <p className="text-2xs leading-snug text-muted">
               Stored per account; applies across learner, expert, and admin shells.
             </p>

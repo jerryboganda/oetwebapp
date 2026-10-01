@@ -121,7 +121,7 @@ export default function SpeakingSessionPrepPage() {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-background-light">
       <header className="border-b border-border bg-surface px-4 py-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted">Speaking · Preparation</p>
+        <p className="eyebrow text-muted">Speaking · Preparation</p>
         <h1 className="truncate text-base font-bold text-foreground sm:text-lg">{session.card.scenarioTitle}</h1>
       </header>
 

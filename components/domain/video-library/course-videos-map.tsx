@@ -130,7 +130,7 @@ export function CourseVideosMap({ onAdvanced }: { onAdvanced: () => void }) {
                           return (
                             <div key={folder.id} className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3">
                               <div className="mb-2 flex items-center justify-between gap-2">
-                                <h4 className="text-xs font-bold uppercase tracking-wide text-admin-fg-strong">{folder.label}</h4>
+                                <h4 className="eyebrow text-admin-fg-strong">{folder.label}</h4>
                                 <Link
                                   href={`/admin/content/videos/new?profession=${selected.id}&language=${language.code}&subtest=${section.subtestCode}&folder=${folder.id}`}
                                   className={buttonVariants({ variant: 'outline', size: 'sm' })}

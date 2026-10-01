@@ -333,7 +333,7 @@ export default function ListeningHome() {
         <MotionSection delayIndex={0}>
           <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary-500">
+              <p className="eyebrow text-primary-500">
                 Choose how to practice
               </p>
               <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
@@ -400,7 +400,7 @@ export default function ListeningHome() {
           <section aria-labelledby="listening-papers-heading">
             <div className="mb-4 flex items-end justify-between gap-3">
               <div>
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+                <p className="flex items-center gap-1.5 eyebrow text-primary-500">
                   <Target className="h-3.5 w-3.5" aria-hidden />
                   Paper library
                 </p>
@@ -435,7 +435,7 @@ export default function ListeningHome() {
           <MotionSection delayIndex={2}>
             <section aria-labelledby="listening-results-heading">
               <div className="mb-4">
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+                <p className="flex items-center gap-1.5 eyebrow text-primary-500">
                   <TrendingUp className="h-3.5 w-3.5" aria-hidden />
                   Review
                 </p>
@@ -497,16 +497,16 @@ function PaperCard({
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                 <Lock className="h-3 w-3" aria-hidden />
                 Premium
               </span>
             ) : partial ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                 Partial · Q37–42 unavailable
               </span>
             ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 tile-label text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                 Full exam
               </span>
             )}
@@ -548,7 +548,7 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
 
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-border-hover">
-      <span className="inline-flex w-fit rounded-full bg-primary-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
+      <span className="inline-flex w-fit rounded-full bg-primary-100 px-2 py-0.5 tile-label text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
         {scopeLabel}
       </span>
       <span className="mt-2 font-semibold text-navy">{result.paperTitle}</span>

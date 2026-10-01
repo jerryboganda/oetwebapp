@@ -136,14 +136,14 @@ function SubscriptionPackageCard({
       )}
     >
       {pkg.featured ? (
-        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white">
+        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 eyebrow text-white">
           <Sparkles className="h-3.5 w-3.5" /> {pkg.badges.includes('Recommended') ? 'Recommended' : pkg.badges.includes('Best value') ? 'Best value' : 'Most popular'}
         </div>
       ) : null}
 
       <div className="flex h-full flex-col gap-4 p-5">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Package {pkg.packageNo}</span>
+          <span className="eyebrow text-muted">Package {pkg.packageNo}</span>
           <div className="text-right">
             <div className="text-2xl font-bold text-navy">{formatPrice(price, currency)}</div>
             {hasDiscount ? (
@@ -404,7 +404,7 @@ export function SubscriptionsCatalog() {
         className="relative w-full rounded-2xl border border-border/80 bg-surface p-1.5 shadow-xs sm:p-2"
       >
         <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain py-1 px-1 [-webkit-overflow-scrolling:touch] touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="shrink-0 pl-1.5 text-2xs font-bold uppercase tracking-wider text-muted select-none">
+          <span className="shrink-0 pl-1.5 eyebrow text-muted select-none">
             Quick jump:
           </span>
           {CATALOG_SHORTCUTS.map((shortcut) => (

@@ -49,7 +49,7 @@ export function DashboardHero({ readinessScore, predictedScore, daysToExam, stre
           key={card.label}
           className="rounded-xl border border-border bg-surface px-4 py-4"
         >
-          <p className="text-xs font-medium text-muted uppercase tracking-wide mb-1">{card.label}</p>
+          <p className="eyebrow text-muted mb-1">{card.label}</p>
           <p className={`text-2xl font-bold tabular-nums ${card.accent}`}>{card.value}</p>
           {card.sub ? (
             <p className="mt-0.5 text-xs text-muted">{card.sub}</p>

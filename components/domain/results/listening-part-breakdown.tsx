@@ -30,13 +30,13 @@ export function ListeningPartBreakdown({ items }: { items: ListeningBreakdownIte
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm" aria-label="Listening part breakdown">
       <div className="mb-4">
-        <p className="text-xs font-black uppercase tracking-widest text-muted">Part breakdown</p>
+        <p className="eyebrow text-muted">Part breakdown</p>
         <h2 className="mt-1 text-base font-black text-navy">Listening accuracy by part</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-left text-sm">
           <thead>
-            <tr className="border-b border-border text-xs font-black uppercase tracking-widest text-muted">
+            <tr className="border-b border-border eyebrow text-muted">
               <th className="pb-3 pr-4">Part</th>
               <th className="pb-3 pr-4 text-right">Correct</th>
               <th className="pb-3 pr-4 text-right">Incorrect</th>

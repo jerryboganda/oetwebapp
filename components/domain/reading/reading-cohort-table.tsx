@@ -28,7 +28,7 @@ export function ReadingCohortTable({ students, className }: ReadingCohortTablePr
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">Per-candidate reading results and assignment completion</caption>
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+          <tr className="border-b border-slate-200 bg-slate-50 text-left eyebrow text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
             <th scope="col" className="px-4 py-2.5">Candidate</th>
             <th scope="col" className="px-4 py-2.5">Status</th>
             <th scope="col" className="px-4 py-2.5 text-right">Raw</th>

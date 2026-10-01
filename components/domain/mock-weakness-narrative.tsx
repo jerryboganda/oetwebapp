@@ -90,11 +90,11 @@ export function WeaknessNarrative({
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-black text-danger uppercase tracking-widest">
+              <span className="eyebrow text-danger">
                 {fallback.subtest}
               </span>
               <span className="text-danger/40">•</span>
-              <span className="text-xs font-black text-danger uppercase tracking-widest">
+              <span className="eyebrow text-danger">
                 Weakest Criterion
               </span>
             </div>
@@ -119,7 +119,7 @@ export function WeaknessNarrative({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-black text-danger uppercase tracking-widest">
+            <span className="eyebrow text-danger">
               Personalised weakness analysis
             </span>
           </div>
@@ -132,7 +132,7 @@ export function WeaknessNarrative({
 
           {hasTags ? (
             <div className="mt-5">
-              <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+              <div className="mb-2 flex items-center gap-2 eyebrow text-muted">
                 <Target className="w-3.5 h-3.5" />
                 Targeted drills
               </div>
@@ -152,7 +152,7 @@ export function WeaknessNarrative({
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <span className="text-sm font-black text-navy">{t.tag}</span>
                           {t.subtest ? (
-                            <span className="text-3xs font-black uppercase tracking-widest text-muted">
+                            <span className="tile-label text-muted">
                               {t.subtest}
                             </span>
                           ) : null}

@@ -439,7 +439,7 @@ export default function Dashboard() {
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-3xs font-medium uppercase tracking-wide text-muted">Read-only mode</p>
+                    <p className="tile-label text-muted">Read-only mode</p>
                     <CardTitle className="mt-2 flex items-center gap-2 text-xl text-navy">
                       <Shield className="h-5 w-5 text-warning" aria-hidden="true" />
                       Your account is currently frozen
@@ -452,17 +452,17 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Status</p>
+                  <p className="tile-label text-muted">Status</p>
                   <p className="mt-1 text-sm font-normal text-navy">{String(freeze.status ?? 'active')}</p>
                 </div>
                 <div>
-                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Started</p>
+                  <p className="tile-label text-muted">Started</p>
                   <p className="mt-1 text-sm font-normal text-navy">
                     {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-3xs font-medium uppercase tracking-wide text-muted">Ends</p>
+                  <p className="tile-label text-muted">Ends</p>
                   <p className="mt-1 text-sm font-normal text-navy">
                     {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
                   </p>

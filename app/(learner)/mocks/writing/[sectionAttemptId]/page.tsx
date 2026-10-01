@@ -124,12 +124,12 @@ export default function MockWritingSectionPage() {
               </div>
               <div className="flex items-center gap-2">
                 {deliveryModeParam ? (
-                  <span className="inline-flex items-center rounded-full border border-border bg-background-light px-3 py-1 text-xs font-black uppercase tracking-widest text-muted">
+                  <span className="inline-flex items-center rounded-full border border-border bg-background-light px-3 py-1 eyebrow text-muted">
                     {deliveryModeLabel(deliveryMode)}
                   </span>
                 ) : null}
                 {phase === 'reading' ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-warning">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 eyebrow text-warning">
                     <Lock className="h-3.5 w-3.5" aria-hidden />
                     Editor locked
                   </span>

@@ -259,7 +259,7 @@ export function CriterionRubricForm({
   return (
     <form className="flex flex-col gap-4" data-testid="criterion-rubric-form">
       <section aria-label="Linguistic criteria">
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+        <h4 className="mb-2 eyebrow text-muted">
           Linguistic Criteria (0–6)
         </h4>
         <div className="flex flex-col gap-3">
@@ -276,7 +276,7 @@ export function CriterionRubricForm({
       </section>
 
       <section aria-label="Clinical communication criteria">
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+        <h4 className="mb-2 eyebrow text-muted">
           Clinical Communication (0–3)
         </h4>
         <div className="flex flex-col gap-3">

@@ -39,7 +39,7 @@ export function ScoreConversionEvidence({
     <section className={`rounded-2xl border border-border bg-surface p-5 shadow-sm ${className ?? ''}`} aria-label={`${assessment} score conversion evidence`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-muted">Score evidence</p>
+          <p className="eyebrow text-muted">Score evidence</p>
           <h2 className="mt-1 text-base font-black text-navy">Owner-table mapping</h2>
         </div>
         <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-bold text-muted">
@@ -84,7 +84,7 @@ export function ScoreConversionEvidence({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-3xs font-black uppercase tracking-[0.18em] text-white/70">Platform score graph</p>
+            <p className="tile-label text-white/70">Platform score graph</p>
             <p className="mt-1 text-sm font-black tracking-tight">AI Practice Score — not an official OET result</p>
           </div>
           <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-black tabular-nums">

@@ -247,7 +247,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <p className="eyebrow text-slate-500 dark:text-slate-400">
                       {SCOPE_LABELS[(SCOPES as readonly string[]).includes(item.scope) ? (item.scope as FeedbackScope) : 'test']}
                       {item.targetRef ? ` · ${item.targetRef}` : ''}
                     </p>

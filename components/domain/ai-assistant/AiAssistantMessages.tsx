@@ -189,7 +189,7 @@ function CitationList({ citations }: { citations?: MessageCitation[] }) {
             {citation.timestampSeconds !== null && citation.timestampSeconds !== undefined
               ? ` (${formatTimestamp(citation.timestampSeconds)})`
               : ''}
-            <span className="ms-1 rounded bg-background-light px-1 py-0.5 text-3xs uppercase tracking-wide">
+            <span className="ms-1 rounded bg-background-light px-1 py-0.5 tile-label">
               {AUTHORITY_LABELS[citation.authority] ?? citation.authority}
             </span>
           </li>

@@ -138,7 +138,7 @@ export function RulebookFindingsPanel({
                 {finding.ruleId}
               </Link>
             ) : (
-              <span className="text-xs font-black uppercase tracking-widest text-primary">{finding.ruleId}</span>
+              <span className="eyebrow text-primary">{finding.ruleId}</span>
             );
 
             return (

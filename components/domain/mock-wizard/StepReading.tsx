@@ -310,7 +310,7 @@ export function StepReading() {
 
         <div className="space-y-3 rounded-2xl border border-border bg-background-light p-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">
+            <p className="eyebrow text-muted">
               Texts (Part {activeTab})
             </p>
             <Button variant="outline" size="sm" onClick={() => addText(activeTab)}>
@@ -352,7 +352,7 @@ export function StepReading() {
 
         <div className="space-y-3 rounded-2xl border border-border bg-background-light p-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">
+            <p className="eyebrow text-muted">
               Questions (Part {activeTab})
             </p>
             <Button variant="outline" size="sm" onClick={() => addQuestion(activeTab)}>

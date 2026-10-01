@@ -512,7 +512,7 @@ function MockCenterInner() {
             to scroll past Resume / Recommended / Profession-filter blocks. */}
         <section aria-labelledby="mocks-categories-heading" data-testid="mocks-categories">
           <div className="mb-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            <p className="eyebrow text-primary">
               Choose your mock type
             </p>
             <h2 id="mocks-categories-heading" className="text-lg font-bold text-navy">
@@ -695,7 +695,7 @@ function MockCenterInner() {
                   {availableProfessions.length > 0 ? (
                     <section aria-label="Profession filter">
                       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Filter mocks by profession">
-                        <span className="text-xs font-black uppercase tracking-widest text-muted">Profession</span>
+                        <span className="eyebrow text-muted">Profession</span>
                         <button
                           type="button"
                           role="tab"
@@ -869,7 +869,7 @@ function MockCenterInner() {
                                       <h3 className="flex items-center gap-2 text-base font-bold text-navy">
                                         <span className="truncate">{mock.title}</span>
                                         {mock.isRecommended ? (
-                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-widest text-amber-700">
+                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-700">
                                             Recommended
                                           </span>
                                         ) : null}

@@ -91,7 +91,7 @@ export default function WritingCaseNoteDrillsPage() {
 
         <fieldset className="flex flex-wrap items-center gap-2" aria-label="Filter by profession">
           <legend className="sr-only">Filter drills</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">Profession:</span>
+          <span className="eyebrow text-muted">Profession:</span>
           <button
             type="button"
             onClick={() => setProfession(null)}

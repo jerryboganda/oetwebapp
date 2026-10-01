@@ -131,7 +131,7 @@ export default function SubmissionEvidencePage() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-success">Strengths</p>
+                    <p className="eyebrow text-success">Strengths</p>
                     <ul className="mt-3 space-y-2 text-sm text-success">
                       {(detail.strengths.length ? detail.strengths : ['No strengths have been surfaced for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
@@ -143,7 +143,7 @@ export default function SubmissionEvidencePage() {
                   </div>
 
                   <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-warning">Needs Attention</p>
+                    <p className="eyebrow text-warning">Needs Attention</p>
                     <ul className="mt-3 space-y-2 text-sm text-warning">
                       {(detail.issues.length ? detail.issues : ['No issue summary is available for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
@@ -226,7 +226,7 @@ export default function SubmissionEvidencePage() {
                 <div className="rounded-2xl border border-border bg-background-light p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <p className="text-sm font-bold text-navy">Final comment</p>
-                    {detail.expertReview.scoreLabel ? <span className="text-xs font-black uppercase tracking-widest text-primary">{detail.expertReview.scoreLabel}</span> : null}
+                    {detail.expertReview.scoreLabel ? <span className="eyebrow text-primary">{detail.expertReview.scoreLabel}</span> : null}
                   </div>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted">{detail.expertReview.finalComment}</p>
                 </div>
@@ -279,7 +279,7 @@ export default function SubmissionEvidencePage() {
                 <div className="space-y-3">
                   {detail.transcript.slice(0, 10).map((line) => (
                     <div key={line.id} className="rounded-2xl border border-border bg-background-light p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">{line.speaker}</p>
+                      <p className="eyebrow text-muted">{line.speaker}</p>
                       <p className="mt-2 text-sm leading-6 text-navy">{line.text}</p>
                     </div>
                   ))}
@@ -306,7 +306,7 @@ export default function SubmissionEvidencePage() {
                     <div key={item.id} className="rounded-2xl border border-border bg-background-light p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <p className="text-xs font-black uppercase tracking-widest text-muted">Question {item.number}</p>
+                          <p className="eyebrow text-muted">Question {item.number}</p>
                           <p className="mt-2 text-sm font-bold text-navy">{item.text}</p>
                         </div>
                         <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${item.isCorrect ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
@@ -315,11 +315,11 @@ export default function SubmissionEvidencePage() {
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
                         <div className="rounded-2xl border border-border bg-surface p-3">
-                          <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
+                          <p className="eyebrow text-muted">Your answer</p>
                           <p className="mt-2 text-sm text-navy">{item.learnerAnswer || 'No answer recorded'}</p>
                         </div>
                         <div className="rounded-2xl border border-border bg-surface p-3">
-                          <p className="text-xs font-black uppercase tracking-widest text-muted">Correct answer</p>
+                          <p className="eyebrow text-muted">Correct answer</p>
                           <p className="mt-2 text-sm text-navy">{item.correctAnswer}</p>
                         </div>
                       </div>

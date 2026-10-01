@@ -120,7 +120,7 @@ function StageCard({ stage }: { stage: CurriculumStage }) {
   const body = (
     <div className={'flex h-full flex-col gap-2 rounded-2xl border border-border bg-surface p-5 shadow-sm' + (stage.locked ? '' : ' transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical')}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+        <span className="eyebrow text-muted">
           Stage {stage.order} · {stage.partHint}
         </span>
         {stateBadge}

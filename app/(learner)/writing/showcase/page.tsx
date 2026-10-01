@@ -60,7 +60,7 @@ export default function WritingShowcasePage() {
 
         <fieldset className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm" aria-label={t('writing.showcase.filters.legend')}>
           <legend className="sr-only">{t('writing.showcase.filters.legend')}</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">
+          <span className="eyebrow text-muted">
             <Filter className="mr-1 inline h-3 w-3" aria-hidden="true" /> {t('writing.showcase.filters.professionLabel')}
           </span>
           <select
@@ -72,7 +72,7 @@ export default function WritingShowcasePage() {
             {PROFESSIONS.map((p) => <option key={p} value={p}>{t(`writing.practice.library.profession.${p}`)}</option>)}
           </select>
 
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.showcase.filters.letterTypeLabel')}</span>
+          <span className="eyebrow text-muted">{t('writing.showcase.filters.letterTypeLabel')}</span>
           <select
             value={letterType ?? ''}
             onChange={(e) => setLetterType((e.target.value || null) as WritingLetterType | null)}

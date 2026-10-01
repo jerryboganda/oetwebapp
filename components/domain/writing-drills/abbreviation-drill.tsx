@@ -46,7 +46,7 @@ export function AbbreviationDrillComponent({ drill, onGraded }: AbbreviationDril
                   className="rounded-lg border border-border p-3 flex flex-col sm:flex-row sm:items-center gap-3"
                 >
                   <div className="flex-1">
-                    <div className="text-xs uppercase tracking-wide text-muted">{item.context}</div>
+                    <div className="eyebrow text-muted">{item.context}</div>
                     <div className="font-mono text-sm">{item.abbreviation}</div>
                   </div>
                   <div className="flex gap-2">

@@ -263,13 +263,13 @@ export default function ScoreGuaranteePage() {
               </h2>
               <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                  <dt className="eyebrow text-muted">
                     Baseline
                   </dt>
                   <dd className="mt-1 text-2xl font-black text-navy">{pledge.baselineScore}</dd>
                 </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                  <dt className="eyebrow text-muted">
                     Target
                   </dt>
                   <dd className="mt-1 text-2xl font-black text-success">
@@ -277,7 +277,7 @@ export default function ScoreGuaranteePage() {
                   </dd>
                 </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                  <dt className="eyebrow text-muted">
                     Improvement
                   </dt>
                   <dd className="mt-1 text-2xl font-black text-primary">
@@ -285,7 +285,7 @@ export default function ScoreGuaranteePage() {
                   </dd>
                 </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="text-2xs font-black uppercase tracking-widest text-muted">
+                  <dt className="eyebrow text-muted">
                     Expires
                   </dt>
                   <dd className="mt-1 text-sm font-bold text-navy">

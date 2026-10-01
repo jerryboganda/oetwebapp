@@ -425,7 +425,7 @@ export default function RecallsWordsPage() {
         <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
           <div className="space-y-3">
             <fieldset>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Saved</legend>
+              <legend className="mb-2 eyebrow text-muted">Saved</legend>
               <button
                 type="button"
                 aria-pressed={favouritesOnly}
@@ -442,7 +442,7 @@ export default function RecallsWordsPage() {
             </fieldset>
             {!favouritesOnly && (recallSets.length > 0 || freePreviewCount > 0) && (
               <fieldset>
-                <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recall set</legend>
+                <legend className="mb-2 eyebrow text-muted">Recall set</legend>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -497,7 +497,7 @@ export default function RecallsWordsPage() {
             )}
             {!favouritesOnly && (
             <fieldset>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Functional category</legend>
+              <legend className="mb-2 eyebrow text-muted">Functional category</legend>
               <div className="flex flex-wrap gap-2">
                 {categoryFilters.map((filter) => (
                   <button

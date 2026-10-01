@@ -153,7 +153,7 @@ export default function SpeakingTranscriptPage() {
                 <div key={line.id} className="rounded-2xl border border-border bg-background-light p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">{line.speaker}</p>
+                      <p className="eyebrow text-muted">{line.speaker}</p>
                       <p className="mt-2 text-sm leading-6 text-navy">{line.text}</p>
                     </div>
                     <span className="text-xs font-bold text-muted">{Math.round(line.startTime)}s</span>
@@ -237,11 +237,11 @@ export default function SpeakingTranscriptPage() {
               {selectedMarker ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-border bg-background-light p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-muted">Flagged phrase</p>
+                    <p className="eyebrow text-muted">Flagged phrase</p>
                     <p className="mt-2 text-sm font-bold text-navy">&quot;{selectedMarker.text}&quot;</p>
                   </div>
                   <div className="rounded-2xl border border-border bg-background-light p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-muted">Suggestion</p>
+                    <p className="eyebrow text-muted">Suggestion</p>
                     <p className="mt-2 text-sm leading-6 text-muted">{selectedMarker.suggestion}</p>
                   </div>
                 </div>

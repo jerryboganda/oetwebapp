@@ -105,7 +105,7 @@ export function AdminRouteHero({
               {renderAdminRouteIcon(Icon, 'h-5 w-5')}
             </div>
             <div className="min-w-0">
-              {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-admin-text-muted">{eyebrow}</p>}
+              {eyebrow && <p className="eyebrow text-admin-text-muted">{eyebrow}</p>}
               <h1 className="mt-1 text-xl font-bold leading-tight tracking-tight text-admin-text">{title}</h1>
               <p className="mt-1.5 max-w-4xl text-sm leading-6 text-admin-text-muted">{description}</p>
             </div>
@@ -114,7 +114,7 @@ export function AdminRouteHero({
             <div className="mt-4 flex flex-wrap gap-2">
               {highlights.map((item) => (
                 <div key={`${item.label}-${item.value}`} className="min-w-0 rounded-2xl border border-admin-border bg-admin-surface-raised/60 px-3 py-2">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-admin-text-muted">
+                  <div className="flex items-center gap-2 eyebrow text-admin-text-muted">
                     {renderAdminRouteIcon(item.icon, 'h-3.5 w-3.5')}
                     {item.label}
                   </div>
@@ -165,15 +165,15 @@ export function AdminRouteSectionHeader({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {eyebrow && <span className={cn('rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-widest', palette.chip)}>{eyebrow}</span>}
+            {eyebrow && <span className={cn('rounded-full border px-2 py-0.5 eyebrow', palette.chip)}>{eyebrow}</span>}
             {title && <h1 className="text-xl font-bold tracking-tight text-admin-text leading-none">{title}</h1>}
-            {meta && <span className="rounded-full bg-admin-surface-raised px-2 py-0.5 text-xs uppercase tracking-widest text-admin-text-muted font-bold">{meta}</span>}
+            {meta && <span className="rounded-full bg-admin-surface-raised px-2 py-0.5 eyebrow text-admin-text-muted">{meta}</span>}
           </div>
           {description && <p className="mt-1.5 max-w-4xl text-xs leading-snug text-admin-text-muted">{description}</p>}
           {safeHighlights.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {safeHighlights.map((item) => (
-                <span key={`${item.label}-${item.value}`} className="rounded-full border border-admin-border bg-admin-surface-raised px-2 py-1 text-xs font-bold uppercase tracking-wider text-admin-text-muted">
+                <span key={`${item.label}-${item.value}`} className="rounded-full border border-admin-border bg-admin-surface-raised px-2 py-1 eyebrow text-admin-text-muted">
                   {item.label}: <span className="text-admin-text">{item.value}</span>
                 </span>
               ))}
@@ -230,7 +230,7 @@ export function AdminRouteSummaryCard({
     <div data-slot="summary-card" className={cn('flex items-center gap-3 rounded-2xl border px-4 py-3 flex-1 min-w-0 shadow-sm', bg[tone], className)}>
       {renderAdminRouteIcon(icon, cn('h-5 w-5 shrink-0', icoMap[tone]))}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-admin-text-muted truncate leading-none mb-1">{label}</p>
+        <p className="eyebrow text-admin-text-muted truncate leading-none mb-1">{label}</p>
         <p className={cn('text-xl font-bold leading-none tabular-nums tracking-tight', valMap[tone])}>{value}</p>
         {hint && <p className="mt-1 text-xs text-admin-text-muted leading-none">{hint}</p>}
       </div>
@@ -258,7 +258,7 @@ export function AdminRoutePanel({
       {(title || description || actions) && (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 border-b border-admin-border/60 bg-admin-surface-raised/40 shrink-0">
           <div className="flex flex-col">
-            {title && <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-admin-text-muted leading-none">{title}</h2>}
+            {title && <h2 className="eyebrow text-admin-text-muted leading-none">{title}</h2>}
             {description && <p className="mt-1 text-xs text-admin-text-muted">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

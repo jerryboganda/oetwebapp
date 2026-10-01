@@ -204,7 +204,7 @@ export function WritingReadingWindowOverlay({
     >
       {/* Header — countdown + instructions */}
       <header className="w-full max-w-4xl px-4 pt-[calc(2rem+env(safe-area-inset-top))] pb-4 text-center select-none">
-        <p className="text-xs font-bold uppercase tracking-wider text-white/60">
+        <p className="eyebrow text-white/60">
           Reading time
         </p>
         <div

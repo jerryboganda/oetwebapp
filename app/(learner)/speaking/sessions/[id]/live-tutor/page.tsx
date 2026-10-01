@@ -225,7 +225,7 @@ export default function SpeakingSessionLiveTutorPage() {
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted">
+          <p className="eyebrow text-muted">
             Speaking - Live tutor
           </p>
           <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>

@@ -45,7 +45,7 @@ export function LearnerSkillSwitcher({
       aria-label="Skill modules"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">{title}</p>
+        <p className="eyebrow text-muted">{title}</p>
       </div>
       <div className={cn('grid gap-2', compact ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
         {modules.map((module) => {

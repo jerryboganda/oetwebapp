@@ -29,7 +29,7 @@ export function ListeningSectionStepper({
     <div
       data-testid="listening-section-stepper"
       role="list"
-      className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3 text-xs font-black uppercase tracking-widest"
+      className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3 eyebrow"
     >
       {sections.map((code, idx) => {
         const state =

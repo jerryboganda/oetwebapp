@@ -481,7 +481,7 @@ function QuestionRow({
       {/* Phase 4: per-option distractor analysis (MCQ only). */}
       {isMcq && (
         <div className="mt-3 rounded-lg border border-border bg-surface p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+          <p className="eyebrow text-muted-foreground mb-2">
             Per-option distractor analysis
           </p>
           <div className="space-y-2">

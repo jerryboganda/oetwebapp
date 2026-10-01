@@ -79,7 +79,7 @@ export function ResultsScorePanel({
               </span>
             )}
             {gaugeLabel ? (
-              <span className="mt-1 text-3xs font-bold uppercase tracking-widest text-muted">{gaugeLabel}</span>
+              <span className="mt-1 tile-label text-muted">{gaugeLabel}</span>
             ) : null}
           </ResultGauge>
           <div className="min-w-0">

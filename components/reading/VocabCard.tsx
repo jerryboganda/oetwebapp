@@ -53,7 +53,7 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
               /{item.pronunciationIpa}/
             </p>
           ) : null}
-          <p className="mt-auto pt-6 text-xs font-medium uppercase tracking-widest text-primary-400">
+          <p className="mt-auto pt-6 eyebrow text-primary-400">
             Tap to reveal
           </p>
         </div>

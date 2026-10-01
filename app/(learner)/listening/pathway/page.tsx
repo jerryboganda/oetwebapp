@@ -150,13 +150,13 @@ export default function ListeningPathwayPage() {
         {pathway && (
           <div className="flex flex-wrap gap-6 rounded-2xl border border-border bg-surface p-5 text-sm shadow-sm">
             <div>
-              <span className="block text-xs uppercase tracking-wide text-muted">
+              <span className="block eyebrow text-muted">
                 Total stages
               </span>
               <span className="text-xl font-bold text-primary">{pathway.length}</span>
             </div>
             <div>
-              <span className="block text-xs uppercase tracking-wide text-muted">
+              <span className="block eyebrow text-muted">
                 Completed
               </span>
               <span className="text-xl font-bold text-navy">{mockCount}</span>

@@ -66,7 +66,7 @@ export function roleCardPropsFrom(card: LearnerRoleCardSource): SpeakingRoleCard
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[100px_1fr] gap-3 px-4 py-3 sm:grid-cols-[130px_1fr]">
-      <div className="text-xs font-bold uppercase tracking-wide text-slate-600">{label}</div>
+      <div className="eyebrow text-slate-600">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
   );

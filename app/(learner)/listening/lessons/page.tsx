@@ -71,7 +71,7 @@ export default function ListeningLessonsPage() {
               key={l.id}
               className="rounded-2xl border border-border bg-surface p-5 shadow-sm flex flex-col"
             >
-              <span className="text-xs font-semibold tracking-wide text-primary uppercase">
+              <span className="eyebrow text-primary">
                 {l.skillCode} · {SKILL_LABEL[l.skillCode] ?? l.skillCode}
               </span>
               <h2 className="mt-1 text-base font-semibold text-navy">{l.title}</h2>

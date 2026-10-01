@@ -64,7 +64,7 @@ export function RoleplayerCard({ card, cardNumber, slotLabel, className }: Rolep
     >
       <header className="flex items-center justify-between gap-3 bg-amber-700 px-4 py-2 text-white">
         <h3 className="text-sm font-bold uppercase tracking-wide">{heading}</h3>
-        <span className="text-xs font-semibold uppercase tracking-widest text-amber-100">
+        <span className="eyebrow text-amber-100">
           {titleCaseProfession(card.professionId)}
         </span>
       </header>
@@ -94,7 +94,7 @@ export function RoleplayerCard({ card, cardNumber, slotLabel, className }: Rolep
         )}
       </div>
 
-      <footer className="border-t border-amber-200 bg-amber-100/60 px-4 py-1.5 text-2xs font-medium uppercase tracking-wide text-amber-800">
+      <footer className="border-t border-amber-200 bg-amber-100/60 px-4 py-1.5 eyebrow text-amber-800">
         Tutor / examiner only — not shown to the candidate
       </footer>
     </article>
@@ -104,7 +104,7 @@ export function RoleplayerCard({ card, cardNumber, slotLabel, className }: Rolep
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[88px_1fr] gap-3 px-4 py-3 sm:grid-cols-[110px_1fr]">
-      <div className="text-xs font-bold uppercase tracking-wide text-amber-800">{label}</div>
+      <div className="eyebrow text-amber-800">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
   );

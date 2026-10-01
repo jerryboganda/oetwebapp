@@ -64,7 +64,7 @@ export function PartARenderer({
     >
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge variant="info">Q{questionNumber}</Badge>
-        <span id={`part-a-q${questionNumber}-label`} className="text-xs font-black uppercase tracking-widest text-muted">
+        <span id={`part-a-q${questionNumber}-label`} className="eyebrow text-muted">
           {partLabel} clinical notes
         </span>
       </div>

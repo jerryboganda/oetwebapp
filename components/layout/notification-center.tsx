@@ -463,7 +463,7 @@ function NotificationCenterContent({
       {adminAlerts.length > 0 && (
         <div className="mx-0.5 mt-2 shrink-0 overflow-hidden rounded-xl border border-amber-200/70 dark:border-amber-900/50">
           <div className="flex items-center justify-between border-b border-inherit bg-amber-50/80 px-3 py-2 dark:bg-amber-950/40">
-            <p className="text-3xs font-bold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">
+            <p className="tile-label text-amber-700 dark:text-amber-300">
               Admin alerts
             </p>
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-3xs font-bold tabular-nums leading-none text-white">
@@ -535,7 +535,7 @@ function NotificationCenterContent({
         {dateGroups.map((group) => (
           <div key={group.label} className="mb-1">
             <div className="sticky top-0 z-10 bg-surface/90 px-3 pb-1 pt-2 backdrop-blur-md">
-              <p className="text-3xs font-bold uppercase tracking-[0.1em] text-muted/50">{group.label}</p>
+              <p className="tile-label text-muted/50">{group.label}</p>
             </div>
             <div className="space-y-0.5 px-1">
               {group.items.map((item) => {

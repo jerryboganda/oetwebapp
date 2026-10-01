@@ -106,27 +106,27 @@ export default function ProfileSetupConfirmPage() {
           {state ? (
             <dl className="grid gap-3 sm:grid-cols-2" aria-label="Review summary">
               <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Profession</dt>
+                <dt className="eyebrow text-muted">Profession</dt>
                 <dd className="mt-1 text-sm font-semibold text-navy capitalize">
                   {state.profession}{state.subDiscipline ? ` · ${state.subDiscipline}` : ''}
                   {typeof state.yearsExperience === 'number' ? ` · ${state.yearsExperience}y experience` : ''}
                 </dd>
               </div>
               <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Target</dt>
+                <dt className="eyebrow text-muted">Target</dt>
                 <dd className="mt-1 text-sm font-semibold text-navy">
                   Band {state.targetBand}{state.targetCountry ? ` · ${state.targetCountry}` : ''}
                   {state.examDate ? ` · Exam ${state.examDate}` : ''}
                 </dd>
               </div>
               <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Weekly budget</dt>
+                <dt className="eyebrow text-muted">Weekly budget</dt>
                 <dd className="mt-1 text-sm font-semibold text-navy">
                   {state.daysPerWeek} days/week · {state.minutesPerDay} min/day
                 </dd>
               </div>
               <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Letter focus</dt>
+                <dt className="eyebrow text-muted">Letter focus</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {state.letterTypeFocus.map((code) => (
                     <Badge key={code} variant="info" size="sm">{code}</Badge>
@@ -134,7 +134,7 @@ export default function ProfileSetupConfirmPage() {
                 </dd>
               </div>
               <div className="rounded-xl border border-border bg-background p-3 sm:col-span-2">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Preferences</dt>
+                <dt className="eyebrow text-muted">Preferences</dt>
                 <dd className="mt-1 flex flex-wrap gap-1 text-sm">
                   <Badge variant={state.optInCommunity ? 'success' : 'muted'} size="sm">
                     Community {state.optInCommunity ? 'on' : 'off'}

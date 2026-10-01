@@ -303,7 +303,7 @@ export default function PronunciationReviewPage() {
               </div>
             ) : (
               <div className="w-full text-center">
-                <p className="text-xs uppercase tracking-widest text-muted">
+                <p className="eyebrow text-muted">
                   Listen, then rate yourself
                 </p>
                 <p className="mt-2 text-lg font-semibold text-muted">

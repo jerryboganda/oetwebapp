@@ -79,11 +79,11 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
       data-testid="listening-intro-card"
     >
       <Volume2 className="mx-auto mb-4 h-9 w-9 text-primary" aria-hidden="true" />
-      <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">{modeLabel}</p>
+      <p className="mb-2 eyebrow text-muted">{modeLabel}</p>
       <h2 className="mb-4 text-2xl font-black text-navy">{session.paper.title}</h2>
       {session.preflight ? (
         <div className="mx-auto mb-6 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left" data-testid="listening-preflight-summary">
-          <h3 className="text-xs font-black uppercase tracking-[0.16em] text-muted">Confirm your test</h3>
+          <h3 className="eyebrow text-muted">Confirm your test</h3>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs font-semibold uppercase text-muted">Candidate</dt>

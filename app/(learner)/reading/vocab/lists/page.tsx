@@ -111,7 +111,7 @@ export default function VocabListsPage() {
       <div className="space-y-5 sm:space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
+            <p className="mb-0.5 eyebrow text-primary-500">
               Curated Collections
             </p>
             <h1 className="text-2xl font-bold text-navy">

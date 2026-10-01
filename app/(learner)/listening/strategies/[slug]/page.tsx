@@ -89,7 +89,7 @@ export default function ListeningStrategyDetailPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <span className="text-xs uppercase tracking-wide text-muted">
+        <span className="eyebrow text-muted">
           {strategy.category.replace('_', ' ')}
         </span>
         <h1 className="text-3xl font-bold tracking-tight text-navy">{strategy.title}</h1>

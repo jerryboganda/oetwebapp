@@ -229,7 +229,7 @@ function ListeningResultsContent() {
                     : 'border-danger/20 bg-danger/10 text-danger'
                   : 'border-border bg-background-light text-navy'
               }`}>
-                <p className="text-xs font-black uppercase tracking-widest">
+                <p className="eyebrow">
                   {hasApprovedConversion ? (result.passed ? 'Owner table: passed' : 'Owner table: not passed') : 'Scaled score unavailable'}
                 </p>
                 <p className="mt-1 text-xs leading-5 opacity-90">
@@ -265,7 +265,7 @@ function ListeningResultsContent() {
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript & audio — permanent access</p>
+              <p className="eyebrow text-muted">Full transcript & audio — permanent access</p>
               <p className="mt-2 text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
               <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
             </div>
@@ -286,7 +286,7 @@ function ListeningResultsContent() {
             <div>
               <h2 id="listening-show-script-heading" className="text-lg font-black text-navy">
                 Show Script
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-3xs font-black uppercase tracking-widest text-white">
+                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle tile-label text-white">
                   Post-submit
                 </span>
               </h2>
@@ -343,11 +343,11 @@ function ListeningResultsContent() {
                       )}
                     </div>
                     <div className="flex-1 pr-4">
-                      <span className="mb-1 block text-xs font-black uppercase tracking-widest text-muted">
+                      <span className="mb-1 block eyebrow text-muted">
                         Part {item.partCode} / Question {item.number}
                       </span>
                         <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
-                        {item.isInvalid ? <p className="mt-1 text-xs font-black uppercase tracking-widest text-warning">Invalid — admin review</p> : null}
+                        {item.isInvalid ? <p className="mt-1 eyebrow text-warning">Invalid — admin review</p> : null}
                     </div>
                     <div className="shrink-0 text-muted">
                       {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -367,7 +367,7 @@ function ListeningResultsContent() {
                             </div>
                             {!item.isCorrect && !item.isInvalid ? (
                               <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-                                <span className="mb-2 block text-3xs font-black uppercase tracking-widest text-success">
+                                <span className="mb-2 block tile-label text-success">
                                   Correct Answer
                                 </span>
                                 <p className="text-sm font-medium text-success">{item.correctAnswer}</p>
@@ -386,7 +386,7 @@ function ListeningResultsContent() {
                               data-testid={`listening-miss-${item.questionId}`}
                               className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning"
                             >
-                              <span className="mb-1 block text-xs font-black uppercase tracking-widest">
+                              <span className="mb-1 block eyebrow">
                                 Missed because: {missReason.label}
                               </span>
                               <p className="text-sm leading-relaxed">{missReason.hint}</p>
@@ -397,14 +397,14 @@ function ListeningResultsContent() {
                             <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
                               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                               <div>
-                                <span className="mb-1 block text-xs font-black uppercase tracking-widest text-warning">Distractor Trap</span>
+                                <span className="mb-1 block eyebrow text-warning">Distractor Trap</span>
                                 <p className="text-sm leading-relaxed text-warning">{item.distractorExplanation}</p>
                               </div>
                             </div>
                           ) : null}
 
                           <div className="rounded-xl border border-border bg-surface p-4">
-                            <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">Explanation</span>
+                            <span className="mb-2 block eyebrow text-muted">Explanation</span>
                             {item.explanation ? (
                               <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
                             ) : (

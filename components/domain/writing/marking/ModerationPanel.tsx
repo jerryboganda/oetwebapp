@@ -122,7 +122,7 @@ export function ModerationPanel({
         <div className="mt-3 overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-background-light text-xs uppercase tracking-wider text-muted">
+              <tr className="bg-background-light eyebrow text-muted">
                 <th scope="col" className="px-3 py-2 text-left font-semibold">Criterion</th>
                 <th scope="col" className="px-3 py-2 text-center font-semibold">1st</th>
                 <th scope="col" className="px-3 py-2 text-center font-semibold">2nd</th>
@@ -193,7 +193,7 @@ export function ModerationPanel({
       {/* Finalized decision note */}
       {moderation?.status === 'finalized' && moderation.finalDecisionNote ? (
         <div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-success">Moderator decision</p>
+          <p className="eyebrow text-success">Moderator decision</p>
           <p className="mt-1 whitespace-pre-line text-sm text-navy">{moderation.finalDecisionNote}</p>
         </div>
       ) : null}
@@ -209,7 +209,7 @@ export function ModerationPanel({
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {CRITERION_CODES.map((c) => (
-              <label key={c} className="flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+              <label key={c} className="flex flex-col gap-1 eyebrow text-muted">
                 {CRITERION_LABEL[c].replace(/ .*/, '')} (0–{CRITERION_MAX[c]})
                 <input
                   type="number"
@@ -231,7 +231,7 @@ export function ModerationPanel({
           <p className="mt-2 text-right text-xs font-bold text-navy">
             Final raw total: <span className="tabular-nums">{finalTotal}/{RAW_TOTAL_MAX}</span>
           </p>
-          <label className="mt-2 flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+          <label className="mt-2 flex flex-col gap-1 eyebrow text-muted">
             Decision note
             <textarea
               rows={3}

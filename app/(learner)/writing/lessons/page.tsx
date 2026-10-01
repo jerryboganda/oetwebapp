@@ -109,7 +109,7 @@ function WritingLessonsCatalogueInner() {
 
         <fieldset className="flex flex-wrap items-center gap-2" aria-label={t('writing.lessons.filter.label')}>
           <legend className="sr-only">{t('writing.lessons.filter.legend')}</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">
+          <span className="eyebrow text-muted">
             <Filter className="mr-1 inline h-3 w-3" aria-hidden="true" />
             {t('writing.lessons.filter.skillLabel')}
           </span>

@@ -121,7 +121,7 @@ export default function PackageDetailPage() {
           </Link>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-6">
             <div className="flex-1 min-w-[260px]">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">
+              <p className="eyebrow text-gold">
                 {websitePackage ? `Package ${websitePackage.packageNo} · ${websitePackage.category}` : plan.productCategory.replace(/_/g, ' ')}
               </p>
               <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{websitePackage?.name ?? plan.name}</h1>
@@ -356,7 +356,7 @@ function AddonGroup({
 function SidebarBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-4">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h4>
+      <h4 className="eyebrow text-muted">{title}</h4>
       <p className="mt-1.5 text-sm">{children}</p>
     </div>
   );

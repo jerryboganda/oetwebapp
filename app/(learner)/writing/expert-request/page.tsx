@@ -134,7 +134,7 @@ function WritingExpertReviewContent() {
         <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden dark:border dark:border-border dark:bg-surface dark:text-navy">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
           <div className="relative z-10">
-            <div className="flex items-center gap-2 text-info text-xs font-bold uppercase tracking-widest mb-2"><ShieldCheck className="w-4 h-4" /> Human-in-the-loop</div>
+            <div className="flex items-center gap-2 text-info eyebrow mb-2"><ShieldCheck className="w-4 h-4" /> Human-in-the-loop</div>
             <h2 className="text-xl font-bold mb-1">Writing Submission</h2>
             <div className="text-sm text-info/70">{availableCredits} credits available</div>
           </div>

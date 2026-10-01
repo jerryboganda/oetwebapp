@@ -56,7 +56,7 @@ export function RubricPanel({ draft, onChange, aiSuggestion, readOnly = false, c
       <div className="flex items-center justify-between gap-3">
         <h3 id="rubric-heading" className="text-sm font-bold text-navy">Rubric scores</h3>
         <div className="text-right">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Raw total</p>
+          <p className="eyebrow text-muted">Raw total</p>
           <p className={cn('text-lg font-black tabular-nums', complete ? 'text-navy' : 'text-muted')}>
             {total}
             <span className="text-sm font-bold text-muted">/{RAW_TOTAL_MAX}</span>
