@@ -410,6 +410,22 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       expect(result.current.connection).toBe('connected');
     });
 
+    it('counts the silence from the first sentence nobody answered, however much more the candidate says to a silent patient', async () => {
+      // Production, 1 Oct 2026: the scripted candidate kept speaking every ~12 s to a stalled patient, each new
+      // sentence restarted the 20 s clock, and the restore only came 94 s after the stall.
+      const { result } = await mount();
+      await startVoice(result);
+      await candidateSpeaks(2_000); // the sentence nobody answers
+      await advance(9_000);
+      await candidateSpeaks(2_000); // "Hello? Can you hear me?"
+      await advance(7_000);
+      expect(result.current.recoveries).toBe(0); // still inside the first sentence's window
+
+      await advance(3_000);
+      expect(mockToken).toHaveBeenCalledTimes(2);
+      expect(result.current.recoveries).toBe(1);
+    });
+
     it('does not restore a patient who answered in time, and waits for the next sentence before it judges again', async () => {
       const { result } = await mount();
       await startVoice(result);
