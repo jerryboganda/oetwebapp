@@ -4,23 +4,34 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  Briefcase,
   CalendarDays,
   Clock,
   Eye,
   Headphones,
   ListChecks,
   Lock,
+  NotebookPen,
   PlayCircle,
+  Presentation,
   Target,
+  Timer,
   TrendingUp,
+  type LucideIcon,
 } from 'lucide-react';
 import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
 import { FreeSampleCard } from '@/components/domain/free-sample-card';
+import { LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { Badge } from '@/components/ui/badge';
+import { Card, cardClassName } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { findFreeSamplePaper } from '@/lib/free-sample';
@@ -64,61 +75,43 @@ interface HubCard {
   subtitle: string;
   href: string;
   accent: 'partA' | 'partB' | 'partC' | 'exam';
+  icon: LucideIcon;
 }
 
+// One Listening identity colour for every card; the icon tells the parts apart.
 const HUB_CARDS: HubCard[] = [
   {
     title: 'Practice Part A',
     subtitle: 'Patient consultations: note-taking from two consultations (24 items).',
     href: '/listening/practice/a',
     accent: 'partA',
+    icon: NotebookPen,
   },
   {
     title: 'Practice Part B',
     subtitle: 'Workplace extracts: six short workplace audio extracts (6 items).',
     href: '/listening/practice/b',
     accent: 'partB',
+    icon: Briefcase,
   },
   {
     title: 'Practice Part C',
     subtitle: 'Healthcare presentations: two longer extracts with detailed questions (12 items).',
     href: '/listening/practice/c',
     accent: 'partC',
+    icon: Presentation,
   },
   {
     title: 'Full Listening Exam',
     subtitle: '45 minutes • 42 questions • audio plays once. Raw practice evidence is retained; owner-approved conversion is shown only when configured.',
     href: '/listening/exam',
     accent: 'exam',
+    icon: Timer,
   },
 ];
 
-const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
-  partA: {
-    ring: 'border-primary-200 hover:border-primary-300 dark:border-primary-900/60 dark:hover:border-primary-700',
-    badge: 'bg-primary-100 text-primary-800 dark:bg-primary-950/60 dark:text-primary-300',
-    icon: 'bg-primary-100 text-primary-700 dark:bg-primary-950/60 dark:text-primary-300',
-    chip: 'Part A',
-  },
-  partB: {
-    ring: 'border-info/20 hover:border-info/30',
-    badge: 'bg-info/10 text-info',
-    icon: 'bg-info/10 text-info',
-    chip: 'Part B',
-  },
-  partC: {
-    ring: 'border-success/20 hover:border-success/30',
-    badge: 'bg-success/10 text-success-strong',
-    icon: 'bg-success/10 text-success-strong',
-    chip: 'Part C',
-  },
-  exam: {
-    ring: 'border-warning/20 hover:border-warning/30',
-    badge: 'bg-warning/10 text-warning-strong',
-    icon: 'bg-warning/10 text-warning-strong',
-    chip: 'Full exam',
-  },
-};
+const SKILL_ICON_TILE = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-skill-listening/10 text-skill-listening';
+const SKILL_CHIP = 'inline-flex w-fit items-center rounded-full border border-skill-listening/20 bg-skill-listening/10 px-2 py-0.5 tile-label text-skill-listening';
 
 export default function ListeningHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -277,20 +270,14 @@ export default function ListeningHome() {
   );
 
   if (authLoading) {
-    return (
-      <>
-        <LearnerSkeleton variant="dashboard" />
-      </>
-    );
+    return <LearnerSkeleton variant="dashboard" />;
   }
 
   if (!isAuthenticated) {
-    return (
-      <>
-        <InlineAlert variant="info">Please sign in to access the listening module.</InlineAlert>
-      </>
-    );
+    return <InlineAlert variant="info">Please sign in to access the listening module.</InlineAlert>;
   }
+
+  const retry = () => setRetryCount((count) => count + 1);
 
   return (
     <>
@@ -299,161 +286,148 @@ export default function ListeningHome() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <div className="space-y-6 sm:space-y-10">
-        <LearnerPageHero
-          eyebrow="Module focus"
-          icon={Headphones}
-          accent="purple"
-          title="OET Listening"
-          description="Practice each part separately or attempt the full listening exam under official timing."
-          highlights={heroHighlights}
-        />
+      <LearnerPageHero
+        eyebrow="Module focus"
+        icon={Headphones}
+        accent="purple"
+        title="OET Listening"
+        description="Practice each part separately or attempt the full listening exam under official timing."
+        highlights={heroHighlights}
+      />
 
-        <CreditsGuideButton variant="banner" />
+      <CreditsGuideButton variant="banner" />
 
-        <LearnerSkillSwitcher compact />
+      <LearnerSkillSwitcher compact />
 
-        {homeError ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <InlineAlert variant="error">{homeError}</InlineAlert>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRetryCount((count) => count + 1)}
-              className="border-danger/30 bg-surface text-danger-strong hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
-            >
-              Try again
-            </Button>
-          </div>
-        ) : null}
-        {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
+      {/* A failed load shows in the paper library below; this is for a failed start. */}
+      {homeError && home ? (
+        <InlineAlert
+          variant="error"
+          action={<Button variant="outline" size="sm" onClick={retry}>Try again</Button>}
+        >
+          {homeError}
+        </InlineAlert>
+      ) : null}
+      {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
 
-        {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
+      {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <MotionSection delayIndex={0}>
-          <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
-            <div className="mb-4">
-              <p className="eyebrow text-primary-500">
-                Choose how to practice
-              </p>
-              <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
-                Practice by Part, or attempt the full exam
-              </h2>
-            </div>
-  
-            <CreditUsageInfoCard module="listening" className="mb-4" />
-  
-            {freeSampleHref ? (
-              <FreeSampleCard
-                testId="listening-free-mock-card"
-                icon={Headphones}
-                title="Free Listening Mock"
-                description="Try one complete OET Listening mock for free."
-                href={freeSampleHref}
-                onClick={() => analytics.track('free_sample_click', { module: 'listening' })}
-                className="mb-4"
-              />
-            ) : null}
-  
-            <ul
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-              data-testid="listening-hub-cards"
-            >
-              {HUB_CARDS.map((card) => {
-                const accent = ACCENT_STYLES[card.accent];
-                return (
-                  <li key={card.href}>
-                    <Link
+      <MotionSection delayIndex={0}>
+        <section aria-label="Practice by Part, or attempt the full exam" data-tour="listening-hub">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Choose how to practice"
+            title="Practice by Part, or attempt the full exam"
+            className="mb-4"
+          />
+
+          <CreditUsageInfoCard module="listening" className="mb-4" />
+
+          {freeSampleHref ? (
+            <FreeSampleCard
+              testId="listening-free-mock-card"
+              icon={Headphones}
+              title="Free Listening Mock"
+              description="Try one complete OET Listening mock for free."
+              href={freeSampleHref}
+              onClick={() => analytics.track('free_sample_click', { module: 'listening' })}
+              className="mb-4"
+            />
+          ) : null}
+
+          <ul
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            data-testid="listening-hub-cards"
+          >
+            {HUB_CARDS.map((card, index) => {
+              const Icon = card.icon;
+              return (
+                <li key={card.href}>
+                  <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                    <CardLink
                       href={card.href}
                       data-testid={`listening-hub-card-${card.accent}`}
-                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
+                      className="group flex h-full items-start gap-4"
                     >
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
-                        <Headphones className="h-5 w-5" aria-hidden />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-navy">
-                            {card.title}
-                          </h3>
-                          <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
-                            {accent.chip}
-                          </span>
-                        </div>
+                      <span className={SKILL_ICON_TILE}>
+                        <Icon className="h-5 w-5" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-navy">{card.title}</h3>
                         <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                       </div>
                       <PlayCircle
-                        className="h-4 w-4 self-center text-primary-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                        className="h-4 w-4 shrink-0 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                         aria-hidden
                       />
-                    </Link>
-                  </li>
-                );
-              })}
+                    </CardLink>
+                  </MotionItem>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </MotionSection>
+
+      {/* Full listening exam library — every published listening paper the
+          learner can attempt, surfaced in-module (Reading parity). */}
+      <MotionSection delayIndex={1}>
+        <section aria-label="Available listening exams">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Paper library"
+            icon={Target}
+            title="Available listening exams"
+            className="mb-4"
+          />
+          {homeLoading ? (
+            <LearnerSkeleton variant="card-grid" />
+          ) : !home ? (
+            <ErrorState
+              message={homeError ?? undefined}
+              onRetry={retry}
+              retryLabel="Try again"
+            />
+          ) : catalogPapers.length === 0 ? (
+            <EmptyState
+              icon={<Headphones className="h-8 w-8" aria-hidden />}
+              title="No published Atlas/Nova Listening papers yet."
+            />
+          ) : (
+            <ListeningExamFolderBrowser
+              papers={papers}
+              emptyMessage="No published Atlas/Nova Listening papers yet."
+              renderPaper={(paper) => (
+                <PaperCard
+                  paper={paper}
+                  starting={startingPaperId === paper.id}
+                  onStart={() => void handleStartFullExam(paper)}
+                />
+              )}
+            />
+          )}
+        </section>
+      </MotionSection>
+
+      {recentResults.length > 0 ? (
+        <MotionSection delayIndex={2}>
+          <section aria-label="Recent results">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Review"
+              icon={TrendingUp}
+              title="Recent results"
+              className="mb-4"
+            />
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recentResults.map((result, index) => (
+                <li key={result.attemptId}>
+                  <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                    <ResultCard result={result} />
+                  </MotionItem>
+                </li>
+              ))}
             </ul>
           </section>
         </MotionSection>
-
-        {/* Full listening exam library — every published listening paper the
-            learner can attempt, surfaced in-module (Reading parity). */}
-        <MotionSection delayIndex={1}>
-          <section aria-labelledby="listening-papers-heading">
-            <div className="mb-4 flex items-end justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-1.5 eyebrow text-primary-500">
-                  <Target className="h-3.5 w-3.5" aria-hidden />
-                  Paper library
-                </p>
-                <h2 id="listening-papers-heading" className="text-lg font-bold text-navy">
-                  Available listening exams
-                </h2>
-              </div>
-            </div>
-            {homeLoading ? (
-              <LearnerSkeleton variant="card-grid" />
-            ) : catalogPapers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-background-light px-4 py-6 text-sm text-muted">
-                no published Atlas/Nova Listening papers yet.
-              </div>
-            ) : (
-              <ListeningExamFolderBrowser
-                papers={papers}
-                emptyMessage="no published Atlas/Nova Listening papers yet."
-                renderPaper={(paper) => (
-                  <PaperCard
-                    paper={paper}
-                    starting={startingPaperId === paper.id}
-                    onStart={() => void handleStartFullExam(paper)}
-                  />
-                )}
-              />
-            )}
-          </section>
-        </MotionSection>
-
-        {recentResults.length > 0 ? (
-          <MotionSection delayIndex={2}>
-            <section aria-labelledby="listening-results-heading">
-              <div className="mb-4">
-                <p className="flex items-center gap-1.5 eyebrow text-primary-500">
-                  <TrendingUp className="h-3.5 w-3.5" aria-hidden />
-                  Review
-                </p>
-                <h2 id="listening-results-heading" className="text-lg font-bold text-navy">
-                  Recent results
-                </h2>
-              </div>
-              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {recentResults.map((result) => (
-                  <li key={result.attemptId}>
-                    <ResultCard result={result} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </MotionSection>
-        ) : null}
-      </div>
+      ) : null}
     </>
   );
 }
@@ -488,37 +462,33 @@ function PaperCard({
   const partial = isPartialListeningExam(paper);
   const resume = Boolean(paper.lastAttempt && !paper.lastAttempt.submittedAt);
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <article className={cn(cardClassName({}), 'flex h-full flex-col')}>
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning-strong">
+        <span className={SKILL_ICON_TILE}>
           <Headphones className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
+              <Badge variant="warning" className="gap-1">
                 <Lock className="h-3 w-3" aria-hidden />
                 Premium
-              </span>
+              </Badge>
             ) : partial ? (
-              <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
-                Partial · Q37–42 unavailable
-              </span>
+              <Badge variant="warning">Partial · Q37–42 unavailable</Badge>
             ) : (
-              <span className="rounded-full bg-success/10 px-2 py-0.5 tile-label text-success-strong">
-                Full exam
-              </span>
+              <Badge variant="success">Full exam</Badge>
             )}
           </div>
-          <p className="mt-1 flex items-center gap-2 text-xs text-muted">
-            <span>{paper.questionCount} questions</span>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" aria-hidden />
-              {paper.estimatedDurationMinutes} min
-            </span>
-          </p>
+          <LearnerSurfaceMetaRow
+            size="compact"
+            className="mt-1.5 tabular-nums"
+            items={[
+              { label: `${paper.questionCount} questions`, icon: ListChecks },
+              { label: `${paper.estimatedDurationMinutes} min`, icon: Clock },
+            ]}
+          />
           {partial ? (
             <p className="mt-2 text-xs text-muted">
               Questions 37–42 are unavailable in the supplied source. This paper is 36 items (Parts A, B, and C extract 1 only).
@@ -547,14 +517,12 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
       : 'Practice';
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-border-hover">
-      <span className="inline-flex w-fit rounded-full bg-primary-100 px-2 py-0.5 tile-label text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
-        {scopeLabel}
-      </span>
-      <span className="mt-2 font-semibold text-navy">{result.paperTitle}</span>
-      <span className="mt-1 block text-xs text-muted">
+    <Card className="flex h-full flex-col">
+      <span className={SKILL_CHIP}>{scopeLabel}</span>
+      <h3 className="mt-2 text-sm font-semibold text-navy">{result.paperTitle}</h3>
+      <p className="mt-1 text-xs tabular-nums text-muted">
         {result.requiresAdminReview ? 'Admin review pending' : result.scoreDisplay}
-      </span>
+      </p>
       <div className="mt-auto flex items-center gap-2 pt-3">
         <Button asChild size="sm" variant="outline" className="flex-1">
           <Link href={result.route}>
@@ -569,7 +537,7 @@ function ResultCard({ result }: { result: ListeningHomeResultDto }) {
           </Link>
         </Button>
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -578,20 +546,20 @@ function ResumeBanner({ attempts }: { attempts: ListeningHomeAttemptDto[] }) {
   if (!resumable) return null;
 
   return (
-    <div className="rounded-xl border border-success/20 bg-success/10 px-5 py-4">
-      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-success-strong">
-        <Clock className="h-4 w-4" aria-hidden />
-        You have an open Listening attempt
-      </p>
-      <p className="mb-3 text-xs text-success-strong/80">
-        {resumable.paperTitle}: {resumable.answeredCount} answered. Resume before the timer window closes.
-      </p>
-      <Button asChild size="sm" className="bg-success-strong hover:bg-success-strong">
-        <Link href={resumable.route}>
-          <ListChecks className="h-4 w-4" aria-hidden />
-          Resume attempt
-        </Link>
-      </Button>
-    </div>
+    <InlineAlert
+      variant="success"
+      live="polite"
+      title="You have an open Listening attempt"
+      action={(
+        <Button asChild size="sm">
+          <Link href={resumable.route}>
+            <ListChecks className="h-4 w-4" aria-hidden />
+            Resume attempt
+          </Link>
+        </Button>
+      )}
+    >
+      {resumable.paperTitle}: {resumable.answeredCount} answered. Resume before the timer window closes.
+    </InlineAlert>
   );
 }

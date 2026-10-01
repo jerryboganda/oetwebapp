@@ -1,12 +1,16 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronRight, Folder } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Folder } from 'lucide-react';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   groupListeningExamPapers,
   type ListeningExamCategoryId,
   type ListeningExamCategoryPaper,
 } from '@/lib/listening-exam-categories';
+import { cn } from '@/lib/utils';
 
 export interface ListeningExamFolderItem extends ListeningExamCategoryPaper {
   id: string;
@@ -40,8 +44,9 @@ export function ListeningExamFolderBrowser<T extends ListeningExamFolderItem>({
         <button
           type="button"
           onClick={() => setOpenFolderId(null)}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+          className="-ms-1 inline-flex min-h-11 items-center gap-1.5 rounded-control px-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden />
           Back to folders
         </button>
         <div>
@@ -49,13 +54,15 @@ export function ListeningExamFolderBrowser<T extends ListeningExamFolderItem>({
           <p className="mt-1 text-sm text-muted">{openSection.description}</p>
         </div>
         {openSection.papers.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-sm text-muted">
-            {emptyMessage}
-          </p>
+          <EmptyState icon={<Folder className="h-8 w-8" aria-hidden />} title={emptyMessage} />
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {openSection.papers.map((paper) => (
-              <li key={paper.id}>{renderPaper(paper)}</li>
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {openSection.papers.map((paper, index) => (
+              <li key={paper.id}>
+                <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                  {renderPaper(paper)}
+                </MotionItem>
+              </li>
             ))}
           </ul>
         )}
@@ -71,25 +78,25 @@ export function ListeningExamFolderBrowser<T extends ListeningExamFolderItem>({
           Listening papers are grouped into Atlas Practice Series and Nova Practice Series. New published papers appear here automatically.
         </p>
       </div>
-      <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
-        {sections.map((section, index) => (
-          <li key={section.id} className={index === 0 ? '' : 'border-t border-border'}>
+      <ul className={cn(cardClassName({ padding: 'none' }), 'divide-y divide-border overflow-hidden')}>
+        {sections.map((section) => (
+          <li key={section.id}>
             <button
               type="button"
               data-testid={`listening-exam-folder-${section.id}`}
               onClick={() => setOpenFolderId(section.id)}
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/20"
+              className="hover-primary flex min-h-14 w-full items-center gap-3 px-4 py-3.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             >
-              <Folder className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+              <Folder className="h-5 w-5 shrink-0 text-skill-listening" aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-navy">{section.title}</span>
-                <span className="mt-0.5 block text-xs text-muted">
+                <span className="mt-0.5 block text-xs tabular-nums text-muted">
                   {section.papers.length === 0
                     ? 'No papers yet'
                     : `${section.papers.length} paper${section.papers.length === 1 ? '' : 's'}`}
                 </span>
               </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" aria-hidden />
             </button>
           </li>
         ))}
