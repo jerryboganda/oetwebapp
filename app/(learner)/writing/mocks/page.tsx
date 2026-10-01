@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, PlayCircle, Clock, AlertTriangle, Monitor, FileText } from 'lucide-react';
+import { Award, PlayCircle, Clock, Monitor, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { cn } from '@/lib/utils';
 import { listWritingMocks, startWritingMock } from '@/lib/writing/api';
 import type { WritingMockDto } from '@/lib/writing/types';
@@ -23,6 +26,7 @@ export default function WritingMocksCataloguePage() {
   const t = useTranslations();
   const router = useRouter();
   const [mocks, setMocks] = useState<WritingMockDto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [surface, setSurface] = useState<Surface>('computer');
@@ -38,6 +42,9 @@ export default function WritingMocksCataloguePage() {
       .catch((err) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : t('writing.mocks.catalogue.error.load'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -74,127 +81,118 @@ export default function WritingMocksCataloguePage() {
         ? 'Start practice'
         : 'Start strict mock';
 
+  const optionClassName = (selected: boolean) => cn(
+    'rounded-control border p-3 text-start transition-[color,background-color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed',
+    selected
+      ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+      : 'border-border bg-surface hover:bg-background-light',
+  );
+
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow={t('writing.mocks.catalogue.eyebrow')}
-          icon={Award}
-          accent="amber"
-          title={t('writing.mocks.catalogue.title')}
-          description={t('writing.mocks.catalogue.description')}
-          highlights={[
-            { icon: Award, label: t('writing.mocks.catalogue.highlights.available'), value: `${mocks.length}` },
-            { icon: Clock, label: t('writing.mocks.catalogue.highlights.duration'), value: t('writing.mocks.catalogue.highlights.durationValue') },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.mocks.catalogue.eyebrow')}
+        icon={Award}
+        accent="amber"
+        title={t('writing.mocks.catalogue.title')}
+        description={t('writing.mocks.catalogue.description')}
+        highlights={[
+          { icon: Award, label: t('writing.mocks.catalogue.highlights.available'), value: `${mocks.length}` },
+          { icon: Clock, label: t('writing.mocks.catalogue.highlights.duration'), value: t('writing.mocks.catalogue.highlights.durationValue') },
+        ]}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <Card padding="md" className="border-warning/30 bg-warning/10">
-          <CardContent>
-            <p className="flex items-start gap-2 text-sm text-warning-strong">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>
-                <span className="font-bold">{t('writing.mocks.catalogue.before.title')}</span>{' '}
-                {t('writing.mocks.catalogue.before.body')}
-              </span>
-            </p>
-          </CardContent>
-        </Card>
+      <InlineAlert variant="warning" live="polite">
+        <span className="font-bold">{t('writing.mocks.catalogue.before.title')}</span>{' '}
+        {t('writing.mocks.catalogue.before.body')}
+      </InlineAlert>
 
-        {/* Mode selection — Computer vs Paper, Strict vs Practice (spec §10/§20.2). */}
+      {/* Mode selection — Computer vs Paper, Strict vs Practice (spec §10/§20.2). */}
+      <MotionSection delayIndex={0}>
         <Card padding="md">
-          <CardContent>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <fieldset>
-                <legend className="mb-2 eyebrow text-muted">
-                  How would you like to sit it?
-                </legend>
-                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam surface">
-                  {([
-                    { value: 'computer' as const, label: 'Computer mode', hint: 'On-screen, timed, typed.', icon: Monitor },
-                    { value: 'paper' as const, label: 'Paper mode', hint: 'Print & handwrite, then upload.', icon: FileText },
-                  ]).map((opt) => {
-                    const selected = surface === opt.value;
-                    const Icon = opt.icon;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setSurface(opt.value)}
-                        className={cn(
-                          'rounded-xl border p-3 text-left transition-[color,background-color,border-color] duration-150',
-                          selected
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-                            : 'border-border bg-surface hover:bg-background-light',
-                        )}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Icon className={cn('h-4 w-4', selected ? 'text-primary' : 'text-muted')} aria-hidden="true" />
-                          <span className={cn('text-sm font-bold', selected ? 'text-primary' : 'text-navy')}>{opt.label}</span>
-                        </span>
-                        <span className="mt-1 block text-xs text-muted">{opt.hint}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <fieldset className="min-w-0">
+              <legend className="mb-2 eyebrow text-muted">
+                How would you like to sit it?
+              </legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam surface">
+                {([
+                  { value: 'computer' as const, label: 'Computer mode', hint: 'On-screen, timed, typed.', icon: Monitor },
+                  { value: 'paper' as const, label: 'Paper mode', hint: 'Print & handwrite, then upload.', icon: FileText },
+                ]).map((opt) => {
+                  const selected = surface === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setSurface(opt.value)}
+                      className={optionClassName(selected)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Icon className={cn('h-4 w-4 shrink-0', selected ? 'text-primary' : 'text-muted')} aria-hidden="true" />
+                        <span className={cn('text-sm font-bold', selected ? 'text-primary' : 'text-navy')}>{opt.label}</span>
+                      </span>
+                      <span className="mt-1 block text-xs text-muted">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
 
-              <fieldset className={cn(surface === 'paper' && 'opacity-50')} aria-disabled={surface === 'paper'}>
-                <legend className="mb-2 eyebrow text-muted">Conditions</legend>
-                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam conditions">
-                  {([
-                    { value: 'strict' as const, label: 'Strict mock', hint: 'Exam rules: no paste, locked timing.' },
-                    { value: 'practice' as const, label: 'Practice', hint: 'Relaxed: spellcheck on, no paste lock.' },
-                  ]).map((opt) => {
-                    const selected = rigour === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        disabled={surface === 'paper'}
-                        onClick={() => setRigour(opt.value)}
-                        className={cn(
-                          'rounded-xl border p-3 text-left transition-[color,background-color,border-color] duration-150 disabled:cursor-not-allowed',
-                          selected
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-                            : 'border-border bg-surface hover:bg-background-light',
-                        )}
-                      >
-                        <span className={cn('block text-sm font-bold', selected ? 'text-primary' : 'text-navy')}>{opt.label}</span>
-                        <span className="mt-1 block text-xs text-muted">{opt.hint}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {surface === 'paper' ? (
-                  <p className="mt-2 text-xs text-muted">Conditions apply to computer mode only.</p>
-                ) : null}
-              </fieldset>
-            </div>
-          </CardContent>
+            <fieldset className={cn('min-w-0', surface === 'paper' && 'opacity-50')} aria-disabled={surface === 'paper'}>
+              <legend className="mb-2 eyebrow text-muted">Conditions</legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Exam conditions">
+                {([
+                  { value: 'strict' as const, label: 'Strict mock', hint: 'Exam rules: no paste, locked timing.' },
+                  { value: 'practice' as const, label: 'Practice', hint: 'Relaxed: spellcheck on, no paste lock.' },
+                ]).map((opt) => {
+                  const selected = rigour === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={surface === 'paper'}
+                      onClick={() => setRigour(opt.value)}
+                      className={optionClassName(selected)}
+                    >
+                      <span className={cn('block text-sm font-bold', selected ? 'text-primary' : 'text-navy')}>{opt.label}</span>
+                      <span className="mt-1 block text-xs text-muted">{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {surface === 'paper' ? (
+                <p className="mt-2 text-xs text-muted">Conditions apply to computer mode only.</p>
+              ) : null}
+            </fieldset>
+          </div>
         </Card>
+      </MotionSection>
 
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t('writing.mocks.catalogue.list.label')}>
-          {mocks.length === 0 ? (
-            <li className="col-span-full"><p className="text-sm text-muted">{t('writing.mocks.catalogue.list.empty')}</p></li>
-          ) : null}
-          {mocks.map((mock) => (
+      {loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : mocks.length === 0 ? (
+        error ? null : <EmptyState icon={<Award className="h-8 w-8" />} title={t('writing.mocks.catalogue.list.empty')} />
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t('writing.mocks.catalogue.list.label')}>
+          {mocks.map((mock, index) => (
             <li key={mock.id}>
-              <Card padding="md" aria-label={t('writing.mocks.catalogue.cardAria', { title: mock.title })}>
-                <CardContent>
+              <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                <Card padding="md" className="flex h-full flex-col" aria-label={t('writing.mocks.catalogue.cardAria', { title: mock.title })}>
                   <header className="flex flex-wrap items-center justify-between gap-2">
                     <Badge variant="info" size="sm">{t('writing.mocks.catalogue.badge.mock')}</Badge>
                     <Badge variant={mock.status === 'published' ? 'success' : 'muted'} size="sm">{mock.status}</Badge>
                   </header>
                   {/* Mock title is OET-authored English content. */}
                   <h2 className="mt-2 text-base font-bold text-navy" dir="ltr">{mock.title}</h2>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-auto flex flex-wrap gap-2 pt-3">
                     <Button
                       onClick={() => void start(mock.id)}
                       loading={starting === mock.id}
@@ -207,12 +205,12 @@ export default function WritingMocksCataloguePage() {
                       <Link href="/writing/stats">{t('writing.mocks.catalogue.readiness')}</Link>
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                </Card>
+              </MotionItem>
             </li>
           ))}
         </ul>
-      </div>
+      )}
     </>
   );
 }
