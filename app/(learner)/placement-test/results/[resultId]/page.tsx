@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ErrorState } from '@/components/ui/empty-error';
+import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ResultReportCard } from '@/components/placement/result-report-card';
 import { fetchPlacementStoredResult, type PlacementResultReport } from '@/lib/api/placement';
 import { readErrorMessage } from '@/lib/read-error-message';
@@ -44,39 +46,37 @@ export default function PlacementResultPage() {
   }, [resultId]);
 
   if (!report) {
+    if (notFound) {
+      return (
+        <EmptyState
+          icon={<AlertTriangle className="h-7 w-7 text-warning-strong" aria-hidden="true" />}
+          title="That result does not exist or belongs to another account."
+          action={{ label: 'Back to your placement history', href: '/placement-test/history' }}
+        />
+      );
+    }
+    if (error) return <ErrorState title="Result unavailable" message={error} />;
     return (
-      <>
-      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted">
-        {notFound ? (
-          <>
-            <AlertTriangle className="h-6 w-6 text-warning-strong" aria-hidden />
-            <p>That result does not exist or belongs to another account.</p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/placement-test/history">Back to your placement history</Link>
-            </Button>
-          </>
-        ) : error ? (
-          <ErrorState className="w-full" title="Result unavailable" message={error} />
-        ) : (
-          <p role="status" className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> Loading result…
-          </p>
-        )}
+      <div role="status" aria-busy="true" aria-label="Loading result…">
+        <Skeleton className="h-96 rounded-2xl" />
       </div>
-      </>
     );
   }
 
   return (
     <>
-    <div className="space-y-4">
-      <ResultReportCard title="Your placement result" report={report} />
-      <div className="text-center">
+      {/* The result is the page's h1 block. */}
+      <Card padding="lg">
+        <ResultReportCard title="Your placement result" report={report} embedded headingLevel={1} />
+      </Card>
+      <div>
         <Button asChild variant="outline" size="sm">
-          <Link href="/placement-test/history">Back to your placement history</Link>
+          <Link href="/placement-test/history">
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            Back to your placement history
+          </Link>
         </Button>
       </div>
-    </div>
     </>
   );
 }

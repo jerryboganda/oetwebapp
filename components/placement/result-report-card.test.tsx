@@ -72,6 +72,13 @@ describe('ResultReportCard', () => {
     expect(screen.getByText(/partial profile/i)).toBeInTheDocument();
   });
 
+  it('takes the page h1 when asked, with its sections one level below', () => {
+    render(<ResultReportCard title="Your placement result" report={report()} embedded headingLevel={1} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Your placement result' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /grammar & vocabulary diagnostics/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Reading' })).toBeInTheDocument();
+  });
+
   it('pins the under-review signal to the exact engine note', () => {
     expect(QUEUED_FOR_REVIEW_NOTE).toBe('Queued for human review - not yet scored.');
   });
