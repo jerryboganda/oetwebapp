@@ -29,7 +29,8 @@ const CHUNK_SIZE = 30;
 const SEEDED_ROUTES = [
   '/writing/submissions/11111111-1111-1111-1111-111111111111/results',
   '/writing/submissions/11111111-1111-1111-1111-111111111111',
-  '/speaking/results/sa-001',
+  // The results page takes the evaluation id (se-001 is sa-001's evaluation).
+  '/speaking/results/se-001',
   '/listening/results/la-001',
   '/mocks/report/mock-report-001',
 ];
