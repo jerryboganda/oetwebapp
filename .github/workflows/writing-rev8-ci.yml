@@ -36,6 +36,11 @@ on:
         required: false
         default: ""
         type: string
+      verify_subscription_grading:
+        description: "Owner-authorized one-assessment live QA; temporarily use Codex subscription and restore provider mode"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -45,6 +50,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  production-grading-qa:
+    name: Authorized subscription-only Writing QA
+    if: ${{ inputs.verify_subscription_grading == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify persisted grade report and idempotent retry
+        env:
+          ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          QA_EMAIL: ${{ secrets.WRITING_REV8_QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.WRITING_REV8_QA_PASSWORD }}
+        run: node scripts/qa/writing-grading-live.mjs
+
   production-diagnostics:
     name: Read-only Writing failure diagnostics
     if: ${{ inputs.diagnose_submission != '' }}
