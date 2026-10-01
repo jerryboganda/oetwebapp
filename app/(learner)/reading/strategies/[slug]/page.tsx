@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
-import { InlineAlert } from '@/components/ui/alert';
+import { BookOpen, CheckCircle2, TrendingUp } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   getStrategy,
   markStrategyRead,
@@ -64,105 +67,97 @@ export default function StrategyDetailPage() {
     }
   };
 
+  if (error) return <ErrorState message={error} />;
+
+  if (loading || !data) {
+    return (
+      <>
+        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-96 w-full rounded-2xl" />
+      </>
+    );
+  }
+
+  // The breadcrumb's "Strategies" crumb is the way back, so no back link above the header.
   return (
     <>
-      <div className="mx-auto max-w-2xl space-y-5 sm:space-y-8">
-        {/* Back link */}
-        <Link
-          href="/reading/strategies"
-          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Strategy Library
-        </Link>
-
-        {error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
-        ) : loading || !data ? (
-          <div className="space-y-4">
-            <Skeleton className="h-8 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-96 w-full" />
-          </div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="space-y-3">
-              <h1 className="text-2xl font-bold text-foreground">{data.strategy.title}</h1>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="info">{data.strategy.category}</Badge>
-                <Badge variant={data.strategy.difficulty === 'Advanced' ? 'warning' : 'default'}>
-                  {data.strategy.difficulty}
-                </Badge>
-                <span className="flex items-center gap-1 text-xs text-muted">
-                  <Clock className="h-3 w-3" aria-hidden />
-                  {data.strategy.estimatedReadMinutes} min read
-                </span>
-                {isRead && (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-success-strong">
-                    <CheckCircle2 className="h-3 w-3" aria-hidden />
-                    Read
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Body */}
-            <MarkdownContent
-              markdown={data.strategy.bodyMarkdown}
-              className="rounded-2xl border border-border bg-surface p-6 text-foreground"
-            />
-
-            {/* Actions */}
-            <div className="flex flex-wrap items-center gap-3">
-              {isRead ? (
-                <span className="flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-4 py-2 text-sm font-semibold text-success-strong">
-                  <CheckCircle2 className="h-4 w-4" aria-hidden />
-                  Marked as read
-                </span>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={markingRead}
-                  onClick={() => void handleMarkRead()}
-                >
-                  {markingRead ? 'Saving…' : 'Mark as Read'}
-                </Button>
-              )}
-
-              {data.strategy.skillCode ? (
-                <Button asChild variant="primary" size="sm">
-                  <Link href={`/reading/practice?skill=${data.strategy.skillCode}`}>
-                    <TrendingUp className="h-4 w-4" aria-hidden />
-                    Practice this skill
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-
-            {/* Related strategies */}
-            {data.strategy.relatedSlugs.length > 0 && (
-              <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
-                <h2 className="eyebrow text-muted">Related strategies</h2>
-                <ul className="space-y-1">
-                  {data.strategy.relatedSlugs.map((related) => (
-                    <li key={related}>
-                      <Link
-                        href={`/reading/strategies/${related}`}
-                        className="text-sm font-medium text-primary underline-offset-2 hover:underline"
-                      >
-                        {related}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+      <LearnerPageHero
+        eyebrow="Reading strategies"
+        icon={BookOpen}
+        accent="blue"
+        title={data.strategy.title}
+        description={`${data.strategy.estimatedReadMinutes} min read`}
+        footer={(
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-skill-reading/20 bg-skill-reading/10 px-2 py-0.5 text-xs font-bold text-skill-reading">
+              {data.strategy.category}
+            </span>
+            <Badge variant={data.strategy.difficulty === 'Advanced' ? 'warning' : 'default'}>
+              {data.strategy.difficulty}
+            </Badge>
+            {isRead && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-success-strong">
+                <CheckCircle2 className="h-3 w-3" aria-hidden />
+                Read
+              </span>
             )}
-          </>
+          </div>
         )}
+      />
+
+      <MotionSection>
+        <Card padding="lg">
+          {/* Long-form text: cap the line length, not the page. */}
+          <MarkdownContent markdown={data.strategy.bodyMarkdown} className="max-w-prose text-navy" />
+        </Card>
+      </MotionSection>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {isRead ? (
+          <Badge variant="success" size="md" className="min-h-11 gap-2 rounded-control px-4">
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            Marked as read
+          </Badge>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={markingRead}
+            onClick={() => void handleMarkRead()}
+          >
+            {markingRead ? 'Saving…' : 'Mark as Read'}
+          </Button>
+        )}
+
+        {data.strategy.skillCode ? (
+          <Button asChild variant="primary" size="sm">
+            <Link href={`/reading/practice?skill=${data.strategy.skillCode}`}>
+              <TrendingUp className="h-4 w-4" aria-hidden />
+              Practice this skill
+            </Link>
+          </Button>
+        ) : null}
       </div>
+
+      {data.strategy.relatedSlugs.length > 0 && (
+        <MotionSection>
+          <Card padding="sm">
+            <h2 className="eyebrow text-muted">Related strategies</h2>
+            <ul className="mt-1">
+              {data.strategy.relatedSlugs.map((related) => (
+                <li key={related}>
+                  <Link
+                    href={`/reading/strategies/${related}`}
+                    className="inline-flex min-h-11 items-center rounded-control text-sm font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    {related}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </MotionSection>
+      )}
     </>
   );
 }
