@@ -114,80 +114,66 @@ export default function OnboardingPage() {
     description: s.heading,
   }));
 
+  // Focus route: the shell gives gutters and vertical padding, so the page is
+  // just a centred wizard column (no second padding layer).
   if (loading) {
     return (
-      <>
-        <div className="flex flex-1 items-center justify-center p-4 md:p-8" role="status" aria-label="Loading onboarding">
-          <div className="w-full max-w-2xl space-y-5 sm:space-y-8">
-            <Skeleton className="h-12 w-full rounded-2xl" />
-            <Skeleton className="h-72 w-full rounded-2xl" />
-          </div>
-        </div>
-      </>
+      <div className="mx-auto w-full max-w-2xl space-y-5 sm:space-y-8" role="status" aria-busy="true" aria-label="Loading onboarding">
+        <Skeleton aria-hidden className="h-12 w-full rounded-2xl" />
+        <Skeleton aria-hidden className="h-72 w-full rounded-2xl" />
+      </div>
     );
   }
 
   return (
-    <>
-      <div className="flex-1 flex items-center justify-center p-4 md:p-8 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="w-full max-w-2xl space-y-5 sm:space-y-8">
-          {/* Stepper */}
-          <div className="md:hidden">
-            <Stepper steps={stepperSteps} currentStep={currentStep} orientation="vertical" />
-          </div>
+    <div className="mx-auto w-full max-w-2xl space-y-5 pb-(--safe-area-inset-bottom) sm:space-y-8">
+      {/* One stepper at every width: below sm it shows numbered steps only, so
+          the step card and its Continue button stay in the first screen on phones. */}
+      <Stepper steps={stepperSteps} currentStep={currentStep} />
 
-          <div className="hidden md:block">
-            <Stepper steps={stepperSteps} currentStep={currentStep} />
-          </div>
-
-          {/* Card */}
-          <MotionFadeSwitch
-            activeKey={step.id}
-            direction={direction as 1 | -1}
-            className="bg-surface rounded-2xl border border-border p-6 md:p-10 shadow-clinical"
-          >
-              {/* Icon */}
-              <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-                <Icon className="w-7 h-7 text-primary" aria-hidden="true" />
-              </div>
-
-              {/* Content */}
-              <h2 className="text-2xl font-bold text-navy mb-3">{step.heading}</h2>
-              <p className="text-muted leading-relaxed mb-6">{step.description}</p>
-
-              <ul className="space-y-3">
-                {step.details.map((detail, i) => (
-                  <li key={i} className="flex gap-3 items-start">
-                    <CheckCircle2 className="w-5 h-5 text-success-strong flex-shrink-0 mt-0.5" aria-hidden="true" />
-                    <span className="text-sm text-navy/80">{detail}</span>
-                  </li>
-                ))}
-              </ul>
-          </MotionFadeSwitch>
-
-          {/* Navigation */}
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              onClick={goPrev}
-              disabled={currentStep === 0}
-              className={currentStep === 0 ? 'invisible' : ''}
-            >
-              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-              Back
-            </Button>
-
-            <span className="text-sm text-muted">
-              {currentStep + 1} of {STEPS.length}
-            </span>
-
-            <Button variant="primary" onClick={goNext}>
-              {isLast ? 'Set Your Goals' : 'Continue'}
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </Button>
-          </div>
+      <MotionFadeSwitch
+        activeKey={step.id}
+        direction={direction as 1 | -1}
+        className="rounded-2xl border border-border bg-surface p-6 shadow-clinical md:p-10"
+      >
+        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-lavender">
+          <Icon className="h-7 w-7 text-primary" aria-hidden="true" />
         </div>
+
+        {/* The step heading is the page's one h1 (the focus header title is not a heading). */}
+        <h1 className="mb-3 text-balance text-2xl font-bold leading-tight tracking-tight text-navy">{step.heading}</h1>
+        <p className="mb-6 leading-relaxed text-muted">{step.description}</p>
+
+        <ul className="space-y-3">
+          {step.details.map((detail, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
+              <span className="text-sm text-navy/80">{detail}</span>
+            </li>
+          ))}
+        </ul>
+      </MotionFadeSwitch>
+
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          onClick={goPrev}
+          disabled={currentStep === 0}
+          className={currentStep === 0 ? 'invisible' : ''}
+        >
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          Back
+        </Button>
+
+        <span className="text-sm text-muted tabular-nums">
+          {currentStep + 1} of {STEPS.length}
+        </span>
+
+        <Button variant="primary" onClick={goNext}>
+          {isLast ? 'Set Your Goals' : 'Continue'}
+          <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

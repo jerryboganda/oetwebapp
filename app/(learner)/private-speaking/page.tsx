@@ -8,7 +8,14 @@ import { Modal } from '@/components/ui/modal';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, cardClassName } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Select, Textarea } from '@/components/ui/form-controls';
+import { TabPanel, Tabs } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 import {
   fetchPrivateSpeakingConfig,
   fetchPrivateSpeakingTutors,
@@ -105,17 +112,17 @@ function isUpcomingBooking(booking: Booking): boolean {
   return UPCOMING_STATUSES.has(booking.status) && inFuture;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Reserved: 'bg-warning/10 text-warning-strong',
-  PendingPayment: 'bg-warning/10 text-warning-strong',
-  Confirmed: 'bg-info/10 text-info',
-  InProgress: 'bg-primary/10 text-primary',
-  Completed: 'bg-success/10 text-success-strong',
-  Cancelled: 'bg-danger/10 text-danger-strong',
-  Expired: 'bg-background-light text-muted',
-  Failed: 'bg-danger/10 text-danger-strong',
-  Refunded: 'bg-info/10 text-info',
-  NoShow: 'bg-danger/10 text-danger-strong',
+const STATUS_VARIANTS: Record<string, 'warning' | 'info' | 'default' | 'success' | 'danger' | 'muted'> = {
+  Reserved: 'warning',
+  PendingPayment: 'warning',
+  Confirmed: 'info',
+  InProgress: 'default',
+  Completed: 'success',
+  Cancelled: 'danger',
+  Expired: 'muted',
+  Failed: 'danger',
+  Refunded: 'info',
+  NoShow: 'danger',
 };
 
 const FRIENDLY_STATUS: Record<string, string> = {
@@ -507,100 +514,97 @@ export default function PrivateSpeakingPage() {
     // Join activates 15 min before start (PDF §3.3.4); `now` ticks so it auto-enables.
     const joinOpen = new Date(booking.sessionStartUtc).getTime() - now <= JOIN_LEAD_MINUTES * 60_000;
     return (
-      <MotionItem key={booking.id} delayIndex={i}
-        className="bg-surface rounded-xl border border-border p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-medium text-navy text-sm">{booking.tutorName ?? 'Tutor'}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>
+      <MotionItem key={booking.id} delayIndex={Math.min(i, 5)}>
+        <Card padding="md" className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-navy">{booking.tutorName ?? 'Tutor'}</span>
+              <Badge variant={STATUS_VARIANTS[booking.status] ?? 'muted'}>
                 {FRIENDLY_STATUS[booking.status] ?? booking.status}
-              </span>
+              </Badge>
               {outcome && (
                 <span className={`text-xs font-medium ${OUTCOME_TONE[outcome.tone]}`}>{outcome.label}</span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted/60">
-              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(booking.sessionStartUtc)}</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
+              <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{formatDate(booking.sessionStartUtc)}</span>
               <span>{booking.durationMinutes} min</span>
               <span>{booking.entitlementConsumed ? 'Session credit' : formatPrice(booking.priceMinorUnits, booking.currency)}</span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-muted/60 mt-1">
-              <Globe className="w-3.5 h-3.5 shrink-0" aria-hidden />{formatLocalAndUkTime(booking.sessionStartUtc)}
+            <div className="mt-1 flex items-center gap-1 text-xs text-muted tabular-nums">
+              <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{formatLocalAndUkTime(booking.sessionStartUtc)}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {(booking.status === 'Confirmed' || booking.status === 'InProgress') && (
-              <button onClick={() => handleJoin(booking)} disabled={roomsUnavailable || !joinOpen || joiningBookingId === booking.id}
-                title={roomsUnavailable ? TUTOR_ROOMS_UNAVAILABLE_MESSAGE : joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join LiveKit' : 'Join soon'}
-              </button>
+              // pointer-events stay on while disabled so the title explains when Join opens.
+              <Button size="sm" className="disabled:pointer-events-auto disabled:cursor-not-allowed" onClick={() => handleJoin(booking)} disabled={roomsUnavailable || !joinOpen || joiningBookingId === booking.id}
+                title={roomsUnavailable ? TUTOR_ROOMS_UNAVAILABLE_MESSAGE : joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}>
+                <Video className="h-3.5 w-3.5" aria-hidden="true" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join LiveKit' : 'Join soon'}
+              </Button>
             )}
 
             {config?.allowReschedule && booking.status === 'Confirmed' && (
-              <button onClick={() => startReschedule(booking)}
-                className="text-xs text-primary hover:text-primary font-medium">
+              <Button variant="ghost" size="sm" onClick={() => startReschedule(booking)} className="text-primary">
                 Reschedule
-              </button>
+              </Button>
             )}
 
             {booking.status === 'Confirmed' && (
-              <button onClick={() => handleDownloadInvite(booking.id)}
-                className="flex items-center gap-1 text-xs text-muted hover:text-navy font-medium">
-                <Download className="w-3.5 h-3.5" /> Calendar
-              </button>
+              <Button variant="ghost" size="sm" onClick={() => handleDownloadInvite(booking.id)} className="text-muted">
+                <Download className="h-3.5 w-3.5" aria-hidden="true" /> Calendar
+              </Button>
             )}
 
             {/* Cancel button — opens the policy confirmation modal (PDF §12). */}
             {booking.status === 'Confirmed' && (
-              <button onClick={() => setCancelConfirm(booking)}
-                className="text-xs text-danger-strong hover:text-danger-strong font-medium">
+              <Button variant="ghost" size="sm" onClick={() => setCancelConfirm(booking)} className="text-danger-strong">
                 Cancel
-              </button>
+              </Button>
             )}
 
             {/* Rating */}
             {booking.status === 'Completed' && booking.learnerRating === null && (
               ratingSession === booking.id ? (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1">
                   {[1, 2, 3, 4, 5].map(v => (
-                    <button key={v} onClick={() => setRatingValue(v)}
-                      className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning-strong' : 'text-muted/40'}`}>★</button>
+                    <button key={v} type="button" onClick={() => setRatingValue(v)}
+                      aria-label={`${v} star${v === 1 ? '' : 's'}`} aria-pressed={ratingValue === v}
+                      className="pressable flex h-11 w-11 items-center justify-center rounded-control hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      <Star aria-hidden="true" className={`h-5 w-5 ${ratingValue >= v ? 'fill-warning text-warning-strong' : 'text-muted'}`} />
+                    </button>
                   ))}
-                  <input type="text" placeholder="Feedback" value={ratingFeedback}
+                  <input type="text" placeholder="Feedback" aria-label="Feedback" value={ratingFeedback}
                     onChange={e => setRatingFeedback(e.target.value)}
-                    className="px-2 py-1 border border-border rounded text-xs w-24" />
-                  <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-warning hover:bg-warning/90 text-white rounded-lg">Submit</button>
-                  <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
+                    className="min-h-11 w-32 rounded-control border border-border bg-surface px-3 text-xs text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                  <Button size="sm" onClick={() => handleRate(booking.id)}>Submit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setRatingSession(null)}>Cancel</Button>
                 </div>
               ) : (
-                <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning-strong hover:text-warning-strong font-medium py-2 px-1">
-                  <Star className="w-4 h-4" /> Rate
-                </button>
+                <Button variant="ghost" size="sm" onClick={() => setRatingSession(booking.id)} className="text-warning-strong">
+                  <Star className="h-4 w-4" aria-hidden="true" /> Rate
+                </Button>
               )
             )}
 
             {booking.learnerRating !== null && (
-              <div className="flex items-center gap-1 text-warning-strong text-sm">
+              <div role="img" aria-label={`${booking.learnerRating}/5`} className="flex items-center gap-1 text-sm text-warning-strong">
                 {'★'.repeat(booking.learnerRating)}{'☆'.repeat(5 - booking.learnerRating)}
               </div>
             )}
           </div>
-        </div>
+        </Card>
       </MotionItem>
     );
   }
 
   if (loading) {
     return (
-      <>
-        <div className="space-y-4">
-          <Skeleton className="h-20 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-        </div>
-      </>
+      <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+        <Skeleton aria-hidden className="h-20 rounded-2xl" />
+        <Skeleton aria-hidden className="h-64 rounded-2xl" />
+      </div>
     );
   }
 
@@ -608,32 +612,165 @@ export default function PrivateSpeakingPage() {
     return (
       <>
         <LearnerPageHero title="Private Speaking Sessions" description="This feature is not currently available." icon={Mic} />
-        <InlineAlert variant="info" className="mt-4">Private speaking sessions are temporarily unavailable. Check back once tutor availability is enabled.</InlineAlert>
+        <InlineAlert variant="info" live="polite">Private speaking sessions are temporarily unavailable. Check back once tutor availability is enabled.</InlineAlert>
       </>
     );
   }
 
-  return (
-    <>
-      <div className="flex items-center justify-between mb-6">
-        <LearnerPageHero
-          title="Private Speaking Sessions"
-          description="Use your included private speaking sessions for one-to-one realtime practice with expert OET tutors"
-          icon={Mic}
+  const viewTabs = [
+    { id: 'browse', label: 'Browse Slots' },
+    { id: 'bookings', label: 'My Bookings', count: bookings.length > 0 ? bookings.length : undefined },
+  ];
+
+  const browseView = (
+    <div className="space-y-5">
+      {/* Week navigation + tutor filter */}
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="w-11 px-0" onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}
+            aria-label="Previous week">
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+          <span className="min-w-[200px] text-center text-sm font-medium tabular-nums text-navy">{weekLabel}</span>
+          <Button variant="outline" size="sm" className="w-11 px-0" onClick={() => setWeekOffset(weekOffset + 1)}
+            aria-label="Next week">
+            <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+        </div>
+        <Select
+          aria-label="Tutor"
+          value={selectedTutor ?? ''}
+          onChange={e => setSelectedTutor(e.target.value || null)}
+          options={[
+            { value: '', label: 'All tutors' },
+            ...(!rescheduleTarget ? [{ value: ANY_TUTOR, label: 'Any available tutor' }] : []),
+            ...tutors.map(t => ({ value: t.id, label: t.displayName })),
+          ]}
+          className="py-2.5"
         />
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-info/20 bg-info/5 p-4">
-        <p className="text-sm text-navy">Prefer an AI speaking practice session?</p>
-        <Link
-          href="/speaking/selection"
-          className="inline-flex items-center rounded-lg border border-info/30 bg-surface px-3 py-1.5 text-sm font-semibold text-info transition-colors hover:bg-info/10"
-        >
-          Practice with AI
-        </Link>
-      </div>
+      {/* Tutor spotlight cards */}
+      {tutors.length > 0 && !selectedTutor && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {tutors.map((t, index) => (
+            <MotionItem key={t.id} delayIndex={Math.min(index, 5)}>
+              <button type="button" onClick={() => setSelectedTutor(t.id)}
+                className={cn(cardClassName({ hoverable: true, interactive: true }), 'h-full w-full text-start')}>
+                <span className="mb-2 flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <User className="h-5 w-5 text-primary" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-navy">{t.displayName}</span>
+                    <span className="flex items-center gap-1 text-xs text-muted tabular-nums">
+                      {t.averageRating > 0 && <><Star className="h-3 w-3 fill-warning text-warning-strong" aria-hidden="true" /> {t.averageRating.toFixed(1)}</>}
+                      {t.totalSessions > 0 && <span className="ms-1">· {t.totalSessions} sessions</span>}
+                    </span>
+                  </span>
+                </span>
+                {t.bio && <span className="line-clamp-2 block text-xs text-muted">{t.bio}</span>}
+                <span className="mt-2 block text-xs text-primary tabular-nums">
+                  {formatPrice(t.priceOverrideMinorUnits ?? config.defaultPriceMinorUnits, config.currency)} · {t.slotDurationOverrideMinutes ?? config.defaultSlotDurationMinutes} min
+                </span>
+              </button>
+            </MotionItem>
+          ))}
+        </div>
+      )}
 
-      <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      {slotsLoading ? (
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading"><Skeleton aria-hidden className="h-32 rounded-2xl" /><Skeleton aria-hidden className="h-32 rounded-2xl" /></div>
+      ) : Object.keys(slotsByDate).length === 0 ? (
+        <EmptyState icon={<Calendar className="h-8 w-8" />} title="No available slots this week. Try another week or tutor." />
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(slotsByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, daySlots], dayIndex) => (
+            <MotionItem key={date} delayIndex={Math.min(dayIndex, 5)}>
+              <h2 className="mb-2 text-sm font-semibold text-navy">
+                {new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                {daySlots.map((slot, i) => {
+                  const isSelected = selectedSlot?.startTimeUtc === slot.startTimeUtc && selectedSlot?.tutorProfileId === slot.tutorProfileId;
+                  return (
+                    <button key={`${slot.tutorProfileId}-${slot.startTimeUtc}-${i}`}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedSlot(isSelected ? null : slot)}
+                      className={`min-w-0 rounded-control border p-3 text-start text-sm transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        isSelected
+                          ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                          : 'border-border bg-surface hover:border-primary/30'
+                      }`}>
+                      <span className="block font-medium tabular-nums text-navy">{slot.startTimeLocal}</span>
+                      <span className="mt-0.5 flex items-start gap-1 text-2xs text-muted">
+                        <Globe className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span>{formatLocalAndUkTime(slot.startTimeUtc)}</span>
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted">{slot.tutorDisplayName}</span>
+                      <span className="mt-1 block text-xs text-primary tabular-nums">
+                        {formatPrice(slot.priceMinorUnits, slot.currency)} · {slot.durationMinutes}m
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </MotionItem>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const bookingsView = bookings.length === 0 ? (
+    <section className="space-y-4">
+      <LearnerSurfaceSectionHeader title="Your Bookings" />
+      <EmptyState icon={<Mic className="h-8 w-8" />} title="No bookings yet. Browse available slots to get started." />
+    </section>
+  ) : (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Upcoming Speaking Sessions (PDF §11) */}
+      <section className="space-y-3">
+        <LearnerSurfaceSectionHeader title="Upcoming Speaking Sessions" />
+        {upcomingBookings.length === 0 ? (
+          <p className="py-2 text-sm text-muted">No upcoming sessions. Browse slots to book one.</p>
+        ) : (
+          <div className="space-y-3">
+            {upcomingBookings.map((booking, i) => renderBookingCard(booking, i))}
+          </div>
+        )}
+      </section>
+
+      {/* Past Speaking Sessions (PDF §11) */}
+      {pastBookings.length > 0 && (
+        <section className="space-y-3">
+          <LearnerSurfaceSectionHeader title="Past Speaking Sessions" />
+          <div className="space-y-3">
+            {pastBookings.map((booking, i) => renderBookingCard(booking, i))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <LearnerPageHero
+        title="Private Speaking Sessions"
+        description="Use your included private speaking sessions for one-to-one realtime practice with expert OET tutors"
+        icon={Mic}
+        aside={(
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <p className="text-sm text-muted">Prefer an AI speaking practice session?</p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/speaking/selection">Practice with AI</Link>
+            </Button>
+          </div>
+        )}
+      />
+
+      <Card padding="md">
         {liveTutorEligible === false ? (
           <div data-testid="live-tutor-ineligible">
             <p className="text-sm font-semibold text-navy">You are not eligible to book a session with a tutor.</p>
@@ -650,306 +787,171 @@ export default function PrivateSpeakingPage() {
             </div>
           </div>
         ) : (
-        <>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-navy">Speaking session credits</p>
-            <p className="text-xs text-muted">Bookings use one bundled or add-on private speaking session.</p>
-          </div>
-          <span className="inline-flex w-fit items-center rounded-full bg-surface px-3 py-1 text-sm font-semibold text-primary ring-1 ring-primary/20">
-            {entitlementRemaining ?? 0} remaining
-          </span>
-        </div>
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-navy">Speaking session credits</p>
+                <p className="text-xs text-muted">Bookings use one bundled or add-on private speaking session.</p>
+              </div>
+              <Badge size="md" className="w-fit">
+                <CountUp value={entitlementRemaining ?? 0} suffix=" remaining" />
+              </Badge>
+            </div>
 
-        {/* Edge case #5 — no remaining entitlement → purchase CTA. */}
-        {hasNoEntitlement && (
-          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-warning-strong">
-              You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
-            </p>
-            <Button asChild size="sm" className="w-fit shrink-0">
-              <Link href="/catalog">
-                <ShoppingBag className="h-3.5 w-3.5" aria-hidden /> Buy speaking sessions
-              </Link>
-            </Button>
-          </div>
+            {/* Edge case #5 — no remaining entitlement → purchase CTA. */}
+            {hasNoEntitlement && (
+              <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-warning-strong">
+                  You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
+                </p>
+                <Button asChild size="sm" className="w-fit shrink-0">
+                  <Link href="/catalog">
+                    <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" /> Buy speaking sessions
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </>
         )}
-        </>
-        )}
-      </div>
+      </Card>
 
       {roomsUnavailable && (
-        <InlineAlert variant="warning" className="mb-4" data-testid="tutor-rooms-unavailable">
+        <InlineAlert variant="warning" data-testid="tutor-rooms-unavailable">
           {TUTOR_ROOMS_UNAVAILABLE_MESSAGE}
         </InlineAlert>
       )}
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} aria-label="Dismiss error" className="ml-2"><X className="w-4 h-4 inline" aria-hidden /></button></InlineAlert>}
-
-      {/* View mode toggle — slot browsing is hidden while ineligible (the
-          server also blocks direct booking attempts). Past bookings stay visible. */}
-      <div className="flex gap-2 mb-6">
-        {canBrowse && (
-        <button type="button" aria-pressed={viewMode === 'browse'} onClick={() => setViewMode('browse')} className={`min-h-11 px-4 py-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted hover:bg-border'}`}>
-          Browse Slots
-        </button>
-        )}
-        <button type="button" aria-pressed={viewMode === 'bookings'} onClick={() => setViewMode('bookings')} className={`min-h-11 px-4 py-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted hover:bg-border'}`}>
-          My Bookings {bookings.length > 0 && <span className="ml-1 bg-white/20 px-1.5 rounded-full text-xs">{bookings.length}</span>}
-        </button>
-      </div>
-
-      {/* ── Browse Slots ──────────────────────────────── */}
-      {viewMode === 'browse' && canBrowse && (
-        <>
-          {/* Week navigation + tutor filter */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}
-                aria-label="Previous week"
-                className="p-2.5 rounded-lg border border-border hover:bg-background-light disabled:opacity-30 transition-colors">
-                <ChevronLeft className="w-4 h-4" aria-hidden />
-              </button>
-              <span className="text-sm font-medium text-navy min-w-[200px] text-center">{weekLabel}</span>
-              <button onClick={() => setWeekOffset(weekOffset + 1)}
-                aria-label="Next week"
-                className="p-2.5 rounded-lg border border-border hover:bg-background-light transition-colors">
-                <ChevronRight className="w-4 h-4" aria-hidden />
-              </button>
-            </div>
-            <select value={selectedTutor ?? ''} onChange={e => setSelectedTutor(e.target.value || null)}
-              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-              <option value="">All tutors</option>
-              {!rescheduleTarget && <option value={ANY_TUTOR}>Any available tutor</option>}
-              {tutors.map(t => (
-                <option key={t.id} value={t.id}>{t.displayName}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tutor spotlight cards */}
-          {tutors.length > 0 && !selectedTutor && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-              {tutors.map(t => (
-                <button key={t.id} onClick={() => setSelectedTutor(t.id)}
-                  className="text-left bg-surface rounded-xl border border-border p-4 hover:border-primary/30 transition-colors">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-navy text-sm">{t.displayName}</h4>
-                      <div className="flex items-center gap-1 text-xs text-muted/60">
-                        {t.averageRating > 0 && <><Star className="w-3 h-3 text-warning-strong fill-warning" /> {t.averageRating.toFixed(1)}</>}
-                        {t.totalSessions > 0 && <span className="ml-1">· {t.totalSessions} sessions</span>}
-                      </div>
-                    </div>
-                  </div>
-                  {t.bio && <p className="text-xs text-muted line-clamp-2">{t.bio}</p>}
-                  <div className="mt-2 text-xs text-primary">
-                    {formatPrice(t.priceOverrideMinorUnits ?? config.defaultPriceMinorUnits, config.currency)} · {t.slotDurationOverrideMinutes ?? config.defaultSlotDurationMinutes} min
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {slotsLoading ? (
-            <div className="space-y-3"><Skeleton className="h-32 rounded-xl" /><Skeleton className="h-32 rounded-xl" /></div>
-          ) : Object.keys(slotsByDate).length === 0 ? (
-            <div className="text-center py-12 text-muted/60">
-              <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
-              <p>No available slots this week. Try another week or tutor.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {Object.entries(slotsByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, daySlots]) => (
-                <div key={date}>
-                  <h3 className="text-sm font-semibold text-navy mb-2">
-                    {new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                    {daySlots.map((slot, i) => {
-                      const isSelected = selectedSlot?.startTimeUtc === slot.startTimeUtc && selectedSlot?.tutorProfileId === slot.tutorProfileId;
-                      return (
-                        <button key={`${slot.tutorProfileId}-${slot.startTimeUtc}-${i}`}
-                          onClick={() => setSelectedSlot(isSelected ? null : slot)}
-                          className={`p-3 rounded-lg border text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-sm ${
-                            isSelected
-                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
-                              : 'border-border bg-surface hover:border-primary/30'
-                          }`}>
-                          <div className="font-medium text-navy">{slot.startTimeLocal}</div>
-                          <div className="flex items-start gap-1 text-2xs text-muted mt-0.5">
-                            <Globe className="w-3 h-3 mt-0.5 shrink-0 text-muted/60" aria-hidden />
-                            <span>{formatLocalAndUkTime(slot.startTimeUtc)}</span>
-                          </div>
-                          <div className="text-xs text-muted mt-0.5">{slot.tutorDisplayName}</div>
-                          <div className="text-xs text-primary mt-1">
-                            {formatPrice(slot.priceMinorUnits, slot.currency)} · {slot.durationMinutes}m
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Booking confirmation panel */}
-          {selectedSlot && (
-            <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-surface rounded-xl border border-primary/30 shadow-2xl p-5 z-40">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-navy">{rescheduleTarget ? 'Confirm Reschedule' : 'Confirm Booking'}</h3>
-                <button onClick={() => { setSelectedSlot(null); setRescheduleTarget(null); }} aria-label="Close booking panel" className="text-muted/60 hover:text-muted"><X className="w-5 h-5" aria-hidden /></button>
-              </div>
-              <div className="space-y-2 text-sm text-muted mb-4">
-                <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted/60" /> {selectedSlot.tutorDisplayName}</div>
-                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted/60" /> {formatDate(selectedSlot.startTimeUtc)}</div>
-                <div className="flex items-start gap-2"><Globe className="w-4 h-4 mt-0.5 text-muted/60" /> {formatLocalAndUkTime(selectedSlot.startTimeUtc)}</div>
-                <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-muted/60" /> {selectedSlot.durationMinutes} minutes</div>
-                <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted/60" /> Uses 1 session credit</div>
-              </div>
-              {/* Profession track (booking only — reschedule keeps the original track). */}
-              {!rescheduleTarget && (
-                <div className="mb-3">
-                  <label htmlFor="profession-track" className="mb-1 block text-xs font-medium text-navy">Profession track</label>
-                  <select
-                    id="profession-track"
-                    value={professionTrack}
-                    onChange={e => setProfessionTrack(e.target.value as ProfessionTrack)}
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  >
-                    {PROFESSION_TRACKS.map(track => (
-                      <option key={track} value={track}>{track}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {!rescheduleTarget && (
-                <div className="mb-3">
-                  <label className="mb-1 block text-xs font-medium text-navy">Session format</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['practice', 'exam'] as const).map(fmt => (
-                      <button
-                        key={fmt}
-                        type="button"
-                        onClick={() => setBookingFormat(fmt)}
-                        className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                          bookingFormat === fmt
-                            ? 'border-primary bg-primary/10 text-primary'
-                            : 'border-border bg-surface text-muted hover:text-navy'
-                        }`}
-                      >
-                        {fmt === 'practice' ? 'Practice' : 'Full exam (Card A + B)'}
-                      </button>
-                    ))}
-                  </div>
-                  {bookingFormat === 'exam' && (
-                    <p className="mt-1 text-2xs text-muted">
-                      A structured two-card exam. Your tutor plays the patient and marks your result.
-                    </p>
-                  )}
-                </div>
-              )}
-              <textarea
-                aria-label="Notes for the tutor (optional)"
-                placeholder="Notes for the tutor (optional)"
-                value={bookingNotes}
-                onChange={e => setBookingNotes(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
-              />
-              {rescheduleTarget ? (
-                <>
-                  <Button fullWidth onClick={() => setRescheduleConfirmOpen(true)} disabled={bookingInProgress}>
-                    {bookingInProgress ? 'Processing...' : 'Confirm Reschedule'}
-                  </Button>
-                  <p className="text-xs text-muted/60 text-center mt-2">
-                    Your original booking will close and this slot will replace it.
-                  </p>
-                </>
-              ) : paypalOrderId ? (
-                <div className="rounded-lg border border-border bg-surface p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-medium text-navy">
-                      Pay {selectedSlot ? formatSlotPrice(selectedSlot) : ''} with PayPal
-                    </span>
-                    <button type="button" onClick={() => setPaypalOrderId(null)} className="text-xs text-muted hover:text-navy">
-                      Cancel
-                    </button>
-                  </div>
-                  <PayPalExpandedCheckout
-                    createOrder={() => Promise.resolve(paypalOrderId ?? '')}
-                    onCaptured={handlePaypalBookingCaptured}
-                    onError={(message) => setError(message)}
-                    onUnavailable={() => {
-                      setPaypalOrderId(null);
-                      setError('PayPal is unavailable right now. Please use a session credit or try again.');
-                    }}
-                    amountLabel={selectedSlot ? formatSlotPrice(selectedSlot) : ''}
-                    disabled={bookingInProgress}
-                  />
-                </div>
-              ) : (
-                <>
-                  <Button fullWidth onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}>
-                    {bookingInProgress ? 'Processing...' : 'Use Session Credit & Book'}
-                  </Button>
-                  {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
-                    <button onClick={handleBookWithPaypal} disabled={bookingInProgress}
-                      className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-success/30 disabled:opacity-50 transition-colors">
-                      Pay {formatSlotPrice(selectedSlot)} with PayPal
-                    </button>
-                  ) : null}
-                  <p className="text-xs text-muted/60 text-center mt-2">
-                    Use a session credit, or pay per session with PayPal.
-                  </p>
-                </>
-              )}
-            </MotionSection>
-          )}
-        </>
+      {error && (
+        <InlineAlert
+          variant="warning"
+          action={<Button variant="ghost" size="sm" onClick={() => setError(null)}>Dismiss</Button>}
+        >
+          {error}
+        </InlineAlert>
       )}
 
-      {/* ── My Bookings ───────────────────────────────── */}
-      {viewMode === 'bookings' && (
+      {/* View mode toggle: slot browsing is hidden while ineligible (the server
+          also blocks direct booking attempts), and a single view needs no
+          switcher. Past bookings stay visible. */}
+      {canBrowse ? (
         <>
-          {bookings.length === 0 ? (
-            <>
-              <LearnerSurfaceSectionHeader title="Your Bookings" />
-              <div className="text-center py-12 text-muted/60">
-                <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
-                <p>No bookings yet. Browse available slots to get started.</p>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-5 sm:space-y-8">
-              {/* Upcoming Speaking Sessions (PDF §11) */}
-              <section>
-                <LearnerSurfaceSectionHeader title="Upcoming Speaking Sessions" />
-                {upcomingBookings.length === 0 ? (
-                  <p className="text-sm text-muted/60 py-2">No upcoming sessions. Browse slots to book one.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {upcomingBookings.map((booking, i) => renderBookingCard(booking, i))}
-                  </div>
-                )}
-              </section>
+          <Tabs tabs={viewTabs} activeTab={viewMode} onChange={(id) => setViewMode(id as ViewMode)} />
+          <TabPanel id="browse" activeTab={viewMode}>{browseView}</TabPanel>
+          <TabPanel id="bookings" activeTab={viewMode}>{bookingsView}</TabPanel>
+        </>
+      ) : viewMode === 'bookings' ? bookingsView : null}
 
-              {/* Past Speaking Sessions (PDF §11) */}
-              {pastBookings.length > 0 && (
-                <section>
-                  <LearnerSurfaceSectionHeader title="Past Speaking Sessions" />
-                  <div className="space-y-3">
-                    {pastBookings.map((booking, i) => renderBookingCard(booking, i))}
-                  </div>
-                </section>
+      {/* Booking confirmation panel */}
+      {viewMode === 'browse' && canBrowse && selectedSlot && (
+        <MotionSection className="fixed start-4 end-4 bottom-[calc(var(--bottom-nav-height)+0.5rem)] z-40 max-h-[75dvh] overflow-y-auto overscroll-contain rounded-surface border border-primary/30 bg-surface p-5 shadow-lg sm:start-auto sm:end-6 sm:max-w-md lg:bottom-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="font-semibold text-navy">{rescheduleTarget ? 'Confirm Reschedule' : 'Confirm Booking'}</h2>
+            <Button variant="ghost" size="sm" className="-me-2 w-11 px-0" onClick={() => { setSelectedSlot(null); setRescheduleTarget(null); }} aria-label="Close booking panel">
+              <X className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          </div>
+          <div className="mb-4 space-y-2 text-sm text-muted">
+            <div className="flex items-center gap-2"><User className="h-4 w-4 shrink-0" aria-hidden="true" /> {selectedSlot.tutorDisplayName}</div>
+            <div className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0" aria-hidden="true" /> {formatDate(selectedSlot.startTimeUtc)}</div>
+            <div className="flex items-start gap-2"><Globe className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {formatLocalAndUkTime(selectedSlot.startTimeUtc)}</div>
+            <div className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0" aria-hidden="true" /> {selectedSlot.durationMinutes} minutes</div>
+            <div className="flex items-center gap-2"><CreditCard className="h-4 w-4 shrink-0" aria-hidden="true" /> Uses 1 session credit</div>
+          </div>
+          {/* Profession track (booking only — reschedule keeps the original track). */}
+          {!rescheduleTarget && (
+            <div className="mb-3">
+              <Select
+                id="profession-track"
+                label="Profession track"
+                value={professionTrack}
+                onChange={e => setProfessionTrack(e.target.value as ProfessionTrack)}
+                options={PROFESSION_TRACKS.map(track => ({ value: track, label: track }))}
+                className="py-2.5"
+              />
+            </div>
+          )}
+          {!rescheduleTarget && (
+            <div className="mb-3" role="group" aria-labelledby="session-format-label">
+              <p id="session-format-label" className="mb-1 text-xs font-medium text-navy">Session format</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(['practice', 'exam'] as const).map(fmt => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    aria-pressed={bookingFormat === fmt}
+                    onClick={() => setBookingFormat(fmt)}
+                    className={`min-h-11 rounded-control border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      bookingFormat === fmt
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'hover-primary border-border bg-surface text-muted'
+                    }`}
+                  >
+                    {fmt === 'practice' ? 'Practice' : 'Full exam (Card A + B)'}
+                  </button>
+                ))}
+              </div>
+              {bookingFormat === 'exam' && (
+                <p className="mt-1 text-2xs text-muted">
+                  A structured two-card exam. Your tutor plays the patient and marks your result.
+                </p>
               )}
             </div>
           )}
-        </>
+          <Textarea
+            aria-label="Notes for the tutor (optional)"
+            placeholder="Notes for the tutor (optional)"
+            value={bookingNotes}
+            onChange={e => setBookingNotes(e.target.value)}
+            rows={2}
+            className="mb-3 resize-none"
+          />
+          {rescheduleTarget ? (
+            <>
+              <Button fullWidth onClick={() => setRescheduleConfirmOpen(true)} disabled={bookingInProgress}>
+                {bookingInProgress ? 'Processing...' : 'Confirm Reschedule'}
+              </Button>
+              <p className="mt-2 text-center text-xs text-muted">
+                Your original booking will close and this slot will replace it.
+              </p>
+            </>
+          ) : paypalOrderId ? (
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-navy">
+                  Pay {selectedSlot ? formatSlotPrice(selectedSlot) : ''} with PayPal
+                </span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setPaypalOrderId(null)}>
+                  Cancel
+                </Button>
+              </div>
+              <PayPalExpandedCheckout
+                createOrder={() => Promise.resolve(paypalOrderId ?? '')}
+                onCaptured={handlePaypalBookingCaptured}
+                onError={(message) => setError(message)}
+                onUnavailable={() => {
+                  setPaypalOrderId(null);
+                  setError('PayPal is unavailable right now. Please use a session credit or try again.');
+                }}
+                amountLabel={selectedSlot ? formatSlotPrice(selectedSlot) : ''}
+                disabled={bookingInProgress}
+              />
+            </div>
+          ) : (
+            <>
+              <Button fullWidth onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}>
+                {bookingInProgress ? 'Processing...' : 'Use Session Credit & Book'}
+              </Button>
+              {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
+                <Button variant="outline" fullWidth onClick={handleBookWithPaypal} disabled={bookingInProgress} className="mt-2">
+                  Pay {formatSlotPrice(selectedSlot)} with PayPal
+                </Button>
+              ) : null}
+              <p className="mt-2 text-center text-xs text-muted">
+                Use a session credit, or pay per session with PayPal.
+              </p>
+            </>
+          )}
+        </MotionSection>
       )}
 
       {/* Cancellation policy confirmation modal (PDF §12) */}
@@ -957,14 +959,12 @@ export default function PrivateSpeakingPage() {
         <div className="space-y-4">
           <p className="text-sm text-muted">{CANCELLATION_POLICY_TEXT}</p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => setCancelConfirm(null)} disabled={cancelInProgress}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy disabled:opacity-50">
+            <Button type="button" variant="outline" onClick={() => setCancelConfirm(null)} disabled={cancelInProgress}>
               Keep booking
-            </button>
-            <button type="button" onClick={handleCancelConfirmed} disabled={cancelInProgress}
-              className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:opacity-50">
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleCancelConfirmed} disabled={cancelInProgress}>
               {cancelInProgress ? 'Cancelling...' : 'Confirm cancellation'}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -974,7 +974,7 @@ export default function PrivateSpeakingPage() {
         <div className="space-y-4">
           <p className="text-sm text-muted">{RESCHEDULE_POLICY_TEXT}</p>
           {selectedSlot && (
-            <p className="text-xs text-muted/60">
+            <p className="text-xs text-muted">
               New time: {formatLocalAndUkTime(selectedSlot.startTimeUtc)}
             </p>
           )}

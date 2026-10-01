@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, Star, Send, ArrowLeft, CheckCircle, Clock } from 'lucide-react';
+import { FileText, Star, Send, ArrowLeft, CheckCircle, Clock, ClipboardList } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/empty-error';
+import { InlineAlert } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/form-controls';
 import { apiClient } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth-context';
@@ -114,116 +118,98 @@ export default function PeerReviewDetailPage() {
     }
   };
 
+  const backLink = (
+    <div>
+      <Button asChild variant="outline" size="sm">
+        <Link href="/community/peer-review">
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to Peer Reviews
+        </Link>
+      </Button>
+    </div>
+  );
+
   if (loading) {
     return (
-      <>
-        <div className="space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-40 rounded-lg" />
-          <Skeleton className="h-32 rounded-lg" />
-        </div>
-      </>
+      <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+        <Skeleton aria-hidden className="h-8 w-48" />
+        <Skeleton aria-hidden className="h-40 rounded-2xl" />
+        <Skeleton aria-hidden className="h-32 rounded-2xl" />
+      </div>
     );
   }
 
   if (error || !request) {
     return (
       <>
-        <div className="space-y-4">
-          <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
-          </Link>
-          <Card className="p-6 text-center">
-            <p className="text-muted-foreground">{error ?? 'Review not found'}</p>
-          </Card>
-        </div>
+        {backLink}
+        <ErrorState message={error ?? 'Review not found'} onRetry={() => void loadRequest()} />
       </>
     );
   }
 
+  const formatDay = (iso: string) => new Date(iso).toLocaleDateString();
+
   return (
     <>
-      <div className="space-y-6">
-        <Link href="/community/peer-review" className="inline-flex min-h-11 items-center gap-1 rounded text-sm text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Peer Reviews
-        </Link>
+      {backLink}
 
-        <LearnerPageHero
-          eyebrow="Peer Review"
-          title={`${request.subtestCode.charAt(0).toUpperCase() + request.subtestCode.slice(1)} Review`}
-          description={isReviewer ? 'Provide feedback for this submission.' : 'View your submission status and feedback.'}
-          icon={FileText}
-        />
+      {/* Subtest is in the title and status is the badge, so the old status card is gone. */}
+      <LearnerPageHero
+        eyebrow="Peer Review"
+        title={`${request.subtestCode.charAt(0).toUpperCase() + request.subtestCode.slice(1)} Review`}
+        description={isReviewer ? 'Provide feedback for this submission.' : 'View your submission status and feedback.'}
+        icon={FileText}
+        aside={(
+          <Badge variant={STATUS_VARIANTS[request.status] ?? 'default'} size="md" className="capitalize">
+            {request.status}
+          </Badge>
+        )}
+        highlights={[
+          { icon: Clock, label: 'Submitted', value: formatDay(request.createdAt) },
+          ...(request.claimedAt ? [{ icon: ClipboardList, label: 'Claimed', value: formatDay(request.claimedAt) }] : []),
+          ...(request.completedAt ? [{ icon: CheckCircle, label: 'Completed', value: formatDay(request.completedAt) }] : []),
+        ]}
+      />
 
-        {/* Status Card */}
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm">Review Status</h3>
-            <Badge variant={STATUS_VARIANTS[request.status] ?? 'default'}>
-              {request.status}
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Subtest</span>
-              <p className="font-medium capitalize">{request.subtestCode}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Submitted</span>
-              <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
-            </div>
-            {request.claimedAt && (
-              <div>
-                <span className="text-muted-foreground">Claimed</span>
-                <p className="font-medium">{new Date(request.claimedAt).toLocaleDateString()}</p>
-              </div>
-            )}
-            {request.completedAt && (
-              <div>
-                <span className="text-muted-foreground">Completed</span>
-                <p className="font-medium">{new Date(request.completedAt).toLocaleDateString()}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Feedback Section — shown for submitter when feedback exists */}
-        {isSubmitter && feedback && (
-          <Card className="p-5 space-y-3">
-            <h3 className="font-semibold text-sm">Peer Feedback</h3>
+      {isSubmitter && feedback && (
+        <MotionSection>
+          <Card padding="lg" className="space-y-3">
+            <h2 className="text-base font-bold text-navy">Peer Feedback</h2>
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
                   key={star}
-                  className={`w-5 h-5 ${star <= feedback.rating ? 'text-warning-strong fill-warning' : 'text-muted-foreground'}`}
+                  aria-hidden="true"
+                  className={`h-5 w-5 ${star <= feedback.rating ? 'fill-warning text-warning-strong' : 'text-muted'}`}
                 />
               ))}
-              <span className="ml-2 text-sm font-medium">{feedback.rating}/5</span>
+              <span className="ms-2 text-sm font-medium tabular-nums text-navy">{feedback.rating}/5</span>
             </div>
-            <p className="text-sm text-foreground whitespace-pre-wrap">{feedback.comments}</p>
+            <p className="max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-navy">{feedback.comments}</p>
             {feedback.strengthNotes && (
               <div>
-                <span className="text-xs font-medium text-success-strong">Strengths</span>
-                <p className="text-sm text-muted-foreground">{feedback.strengthNotes}</p>
+                <p className="text-xs font-semibold text-success-strong">Strengths</p>
+                <p className="text-sm text-muted">{feedback.strengthNotes}</p>
               </div>
             )}
             {feedback.improvementNotes && (
               <div>
-                <span className="text-xs font-medium text-warning-strong">Areas for Improvement</span>
-                <p className="text-sm text-muted-foreground">{feedback.improvementNotes}</p>
+                <p className="text-xs font-semibold text-warning-strong">Areas for Improvement</p>
+                <p className="text-sm text-muted">{feedback.improvementNotes}</p>
               </div>
             )}
           </Card>
-        )}
+        </MotionSection>
+      )}
 
-        {/* Feedback Form — shown for reviewer on claimed requests */}
-        {isReviewer && request.status === 'claimed' && !submitSuccess && (
-          <Card className="p-5 space-y-4">
-            <h3 className="font-semibold text-sm">Submit Your Feedback</h3>
+      {isReviewer && request.status === 'claimed' && !submitSuccess && (
+        <MotionSection>
+          <Card padding="lg" className="space-y-4">
+            <h2 className="text-base font-bold text-navy">Submit Your Feedback</h2>
 
-            <div className="space-y-2">
-              <p className="block text-sm font-medium text-navy">Rating</p>
-              <div className="flex items-center gap-1">
+            <div className="space-y-2" role="group" aria-labelledby="peer-rating-label">
+              <p id="peer-rating-label" className="text-sm font-semibold tracking-tight text-navy">Rating</p>
+              <div className="flex flex-wrap items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
@@ -231,68 +217,55 @@ export default function PeerReviewDetailPage() {
                     onClick={() => setRating(star)}
                     aria-label={`${star} star${star === 1 ? '' : 's'}`}
                     aria-pressed={rating === star}
-                    className="flex h-11 w-11 items-center justify-center rounded-lg transition-transform hoverable:scale-110 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="pressable flex h-11 w-11 items-center justify-center rounded-control hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Star
-                      className={`w-6 h-6 ${star <= rating ? 'text-warning-strong fill-warning' : 'text-muted-foreground'}`}
+                      aria-hidden="true"
+                      className={`h-6 w-6 ${star <= rating ? 'fill-warning text-warning-strong' : 'text-muted'}`}
                     />
                   </button>
                 ))}
-                {rating > 0 && <span className="ml-2 text-sm text-muted-foreground">{rating}/5</span>}
+                {rating > 0 && <span className="ms-2 text-sm tabular-nums text-muted">{rating}/5</span>}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="peer-feedback-text" className="block text-sm font-medium text-navy">
-                Your Feedback
-              </label>
-              <textarea
-                id="peer-feedback-text"
-                value={feedbackText}
-                onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder="Provide constructive feedback on this submission..."
-                className="w-full min-h-[150px] rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
-              />
-            </div>
+            <Textarea
+              id="peer-feedback-text"
+              label="Your Feedback"
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              placeholder="Provide constructive feedback on this submission..."
+              className="min-h-[150px] resize-y"
+            />
 
             <Button
               variant="primary"
               onClick={handleSubmitFeedback}
               disabled={submitting || !feedbackText.trim() || rating < 1}
             >
-              <Send className="w-4 h-4" aria-hidden="true" />
+              <Send className="h-4 w-4" aria-hidden="true" />
               {submitting ? 'Submitting...' : 'Submit Feedback'}
             </Button>
           </Card>
-        )}
+        </MotionSection>
+      )}
 
-        {/* Success message after feedback */}
-        {submitSuccess && (
-          <Card className="p-5">
-            <div role="status" className="flex items-center gap-2 text-success-strong">
-              <CheckCircle className="w-5 h-5" aria-hidden="true" />
-              <span className="font-medium">Feedback submitted successfully!</span>
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              Thank you for helping a fellow learner improve.
-            </p>
-          </Card>
-        )}
+      {submitSuccess && (
+        <InlineAlert variant="success" live="polite" title="Feedback submitted successfully!">
+          Thank you for helping a fellow learner improve.
+        </InlineAlert>
+      )}
 
-        {/* Waiting state for submitter */}
-        {isSubmitter && !feedback && request.status !== 'completed' && (
-          <Card className="p-5">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="w-5 h-5" aria-hidden="true" />
-              <span className="text-sm">
-                {request.status === 'open'
-                  ? 'Waiting for a peer to claim your review...'
-                  : 'A peer has claimed your review and is preparing feedback...'}
-              </span>
-            </div>
-          </Card>
-        )}
-      </div>
+      {isSubmitter && !feedback && request.status !== 'completed' && (
+        <Card padding="md" className="flex items-center gap-2 text-muted">
+          <Clock className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="text-sm">
+            {request.status === 'open'
+              ? 'Waiting for a peer to claim your review...'
+              : 'A peer has claimed your review and is preparing feedback...'}
+          </span>
+        </Card>
+      )}
     </>
   );
 }

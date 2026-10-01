@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CalendarDays, Clock, FileText, PlayCircle, Users, Video, X } from 'lucide-react';
+import { BarChart3, Clock, FileText, GraduationCap, PlayCircle, Users, Video, Wallet } from 'lucide-react';
 
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonClassName } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   cancelLiveClassEnrollment,
@@ -120,102 +122,110 @@ export default function LiveClassDetailPage() {
 
   if (loading) {
     return (
-      <>
-        <div className="space-y-4"><Skeleton className="h-24 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div>
-      </>
+      <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading"><Skeleton aria-hidden className="h-24 rounded-2xl" /><Skeleton aria-hidden className="h-72 rounded-2xl" /></div>
     );
   }
 
   if (!detail) {
-    return (
-      <>
-        <InlineAlert variant="warning">Live class not found.</InlineAlert>
-      </>
-    );
+    return <InlineAlert variant="warning">Live class not found.</InlineAlert>;
   }
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero title={detail.title} description={detail.description} icon={Video} />
+      {/* Track, level, tutor and cost are the class's key facts, so they ride in the hero. */}
+      <LearnerPageHero
+        title={detail.title}
+        description={detail.description}
+        icon={Video}
+        highlights={[
+          { icon: Users, label: 'Track', value: detail.professionTrack },
+          { icon: BarChart3, label: 'Level', value: detail.level },
+          { icon: GraduationCap, label: 'Tutor', value: detail.tutorDisplayName ?? 'To confirm' },
+          { icon: Wallet, label: 'Cost', value: `${detail.creditCost} wallet credits` },
+        ]}
+      />
 
-        {error ? (
-          <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <button type="button" onClick={() => setError(null)} aria-label="Dismiss" className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><X className="h-4 w-4" aria-hidden="true" /></button>
-          </InlineAlert>
-        ) : null}
+      {error ? (
+        <InlineAlert
+          variant="warning"
+          action={(
+            <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
+              Dismiss
+            </Button>
+          )}
+        >
+          {error}
+        </InlineAlert>
+      ) : null}
 
-        <section className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm md:grid-cols-4">
-          <div><p className="text-xs font-semibold uppercase text-muted">Track</p><p className="mt-1 text-sm font-semibold text-navy">{detail.professionTrack}</p></div>
-          <div><p className="text-xs font-semibold uppercase text-muted">Level</p><p className="mt-1 text-sm font-semibold text-navy">{detail.level}</p></div>
-          <div><p className="text-xs font-semibold uppercase text-muted">Tutor</p><p className="mt-1 text-sm font-semibold text-navy">{detail.tutorDisplayName ?? 'To confirm'}</p></div>
-          <div><p className="text-xs font-semibold uppercase text-muted">Cost</p><p className="mt-1 text-sm font-semibold text-navy">{detail.creditCost} wallet credits</p></div>
-        </section>
-
-        <section className="space-y-4">
-          <LearnerSurfaceSectionHeader eyebrow="Schedule" title="Sessions" description="Reserve, join, cancel, or open class recordings from one place." />
-          <div className="space-y-3">
-            {detail.sessions.map((session) => {
-              const canJoin = isJoinAvailable(session, now);
-              return (
-              <article key={session.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={statusVariant(session.status)}>{session.status}</Badge>
-                      {session.isEnrolled ? <Badge variant="success">Reserved</Badge> : null}
+      <section className="space-y-4">
+        <LearnerSurfaceSectionHeader eyebrow="Schedule" title="Sessions" description="Reserve, join, cancel, or open class recordings from one place." />
+        <div className="space-y-3">
+          {detail.sessions.map((session, index) => {
+            const canJoin = isJoinAvailable(session, now);
+            return (
+              <MotionItem key={session.id} delayIndex={Math.min(index, 5)}>
+                <article className={cardClassName({ padding: 'lg' })}>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={statusVariant(session.status)}>{session.status}</Badge>
+                        {session.isEnrolled ? <Badge variant="success">Reserved</Badge> : null}
+                      </div>
+                      <h3 className="text-lg font-semibold text-navy">{formatDate(session.scheduledStartAt)}</h3>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted tabular-nums">
+                        <span className="flex items-center gap-1"><Clock className="h-4 w-4 shrink-0" aria-hidden="true" /> Ends {formatDate(session.scheduledEndAt)}</span>
+                        <span className="flex items-center gap-1"><Users className="h-4 w-4 shrink-0" aria-hidden="true" /> {session.enrolledCount}/{session.capacity} enrolled</span>
+                        <span className="flex items-center gap-1"><Wallet className="h-4 w-4 shrink-0" aria-hidden="true" /> {session.creditCost} credits</span>
+                      </div>
                     </div>
-                    <p className="text-lg font-semibold text-navy">{formatDate(session.scheduledStartAt)}</p>
-                    <div className="flex flex-wrap gap-4 text-sm text-muted">
-                      <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> Ends {formatDate(session.scheduledEndAt)}</span>
-                      <span className="flex items-center gap-1"><Users className="h-4 w-4" /> {session.enrolledCount}/{session.capacity} enrolled</span>
-                      <span className="flex items-center gap-1"><CalendarDays className="h-4 w-4" /> {session.creditCost} credits</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    {session.isEnrolled ? (
-                      <>
-                        {canJoin ? (
-                          <Link href={`/classes/${detail.slug}/sessions/${session.id}/join`} className={buttonClassName({ variant: 'primary', size: 'sm' })}>
-                            <PlayCircle className="h-4 w-4" /> Join class
-                          </Link>
-                        ) : (
-                          <Button type="button" variant="secondary" size="sm" disabled>
-                            <PlayCircle className="h-4 w-4" /> Opens 30m before
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      {session.isEnrolled ? (
+                        <>
+                          {canJoin ? (
+                            <Button asChild size="sm">
+                              <Link href={`/classes/${detail.slug}/sessions/${session.id}/join`}>
+                                <PlayCircle className="h-4 w-4" aria-hidden="true" /> Join class
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button type="button" variant="secondary" size="sm" disabled>
+                              <PlayCircle className="h-4 w-4" aria-hidden="true" /> Opens 30m before
+                            </Button>
+                          )}
+                          <Button type="button" variant="outline" size="sm" onClick={() => loadRecording(session.id)}>
+                            <FileText className="h-4 w-4" aria-hidden="true" /> Recording
                           </Button>
-                        )}
-                        <Button type="button" variant="outline" size="sm" onClick={() => loadRecording(session.id)}>
-                          <FileText className="h-4 w-4" /> Recording
+                          <Button type="button" variant="ghost" size="sm" loading={busySessionId === session.id} onClick={() => handleCancel(session)}>
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button type="button" size="sm" loading={busySessionId === session.id} onClick={() => handleEnroll(session)}>
+                          Reserve seat
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" loading={busySessionId === session.id} onClick={() => handleCancel(session)}>
-                          Cancel
-                        </Button>
-                      </>
-                    ) : (
-                      <Button type="button" size="sm" loading={busySessionId === session.id} onClick={() => handleEnroll(session)}>
-                        Reserve seat
-                      </Button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              </article>
-              );
-            })}
-          </div>
-        </section>
+                </article>
+              </MotionItem>
+            );
+          })}
+        </div>
+      </section>
 
-        {recording ? (
-          <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      {recording ? (
+        <MotionSection>
+          <Card padding="lg">
             <LearnerSurfaceSectionHeader eyebrow="Replay" title="Recording notes" description={recording.status === 'Ready' ? 'Summary and transcript are ready.' : 'Recording is queued for processing.'} />
             <div className="mt-4 space-y-3 text-sm text-muted">
-              {recording.aiSummary ? <p className="rounded-xl bg-background-light p-4 text-navy">{recording.aiSummary}</p> : null}
-              {recording.transcriptText ? <p className="max-h-64 overflow-auto rounded-xl bg-background-light p-4 whitespace-pre-wrap">{recording.transcriptText}</p> : null}
+              {recording.aiSummary ? <p className="max-w-3xl rounded-xl bg-background-light p-4 text-navy">{recording.aiSummary}</p> : null}
+              {recording.transcriptText ? <p className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-background-light p-4">{recording.transcriptText}</p> : null}
               {!recording.aiSummary && !recording.transcriptText ? <p>Recording status: {recording.status}</p> : null}
             </div>
-          </section>
-        ) : null}
-      </div>
+          </Card>
+        </MotionSection>
+      ) : null}
     </>
   );
 }

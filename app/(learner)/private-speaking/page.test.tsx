@@ -108,7 +108,7 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
     render(<PrivateSpeakingPage />);
 
     expect(await screen.findByTestId('tutor-rooms-unavailable')).toHaveTextContent(UNAVAILABLE);
-    expect(screen.queryByRole('button', { name: 'Browse Slots' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Browse Slots' })).not.toBeInTheDocument();
     expect(mockFetchAllSlots).not.toHaveBeenCalled();
     expect(mockFetchSlots).not.toHaveBeenCalled();
   });
@@ -119,7 +119,7 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
     render(<PrivateSpeakingPage />);
 
     expect(await screen.findByTestId('tutor-rooms-unavailable')).toHaveTextContent(UNAVAILABLE);
-    expect(screen.queryByRole('button', { name: 'Browse Slots' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Browse Slots' })).not.toBeInTheDocument();
   });
 
   it('offers "Any available tutor" and books the chosen slot with tutorProfileId "any"', async () => {
@@ -127,6 +127,8 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
     render(<PrivateSpeakingPage />);
 
     const tutorFilter = await screen.findByRole('combobox');
+    // The control the unavailable-state tests expect to be absent really is this tab.
+    expect(screen.getByRole('tab', { name: 'Browse Slots' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Any available tutor' })).toBeInTheDocument();
     await user.selectOptions(tutorFilter, 'any');
 
