@@ -32,8 +32,8 @@ export function AbbreviationDrillComponent({ drill, onGraded }: AbbreviationDril
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted">
             For each abbreviation, decide whether to expand it or keep it given the recipient.
           </p>

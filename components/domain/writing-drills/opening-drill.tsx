@@ -29,8 +29,8 @@ export function OpeningDrillComponent({ drill, onGraded }: OpeningDrillProps) {
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <header>
             <h2 className="text-lg font-semibold text-navy">Scenario</h2>
             <p className="text-sm text-muted mt-1">
