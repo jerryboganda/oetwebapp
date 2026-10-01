@@ -8,8 +8,10 @@ import { Award, Clock, FileText, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
@@ -17,6 +19,8 @@ import { BandHistoryChart } from '@/components/domain/writing/BandHistoryChart';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import { getWritingAnswerSheet, getWritingMockResults, getWritingStatsBands } from '@/lib/writing/api';
+import { WRITING_RAW_MAX } from '@/lib/scoring';
+import { cn } from '@/lib/utils';
 import type {
   WritingBandHistoryPointDto,
   WritingCriteriaScoresDto,
@@ -119,137 +123,146 @@ export default function WritingMockResultsPage() {
 
   const scores = grade ? gradeToScores(grade) : null;
 
+  const sectionCard = cardClassName({ padding: 'lg' });
+
   return (
     <>
-      <div className="space-y-6" aria-busy={!grade}>
-        {grade ? (
-          <ResultsScorePanel
-            eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
-            icon={Award}
-            title={t('writing.mocks.results.heroTitle', { band: grade.bandLabel })}
-            subtitle={t('writing.mocks.results.description')}
-            gaugeValue={(grade.estimatedBand / 7) * 100}
-            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{grade.bandLabel}</span>}
-            gaugeLabel={`${grade.rawTotal}/38`}
-            gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
-            stats={[
-              { label: t('writing.mocks.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
-              {
-                label: t('writing.mocks.results.highlights.delta'),
-                value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)),
-                tone: delta != null && delta > 0 ? 'success' : delta != null && delta < 0 ? 'danger' : 'default',
-                icon: <TrendingUp />,
-              },
-            ]}
-          />
-        ) : (
-          <LearnerPageHero
-            eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
-            icon={Award}
-            accent="amber"
-            title={t('writing.mocks.results.heroTitleFallback')}
-            description={t('writing.mocks.results.description')}
-          />
-        )}
+      {grade ? (
+        <ResultsScorePanel
+          eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
+          icon={Award}
+          title={t('writing.mocks.results.heroTitle', { band: grade.bandLabel })}
+          subtitle={t('writing.mocks.results.description')}
+          // The ring fills on the raw /38 scale its label shows: estimatedBand is
+          // stored in raw-total units, never a 0–7 band.
+          gaugeValue={(grade.rawTotal / WRITING_RAW_MAX) * 100}
+          gaugeCenter={<span className="text-2xl font-black text-navy">{grade.bandLabel}</span>}
+          gaugeLabel={`${grade.rawTotal}/38`}
+          gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
+          stats={[
+            { label: t('writing.mocks.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
+            {
+              label: t('writing.mocks.results.highlights.delta'),
+              value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)),
+              tone: delta != null && delta > 0 ? 'success' : delta != null && delta < 0 ? 'danger' : 'default',
+              icon: <TrendingUp />,
+            },
+          ]}
+        />
+      ) : (
+        <LearnerPageHero
+          eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
+          icon={Award}
+          accent="amber"
+          title={t('writing.mocks.results.heroTitleFallback')}
+          description={t('writing.mocks.results.description')}
+        />
+      )}
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {!grade && status === 'awaiting_review' ? (
-          <Card padding="md">
-            <CardContent>
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden />
-                <div>
-                  <h2 className="text-base font-bold text-navy">{t('writing.mocks.results.awaiting.title')}</h2>
-                  <p className="mt-1 text-sm text-muted">{t('writing.mocks.results.awaiting.body')}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
+      {!session && !error ? <LearnerSkeleton variant="list" /> : null}
 
-        {scores ? (
-          <section className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm lg:grid-cols-2">
-            <div>
+      {!grade && status === 'awaiting_review' ? (
+        <Card padding="md">
+          <div className="flex items-start gap-3">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-navy">{t('writing.mocks.results.awaiting.title')}</h2>
+              <p className="mt-1 text-sm text-muted">{t('writing.mocks.results.awaiting.body')}</p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {scores ? (
+        <MotionSection delayIndex={0}>
+          <section className={cn(sectionCard, 'grid grid-cols-1 gap-6 lg:grid-cols-2')}>
+            <div className="min-w-0">
               <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.criteria.heading')}</h2>
               <CriteriaRadar scores={scores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
               <div className="mt-4 space-y-2">
-                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => (
-                  <CriterionScoreRow
-                    key={code}
-                    label={CRITERION_NAMES[code]}
-                    score={scores![code]}
-                    max={CRITERION_MAX[code]}
-                    target={CRITERION_TARGET[code]}
-                  />
+                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code, index) => (
+                  <MotionItem key={code} delayIndex={Math.min(index, 5)}>
+                    <CriterionScoreRow
+                      label={CRITERION_NAMES[code]}
+                      score={scores![code]}
+                      max={CRITERION_MAX[code]}
+                      target={CRITERION_TARGET[code]}
+                    />
+                  </MotionItem>
                 ))}
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.trajectory.heading')}</h2>
               <BandHistoryChart data={mockHistory.map((p) => ({ date: p.date, rawTotal: p.rawTotal, estimatedBand: p.estimatedBand, letterType: p.letterType }))} />
             </div>
           </section>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {/* Answer Sheet PDF — official answer to tally the letter against (read-only). */}
-        {answerSheetPath ? (
-          <section aria-labelledby="answer-sheet-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="answer-sheet-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
-              <FileText className="h-5 w-5 text-primary" aria-hidden="true" /> Answer sheet
-            </h2>
-            <p className="mt-1 text-sm text-muted">Tally your letter against the official answer sheet.</p>
-            <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
-              <WritingStimulusViewer downloadPath={answerSheetPath} title="Answer Sheet" />
-            </div>
-          </section>
-        ) : null}
+      {/* Answer Sheet PDF — official answer to tally the letter against (read-only). */}
+      {answerSheetPath ? (
+        <section aria-labelledby="answer-sheet-heading" className={sectionCard}>
+          <h2 id="answer-sheet-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
+            <FileText className="h-5 w-5 text-primary" aria-hidden="true" /> Answer sheet
+          </h2>
+          <p className="mt-1 text-sm text-muted">Tally your letter against the official answer sheet.</p>
+          <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
+            <WritingStimulusViewer downloadPath={answerSheetPath} title="Answer Sheet" />
+          </div>
+        </section>
+      ) : null}
 
-        {grade?.canonViolations?.length ? (
-          <section aria-labelledby="canon-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      {grade?.canonViolations?.length ? (
+        <MotionSection>
+          <section aria-labelledby="canon-heading" className={sectionCard}>
             <h2 id="canon-heading" className="text-lg font-bold text-navy">{t('writing.mocks.results.canon.heading')}</h2>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
               {grade.canonViolations.map((v) => (
                 <CanonViolationCard key={v.id} violation={v} />
               ))}
             </div>
           </section>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {grade?.topThreePriorities?.length ? (
-          <Card padding="md">
-            <CardContent>
-              <h2 className="text-base font-bold text-navy">{t('writing.mocks.results.priorities.heading')}</h2>
-              <ol className="mt-3 grid gap-2 md:grid-cols-3">
-                {grade.topThreePriorities.map((priority, idx) => (
-                  <li key={idx} className="rounded-xl border border-border bg-background p-3">
-                    <Badge variant="warning" size="sm">#{idx + 1}</Badge>
+      {grade?.topThreePriorities?.length ? (
+        <MotionSection>
+          <section className={sectionCard}>
+            <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.priorities.heading')}</h2>
+            <ol className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {grade.topThreePriorities.map((priority, idx) => (
+                <li key={idx} className="min-w-0">
+                  <MotionItem delayIndex={Math.min(idx, 5)} className="h-full rounded-xl bg-background-light p-3">
+                    <Badge variant="warning" size="sm" className="tabular-nums">#{idx + 1}</Badge>
                     {/* Priorities are AI-generated English content. */}
                     <p className="mt-2 text-sm text-navy" dir="ltr">{priority}</p>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        ) : null}
+                  </MotionItem>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </MotionSection>
+      ) : null}
 
-        <section className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div>
-            <h2 className="text-base font-bold text-navy">{t('writing.mocks.results.next.heading')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('writing.mocks.results.next.description')}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
-              <Link href="/writing/mocks">{t('writing.mocks.results.back')}</Link>
-            </Button>
-            <Button asChild>
-              <Link href={session?.submissionId ? `/writing/submissions/${encodeURIComponent(session.submissionId)}/results` : '/writing/today'}>
-                {t('writing.mocks.results.openSubmission')}
-              </Link>
-            </Button>
-          </div>
-        </section>
-      </div>
+      <section className={cn(sectionCard, 'flex flex-wrap items-center justify-between gap-3')}>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.next.heading')}</h2>
+          <p className="mt-1 text-sm text-muted">{t('writing.mocks.results.next.description')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/writing/mocks">{t('writing.mocks.results.back')}</Link>
+          </Button>
+          <Button asChild>
+            <Link href={session?.submissionId ? `/writing/submissions/${encodeURIComponent(session.submissionId)}/results` : '/writing/today'}>
+              {t('writing.mocks.results.openSubmission')}
+            </Link>
+          </Button>
+        </div>
+      </section>
     </>
   );
 }
