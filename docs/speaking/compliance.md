@@ -17,6 +17,21 @@
 
 `SpeakingAudioRetentionWorker` runs hourly; writes `AuditEvent` per deletion.
 
+### Live voice (AI patient): what is stored
+
+- **No audio recording is stored by this app** for a live-voice role-play. It keeps the transcript text with segment timing
+  (`SpeakingTranscripts`, provider `realtime-openai` / `realtime-gemini`) and per-turn working rows (`SpeakingPatientTurns`).
+  The voice provider (OpenAI or Google) receives the microphone audio in real time and may retain bounded session audio under
+  its own policy ([disclosure](live-voice.md#consent-and-disclosure)).
+- `LIVEVOICE__RETENTIONDAYS` (30) wipes only the per-turn working rows. The final transcript, the v1.1 turn evidence and the
+  feedback quotes of a live-voice session have **no expiry code**: the audio sweep above is keyed on `SpeakingRecording`
+  rows, which a live-voice session never has. Whether those should expire is an owner/legal decision.
+- While a card runs, a copy of the conversation (that session's words only, no tokens or provider ids) is kept in the tab's
+  `sessionStorage` for up to 15 minutes so a page refresh does not lose it; it is removed after the transcript is saved
+  ([Refresh behaviour](live-voice.md#refresh-behaviour)).
+- The consent screen still says "Your audio is recorded and graded by AI" (one recording consent text shared with the
+  recorder fallback): owner/legal decision ([Known open items](live-voice.md#known-open-items)).
+
 ## Learner rights
 
 - **Access**: `GET /v1/speaking/recordings/mine`, `/v1/speaking/consents/me`.
