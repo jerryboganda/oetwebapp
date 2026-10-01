@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Headphones, ListChecks, Lock } from 'lucide-react';
+import { Clock, Headphones, ListChecks, Lock } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
+import { LearnerSurfaceMetaRow } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import {
   ContentLockedNotice,
   isContentLockedError,
@@ -148,95 +152,86 @@ export default function ListeningFullExamPage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <div className="space-y-5 sm:space-y-8" data-testid="listening-full-exam">
-        <Link
-          href="/listening"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Listening
-        </Link>
+      <LearnerPageHero
+        eyebrow="Full exam"
+        icon={Headphones}
+        accent="purple"
+        title="Full Listening Exam"
+        description="Open a Listening series folder, then start a published Atlas or Nova exam. Audio plays once. You can submit at any time; you cannot jump freely between Parts A, B, and C."
+      />
 
-        <LearnerPageHero
-          eyebrow="Full exam"
-          icon={Headphones}
-          accent="purple"
-          title="Full Listening Exam"
-          description="Open a Listening series folder, then start a published Atlas or Nova exam. Audio plays once. You can submit at any time; you cannot jump freely between Parts A, B, and C."
-        />
+      {/* A failed load is the error state below; this is for a failed start. */}
+      {error && home ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
-
-        {loading ? (
-          <LearnerSkeleton variant="card-grid" />
-        ) : (
-          <ListeningExamFolderBrowser
-            papers={home?.papers ?? []}
-            emptyMessage="no published Atlas/Nova Listening papers yet."
-            renderPaper={(paper) => {
-              const allowed = isPaperAllowed(paper);
-              const resumeRoute = activeByPaper.get(paper.id)
-                ?? (paper.lastAttempt && !paper.lastAttempt.submittedAt
-                  ? `/listening/paper/${paper.id}?attemptId=${paper.lastAttempt.attemptId}`
-                  : null);
-              const starting = startingPaperId === paper.id;
-              const partial = isPartialListeningExam(paper);
-              return (
-                <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
-                  <h3 className="text-base font-bold text-navy">{paper.title}</h3>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                    <span className="inline-flex items-center gap-1">
-                      <ListChecks className="h-3 w-3" aria-hidden />
-                      {paper.questionCount} questions
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" aria-hidden />
-                      {paper.estimatedDurationMinutes || 45} min
-                    </span>
+      {loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : !home ? (
+        <ErrorState message={error ?? undefined} />
+      ) : (
+        <ListeningExamFolderBrowser
+          papers={home.papers ?? []}
+          emptyMessage="No published Atlas/Nova Listening papers yet."
+          renderPaper={(paper) => {
+            const allowed = isPaperAllowed(paper);
+            const resumeRoute = activeByPaper.get(paper.id)
+              ?? (paper.lastAttempt && !paper.lastAttempt.submittedAt
+                ? `/listening/paper/${paper.id}?attemptId=${paper.lastAttempt.attemptId}`
+                : null);
+            const starting = startingPaperId === paper.id;
+            const partial = isPartialListeningExam(paper);
+            return (
+              <article className={cn(cardClassName({}), 'flex h-full flex-col')}>
+                <h3 className="text-base font-bold text-navy">{paper.title}</h3>
+                <LearnerSurfaceMetaRow
+                  size="compact"
+                  className="mt-1.5 tabular-nums"
+                  items={[
+                    { label: `${paper.questionCount} questions`, icon: ListChecks },
+                    { label: `${paper.estimatedDurationMinutes || 45} min`, icon: Clock },
+                  ]}
+                />
+                {!allowed || partial ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {!allowed ? (
-                      <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300">
+                      <Badge variant="warning" className="gap-1">
                         <Lock className="h-3 w-3" aria-hidden />
                         Subscription required
-                      </span>
+                      </Badge>
                     ) : null}
-                    {partial ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
-                        Partial · Q37–42 unavailable
-                      </span>
-                    ) : null}
-                  </p>
-                  {partial ? (
-                    <p className="mt-2 text-xs text-muted">
-                      Questions 37–42 are unavailable in the supplied source. This paper is {paper.questionCount} items.
-                    </p>
-                  ) : null}
-                  {paper.lastAttempt?.submittedAt ? (
-                    <p className="mt-2 text-xs text-muted">
-                      Last attempt submitted
-                    </p>
-                  ) : null}
-                  <div className="mt-auto pt-4">
-                    <Button
-                      size="sm"
-                      onClick={() => handleStart(paper)}
-                      disabled={starting}
-                    >
-                      {starting
-                        ? 'Starting...'
-                        : resumeRoute
-                          ? 'Resume exam'
-                          : allowed
-                            ? 'Start full exam'
-                            : 'View access'}
-                    </Button>
+                    {partial ? <Badge variant="warning">Partial · Q37–42 unavailable</Badge> : null}
                   </div>
-                </article>
-              );
-            }}
-          />
-        )}
-      </div>
+                ) : null}
+                {partial ? (
+                  <p className="mt-2 text-xs text-muted">
+                    Questions 37–42 are unavailable in the supplied source. This paper is {paper.questionCount} items.
+                  </p>
+                ) : null}
+                {paper.lastAttempt?.submittedAt ? (
+                  <p className="mt-2 text-xs text-muted">
+                    Last attempt submitted
+                  </p>
+                ) : null}
+                <div className="mt-auto pt-4">
+                  <Button
+                    size="sm"
+                    onClick={() => handleStart(paper)}
+                    disabled={starting}
+                  >
+                    {starting
+                      ? 'Starting...'
+                      : resumeRoute
+                        ? 'Resume exam'
+                        : allowed
+                          ? 'Start full exam'
+                          : 'View access'}
+                  </Button>
+                </div>
+              </article>
+            );
+          }}
+        />
+      )}
     </>
   );
 }
