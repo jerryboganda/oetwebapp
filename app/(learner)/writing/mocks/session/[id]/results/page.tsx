@@ -138,12 +138,15 @@ export default function WritingMockResultsPage() {
           gaugeValue={(grade.rawTotal / WRITING_RAW_MAX) * 100}
           gaugeCenter={<span className="text-2xl font-black text-navy">{grade.bandLabel}</span>}
           gaugeLabel={`${grade.rawTotal}/38`}
-          gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
+          // Neutral: raw marks have no inline pass mark (Writing is country-aware), and
+          // the band label beside the ring already carries the result.
+          gaugeColor="var(--color-primary)"
           stats={[
             { label: t('writing.mocks.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
             {
               label: t('writing.mocks.results.highlights.delta'),
-              value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)),
+              // Whole raw marks out of 38, not a one-decimal band.
+              value: delta === null ? t('writing.mocks.results.highlights.firstMock') : `${delta > 0 ? '+' : ''}${Math.round(delta)}`,
               tone: delta != null && delta > 0 ? 'success' : delta != null && delta < 0 ? 'danger' : 'default',
               icon: <TrendingUp />,
             },
