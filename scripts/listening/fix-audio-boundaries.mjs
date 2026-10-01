@@ -53,6 +53,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { jevJudge, noulVerdict, JevError } from './jev-client.mjs';
+import { transcribeLocal } from './local-stt.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = (process.env.OET_API_BASE || 'https://api.oetwithdrhesham.co.uk').replace(/\/+$/, '');
@@ -63,6 +65,11 @@ const PHASE = (process.argv[2] || '').replace(/^--/, '').toLowerCase();
 const ONLY_PAPER = (() => { const i = process.argv.indexOf('--paper'); return i >= 0 ? process.argv[i + 1] : null; })();
 const ONLY_PAIR = (() => { const i = process.argv.indexOf('--pair'); return i >= 0 ? (process.argv[i + 1] || '').toUpperCase() : null; })();
 const RESCAN = process.argv.includes('--rescan');
+const USE_JEV = !process.argv.includes('--no-jev');
+// --local-stt: transcribe with local faster-whisper instead of the QA
+// endpoint. Use when the production whisper-asr credential is dead (401
+// upstream) or the mock-active instance answers; schema-identical output.
+const USE_LOCAL_STT = process.argv.includes('--local-stt');
 
 const SECTIONS = ['A1', 'A2', 'B', 'C1', 'C2'];
 const PAIRS = [
@@ -137,7 +144,7 @@ async function api(method, urlPath, { json, body, form, isWrite = false, extraHe
   const text = await res.text();
   if (!res.ok) {
     let code = null;
-    try { code = JSON.parse(text)?.errorCode ?? null; } catch { /* body not json */ }
+    try { code = JSON.parse(text)?.errorCode ?? JSON.parse(text)?.code ?? null; } catch { /* body not json */ }
     throw new HttpError(res.status, code, `${method} ${urlPath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   return { json: text ? JSON.parse(text) : null, headers: res.headers };
@@ -215,6 +222,26 @@ function findCueInWords(words, fileEndSec) {
     }
   }
   return hits.length ? hits[hits.length - 1] : null;
+}
+
+// Walk backwards from the cue to the start of the announcer sentence so the
+// re-cut does not orphan the transition's opening words ("Now look at…") on
+// the source tail — a mid-phrase split at the A1→A2 boundary is itself a
+// defect. Bounded at 12s; requires a >=0.8s pause or sentence punctuation to
+// anchor the boundary, otherwise falls back to the raw cue start.
+function sentenceStartBefore(words, cueStart) {
+  let idx = words.findIndex((w) => w.s >= cueStart - 0.001);
+  if (idx <= 0) return round3(cueStart);
+  let sentStart = idx;
+  for (let i = idx; i > 0; i--) {
+    if (cueStart - words[i].s > 12) break;
+    const prevEnd = words[i - 1].e ?? words[i - 1].s;
+    const gap = words[i].s - prevEnd;
+    const prevTok = String(words[i - 1].w ?? '');
+    sentStart = i;
+    if (gap >= 0.8 || /[.:!?]["']?$/.test(prevTok)) break;
+  }
+  return round3(Math.max(0, words[sentStart].s - 0.05));
 }
 
 function loadWindowWords(transcriptDir, windowName, offsetSec) {
@@ -380,18 +407,22 @@ async function phaseTranscribe() {
       if (!existsSync(windowPath)) { console.error(`  [FAIL] ${paperId}/${w}: window file missing — rerun prepare`); continue; }
       process.stdout.write(`  ${paperId}/${w}...`);
       try {
-        // 503 "mock active" is an intermittent per-instance cache behind the
-        // load balancer — same request succeeds on retry. Back off and retry
-        // rather than waiting for the next whole pass.
         let result = null;
-        for (let attempt = 1; attempt <= 5; attempt++) {
-          try {
-            result = await transcribeWindowFile(windowPath);
-            break;
-          } catch (err) {
-            const retryable = err instanceof HttpError && (err.status === 503 || err.status === 429 || err.status >= 500);
-            if (!retryable || attempt === 5) throw err;
-            await sleep(4000 * attempt);
+        if (USE_LOCAL_STT) {
+          result = await transcribeLocal(windowPath);
+        } else {
+          // 503 "mock active" is an intermittent per-instance cache behind the
+          // load balancer — same request succeeds on retry. Back off and retry
+          // rather than waiting for the next whole pass.
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+              result = await transcribeWindowFile(windowPath);
+              break;
+            } catch (err) {
+              const retryable = err instanceof HttpError && (err.status === 503 || err.status === 429 || err.status >= 500);
+              if (!retryable || attempt === 5) throw err;
+              await sleep(4000 * attempt);
+            }
           }
         }
         writeFileSync(outJson, JSON.stringify(result, null, 2));
@@ -417,7 +448,7 @@ async function phasePlan() {
     const manifest = existsSync(join(dir, 'windows', 'manifest.tsv'))
       ? Object.fromEntries(readFileSync(join(dir, 'windows', 'manifest.tsv'), 'utf-8').split(/\r?\n/).filter(Boolean).map((l) => l.split('\t')).map(([n, o]) => [n.replace(/\.mp3$/, ''), Number(o)]))
       : {};
-    for (const { id } of PAIRS) {
+    for (const { src, dst, id } of PAIRS) {
       if (ONLY_PAIR && id !== ONLY_PAIR) continue;
       const pairAssets = assets.pairs[id];
       if (!pairAssets) continue;
@@ -431,11 +462,13 @@ async function phasePlan() {
       const srcEnd = srcWords.words[srcWords.words.length - 1].e;
       const cue = findCueInWords(srcWords.words, srcEnd + 8);
       if (cue) {
+        const cutSec = sentenceStartBefore(srcWords.words, cue.start);
         plan.pairs[id] = {
           mode: pairAssets.sharedAsset ? 'split' : 'recut',
           cueSec: cue.start,
           srcCueEnd: cue.end,
-          note: `Extract Two cue at ${cue.start}s of source audio`,
+          cutSec,
+          note: `Extract Two cue at ${cue.start}s of source audio; cut at sentence start ${cutSec}s`,
         };
         continue;
       }
@@ -460,10 +493,13 @@ async function phasePlan() {
 // ── apply ────────────────────────────────────────────────────────────────────
 async function uploadMedia(filePath, originalName) {
   const size = statSync(filePath).size;
-  const started = await api('POST', '/v1/admin/uploads', {
+  // api() returns { json, headers } — unwrap .json (this path was never
+  // exercised before the first canary apply, which is how the envelope bug
+  // survived).
+  const started = (await api('POST', '/v1/admin/uploads', {
     isWrite: true,
     json: { originalFilename: originalName, declaredMimeType: 'audio/mpeg', declaredSizeBytes: size, intendedRole: 'Audio' },
-  });
+  })).json;
   const chunk = started.chunkSizeBytes;
   const totalParts = Math.max(1, Math.ceil(size / chunk));
   const handle = await (await import('node:fs/promises')).open(filePath, 'r');
@@ -482,7 +518,7 @@ async function uploadMedia(filePath, originalName) {
   } finally {
     await handle.close();
   }
-  const done = await api('POST', `/v1/admin/uploads/${started.uploadId}/complete`, { isWrite: true, json: {} });
+  const done = (await api('POST', `/v1/admin/uploads/${started.uploadId}/complete`, { isWrite: true, json: {} })).json;
   return done.mediaAssetId;
 }
 
@@ -503,14 +539,40 @@ async function attachAudio(paperId, part, mediaAssetId, durationSec, title) {
   });
 }
 
-async function patchTimer(paperId, code, timeLimitSeconds) {
+async function patchTimer(paperId, code, timeLimitSeconds, { retryOn412 = true } = {}) {
   const res = await api('GET', `/v1/admin/papers/${paperId}/listening/extracts`);
-  const etag = res.headers.get('etag');
-  await api('PATCH', `/v1/admin/papers/${paperId}/listening/extracts/${code}`, {
-    isWrite: true,
-    json: { timeLimitSeconds },
-    extraHeaders: etag ? { 'If-Match': etag } : undefined,
-  });
+  // The extracts GET emits a WEAK ETag (W/"15") while the PATCH's
+  // CheckIfMatch only strips quotes and int-parses — a W/-prefixed value can
+  // never validate (server quirk, reproduced live). Normalize to the strong
+  // form so optimistic concurrency still guards the write.
+  const raw = res.headers.get('etag');
+  const etag = raw ? `"${raw.replace(/^W\//i, '').trim().replace(/^"|"$/g, '')}"` : null;
+  try {
+    await api('PATCH', `/v1/admin/papers/${paperId}/listening/extracts/${code}`, {
+      isWrite: true,
+      json: { timeLimitSeconds },
+      extraHeaders: etag ? { 'If-Match': etag } : undefined,
+    });
+  } catch (err) {
+    if (retryOn412 && err instanceof HttpError && err.status === 412) return patchTimer(paperId, code, timeLimitSeconds, { retryOn412: false });
+    throw err;
+  }
+}
+
+// Papers with learner attempts gate extract-metadata edits behind a paper
+// revision (listening_relational_resync_blocked). Audio swaps are not gated;
+// when only the timer sync is gated, record it — the shipped auto-advance
+// fires on audio end, so timers ≥ audio duration stay safe.
+async function syncTimersOrRecord(paper, id, src, dst, srcNewDur, dstNewDur, notes) {
+  for (const [code, dur] of [[src, srcNewDur], [dst, dstNewDur]]) {
+    try {
+      await patchTimer(paper.id, code, Math.ceil(dur) + TIMER_BUFFER_SEC);
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'listening_relational_resync_blocked') {
+        notes.push(`${code} timer sync gated (learner attempts) — skipped`);
+      } else throw err;
+    }
+  }
 }
 
 async function cutRepairedPair(dir, id, src, dst, pair, cueSec) {
@@ -557,7 +619,7 @@ async function phaseApply() {
       if (p.mode === 'applied') { results.push({ paper: paper.title, pair: id, action: 'already applied' }); continue; }
       if (!['recut', 'split'].includes(p.mode)) { results.push({ paper: paper.title, pair: id, action: p.mode }); continue; }
       try {
-        const { srcFile, dstFile } = await cutRepairedPair(dir, id, src, dst, assets.pairs[id], p.cueSec);
+        const { srcFile, dstFile } = await cutRepairedPair(dir, id, src, dst, assets.pairs[id], p.cutSec ?? p.cueSec);
         const srcNewDur = await ffprobeDurationSec(srcFile);
         const dstNewDur = await ffprobeDurationSec(dstFile);
 
@@ -565,7 +627,9 @@ async function phaseApply() {
         const verifyDir = join(dir, 'verify');
         mkdirSync(verifyDir, { recursive: true });
         await cutWindow(dstFile, join(verifyDir, `${id}-verify.mp3`), { offset: 0, duration: 75 });
-        const verifyResult = await transcribeWindowFile(join(verifyDir, `${id}-verify.mp3`));
+        const verifyResult = USE_LOCAL_STT
+          ? await transcribeLocal(join(verifyDir, `${id}-verify.mp3`))
+          : await transcribeWindowFile(join(verifyDir, `${id}-verify.mp3`));
         writeFileSync(join(verifyDir, `${id}-verify.mp3.json`), JSON.stringify(verifyResult, null, 2));
         const verifyWords = loadWindowWords(verifyDir, `${id}-verify`, 0);
         if (verifyWords.error) throw new Error(`post-cut verify transcript: ${verifyWords.error}`);
@@ -573,12 +637,42 @@ async function phaseApply() {
         if (!headCue) throw new Error('post-cut verify failed: cue not found at head of new destination audio');
         if (headCue.start > 20) throw new Error(`post-cut verify failed: cue at ${headCue.start}s into new ${dst} (expected ≤ 20s)`);
 
+        // JEV semantic confirmation ("use JEV 100%"): the deterministic gate
+        // above stays the hard gate; Jev judges whether the new destination
+        // head READS as the Extract Two opening and is not clipped. Jev
+        // unavailable/unsure never blocks a deterministically-verified cut,
+        // but the pair is flagged for manual review in the report — never
+        // silently treated as content-confirmed.
+        let jevNote = null;
+        if (USE_JEV) {
+          try {
+            const verifyText = verifyWords.text
+              ?? (Array.isArray(verifyResult?.segments) ? verifyResult.segments.map((s) => s.text ?? '').join(' ') : '');
+            const answers = await jevJudge(`listening-apply:${paper.id}:${id}`, {
+              task: 'Post-cut verification of a re-split OET Listening destination section. The deterministic cue gate already passed (cue within 20s of head). Judge meaning from the transcript text.',
+              paper: paper.title,
+              destinationHeadTranscript: String(verifyText).split(/\s+/).slice(0, 120).join(' '),
+            }, {
+              dest_head_cue: { type: 'noul', instructions: 'Does destinationHeadTranscript open with (or contain, near its start) an announcer transition introducing the second consultation ("Extract Two"), rather than starting inside dialogue with no transition?' },
+              dest_head_clip: { type: 'noul', instructions: 'Does destinationHeadTranscript start mid-sentence or with a clipped fragment of speech?' },
+            });
+            const cueV = noulVerdict(answers.dest_head_cue);
+            const clipV = noulVerdict(answers.dest_head_clip);
+            if (clipV === 'yes') throw new Error('JEV: new destination head reads as clipped speech');
+            if (cueV !== 'yes' || clipV === 'unsure') jevNote = `JEV review (cue=${cueV}, clip=${clipV})`;
+          } catch (err) {
+            if (!(err instanceof JevError)) throw err;
+            jevNote = `JEV unavailable: ${err.message}`;
+          }
+        }
+
         const srcAssetId = await uploadMedia(srcFile, `${id}-${src}-repaired.mp3`);
         await attachAudio(paper.id, src, srcAssetId, srcNewDur, `${paper.title} ${src} (boundary repair)`);
         const dstAssetId = await uploadMedia(dstFile, `${id}-${dst}-repaired.mp3`);
         await attachAudio(paper.id, dst, dstAssetId, dstNewDur, `${paper.title} ${dst} (boundary repair)`);
-        await patchTimer(paper.id, src, Math.ceil(srcNewDur) + TIMER_BUFFER_SEC);
-        await patchTimer(paper.id, dst, Math.ceil(dstNewDur) + TIMER_BUFFER_SEC);
+        const timerNotes = [];
+        await syncTimersOrRecord(paper, id, src, dst, srcNewDur, dstNewDur, timerNotes);
+        if (timerNotes.length) console.log(`    ${paper.title} [${id}]: ${timerNotes.join('; ')}`);
 
         plan.pairs[id] = {
           ...p,
@@ -587,9 +681,11 @@ async function phaseApply() {
           srcNewDur: round3(srcNewDur),
           dstNewDur: round3(dstNewDur),
           assets: { [src]: srcAssetId, [dst]: dstAssetId },
+          timerNotes,
+          jev: jevNote ?? 'confirmed',
         };
         writeFileSync(planPath, JSON.stringify(plan, null, 2));
-        results.push({ paper: paper.title, pair: id, action: `${p.mode} APPLIED`, srcNewDur: Math.round(srcNewDur), dstNewDur: Math.round(dstNewDur), cueAt: p.cueSec });
+        results.push({ paper: paper.title, pair: id, action: `${p.mode} APPLIED`, srcNewDur: Math.round(srcNewDur), dstNewDur: Math.round(dstNewDur), cueAt: p.cueSec, timerNotes, jev: jevNote ?? 'confirmed' });
       } catch (err) {
         failures.push({ paper: paper.title, pair: id, error: String(err.message || err) });
         console.error(`  [FAIL] ${paper.title} ${id}: ${err.message}`);
@@ -597,7 +693,12 @@ async function phaseApply() {
     }
   }
   const outPath = join(STATE_DIR, `apply-${Date.now()}.json`);
-  writeFileSync(outPath, JSON.stringify({ generatedAt: new Date().toISOString(), results, failures }, null, 2));
+  writeFileSync(outPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    results,
+    failures,
+    jevReview: results.filter((r) => r.jev && r.jev !== 'confirmed'),
+  }, null, 2));
   console.log(`\nPairs actioned: ${results.length}, failures: ${failures.length}`);
   for (const r of results) console.log(`  ${r.paper} [${r.pair}] ${r.action}${r.dstNewDur ? ` → src ${r.srcNewDur}s / dst ${r.dstNewDur}s` : ''}`);
   if (failures.length) console.log(`Failures:\n${failures.map((f) => `  ${f.paper} [${f.pair ?? '-'}] ${f.error}`).join('\n')}`);
@@ -606,7 +707,7 @@ async function phaseApply() {
 
 async function main() {
   if (!['prepare', 'transcribe', 'plan', 'apply'].includes(PHASE)) {
-    console.error('Usage: node fix-audio-boundaries.mjs prepare|transcribe|plan|apply [--paper <id>] [--pair A|C] [--rescan]');
+    console.error('Usage: node fix-audio-boundaries.mjs prepare|transcribe|plan|apply [--paper <id>] [--pair A|C] [--rescan] [--local-stt] [--no-jev]');
     process.exit(1);
   }
   mkdirSync(STATE_DIR, { recursive: true });
