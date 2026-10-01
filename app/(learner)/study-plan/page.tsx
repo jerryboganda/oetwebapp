@@ -47,11 +47,11 @@ const SUBTEST_COLORS: Record<SubTest, string> = {
 
 type SectionType = 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';
 
-const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; eyebrow: string; description: string }[] = [
-  { type: 'today', title: 'Today', icon: Calendar, eyebrow: 'Today', description: 'These are the tasks scheduled for today. Complete them in the order shown to keep momentum.' },
-  { type: 'thisWeek', title: 'This Week', icon: Calendar, eyebrow: 'This Week', description: 'Upcoming work for the rest of this week. Start any of these early if today is light.' },
-  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, eyebrow: 'Next Checkpoint', description: 'Work that leads into your next progress checkpoint or mock attempt.' },
-  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, eyebrow: 'Weak-Skill Focus', description: 'Targeted drills on the skills your recent attempts show need the most work.' },
+const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; description: string }[] = [
+  { type: 'today', title: 'Today', icon: Calendar, description: 'These are the tasks scheduled for today. Complete them in the order shown to keep momentum.' },
+  { type: 'thisWeek', title: 'This Week', icon: Calendar, description: 'Upcoming work for the rest of this week. Start any of these early if today is light.' },
+  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, description: 'Work that leads into your next progress checkpoint or mock attempt.' },
+  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, description: 'Targeted drills on the skills your recent attempts show need the most work.' },
 ];
 
 export default function StudyPlanPage() {
@@ -234,14 +234,13 @@ export default function StudyPlanPage() {
         }
       >
         <div className="learner-page-flow">
-          {SECTIONS.map(({ type, title, icon: SectionIcon, eyebrow, description }) => {
+          {SECTIONS.map(({ type, title, icon: SectionIcon, description }) => {
             const sectionTasks = tasks.filter((t) => t.section === type);
             if (sectionTasks.length === 0) return null;
 
             return (
               <section key={type}>
                 <LearnerSurfaceSectionHeader
-                  eyebrow={eyebrow}
                   title={`${title} (${sectionTasks.length})`}
                   description={description}
                   icon={SectionIcon}
