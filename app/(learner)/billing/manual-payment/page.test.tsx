@@ -41,6 +41,7 @@ vi.mock('@/components/layout', () => ({
 
 vi.mock('@/components/domain', () => ({
   LearnerPageHero: (props: any) => <div data-testid="hero">{props.title}</div>,
+  LearnerSurfaceSectionHeader: (props: any) => <h2>{props.title}</h2>,
 }));
 
 import ManualPaymentPage from './page';

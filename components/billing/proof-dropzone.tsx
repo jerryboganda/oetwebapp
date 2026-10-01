@@ -61,7 +61,7 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
         onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
         onDrop={(e) => { e.preventDefault(); setDragActive(false); accept(e.dataTransfer.files?.[0]); }}
         className={cn(
-          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
           dragActive
             ? 'border-primary bg-primary/5'
             : shownError
@@ -74,10 +74,10 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewUrl} alt="Payment screenshot preview" className="max-h-40 rounded-lg border border-border object-contain" />
           ) : (
-            <FileText className="h-10 w-10 text-primary" />
+            <FileText className="h-10 w-10 text-primary" aria-hidden="true" />
           )
         ) : (
-          <UploadCloud className="h-10 w-10 text-primary" />
+          <UploadCloud className="h-10 w-10 text-primary" aria-hidden="true" />
         )}
         {value ? (
           <div className="flex items-center gap-2 text-sm">
@@ -86,7 +86,7 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onChange(null); setLocalError(null); if (inputRef.current) inputRef.current.value = ''; }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-danger-strong hover:bg-danger/10"
+              className="inline-flex min-h-11 items-center gap-1 rounded-control px-2.5 text-xs font-medium text-danger-strong hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" /> Remove
             </button>

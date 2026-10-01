@@ -28,22 +28,20 @@ export default function Error({
 
   return (
     <>
-      <div className="space-y-6">
-        <InlineAlert
-          variant="error"
-          title="We couldn't load your billing details"
-        >
-          {error.message || 'An unexpected error occurred while loading billing. Please try again in a moment.'}
-        </InlineAlert>
+      <InlineAlert
+        variant="error"
+        title="We couldn't load your billing details"
+      >
+        {error.message || 'An unexpected error occurred while loading billing. Please try again in a moment.'}
+      </InlineAlert>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={reset} variant="primary">
-            Try again
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/">Back to dashboard</Link>
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={reset} variant="primary">
+          Try again
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/">Back to dashboard</Link>
+        </Button>
       </div>
     </>
   );

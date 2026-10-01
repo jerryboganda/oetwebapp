@@ -132,8 +132,8 @@ export function FreezeRequestModal({ open, onClose, freezeState, onCompleted }: 
   return (
     <Modal open={open} onClose={onClose} title="Freeze your subscription" size="md">
       <div className="space-y-5">
-        <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
-          <div className="rounded-xl bg-sky-500/10 p-2 text-sky-600">
+        <div className="flex items-start gap-3 rounded-2xl border border-info/30 bg-info/10 p-4">
+          <div className="rounded-xl bg-info/10 p-2 text-info">
             <Snowflake className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="text-sm leading-6 text-navy">
@@ -160,7 +160,7 @@ export function FreezeRequestModal({ open, onClose, freezeState, onCompleted }: 
                     'Your account is not eligible for a self-service freeze under the current policy.'}
             </p>
             {eligibilityMessages.length > 1 ? (
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-muted">
+              <ul className="mt-3 list-disc space-y-1 ps-5 text-muted">
                 {eligibilityMessages.slice(1).map((message) => (
                   <li key={message}>{message}</li>
                 ))}
@@ -215,7 +215,7 @@ export function FreezeRequestModal({ open, onClose, freezeState, onCompleted }: 
             Cancel
           </Button>
           <Button onClick={submit} loading={busy} disabled={!canRequest || busy}>
-            <Snowflake className="h-4 w-4" /> Freeze my subscription
+            <Snowflake className="h-4 w-4" aria-hidden="true" /> Freeze my subscription
           </Button>
         </div>
       </div>
