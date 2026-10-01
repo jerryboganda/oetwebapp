@@ -238,7 +238,7 @@ async function crawlRoute(page: Page, request: APIRequestContext, route: string,
       }
     }
     if (SCREENSHOT_WIDTHS.has(width)) {
-      await testInfo.attach(`learner${landed.replace(/\//g, '_')}@${width}.jpg`, {
+      await testInfo.attach(`${testInfo.title.includes('RTL') ? 'rtl-' : ''}learner${landed.replace(/\//g, '_')}@${width}.jpg`, {
         body: await page.screenshot({ type: 'jpeg', quality: 60 }),
         contentType: 'image/jpeg',
       });
@@ -274,6 +274,19 @@ async function runCrawl(
   test.skip(testInfo.project.name !== 'chromium-learner', 'learner layout crawl runs on chromium-learner only');
   test.setTimeout(routes.length * 40_000 + 60_000);
   await page.addInitScript(() => window.sessionStorage.setItem('oet_app_promo_dismissed', 'true'));
+  // First-run tours open over every module hub and would hide it in the screenshots.
+  await page.route('**/v1/onboarding/tours', (route) => route.request().method() === 'GET'
+    ? route.fulfill({
+      json: {
+        onboardingVersion: 1,
+        role: 'learner',
+        lastSeenTourVersion: Number.MAX_SAFE_INTEGER,
+        completed: { intro: true, dashboard: true, listening: true, reading: true, writing: true, speaking: true, admin: true, expert: true },
+        skippedTours: [],
+        dismissedTips: [],
+      },
+    })
+    : route.continue());
   page.on('dialog', (dialog) => {
     (dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss()).catch(() => undefined);
   });
