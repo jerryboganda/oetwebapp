@@ -36,7 +36,8 @@ export default function MaterialsPage() {
     return [
       { icon: FolderOpen, label: 'Sections', value: String(folders.length) },
       { icon: FileText, label: 'Files', value: String(totals.files) },
-      { icon: HardDrive, label: 'Library', value: formatBytes(totals.bytes) || '—' },
+      // Library size only once there is something to measure (no "—" placeholder chip).
+      ...(totals.bytes > 0 ? [{ icon: HardDrive, label: 'Library', value: formatBytes(totals.bytes) }] : []),
     ];
   }, [folders]);
 
@@ -49,7 +50,7 @@ export default function MaterialsPage() {
         highlights={loading ? [] : highlights}
       />
 
-      <MotionSection className="mx-auto mt-6 max-w-4xl space-y-5 pb-24">
+      <MotionSection className="space-y-5">
         <LearnerSurfaceSectionHeader
           title="Your Course Materials"
           description="Listening and Reading are shared across professions. Writing and Speaking are specific to yours."

@@ -5,6 +5,7 @@ import {
   FileText, Music, Image as ImageIcon, Video, File as FileIcon,
   Download, Play, Loader2, ChevronRight,
 } from 'lucide-react';
+import { cardClassName } from '@/components/ui/card';
 import { fetchAuthorizedBlob, fetchAuthorizedObjectUrl } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -20,12 +21,16 @@ const KIND_ICON = {
   pdf: { Icon: FileText, tone: 'text-danger-strong bg-danger/10' },
 } as const;
 
+// Sub-test identity chips (DESIGN.md §2), not status colours.
 const SUBTEST_TONE: Record<string, string> = {
-  listening: 'bg-info/10 text-info',
-  reading: 'bg-success/10 text-success-strong',
-  writing: 'bg-warning/10 text-warning-strong',
-  speaking: 'bg-lavender text-primary-dark',
+  listening: 'bg-skill-listening/10 text-skill-listening',
+  reading: 'bg-skill-reading/10 text-skill-reading',
+  writing: 'bg-skill-writing/10 text-skill-writing',
+  speaking: 'bg-skill-speaking/10 text-skill-speaking',
 };
+
+const ROW_ACTION =
+  'pressable flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 lg:min-h-8 lg:min-w-0';
 
 /**
  * Native <audio>/<img> can't carry a bearer token, so authorised media is
@@ -100,11 +105,12 @@ export function MaterialFileRow({
     }
   }, [downloading, file]);
 
+  // A row of actions, not one link: it highlights on hover but does not lift.
   return (
-    <div className="group rounded-2xl border border-border/50 bg-surface/70 px-3 py-2.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-md motion-reduce:hover:translate-y-0 sm:px-4 sm:py-3">
+    <div className={cn(cardClassName({ padding: 'none' }), 'px-3 py-2.5 transition-colors hover:border-primary/30 sm:px-4 sm:py-3')}>
       <div className="flex items-center gap-3">
-        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 motion-reduce:group-hover:scale-100', tone)}>
-          <Icon className="h-[18px] w-[18px]" />
+        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', tone)}>
+          <Icon className="size-4.5" aria-hidden="true" />
         </span>
 
         <div className="min-w-0 flex-1">
@@ -112,7 +118,7 @@ export function MaterialFileRow({
             <p className="mb-0.5 flex items-center gap-0.5 truncate text-3xs text-muted">
               {path.map((segment, i) => (
                 <span key={`${segment}-${i}`} className="flex items-center gap-0.5">
-                  {i > 0 && <ChevronRight className="h-2.5 w-2.5 shrink-0 opacity-60" />}
+                  {i > 0 && <ChevronRight className="h-2.5 w-2.5 shrink-0 opacity-60 rtl:rotate-180" aria-hidden="true" />}
                   {segment}
                 </span>
               ))}
@@ -131,7 +137,7 @@ export function MaterialFileRow({
               {file.subtestCode}
             </span>
             {file.sizeBytes ? (
-              <span className="text-3xs text-muted">{formatBytes(file.sizeBytes)}</span>
+              <span className="text-3xs tabular-nums text-muted">{formatBytes(file.sizeBytes)}</span>
             ) : null}
             {error && <span className="text-3xs font-semibold text-danger-strong">Download failed — try again</span>}
           </div>
@@ -143,10 +149,10 @@ export function MaterialFileRow({
               type="button"
               onClick={audio.load}
               disabled={audio.loading}
-              className="pressable flex items-center gap-1.5 rounded-lg bg-info/10 px-2.5 py-1.5 text-xs font-semibold text-info transition-colors hover:bg-info/20 disabled:opacity-50"
+              className={cn(ROW_ACTION, 'bg-info/10 text-info hover:bg-info/20')}
               aria-label={`Play ${file.title}`}
             >
-              {audio.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {audio.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Play className="h-3.5 w-3.5" aria-hidden="true" />}
               <span className="hidden sm:inline">{audio.loading ? 'Loading…' : 'Play'}</span>
             </button>
           )}
@@ -155,10 +161,10 @@ export function MaterialFileRow({
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            className="pressable flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary-dark transition-colors hover:bg-primary/20 disabled:opacity-50"
+            className={cn(ROW_ACTION, 'bg-primary/10 text-primary-dark hover:bg-primary/20')}
             aria-label={`Download ${file.title}`}
           >
-            {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
             <span className="hidden sm:inline">{downloading ? 'Saving…' : 'Download'}</span>
           </button>
         </div>

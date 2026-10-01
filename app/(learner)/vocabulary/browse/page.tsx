@@ -2,7 +2,7 @@
 
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { AuthContext } from '@/contexts/auth-context';
@@ -28,7 +28,18 @@ import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrad
 import { playTransientAudio } from '@/lib/recalls-audio';
 import { isEditableEventTarget } from '@/lib/is-editable-target';
 import { cleanExampleSentencesForList } from '@/lib/vocabulary-example-sentence';
+import { cn } from '@/lib/utils';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
+
+// Toggle pills: a tint plus a border when pressed; 44px tall on touch layouts.
+function chipClass(active: boolean) {
+  return cn(
+    'inline-flex min-h-11 items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8',
+    active
+      ? 'border-primary/30 bg-primary/10 text-primary'
+      : 'border-border bg-background-light text-muted hover:border-border-hover hover:text-navy',
+  );
+}
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
 async function cacheVocabularyToIndexedDb(terms: unknown[]) {
@@ -154,18 +165,25 @@ export default function BrowseVocabularyPage() {
 
   return (
     <>
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </Link>
-        <LearnerPageHero title="Browse Vocabulary" description="Explore OET medical vocabulary terms" icon={BookOpen} />
-      </div>
+      <LearnerPageHero
+        title="Browse Vocabulary"
+        description="Explore OET medical vocabulary terms"
+        icon={BookOpen}
+        aside={(
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/vocabulary">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+              Back to vocabulary
+            </Link>
+          </Button>
+        )}
+      />
 
-      {displayError && <InlineAlert variant="warning" className="mb-4">{displayError}</InlineAlert>}
+      {displayError && <InlineAlert variant="warning">{displayError}</InlineAlert>}
       {audioUpgradeModal}
 
       {/* Filters */}
-      <Card className="mb-6 border-border bg-surface p-4">
+      <Card>
         <LearnerSurfaceSectionHeader
           eyebrow="Search"
           title="Filter terms"
@@ -174,21 +192,21 @@ export default function BrowseVocabularyPage() {
         />
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <Search className="absolute start-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted" aria-hidden="true" />
             <input
               type="text"
               aria-label="Search vocabulary terms"
               placeholder="Search terms..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="w-full rounded-xl border border-border bg-background-light pl-9 pr-4 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="min-h-11 w-full rounded-xl border border-border bg-background-light py-2.5 ps-9 pe-4 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <select
             aria-label="Filter vocabulary by category"
             value={category}
             onChange={e => { setCategory(e.target.value); setPage(1); }}
-            className="rounded-xl border border-border bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
+            className="min-h-11 rounded-xl border border-border bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
           >
             <option value="">All Categories ({total})</option>
             {categories.map(c => (
@@ -205,11 +223,7 @@ export default function BrowseVocabularyPage() {
               type="button"
               aria-pressed={recallSet === ''}
               onClick={() => { setRecallSet(''); setPage(1); }}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                recallSet === ''
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border bg-background-light text-muted hover:border-border-hover hover:text-navy'
-              }`}
+              className={chipClass(recallSet === '')}
             >
               All
             </button>
@@ -220,11 +234,7 @@ export default function BrowseVocabularyPage() {
                 aria-pressed={recallSet === s.code}
                 onClick={() => { setRecallSet(s.code); setPage(1); }}
                 title={s.description}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  recallSet === s.code
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-background-light text-muted hover:border-border-hover hover:text-navy'
-                }`}
+                className={chipClass(recallSet === s.code)}
               >
                 {s.shortLabel}{s.termCount > 0 ? ` (${s.termCount})` : ''}
               </button>
@@ -235,7 +245,7 @@ export default function BrowseVocabularyPage() {
 
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       ) : terms.length === 0 ? (
         <EmptyState
@@ -244,94 +254,100 @@ export default function BrowseVocabularyPage() {
           description="Try a different search or clear the filters."
         />
       ) : (
-        <>
-          <div className="space-y-3 mb-6">
+        <MotionSection className="space-y-6">
+          <div className="space-y-3">
             {terms.map((term, i) => {
               if (term.isLocked) {
                 return (
-                  <MotionItem
-                    key={term.id}
-                    delayIndex={i}
-                    role="group"
-                    tabIndex={0}
-                    onClick={() => setShowLockedModal(true)}
-                    onKeyDown={(event: React.KeyboardEvent) => {
-                      if (isEditableEventTarget(event.target)) return;
-                      if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
-                        event.preventDefault();
-                        setShowLockedModal(true);
-                      }
-                    }}
-                    aria-label={`${term.term} — locked. Subscribe to unlock the full Recall Vocabulary Bank.`}
-                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow] duration-200 hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <div className="pointer-events-none select-none blur-sm" aria-hidden="true">
-                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                        <span className="text-base font-bold text-navy">{term.term}</span>
+                  <MotionItem key={term.id} delayIndex={Math.min(i, 5)}>
+                    <Card
+                      hoverable
+                      role="group"
+                      tabIndex={0}
+                      onClick={() => setShowLockedModal(true)}
+                      onKeyDown={(event: React.KeyboardEvent) => {
+                        if (isEditableEventTarget(event.target)) return;
+                        if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+                          event.preventDefault();
+                          setShowLockedModal(true);
+                        }
+                      }}
+                      aria-label={`${term.term} — locked. Subscribe to unlock the full Recall Vocabulary Bank.`}
+                      className="group relative cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    >
+                      <div className="pointer-events-none select-none blur-sm" aria-hidden="true">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          <span className="text-base font-bold text-navy">{term.term}</span>
+                        </div>
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                          <CategoryBadge category={term.category} size="sm" />
+                        </div>
+                        <p className="text-sm leading-relaxed text-muted">
+                          Definition hidden — subscribe to reveal the full recall entry, audio and examples.
+                        </p>
                       </div>
-                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                        <CategoryBadge category={term.category} size="sm" />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/40 text-center backdrop-blur-[2px]">
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Lock size={16} strokeWidth={2} aria-hidden="true" />
+                        </span>
+                        <span className="px-4 text-xs font-semibold text-navy">
+                          Subscribe to unlock the full Recall Vocabulary Bank.
+                        </span>
                       </div>
-                      <p className="text-sm leading-relaxed text-muted">
-                        Definition hidden — subscribe to reveal the full recall entry, audio and examples.
-                      </p>
-                    </div>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/40 text-center backdrop-blur-[2px]">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Lock size={16} strokeWidth={2} />
-                      </span>
-                      <span className="px-4 text-xs font-semibold text-navy">
-                        Subscribe to unlock the full Recall Vocabulary Bank.
-                      </span>
-                    </div>
+                    </Card>
                   </MotionItem>
                 );
               }
               return (
-                <MotionItem
-                  key={term.id}
-                  delayIndex={i}
-                  className="group flex gap-4 rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md hoverable:-translate-y-0.5"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
-                        className="text-base font-bold text-navy hover:text-primary transition-colors"
-                      >
-                        {term.term}
-                      </Link>
-                      <RecallTierBadge
-                        count={term.examFrequencyCount ?? 0}
-                        occurrences={term.recallSetOccurrences}
-                        lastUpdatedAt={term.updatedAt}
-                      />
-                      {term.ipaPronunciation && (
-                        <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
+                <MotionItem key={term.id} delayIndex={Math.min(i, 5)}>
+                  <Card className="flex gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
+                          className="rounded text-base font-bold text-navy transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          {term.term}
+                        </Link>
+                        <RecallTierBadge
+                          count={term.examFrequencyCount ?? 0}
+                          occurrences={term.recallSetOccurrences}
+                          lastUpdatedAt={term.updatedAt}
+                        />
+                        {term.ipaPronunciation && (
+                          <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void playAudio(term.id)}
+                          className="pressable inline-flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:size-8"
+                          aria-label={`Play pronunciation of ${term.term}`}
+                        >
+                          <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        <CategoryBadge category={term.category} size="sm" />
+                      </div>
+                      <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
+                      {(exampleSentences.get(term.id) ?? '') && <p className="mt-1.5 text-xs italic leading-relaxed text-muted">&quot;{exampleSentences.get(term.id)}&quot;</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAdd(term.id)}
+                      disabled={adding.has(term.id) || added.has(term.id)}
+                      className={cn(
+                        'pressable inline-flex size-11 shrink-0 items-center justify-center self-start rounded-control border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                        added.has(term.id)
+                          ? 'border-success/20 bg-success/10 text-success-strong'
+                          : 'border-transparent text-muted hover:border-primary/20 hover:bg-primary/10 hover:text-primary',
                       )}
-                      <button
-                        onClick={() => void playAudio(term.id)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        aria-label={`Play pronunciation of ${term.term}`}
-                      >
-                        <Volume2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                      <CategoryBadge category={term.category} size="sm" />
-                    </div>
-                    <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
-                    {(exampleSentences.get(term.id) ?? '') && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{exampleSentences.get(term.id)}&quot;</p>}
-                  </div>
-                  <button
-                    onClick={() => handleAdd(term.id)}
-                    disabled={adding.has(term.id) || added.has(term.id)}
-                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-success/10 text-success-strong border border-success/20' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
-                    title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
-                    aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
-                  >
-                    {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                  </button>
+                      title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
+                      aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
+                    >
+                      {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" aria-hidden="true" /> : <Plus className="w-5 h-5" aria-hidden="true" />}
+                    </button>
+                  </Card>
                 </MotionItem>
               );
             })}
@@ -340,11 +356,11 @@ export default function BrowseVocabularyPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
-              <span className="text-sm text-muted">{page} / {totalPages}</span>
+              <span className="text-sm tabular-nums text-muted">{page} / {totalPages}</span>
               <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
             </div>
           )}
-        </>
+        </MotionSection>
       )}
 
       <Modal

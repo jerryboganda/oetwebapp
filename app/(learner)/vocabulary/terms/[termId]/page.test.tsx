@@ -159,7 +159,7 @@ describe('Vocabulary term detail — Practice Spelling (§3B, §3C scope)', () =
     const user = userEvent.setup();
     render(<VocabularyTermDetailPage />);
 
-    // The word is on the page twice (hero title + definition card heading).
+    // The word is the hero title (the definition card is titled "Definition").
     expect(await screen.findAllByText('dyspnoea')).not.toHaveLength(0);
     expect(screen.getByText('Difficulty or laboured breathing.')).toBeInTheDocument();
     expect(screen.getByText(/She presented with acute dyspnoea on exertion/i)).toBeInTheDocument();

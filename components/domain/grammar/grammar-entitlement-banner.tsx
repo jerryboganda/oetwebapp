@@ -40,9 +40,9 @@ export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlemen
               {resetLabel ? <> Your allowance resets on <strong className="text-navy">{resetLabel}</strong>.</> : null}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" size="sm" className="inline-flex items-center gap-1.5" asChild>
+              <Button variant="primary" size="sm" asChild>
                 <Link href="/billing" onClick={() => analytics.track('grammar_paywall_upgrade_clicked', { lessonId: lessonId ?? null })}>
-                  <Sparkles className="h-3.5 w-3.5" /> Upgrade for unlimited
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Upgrade for unlimited
                 </Link>
               </Button>
               <Button variant="outline" size="sm" asChild>

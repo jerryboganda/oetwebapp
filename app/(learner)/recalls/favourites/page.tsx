@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Heart } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import {
   fetchRecallsLibrary,
   fetchRecallsToday,
@@ -60,28 +62,24 @@ export default function RecallsFavouritesPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Recalls / Favourites"
-          title="Your saved words to review later"
-          description="Every word you favourited, in one place. Remove what you've mastered."
-          icon={Heart}
-          highlights={[
-            // Prefer the live list length so the count stays in sync after a
-            // removal; fall back to today's snapshot only while items load.
-            { icon: Heart, label: 'Favourites', value: `${items?.length ?? today?.starred ?? 0}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Recalls / Favourites"
+        title="Your saved words to review later"
+        description="Every word you favourited, in one place. Remove what you've mastered."
+        icon={Heart}
+        highlights={[
+          // Prefer the live list length so the count stays in sync after a
+          // removal; fall back to today's snapshot only while items load.
+          { icon: Heart, label: 'Favourites', value: `${items?.length ?? today?.starred ?? 0}` },
+        ]}
+      />
 
+      <MotionSection className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Review later"
           title="Favourited words"
           description="Tap the heart on any word in the catalog to add it here."
         />
-
-        {error && (
-          <InlineAlert variant="warning">{error}</InlineAlert>
-        )}
 
         {loading ? (
           <div className="space-y-2">
@@ -89,52 +87,51 @@ export default function RecallsFavouritesPage() {
               <Skeleton key={i} className="h-14 rounded-xl" />
             ))}
           </div>
+        ) : error ? (
+          <InlineAlert variant="warning">{error}</InlineAlert>
         ) : items && items.length > 0 ? (
-            <ul className="divide-y divide-border rounded-2xl border border-border bg-surface shadow-sm">
-              {items.map((it) => (
-                <li key={it.cardId} className="flex items-center gap-3 p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-navy">{it.term}</span>
-                      <RecallTierBadge
-                        count={it.examFrequencyCount ?? 0}
-                        occurrences={it.recallSetOccurrences}
-                        lastUpdatedAt={it.updatedAt}
-                      />
-                      <Badge variant={MASTERY_BADGES[it.mastery] ?? 'muted'}>{it.mastery}</Badge>
-                      {it.starReason && <Badge variant="warning">{it.starReason}</Badge>}
+          <Card padding="none">
+            <ul className="divide-y divide-border">
+              {items.map((it, i) => (
+                <li key={it.cardId}>
+                  <MotionItem delayIndex={Math.min(i, 5)} className="flex items-center gap-3 p-3 sm:px-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-navy">{it.term}</span>
+                        <RecallTierBadge
+                          count={it.examFrequencyCount ?? 0}
+                          occurrences={it.recallSetOccurrences}
+                          lastUpdatedAt={it.updatedAt}
+                        />
+                        <Badge variant={MASTERY_BADGES[it.mastery] ?? 'muted'}>{it.mastery}</Badge>
+                        {it.starReason && <Badge variant="warning">{it.starReason}</Badge>}
+                      </div>
+                      {it.definition && <div className="mt-1 text-xs text-muted">{it.definition}</div>}
                     </div>
-                    {it.definition && <div className="mt-1 text-xs text-muted">{it.definition}</div>}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(it)}
-                    aria-label={`Remove ${it.term} from favourites`}
-                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning-strong hover:border-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <Heart size={13} className="fill-current" aria-hidden="true" />
-                    Remove
-                  </button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRemove(it)}
+                      aria-label={`Remove ${it.term} from favourites`}
+                      className="shrink-0"
+                    >
+                      <Heart className="h-3.5 w-3.5 fill-current text-warning-strong" aria-hidden="true" />
+                      Remove
+                    </Button>
+                  </MotionItem>
                 </li>
               ))}
             </ul>
+          </Card>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning-strong">
-              <Heart className="h-6 w-6" />
-            </div>
-            <p className="mt-3 text-sm font-semibold text-navy">No favourites yet</p>
-            <p className="mt-1 text-sm text-muted">
-              Browse the vocabulary catalog and tap the heart on any word to save it for later.
-            </p>
-            <div className="mt-4">
-              <Button asChild variant="secondary">
-                <Link href="/recalls/words">Browse words</Link>
-              </Button>
-            </div>
-          </div>
+          <EmptyState
+            icon={<Heart className="h-7 w-7 text-warning-strong" aria-hidden="true" />}
+            title="No favourites yet"
+            description="Browse the vocabulary catalog and tap the heart on any word to save it for later."
+            action={{ label: 'Browse words', href: '/recalls/words' }}
+          />
         )}
-      </div>
+      </MotionSection>
     </>
   );
 }

@@ -14,56 +14,52 @@ export type VideoModuleTheme = {
   label: string;
   icon: LucideIcon;
   iconWrap: string;
-  gradient: string;
   hoverBorder: string;
   accentText: string;
 };
 
+// Sub-test identity tokens (DESIGN.md §2): they flip with the theme, so no
+// dark: twins. Basic English is not a sub-test and stays neutral.
 export const VIDEO_LIBRARY_MODULES: VideoModuleTheme[] = [
   {
     key: 'listening',
     label: 'Listening',
     icon: Headphones,
-    iconWrap: 'bg-sky-100 text-sky-600 dark:bg-sky-900/50 dark:text-sky-300',
-    gradient: 'from-sky-50/80 to-surface dark:from-sky-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-sky-300 dark:hover:border-sky-700',
-    accentText: 'text-sky-600 dark:text-sky-300',
+    iconWrap: 'bg-skill-listening/10 text-skill-listening',
+    hoverBorder: 'hover:border-skill-listening/40',
+    accentText: 'text-skill-listening',
   },
   {
     key: 'reading',
     label: 'Reading',
     icon: BookOpen,
-    iconWrap: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
-    gradient: 'from-emerald-50/80 to-surface dark:from-emerald-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700',
-    accentText: 'text-emerald-600 dark:text-emerald-300',
+    iconWrap: 'bg-skill-reading/10 text-skill-reading',
+    hoverBorder: 'hover:border-skill-reading/40',
+    accentText: 'text-skill-reading',
   },
   {
     key: 'writing',
     label: 'Writing',
     icon: PenLine,
-    iconWrap: 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-violet-300',
-    gradient: 'from-violet-50/80 to-surface dark:from-violet-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-violet-300 dark:hover:border-violet-700',
-    accentText: 'text-violet-600 dark:text-violet-300',
+    iconWrap: 'bg-skill-writing/10 text-skill-writing',
+    hoverBorder: 'hover:border-skill-writing/40',
+    accentText: 'text-skill-writing',
   },
   {
     key: 'speaking',
     label: 'Speaking',
     icon: Mic,
-    iconWrap: 'bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-300',
-    gradient: 'from-rose-50/80 to-surface dark:from-rose-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-rose-300 dark:hover:border-rose-700',
-    accentText: 'text-rose-600 dark:text-rose-300',
+    iconWrap: 'bg-skill-speaking/10 text-skill-speaking',
+    hoverBorder: 'hover:border-skill-speaking/40',
+    accentText: 'text-skill-speaking',
   },
   {
     key: 'basic-english',
     label: 'Basic English Course',
     icon: GraduationCap,
-    iconWrap: 'bg-slate-100 text-slate-600 dark:bg-slate-900/50 dark:text-slate-300',
-    gradient: 'from-slate-50/80 to-surface dark:from-slate-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-slate-300 dark:hover:border-slate-700',
-    accentText: 'text-slate-600 dark:text-slate-300',
+    iconWrap: 'bg-background-light text-muted',
+    hoverBorder: 'hover:border-border-hover',
+    accentText: 'text-muted',
   },
 ];
 
