@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Download, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -51,31 +52,33 @@ export function CompanionMemoryPanel() {
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-sm font-semibold text-navy">{t('companion.memory.title')}</h2>
         {!isEmpty && !memory.isLoading && (
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
+          <div className="-me-2 -mt-1.5 flex shrink-0 items-center">
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => download.mutate()}
               disabled={download.isPending}
-              className="inline-flex items-center gap-1 text-xs text-muted underline transition-colors hover:text-navy disabled:opacity-50"
+              className="gap-1 px-2 text-muted"
             >
               <Download className="h-3 w-3" aria-hidden="true" />
               {t('companion.memory.export')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => reset.mutate()}
               disabled={reset.isPending}
-              className="text-xs text-muted underline transition-colors hover:text-danger-strong disabled:opacity-50"
+              className="px-2 text-muted hover:text-danger-strong"
             >
               {t('companion.memory.reset')}
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
       <p className="mt-1 text-xs text-muted">{t('companion.memory.description')}</p>
 
-      {memory.isLoading && <Skeleton className="mt-3 h-16 w-full" />}
+      {memory.isLoading && <Skeleton className="mt-3 h-16 w-full rounded-xl" />}
 
       {isEmpty && <p className="mt-3 text-xs text-muted">{t('companion.memory.empty')}</p>}
 
@@ -87,15 +90,16 @@ export function CompanionMemoryPanel() {
                 <p className="truncate text-xs font-semibold text-navy">{note.title}</p>
                 <p className="line-clamp-2 text-xs text-muted">{note.body}</p>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="xs"
                 onClick={() => removeNote.mutate(note.id)}
                 disabled={removeNote.isPending}
                 aria-label={t('companion.memory.deleteNote', { title: note.title })}
-                className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-background-light hover:text-danger-strong disabled:opacity-50"
+                className="-mt-1 w-11 shrink-0 px-0 text-muted hover:text-danger-strong lg:w-8 lg:px-0"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -110,7 +114,7 @@ export function CompanionMemoryPanel() {
                 onClick={() => removeBookmark.mutate(bookmark.id)}
                 disabled={removeBookmark.isPending}
                 aria-label={t('companion.memory.deleteBookmark', { term: bookmark.term })}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-navy transition-colors hover:border-danger hover:text-danger-strong disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 py-0.5 text-xs text-navy transition-colors hover:border-danger hover:text-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 lg:min-h-7 lg:px-2"
               >
                 {bookmark.term}
                 <Trash2 className="h-3 w-3" aria-hidden="true" />

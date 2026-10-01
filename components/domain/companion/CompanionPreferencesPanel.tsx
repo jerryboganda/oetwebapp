@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import {
   fetchCompanionPreferences,
   saveCompanionPreferences,
@@ -89,7 +90,7 @@ export function CompanionPreferencesPanel() {
                   value={style.value}
                   checked={current.teachingStyle === style.value}
                   onChange={() => update({ teachingStyle: style.value })}
-                  className="mt-0.5"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
                 />
                 <span>
                   <span className="block text-xs font-semibold text-navy">{t(style.labelKey)}</span>
@@ -114,7 +115,7 @@ export function CompanionPreferencesPanel() {
                 onChange={() => update({ depth: depth.value })}
                 className="peer sr-only"
               />
-              <span className="inline-block rounded-full border border-border px-2.5 py-1 text-xs text-navy transition-colors peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:font-semibold peer-focus-visible:ring-2 peer-focus-visible:ring-primary">
+              <span className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-xs text-navy transition-colors peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:font-semibold peer-checked:text-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary lg:min-h-7 lg:px-2.5">
                 {t(depth.labelKey)}
               </span>
             </label>
@@ -122,30 +123,30 @@ export function CompanionPreferencesPanel() {
         </div>
       </fieldset>
 
-      <div className="mt-4 space-y-2">
-        <label className="flex cursor-pointer items-start gap-2">
-          <input
-            type="checkbox"
-            checked={current.englishOnly}
-            disabled={save.isPending}
-            onChange={(event) => update({ englishOnly: event.target.checked })}
-            className="mt-0.5"
-          />
+      <div className="mt-4 space-y-3">
+        <label className="flex cursor-pointer items-start justify-between gap-3">
           <span>
             <span className="block text-xs font-semibold text-navy">{t('companion.style.englishOnly')}</span>
             <span className="block text-xs text-muted">{t('companion.style.englishOnly.hint')}</span>
           </span>
+          <Switch
+            size="sm"
+            checked={current.englishOnly}
+            disabled={save.isPending}
+            onChange={() => update({ englishOnly: !current.englishOnly })}
+            label={t('companion.style.englishOnly')}
+          />
         </label>
 
-        <label className="flex cursor-pointer items-start gap-2">
-          <input
-            type="checkbox"
+        <label className="flex cursor-pointer items-start justify-between gap-3">
+          <span className="text-xs font-semibold text-navy">{t('companion.style.workedExamples')}</span>
+          <Switch
+            size="sm"
             checked={current.preferWorkedExamples}
             disabled={save.isPending}
-            onChange={(event) => update({ preferWorkedExamples: event.target.checked })}
-            className="mt-0.5"
+            onChange={() => update({ preferWorkedExamples: !current.preferWorkedExamples })}
+            label={t('companion.style.workedExamples')}
           />
-          <span className="text-xs font-semibold text-navy">{t('companion.style.workedExamples')}</span>
         </label>
       </div>
     </Card>
