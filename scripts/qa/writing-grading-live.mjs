@@ -56,17 +56,33 @@ async function verifyProductionReport() {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(30000);
+    const authRequests = [];
+    page.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.includes('sign-in')) {
+        authRequests.push({ path: new URL(request.url()).pathname, method: request.method() });
+      }
+    });
     await page.goto(`${app}/sign-in`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => {
+      const formElement = document.querySelector('form');
+      return formElement && Object.keys(formElement).some(propertyName =>
+        propertyName.startsWith('__reactProps$') && typeof formElement[propertyName]?.onSubmit === 'function');
+    });
     await page.locator('input[type="email"]').fill(process.env.QA_EMAIL);
     await page.locator('input[type="password"]').fill(process.env.QA_PASSWORD);
     const signInRead = page.waitForResponse(response =>
-      new URL(response.url()).pathname.endsWith('/v1/auth/sign-in')
+      new URL(response.url()).pathname.endsWith('/sign-in')
       && response.request().method() === 'POST');
-    await page.getByRole('button', { name: /sign in|log in/i }).first().click();
-    const signInResponse = await signInRead;
-    const signInResult = await signInResponse.json();
+    await page.locator('form button[type="submit"]').click();
+    const signInResponse = await signInRead.catch(error => {
+      console.log('QA_LIVE_BROWSER_AUTH_REQUESTS', JSON.stringify(authRequests));
+      throw error;
+    });
+    const signInResult = await signInResponse.json().catch(() => ({}));
     const signInCode = signInResult.errorCode ?? signInResult.code ?? signInResult.error?.code ?? 'none';
-    console.log('QA_LIVE_BROWSER_SIGN_IN', JSON.stringify({ status: signInResponse.status(), code: signInCode }));
+    console.log('QA_LIVE_BROWSER_SIGN_IN', JSON.stringify({
+      path: new URL(signInResponse.url()).pathname, status: signInResponse.status(), code: signInCode,
+    }));
     assert.equal(signInResponse.status(), 200, `Production browser sign-in failed (${signInCode})`);
     assert.ok(signInResult.accessToken, 'Production browser sign-in requires a challenge before report access');
     await page.waitForURL(url => url.origin === app && !url.pathname.includes('/sign-in'), { waitUntil: 'domcontentloaded' });
