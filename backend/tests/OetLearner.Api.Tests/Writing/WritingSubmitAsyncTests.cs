@@ -157,8 +157,14 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.Equal(1, await _db.WritingSubmissions.CountAsync());
     }
 
-    [Fact]
-    public async Task SubmitAsync_NewContentAfterTerminalSubmit_ThrowsLocked()
+    [Theory]
+    [InlineData("queued")]
+    [InlineData("preflight")]
+    [InlineData("grading")]
+    [InlineData("submitted")]
+    [InlineData("graded")]
+    [InlineData("locked")]
+    public async Task SubmitAsync_NewContentWhileAttemptLocked_ThrowsLocked(string status)
     {
         var pipeline = BuildPipeline();
         _db.WritingSubmissions.Add(new WritingSubmission
@@ -175,7 +181,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
             SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-8),
             IsRevision = false,
             OriginalSubmissionId = null,
-            Status = "submitted",
+            Status = status,
             GradingTier = "express",
             InputSource = "typed",
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-8),
@@ -187,6 +193,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
             () => pipeline.SubmitAsync(SampleAttempt("fresh-key", LetterB), default));
 
         Assert.Equal("writing_submission_locked", ex.Code);
+        Assert.Equal(1, await _db.WritingSubmissions.CountAsync());
     }
 
     [Fact]

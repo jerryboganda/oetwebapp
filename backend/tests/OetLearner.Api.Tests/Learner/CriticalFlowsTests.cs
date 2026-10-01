@@ -318,9 +318,10 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
             idempotencyKey = Guid.NewGuid().ToString("N")
         });
 
-        Assert.Equal(HttpStatusCode.PaymentRequired, submitResponse.StatusCode);
-        using var errorJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
-        Assert.Equal("ai_credits_insufficient", errorJson.RootElement.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Created, submitResponse.StatusCode);
+        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var submissionId = submitJson.RootElement.GetProperty("id").GetGuid();
+        await WaitForSubmissionStatusAsync(client, submissionId, "failed");
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -328,12 +329,15 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         // failure); no grade is ever produced for it.
         var submission = await db.WritingSubmissions.SingleOrDefaultAsync(x => x.UserId == userId);
         Assert.NotNull(submission);
-        Assert.NotEqual("graded", submission!.Status);
+        Assert.Equal(submissionId, submission!.Id);
+        Assert.Equal("failed", submission.Status);
         Assert.False(await db.WritingGrades.AnyAsync(x => x.SubmissionId == submission.Id));
+        Assert.False(await db.AiUsageRecords.AnyAsync(x => x.UserId == userId));
+        Assert.False(await db.AiCreditReservations.AnyAsync(x => x.UserId == userId));
     }
 
     [Fact]
-    public async Task WritingSubmission_WhenEveryGradingProviderFails_ReturnsRetryable503()
+    public async Task WritingSubmission_WhenEveryGradingProviderFails_PersistsFailureAndReleasesCredits()
     {
         await EnsureV11GradingPrerequisitesAsync();
         var userId = $"writing-providers-down-{Guid.NewGuid():N}";
@@ -355,10 +359,16 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
                 idempotencyKey = Guid.NewGuid().ToString("N")
             });
 
-            // Mapped like the single-call path — not a raw 500 internal_server_error.
-            Assert.Equal(HttpStatusCode.ServiceUnavailable, submitResponse.StatusCode);
-            using var errorJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
-            Assert.Equal("writing_rubric_failed", errorJson.RootElement.GetProperty("code").GetString());
+            Assert.Equal(HttpStatusCode.Created, submitResponse.StatusCode);
+            using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+            var submissionId = submitJson.RootElement.GetProperty("id").GetGuid();
+            await WaitForSubmissionStatusAsync(client, submissionId, "failed");
+
+            await using var scope = _factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            Assert.False(await db.WritingGrades.AnyAsync(x => x.SubmissionId == submissionId));
+            var reservation = await db.AiCreditReservations.SingleAsync(x => x.UserId == userId);
+            Assert.Equal(AiCreditReservationState.Released, reservation.State);
         }
         finally
         {
@@ -406,6 +416,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         var userId = $"writing-revision-{Guid.NewGuid():N}";
         using var client = await CreateGradedClientAsync(userId);
         var submissionId = await SubmitV11LetterAsync(client, V11LetterContent);
+        await WaitForSubmissionStatusAsync(client, submissionId, "graded");
 
         var response = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", new
         {
@@ -421,6 +432,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         Assert.NotEqual(submissionId, revisionId);
         Assert.True(json.RootElement.GetProperty("isRevision").GetBoolean());
         Assert.Equal(submissionId, json.RootElement.GetProperty("originalSubmissionId").GetGuid());
+        await WaitForSubmissionStatusAsync(client, revisionId, "graded");
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -444,6 +456,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         var userId = $"writing-revision-idem-{Guid.NewGuid():N}";
         using var client = await CreateGradedClientAsync(userId);
         var submissionId = await SubmitV11LetterAsync(client, V11LetterContent);
+        await WaitForSubmissionStatusAsync(client, submissionId, "graded");
         var body = new
         {
             letterContent = V11RevisionContent,
@@ -458,6 +471,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
 
         var secondResponse = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", body);
         Assert.Equal(HttpStatusCode.TooManyRequests, secondResponse.StatusCode);
+        await WaitForSubmissionStatusAsync(client, revisionId, "graded");
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
