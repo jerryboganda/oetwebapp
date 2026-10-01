@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { ArrowLeft, MessageCircleQuestion, Users } from 'lucide-react';
+import { ArrowLeft, MessageCircleQuestion } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
-import { Card } from '@/components/ui/card';
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking-candidate-resources';
 
 export const metadata: Metadata = {
@@ -32,73 +35,69 @@ function renderWithPlaceholders(text: string) {
 export default function SpeakingIntroQuestionsPage() {
   return (
     <>
-      <div className="mx-auto w-full max-w-4xl space-y-6">
-        <Link
-          href="/speaking"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Back to Speaking
-        </Link>
+      <LearnerPageHero
+        eyebrow="Speaking reference · All professions"
+        icon={<MessageCircleQuestion />}
+        accent="speaking"
+        title="Speaking Intro Questions"
+        description={`${SPEAKING_INTRO_QUESTIONS.length} common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own.`}
+        highlights={[
+          { icon: <MessageCircleQuestion />, label: 'Questions', value: `${SPEAKING_INTRO_QUESTIONS.length} with sample answers` },
+        ]}
+        aside={(
+          <Button asChild variant="outline" size="sm">
+            <Link href="/speaking">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to Speaking
+            </Link>
+          </Button>
+        )}
+      />
 
-        <LearnerPageHero
-          eyebrow="Speaking reference · All professions"
-          icon={<MessageCircleQuestion />}
-          accent="primary"
-          title="Speaking Intro Questions"
-          description={`${SPEAKING_INTRO_QUESTIONS.length} common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own.`}
-          highlights={[
-            { icon: <MessageCircleQuestion />, label: 'Questions', value: `${SPEAKING_INTRO_QUESTIONS.length} with sample answers` },
-            { icon: <Users />, label: 'Works for', value: 'Every profession' },
-          ]}
-        />
+      <InlineAlert variant="warning" live="polite" title="Candidate rule">
+        These are sample answers to personalise, not memorise word-for-word. Adapt the highlighted details to
+        your own profession, experience, country, specialty, and career plan.
+      </InlineAlert>
 
-        <Card padding="md" className="border-warning/30 bg-warning/10">
-          <p className="eyebrow text-navy">
-            Candidate rule
-          </p>
-          <p className="mt-1.5 text-sm leading-6 text-navy">
-            These are sample answers to personalise, not memorise word-for-word. Adapt the highlighted details to
-            your own profession, experience, country, specialty, and career plan.
-          </p>
-        </Card>
+      <ol className="space-y-4">
+        {SPEAKING_INTRO_QUESTIONS.map((item, index) => (
+          <li key={item.no}>
+            <MotionItem delayIndex={Math.min(index, 5)}>
+              <article className={cardClassName({ padding: 'md' })} aria-labelledby={`intro-q-${item.no}`}>
+                <div className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-skill-speaking/10 text-sm font-bold tabular-nums text-skill-speaking"
+                  >
+                    {item.no}
+                  </span>
+                  <h2 id={`intro-q-${item.no}`} className="text-base font-bold text-navy sm:text-lg">
+                    <span className="sr-only">{item.no}. </span>{item.question}
+                  </h2>
+                </div>
+                <p className="mt-3 eyebrow text-primary">
+                  Sample answer — personalise the bracketed details:
+                </p>
+                <p className="mt-1.5 max-w-prose text-sm leading-7 text-navy/85">
+                  {renderWithPlaceholders(item.sampleAnswer)}
+                </p>
+                {item.note ? (
+                  <p className="mt-2 border-t border-border pt-2 text-xs leading-5 text-muted">{item.note}</p>
+                ) : null}
+              </article>
+            </MotionItem>
+          </li>
+        ))}
+      </ol>
 
-        <div className="space-y-4">
-          {SPEAKING_INTRO_QUESTIONS.map((item) => (
-            <Card key={item.no} padding="md" aria-labelledby={`intro-q-${item.no}`}>
-              <div className="flex items-start gap-3">
-                <span
-                  aria-hidden
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-black text-primary"
-                >
-                  {item.no}
-                </span>
-                <h2 id={`intro-q-${item.no}`} className="text-base font-bold text-navy sm:text-lg">
-                  {item.no}. {item.question}
-                </h2>
-              </div>
-              <p className="mt-3 eyebrow text-primary">
-                Sample answer — personalise the bracketed details:
-              </p>
-              <p className="mt-1.5 text-sm leading-7 text-navy/85">
-                {renderWithPlaceholders(item.sampleAnswer)}
-              </p>
-              {item.note ? (
-                <p className="mt-2 border-t border-border pt-2 text-xs leading-5 text-muted">{item.note}</p>
-              ) : null}
-            </Card>
-          ))}
-        </div>
-
-        <Card padding="md" className="border-dashed">
-          <p className="text-sm leading-6 text-muted">
-            Tip: practise each answer aloud in 20–30 seconds, keeping your own details. Revisit the{' '}
-            <Link href="/speaking/assessment-criteria" className="font-semibold text-primary hover:underline">
-              Speaking Assessment Criteria
-            </Link>{' '}
-            to see what the examiner listens for while you speak.
-          </p>
-        </Card>
-      </div>
+      <Card padding="md" className="border-dashed">
+        <p className="text-sm leading-6 text-muted">
+          Tip: practise each answer aloud in 20–30 seconds, keeping your own details. Revisit the{' '}
+          <Link href="/speaking/assessment-criteria" className="font-semibold text-primary hover:underline">
+            Speaking Assessment Criteria
+          </Link>{' '}
+          to see what the examiner listens for while you speak.
+        </p>
+      </Card>
     </>
   );
 }
