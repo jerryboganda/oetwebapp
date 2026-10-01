@@ -131,19 +131,28 @@ public static class CommunityEndpoints
         }).RequireRateLimiting("PerUserWrite");
 
         // ── Study groups ─────────────────────────────────────────────────
+        // page/pageSize are optional: the learner page lists the first page, and a
+        // required int answered 400 to every call that left them out.
         community.MapGet("/study-groups", async (
+            HttpContext http,
             [FromQuery] string? examTypeCode,
-            [FromQuery] int page,
-            [FromQuery] int pageSize,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var ps = pageSize <= 0 ? 20 : pageSize;
-            var pg = page <= 0 ? 1 : page;
+            var ps = pageSize is > 0 ? pageSize.Value : 20;
+            var pg = page is > 0 ? page.Value : 1;
             var query = db.StudyGroups.Where(g => g.IsPublic && g.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(g => g.ExamTypeCode == examTypeCode);
             var total = await query.CountAsync(ct);
             var groups = await query.OrderByDescending(g => g.MemberCount).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);
-            return Results.Ok(new { total, groups = groups.Select(g => new { id = g.Id, name = g.Name, description = g.Description, examTypeCode = g.ExamTypeCode, memberCount = g.MemberCount, maxMembers = g.MaxMembers, createdAt = g.CreatedAt }) });
+            var userId = http.UserId();
+            var groupIds = groups.Select(g => g.Id).ToList();
+            var joinedIds = await db.StudyGroupMembers
+                .Where(m => m.UserId == userId && groupIds.Contains(m.GroupId))
+                .Select(m => m.GroupId)
+                .ToListAsync(ct);
+            return Results.Ok(new { total, groups = groups.Select(g => new { id = g.Id, name = g.Name, description = g.Description, examTypeCode = g.ExamTypeCode, memberCount = g.MemberCount, maxMembers = g.MaxMembers, createdAt = g.CreatedAt, isJoined = joinedIds.Contains(g.Id) }) });
         });
 
         community.MapPost("/study-groups", async (HttpContext http, CreateStudyGroupRequest req, LearnerDbContext db, CancellationToken ct) =>

@@ -1,36 +1,33 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Users, ArrowRight } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { CardLink } from '@/components/ui/card-link';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { analytics } from '@/lib/analytics';
-import { apiClient } from '@/lib/api';
-
-interface StudyGroup {
-  id: string;
-  name: string;
-  profession: string;
-  memberCount: number;
-  description: string;
-  isJoined: boolean;
-}
+import { fetchStudyGroups, joinStudyGroup, type StudyGroupSummary } from '@/lib/api/community';
 
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<StudyGroup[]>([]);
+  const [groups, setGroups] = useState<StudyGroupSummary[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.request<StudyGroup[]>('/v1/community/study-groups');
-      setGroups(Array.isArray(data) ? data : []);
+      const data = await fetchStudyGroups();
+      setGroups(Array.isArray(data?.groups) ? data.groups : []);
+      setTotal(typeof data?.total === 'number' ? data.total : 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load study groups');
     } finally {
@@ -40,6 +37,19 @@ export default function GroupsPage() {
 
   useEffect(() => { analytics.track('page_viewed', { page: 'community-groups' }); load(); }, [load]);
 
+  const join = async (groupId: string) => {
+    setJoiningId(groupId);
+    setJoinError(null);
+    try {
+      await joinStudyGroup(groupId);
+      await load();
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : 'Could not join this group.');
+    } finally {
+      setJoiningId(null);
+    }
+  };
+
   return (
     <>
       <LearnerPageHero
@@ -47,8 +57,14 @@ export default function GroupsPage() {
         title="Study Groups"
         description="Connect with peers preparing for the same exam. Share resources, ask questions, and stay motivated together."
         icon={Users}
-        highlights={!loading && !error ? [{ icon: Users, label: 'Groups', value: `${groups.length} available` }] : undefined}
+        highlights={!loading && !error ? [{ icon: Users, label: 'Groups', value: `${total} available` }] : undefined}
       />
+
+      {joinError ? (
+        <InlineAlert variant="error" dismissible onDismiss={() => setJoinError(null)}>
+          {joinError}
+        </InlineAlert>
+      ) : null}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="status" aria-busy="true" aria-label="Loading">
@@ -64,29 +80,38 @@ export default function GroupsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {groups.map((group, index) => (
-            <MotionItem key={group.id} delayIndex={Math.min(index, 5)}>
-              <CardLink href={`/community/groups/${group.id}`} prefetch={false} className="h-full">
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <h2 className="min-w-0 break-words text-sm font-bold text-navy">{group.name}</h2>
-                  {group.isJoined ? (
-                    <Badge variant="success">Joined</Badge>
-                  ) : (
-                    <Badge variant="outline">Open</Badge>
-                  )}
-                </div>
-                <p className="mb-3 line-clamp-2 text-xs text-muted">{group.description}</p>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="tabular-nums">{group.memberCount} members</span>
-                    <Badge variant="muted" className="text-3xs capitalize">{group.profession}</Badge>
+          {groups.map((group, index) => {
+            const full = group.memberCount >= group.maxMembers;
+            return (
+              <MotionItem key={group.id} delayIndex={Math.min(index, 5)} className="h-full">
+                <Card className="flex h-full flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="min-w-0 break-words text-sm font-bold text-navy">{group.name}</h2>
+                    {group.isJoined ? (
+                      <Badge variant="success">Joined</Badge>
+                    ) : full ? (
+                      <Badge variant="muted">Full</Badge>
+                    ) : null}
                   </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" aria-hidden="true" />
-                </div>
-              </CardLink>
-            </MotionItem>
-          ))}
+                  {group.description ? <p className="line-clamp-2 text-xs text-muted">{group.description}</p> : null}
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="tabular-nums">{group.memberCount}/{group.maxMembers} members</span>
+                      {group.examTypeCode ? (
+                        <Badge variant="muted" className="text-3xs uppercase">{group.examTypeCode}</Badge>
+                      ) : null}
+                    </div>
+                    {!group.isJoined && !full ? (
+                      <Button size="sm" variant="outline" loading={joiningId === group.id} onClick={() => void join(group.id)}>
+                        Join group
+                      </Button>
+                    ) : null}
+                  </div>
+                </Card>
+              </MotionItem>
+            );
+          })}
         </div>
       )}
     </>
