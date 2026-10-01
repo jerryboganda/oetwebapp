@@ -127,9 +127,9 @@ export default function ReadinessCenter() {
         />
 
         {/* Top row: Forecast gauge | Overall + actions | Risk factors */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <section className="bg-surface border border-border rounded-[24px] p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <section className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${riskAccent.tile}`}>
                   <RiskIconCmp className="w-4 h-4" />
@@ -182,7 +182,7 @@ export default function ReadinessCenter() {
             </div>
           </section>
 
-          <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+          <section className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
                 <AlertTriangle className="w-4 h-4" />
@@ -248,7 +248,7 @@ export default function ReadinessCenter() {
         </section>
 
         {/* Trend chart */}
-        <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+        <section className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
               <h3 className="text-lg font-bold text-navy">Readiness trend</h3>
@@ -301,7 +301,7 @@ export default function ReadinessCenter() {
               description="Readiness is computed from real practice: mocks, tutor reviews, vocabulary, and study-plan progress."
               className="mb-4"
             />
-            <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">
+            <section className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
               <div className="space-y-3">
                 <EvidenceRow label="Full mocks (90d)" value={data.evidence.mocksCompleted} />
                 <EvidenceRow label="Practice questions (90d)" value={data.evidence.practiceQuestions} />

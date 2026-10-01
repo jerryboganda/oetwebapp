@@ -28,8 +28,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
+import { useRiseNudge } from '@/hooks/use-rise-nudge';
 import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
 import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
 import { Button } from '@/components/ui/button';
@@ -299,7 +300,7 @@ function NotificationCenterContent({
   // Backend-side ops alerts (manual fulfilment queue). Rendered as a pinned
   // group above the personal feed; adds to the bell's unread pill below.
   const { alerts: adminAlerts } = useAdminAlerts();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const [tab, setTab] = useState<'all' | 'unread'>('all');
   const [category, setCategory] = useState<string | null>(null);
 
@@ -610,12 +611,15 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
     // Only `unreadCount`/`connectionStatus` are needed here — subscribe to
     // state-only context so the bell button skips re-renders caused by action
     // reference changes.
-    const { unreadCount, connectionStatus } = useNotificationState();
+    const { unreadCount, connectionStatus, isLoading } = useNotificationState();
     // Admin fulfilment alerts ride the EXISTING unread pill (added, not a
     // separate dot) so ops load is visible at a glance alongside inbox mail.
     const { totalAlertCount: adminAlertCount } = useAdminAlerts();
     const displayUnreadCount = unreadCount + adminAlertCount;
     const isDegraded = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+    // A one-shot bell nudge + badge pop when new items arrive, never for the
+    // first load (CSS keyframes, so reduced motion and exam stillness apply).
+    const nudge = useRiseNudge(displayUnreadCount, !isLoading);
     return (
       <button
         ref={ref}
@@ -628,9 +632,17 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >
-        <Bell className="h-5 w-5" aria-hidden="true" />
+        <span key={nudge} className={cn('inline-flex', nudge > 0 && 'bell-nudge')}>
+          <Bell className="h-5 w-5" aria-hidden="true" />
+        </span>
         {displayUnreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-3xs">
+          <span
+            key={`badge-${nudge}`}
+            className={cn(
+              'absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-3xs font-bold leading-none text-white shadow-sm dark:bg-violet-700 lg:min-w-[18px]',
+              nudge > 0 && 'pop-in',
+            )}
+          >
             {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
           </span>
         )}

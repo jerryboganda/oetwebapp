@@ -20,7 +20,7 @@
 // (handles are ARIA sliders driven by arrow keys).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotionConfig } from 'motion/react';
 import { Loader2, Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
@@ -131,7 +131,7 @@ export function WaveformCuePointEditor({
   onSaved,
   className,
 }: WaveformCuePointEditorProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);

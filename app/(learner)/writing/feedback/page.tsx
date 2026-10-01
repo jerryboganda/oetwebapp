@@ -12,7 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
 import { Card } from '@/components/ui/card';
@@ -87,30 +87,20 @@ function WritingDetailedFeedbackContent() {
   /* Build a map of anchored-comment id → AnchoredComment for quick lookup */
   const commentMap = new Map<string, AnchoredComment>();
   result.criteria.forEach(c => c.anchoredComments.forEach(ac => commentMap.set(ac.id, ac)));
-  const heroHighlights = [
-    { icon: MessageSquare, label: 'Criteria', value: `${result.criteria.length}` },
-    { icon: Lightbulb, label: 'Commentary', value: `${result.criteria.reduce((sum, c) => sum + c.anchoredComments.length, 0)}` },
-    { icon: ArrowRight, label: 'Revision', value: 'Actionable' },
-  ];
+  const commentCount = result.criteria.reduce((sum, c) => sum + c.anchoredComments.length, 0);
 
   return (
     <AppShell pageTitle="Detailed Feedback" distractionFree>
       <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <LearnerPageHero
-        eyebrow="Writing"
-        icon={MessageSquare}
-        title="Detailed Feedback"
-        description="Review your submission, score breakdown, and revision prompts in one place."
-        highlights={heroHighlights}
-      />
-
-      {/* Toolbar */}
+      {/* Toolbar: the page's one heading (a hero above it repeated the title). */}
       <header className="shrink-0 rounded-3xl border border-border bg-surface px-4 py-3 shadow-sm sm:px-6 flex flex-wrap items-center justify-between gap-3 z-10">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Link href={`/writing/result?id=${resultId}`} className="text-muted transition-colors hover:text-navy p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
           <div className="min-w-0">
             <h1 className="font-bold text-lg leading-tight text-navy">Detailed Feedback</h1>
-            <div className="truncate text-xs text-muted">{result.taskTitle}</div>
+            <div className="truncate text-xs text-muted">
+              {result.taskTitle} · {result.criteria.length} criteria · {commentCount} comments
+            </div>
           </div>
         </div>
       </header>

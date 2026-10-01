@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CountUp } from '@/components/ui/count-up';
 import { ResultGauge } from './gauge';
 
 export type ScoreStatTone = 'default' | 'success' | 'warning' | 'danger' | 'info';
@@ -73,7 +74,7 @@ export function ResultsScorePanel({
           <ResultGauge value={gaugeValue} color={gaugeColor}>
             {gaugeCenter ?? (
               <span className="text-2xl font-black text-navy dark:text-white">
-                {Math.round(gaugeValue)}
+                <CountUp value={Math.round(gaugeValue)} />
                 <span className="text-sm">%</span>
               </span>
             )}
@@ -91,7 +92,9 @@ export function ResultsScorePanel({
             <h1 className="mt-1 text-balance text-xl font-black leading-tight text-navy dark:text-white sm:text-2xl">{title}</h1>
             {subtitle ? <p className="mt-1 max-w-prose text-sm text-muted">{subtitle}</p> : null}
             {grade ? (
-              <Badge variant={grade.tone} className="mt-2">{grade.label}</Badge>
+              <span className="pop-in mt-2 inline-flex">
+                <Badge variant={grade.tone}>{grade.label}</Badge>
+              </span>
             ) : null}
           </div>
         </div>
@@ -102,7 +105,7 @@ export function ResultsScorePanel({
               <div key={index} className={cn('min-w-0 rounded-xl border p-3', statToneClass[stat.tone ?? 'default'])}>
                 <div className="flex items-center gap-1.5">
                   {stat.icon ? <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{stat.icon}</span> : null}
-                  <p className="min-w-0 text-3xs font-black uppercase tracking-wider opacity-80">{stat.label}</p>
+                  <p className="tile-label min-w-0 opacity-80">{stat.label}</p>
                 </div>
                 <p className="mt-1 break-words text-lg font-black leading-tight tabular-nums">{stat.value}</p>
               </div>

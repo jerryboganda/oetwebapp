@@ -156,7 +156,7 @@ export default function PronunciationHubPage() {
 
   return (
     <>
-      <main className="space-y-6 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         {/* Hero */}
         <LearnerPageHero
           eyebrow="SM-2 Spaced Repetition"
@@ -336,7 +336,7 @@ export default function PronunciationHubPage() {
             </div>
           )}
         </section>
-      </main>
+      </div>
     </>
   );
 }

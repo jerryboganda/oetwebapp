@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import {
   ArrowRight,
   BookOpen,
@@ -27,6 +27,9 @@ import { SafeRichText } from '@/components/domain/grammar/grammar-content-render
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { MotionList } from '@/components/ui/motion-primitives';
+import { CelebrationBurst } from '@/components/ui/celebration-burst';
+import { CountUp } from '@/components/ui/count-up';
+import { useIncreaseSinceLastVisit } from '@/hooks/use-increase-since-last-visit';
 import { fetchPublicCatalog, type learnerGetScoringPolicy, type MyEntitlementSnapshot } from '@/lib/api';
 import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 import type { EngagementData } from '@/lib/hooks/use-dashboard-home';
@@ -95,7 +98,8 @@ export function LearnerDashboardDetails({
   scoringPolicy,
 }: LearnerDashboardDetailsProps) {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
+  const streakUp = useIncreaseSinceLastVisit('oet_last_seen_streak', engagement?.currentStreak);
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const [catalogAddOns, setCatalogAddOns] = useState<PublicCatalogAddOnRow[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -290,7 +294,7 @@ export function LearnerDashboardDetails({
                       {subTest.name}
                     </span>
                     <span className="tabular-nums text-muted">
-                      {subTest.readiness}%
+                      <CountUp value={subTest.readiness} suffix="%" />
                       <span className="text-muted/60"> · target {subTest.target}%</span>
                     </span>
                   </div>
@@ -351,9 +355,13 @@ export function LearnerDashboardDetails({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">{engagement.currentStreak}</div>
+                <div className="relative text-center">
+                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">
+                    <CountUp value={engagement.currentStreak} />
+                  </div>
                   <div className="text-xs text-muted">Day Streak</div>
+                  {/* Real wins only: the streak grew since this device last saw it. */}
+                  <CelebrationBurst active={streakUp} onceKey={`streak:${engagement.currentStreak}`} />
                 </div>
                 <div className="text-center">
                   <div className="flex items-center gap-1 text-lg font-bold text-amber-800 dark:text-amber-300">

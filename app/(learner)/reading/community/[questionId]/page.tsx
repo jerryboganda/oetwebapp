@@ -70,7 +70,7 @@ export default function QuestionDiscussionPage() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8 max-w-2xl">
+      <div className="space-y-5 sm:space-y-8 max-w-2xl">
         <Link
           href="/reading"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
@@ -155,7 +155,7 @@ export default function QuestionDiscussionPage() {
             </div>
           </form>
         </div>
-      </main>
+      </div>
     </>
   );
 }

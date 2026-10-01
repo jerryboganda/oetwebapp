@@ -16,7 +16,7 @@ import {
   fetchVocabularyDailySet,
   removeFromMyVocabulary,
 } from '@/lib/api';
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotionConfig } from 'motion/react';
 import { analytics } from '@/lib/analytics';
 import { getMicroHover, prefersReducedMotion } from '@/lib/motion';
 import type { LearnerVocabulary, VocabularyDailySet, VocabularyStats } from '@/lib/types/vocabulary';
@@ -31,7 +31,7 @@ const MASTERY_COLORS: Record<string, string> = {
 };
 
 export default function VocabularyPage() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const microHover = getMicroHover(reducedMotion);
   const [myList, setMyList] = useState<MyVocabItem[]>([]);
   const [myListTotal, setMyListTotal] = useState(0);

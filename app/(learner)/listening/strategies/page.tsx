@@ -45,7 +45,7 @@ export default function ListeningStrategiesPage() {
   });
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-12 space-y-5 sm:space-y-8">
+    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight text-navy">Strategy Library</h1>
         <p className="mt-2 text-muted">
@@ -112,6 +112,6 @@ export default function ListeningStrategiesPage() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

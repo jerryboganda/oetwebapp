@@ -32,7 +32,7 @@ This is the single design-system spec for every surface in the web app: learner,
 - Warm clinical calm, not sterile.
 - An airy cream canvas, not dense dark chrome.
 - A premium academic workspace, not a marketing landing page.
-- Supportive and trustworthy, with gentle motion and soft cards.
+- Supportive and trustworthy, with soft cards and expressive but purposeful motion: it confirms actions, reveals content and celebrates real progress; it never decorates.
 - Data-rich, but never cold or cluttered.
 
 ## 2. Colour
@@ -63,7 +63,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - `text-xs` (12px) through `text-4xl`: Tailwind defaults
 
   The micro sizes are rem-based, so the "large text" accessibility setting scales them.
-- **Eyebrows:** the `eyebrow` utility (`text-2xs font-bold uppercase tracking-[0.16em]`) plus a colour, usually `text-muted`. Don't hand-roll other uppercase label recipes.
+- **Uppercase labels** come in two recipes, each a utility plus a colour (usually `text-muted`): `eyebrow` (`text-2xs font-bold uppercase tracking-[0.16em]`) above headings and sections, and `tile-label` (`text-3xs`, tighter tracking, breaks long words) inside stat tiles and chips. Don't hand-roll others.
 - **Body:** 14–16px with a calm line height. Headings are semibold or bold with tight tracking.
 - **Numbers:** use `tabular-nums` in tables and metrics, and right-align numeric columns.
 
@@ -90,16 +90,30 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - `normal` 220ms
   - `slow` 280ms
   - `hero` 360ms
+  - `flourish` 640ms: one-shot pops and nudges (a badge pop, a bell nudge, a streak flame)
+  - `count` 800ms: count-ups, ring and bar draw-ins, celebration particles
 - **Easing:** `ease-standard` (decisive ease-out), `ease-enter`, `ease-exit`. motion/react uses the same values through `motionTokens` in `lib/motion.ts`.
-- **Surface presets:** use `getSurfaceMotion('route'|'section'|'list'|'item'|'overlay'|'state')` or the Motion* components. Don't hand-write springs.
+- **Surface presets:** use `getSurfaceMotion('route'|'section'|'list'|'item'|'overlay'|'state')` or the Motion* components. Don't hand-write springs; use `motionTokens.spring`.
+- **Personality: expressive.** Springs follow Material 3 Expressive physics:
+  - reveals settle with a little life (ζ ≈ 0.8);
+  - sliding indicators use `spring.layout` (ζ ≈ 0.9);
+  - `spring.pop` (ζ ≈ 0.6) is reserved for presses, badges and celebrations. Never put bounce on per-row list reveals, which must stay cheap while scrolling.
+- **Reveals happen in view.** `MotionSection`/`MotionItem`/`MotionList`/`MotionPage` animate once, when scrolled into view (`whileInView`, default viewport), so below-the-fold content doesn't finish animating off-screen. `layout` animation is opt-in.
 - **Animate only `transform` and `opacity`**, never layout properties.
-- **Hover:** a lift of at most 1px, gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`).
+- **Hover:** a lift of at most 2px (`hoverable:-translate-y-0.5` on interactive cards), gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`, which Link CTAs rendered through `Button asChild` also get).
+- **Hover tints are state layers:** use the shared `.hover-primary` (8% primary, 15% in dark mode, primary text, hover-capable pointers only). Never a solid primary fill on rows, tabs, pills or nav items, and keep children's hover colour on the primary text, never white.
+- **Progress** fills slide with a transform (never animate `width`), and rings draw in from empty on first paint via `@starting-style`.
+- **Numbers that matter** (scores, raw marks, streaks, XP) may count up with `CountUp`: once, when in view, from the real value only.
+- **Wins** (target grade met, streak up, achievement unlocked) may fire `CelebrationBurst`. Use it once per event per session, never decoratively, never on exam/live routes, and pair it with a success haptic in the mobile app. A pass means the learner's own target, else the country-aware pass mark from `lib/scoring` (Writing differs by country); never assume Grade B.
+- **One-shot flourishes** (badge pop, bell nudge, flame pop) are CSS keyframes (`.pop-in`, `.bell-nudge`, `.flame-pop`) keyed to the real event, so they replay on a new event and obey reduce motion and exam stillness.
 - **Active indicators** (tabs, sidebar, bottom nav) use a shared-layout `layoutId`. Scope each instance's id with `useId`.
 - **Reduced motion is mandatory.**
   - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.
+  - Code that branches on the preference reads it with `useReducedMotionConfig()`, which honours the in-app toggle. Plain `useReducedMotion()` only sees the OS setting.
   - Under reduced motion, keep every **state** visible (active fills, selected rings). Drop only the movement.
 - **Never animate** exam timers, audio/recording controls or anything on the critical path of a live attempt.
-- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content`. It is skipped on first paint, in the learner shell (learner pages animate themselves), with `distractionFree`, and on exam/live routes (`isExamOrLiveRoute`). Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
+  - `LearnerShellLayout` enforces this with `MotionStill`: on exam/live routes (`isExamOrLiveRoute`) the whole shell, header included, gets `MotionConfig reducedMotion="always"`, `data-motion="still"` (which the reduce-motion CSS honours) and no in-view reveals at all. The boundary always renders, so entering an exam route never remounts the shell.
+- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content` in every shell, learner included. It is skipped on first paint (protects LCP), with `distractionFree`, and on exam/live routes. It stays opacity-only: a lasting transform would make `<main>` the containing block for fixed children. Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
 
 ## 6. Components
 | Component | Styling | Behaviour |
@@ -118,7 +132,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 ## 7. Layout and responsive behaviour
 - Keep the workspace about 1200px wide.
 - Pages flow as: hero → action cards → main grid → supporting rail.
-- **Vertical rhythm:** the learner shell spaces a page's top-level blocks (`.learner-page-flow`: 24px, 32px from `sm`). Pages return their blocks without wrapper `space-y-*` or ad-hoc `mt-*`. Vertical padding belongs to `<main>`; the workspace container only sets width and gutters.
+- **Vertical rhythm:** the learner shell spaces a page's top-level blocks (`.learner-page-flow`: 24px, 32px from `sm`), so a page can return its blocks directly. A page with one wrapper keeps its own `space-y-*`; neither needs ad-hoc `mt-*` between blocks. Vertical padding belongs to `<main>`; the workspace container only sets width and gutters. One `<main>` (the shell's) and one `<h1>` per page.
 - **Tiles and stat strips** size to their container, not the viewport: auto-fit grids (`grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]`) or `@container` queries. Labels and values wrap; never clip or ellipsize a metric.
 - **Mobile (<lg):**
   - The sidebar becomes the top-nav drawer and the bottom nav appears.
@@ -140,7 +154,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 **Don't:**
 - Add hex colours, `text-[Npx]`, new shadow recipes or a second brand colour.
 - Use default browser controls that ignore the system.
-- Add loud gradients, glassmorphism on content cards, neon glows or decorative motion.
+- Add loud gradients, glassmorphism on content cards, neon glows or decorative motion (motion that confirms, reveals or celebrates a real event is purposeful; motion for its own sake is decorative).
 - Remove the ambient background blooms from learner pages.
 - Change exam-player layouts or timing for visual reasons.
 

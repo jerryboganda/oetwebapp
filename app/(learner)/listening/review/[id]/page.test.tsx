@@ -32,6 +32,7 @@ vi.mock('@/components/ui/skeleton', () => ({
 
 vi.mock('@/components/domain', () => ({
   LearnerPageHero: () => <section data-testid="review-hero" />,
+  LearnerSurfaceMetaRow: () => null,
   LearnerSurfaceSectionHeader: ({ eyebrow, title, description }: {
     eyebrow: string;
     title: string;

@@ -18,7 +18,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
 import { LearnerStreakBadges } from './learner-streak-badges';
 import { ProfileMenu } from './profile-menu';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -118,7 +118,7 @@ export function TopNav({
     setMobileMenuOpen(false);
   }
   const router = useRouter();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const displayName = userSummary?.displayName?.trim() || 'User';
   const initials = displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   const authContext = useContext(AuthContext);
@@ -390,8 +390,8 @@ export function TopNav({
                                     prefetch={false}
                                     onClick={handleMobileItemClick}
                                     className={cn(
-                                      'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
-                                      active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+                                      'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold',
+                                      active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover-primary',
                                     )}
                                     aria-current={active ? 'page' : undefined}
                                   >
@@ -412,7 +412,7 @@ export function TopNav({
                             href={getWorkspaceSettingsHref(workspaceRole)}
                             prefetch={false}
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-sm font-semibold text-navy shadow-sm hover-primary"
                           >
                             <Settings className="h-4 w-4" aria-hidden="true" />
                             Settings
@@ -420,7 +420,7 @@ export function TopNav({
                           <a
                             href={buildSupportMailto(userSummary?.email ?? undefined)}
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                            className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-sm font-semibold text-navy shadow-sm hover-primary"
                           >
                             <HelpCircle className="h-4 w-4" aria-hidden="true" />
                             Help & Support
@@ -446,8 +446,8 @@ export function TopNav({
                               prefetch={false}
                               onClick={handleMobileItemClick}
                               className={cn(
-                                'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-semibold',
-                                active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+                                'pressable flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold',
+                                active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover-primary',
                               )}
                               aria-current={active ? 'page' : undefined}
                             >
@@ -467,7 +467,7 @@ export function TopNav({
                         onClick={() => {
                           void handleSignOut();
                         }}
-                        className="pressable flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-[13px] font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
+                        className="pressable flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-sm font-semibold text-navy shadow-sm hover-primary"
                       >
                         <LogOut className="h-4 w-4" aria-hidden="true" />
                         Sign out

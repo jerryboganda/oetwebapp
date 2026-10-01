@@ -66,7 +66,7 @@ export default function MockResultsPage() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <Link
           href="/reading/mocks"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
@@ -341,7 +341,7 @@ export default function MockResultsPage() {
             </section>
           </>
         ) : null}
-      </main>
+      </div>
     </>
   );
 }

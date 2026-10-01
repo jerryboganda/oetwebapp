@@ -24,7 +24,7 @@
  *     every second (polite, with controlled refresh cadence).
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useReducedMotion, motion } from 'motion/react';
+import { useReducedMotionConfig, motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -62,7 +62,7 @@ export function PrepCountdown({
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const labelId = useId();
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionConfig();
 
   // Use a tick reducer rather than storing the count in state — this
   // way we re-derive the remaining seconds from the start timestamp

@@ -63,7 +63,7 @@ export default function SpeakingExamLauncherPage() {
   }, [router, starting, mockAttemptId, mockSectionId]);
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-10">
+    <div className="mx-auto max-w-xl">
       <h1 className="text-2xl font-semibold text-foreground">Speaking exam</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted">
         A full OET-style Speaking exam: a short unscored introduction, then two role-play cards

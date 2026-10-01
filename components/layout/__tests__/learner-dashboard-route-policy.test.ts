@@ -59,8 +59,13 @@ describe('learner dashboard route policy', () => {
     expect(resolveLearnerChrome('/listening/player/a1')).toEqual({ mode: 'none', requireAuth: true, examOrLive: true });
     expect(resolveLearnerChrome('/speaking/sessions/s1/live-tutor').mode).toBe('none');
     expect(resolveLearnerChrome('/speaking/sessions/s1').mode).toBe('none');
-    expect(resolveLearnerChrome('/listening/strategies/').mode).toBe('none');
     expect(resolveLearnerChrome('/billing/payment-return?status=ok').mode).toBe('none');
+  });
+
+  it('keeps content, hub and results pages in the workspace chrome so navigation never disappears', () => {
+    for (const route of ['/listening/strategies/', '/listening/lessons/l1', '/listening/stats', '/listening/mocks/m1/results', '/speaking/exam', '/speaking/exam/e1/results', '/speaking/mocks']) {
+      expect(resolveLearnerChrome(route).mode, route).toBe('workspace');
+    }
   });
 
   it('resolves focus routes with the page title copy or i18n key', () => {

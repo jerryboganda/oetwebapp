@@ -2,11 +2,11 @@
 
 import { cn } from '@/lib/utils';
 import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, forwardRef } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 
 function useErrorReveal() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   return reducedMotion
     ? {
         initial: false as const,

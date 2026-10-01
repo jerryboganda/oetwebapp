@@ -64,12 +64,12 @@ export function LearnerSkillSwitcher({
                   : 'border-border/70 bg-background-light text-navy hover:border-primary/50 hover-primary',
               )}
             >
-              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors', active ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted ring-1 ring-border/70 group-hover:bg-white/20 group-hover:text-white group-hover:ring-0')}>
+              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors', active ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted ring-1 ring-border/70 group-hover:bg-primary/10 group-hover:text-primary group-hover:ring-primary/20')}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold">{compact ? module.shortLabel : module.label}</span>
-                {!compact ? <span className="mt-0.5 block truncate text-xs text-muted group-hover:text-white/90">{module.description}</span> : null}
+                {!compact ? <span className="mt-0.5 block truncate text-xs text-muted">{module.description}</span> : null}
               </span>
             </Link>
           );

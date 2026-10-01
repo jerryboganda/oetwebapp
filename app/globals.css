@@ -134,6 +134,8 @@
   --duration-normal: 220ms;
   --duration-slow: 280ms;
   --duration-hero: 360ms;
+  --duration-flourish: 640ms;
+  --duration-count: 800ms;
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
@@ -284,13 +286,22 @@
   --color-admin-success-tint-strong: var(--admin-success-tint-strong);
 }
 
-/* DESIGN.md §3 eyebrow: the small uppercase label above a heading or value.
-   Sets type only; pair it with a colour (usually text-muted). */
+/* DESIGN.md §3 label recipes. Type only; pair each with a colour (usually
+   text-muted). eyebrow: above a heading or section. tile-label: inside stat
+   tiles and chips, tighter so long words ("CONFIDENCE") fit narrow tiles. */
 @utility eyebrow {
   font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
+}
+
+@utility tile-label {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  overflow-wrap: break-word;
 }
 
 @layer components {
@@ -306,6 +317,65 @@
       margin-top: 2rem;
     }
   }
+
+  /* CelebrationBurst (components/ui/celebration-burst.tsx): each particle flies
+     out along --angle, spins and fades. Transform/opacity only. */
+  .celebration-particle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--size);
+    height: calc(var(--size) * 1.6);
+    margin: calc(var(--size) * -0.8) 0 0 calc(var(--size) * -0.5);
+    background: var(--color);
+    animation: celebration-particle var(--duration-count) var(--ease-enter) var(--delay) both;
+  }
+
+  /* One-shot flourishes. Each plays once on mount; remount (React key) replays it. */
+  .bell-nudge {
+    transform-origin: 50% 10%;
+    animation: bell-nudge var(--duration-flourish) var(--ease-standard);
+  }
+
+  .pop-in {
+    animation: pop-in var(--duration-flourish) var(--ease-enter) both;
+  }
+
+  .flame-pop {
+    animation: flame-pop var(--duration-flourish) var(--ease-standard) 300ms both;
+  }
+
+  @keyframes bell-nudge {
+    20% { transform: rotate(-16deg); }
+    40% { transform: rotate(12deg); }
+    60% { transform: rotate(-8deg); }
+    80% { transform: rotate(5deg); }
+  }
+
+  @keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes flame-pop {
+    35% { transform: scale(1.3) rotate(-10deg); }
+    65% { transform: scale(0.94) rotate(6deg); }
+  }
+
+  @keyframes celebration-particle {
+    0% {
+      opacity: 1;
+      transform: rotate(var(--angle)) translateY(0) rotate(0deg) scale(1);
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(var(--angle)) translateY(calc(var(--distance) * -1)) rotate(var(--spin)) scale(0.6);
+    }
+  }
 }
 
 @layer utilities {
@@ -313,11 +383,6 @@
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     touch-action: manipulation;
-  }
-
-  .gpu-accelerated {
-    transform: translateZ(0);
-    will-change: transform;
   }
 
   .font-display {
@@ -543,7 +608,6 @@
     --pressable-transition-duration: 180ms;
     --pressable-active-scale: 0.98;
     --page-enter-duration: 320ms;
-    --page-enter-distance: 10px;
   }
 
   html[data-app-active='false'] {
@@ -579,20 +643,6 @@
     --pressable-transition-duration: 160ms;
     --pressable-active-scale: 0.985;
     --page-enter-duration: 280ms;
-    --page-enter-distance: 8px;
-  }
-
-  /* Desktop dense surfaces: subtler hover for table rows and data-dense cards */
-  html[data-runtime-kind='desktop'] tr.hoverable-row:hover {
-    background-color: rgba(124, 58, 237, 0.04);
-    transition: background-color 0.16s var(--ease-standard);
-  }
-
-  html[data-runtime-kind='desktop'] .card-hover-subtle:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-clinical);
-    transition: transform 0.16s var(--ease-standard),
-                box-shadow 0.16s var(--ease-standard);
   }
 
   html[data-runtime-kind='capacitor-native'] {
@@ -600,7 +650,6 @@
     --pressable-transition-duration: 140ms;
     --pressable-active-scale: 0.975;
     --page-enter-duration: 240ms;
-    --page-enter-distance: 6px;
   }
 
   /* Capacitor mobile: active press feedback for touch-first interaction */
@@ -731,7 +780,6 @@
       --pressable-transition-duration: 1ms;
       --pressable-active-scale: 1;
       --page-enter-duration: 1ms;
-      --page-enter-distance: 0px;
     }
 
     *,
@@ -811,25 +859,32 @@ html.a11y-high-contrast *:focus-visible {
 
 /* Reduce motion — class-based mirror of the prefers-reduced-motion block above,
    so the learner's in-app toggle collapses CSS animation/transition too (the
-   motion/react components are handled by MotionConfig in the provider). */
-html.a11y-reduce-motion {
+   motion/react components are handled by MotionConfig in the provider).
+   [data-motion="still"] is the same switch for exam and live routes, set by
+   LearnerShellLayout (DESIGN.md §5: nothing on them animates). */
+html.a11y-reduce-motion,
+[data-motion='still'] {
   scroll-behavior: auto;
   --surface-blur: 0px;
   --pressable-transition-duration: 1ms;
   --pressable-active-scale: 1;
   --page-enter-duration: 1ms;
-  --page-enter-distance: 0px;
 }
 html.a11y-reduce-motion *,
 html.a11y-reduce-motion *::before,
-html.a11y-reduce-motion *::after {
+html.a11y-reduce-motion *::after,
+[data-motion='still'] *,
+[data-motion='still'] *::before,
+[data-motion='still'] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
 html.a11y-reduce-motion .pressable:hover,
-html.a11y-reduce-motion .pressable:active {
+html.a11y-reduce-motion .pressable:active,
+[data-motion='still'] .pressable:hover,
+[data-motion='still'] .pressable:active {
   transform: none !important;
 }
 
@@ -892,15 +947,22 @@ html[data-keyboard-hints='true'] [data-kbd-hint] {
   }
 }
 
-/* ── Platform hover: solid-purple interactive state ───────────────────────
-   Applied to buttons, links, and filter chips that turn solid purple on
-   hover. Placed OUTSIDE @layer so it beats every Tailwind utility class.
-   !important on bg and color ensures it wins over any competing base class
-   regardless of specificity (bg-surface, bg-muted, bg-background-light…).
-   Use class "hover-primary" on any interactive element. ─────────────────── */
-.hover-primary:hover {
-  background-color: var(--color-primary) !important;
-  color: rgb(255 255 255) !important;
+/* ── Platform hover: the shared state layer ───────────────────────────────
+   Use class "hover-primary" on interactive rows, tabs, pills and chips. A
+   tinted state layer (DESIGN.md §5), not a solid fill: 8% primary (15% in
+   dark mode) with primary text. Placed OUTSIDE @layer, with !important, so it
+   beats any base surface class (bg-surface, bg-background-light…). Gated to
+   hover-capable pointers so a tap never leaves a sticky highlight. ──────── */
+@media (hover: hover) {
+  .hover-primary:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 8%, transparent) !important;
+    color: var(--color-primary-dark) !important;
+  }
+
+  :root.dark .hover-primary:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 15%, transparent) !important;
+    color: var(--color-primary) !important;
+  }
 }
 
 /* ------------------------------------------------------------------------- *

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LearnerBreadcrumbs } from '@/components/domain/learner-breadcrumbs';
+import { MotionStill } from '@/components/ui/motion-primitives';
 import { AppShell, type AppShellProps } from './app-shell';
 import { resolveLearnerChrome } from './learner-dashboard-route-policy';
 import { LearnerWorkspaceContainer } from './learner-workspace-container';
@@ -82,9 +83,7 @@ export function LearnerShellLayout({ children }: { children: ReactNode }) {
   const chrome = resolveLearnerChrome(usePathname());
   const [slot, setSlot] = useState<HTMLElement | null>(null);
 
-  if (chrome.mode === 'none') return children;
-
-  return (
+  const shell = chrome.mode === 'none' ? children : (
     <LearnerDashboardShell
       distractionFree={chrome.mode === 'focus'}
       requireAuth={chrome.requireAuth}
@@ -94,4 +93,8 @@ export function LearnerShellLayout({ children }: { children: ReactNode }) {
       <LearnerShellSlot.Provider value={slot}>{children}</LearnerShellSlot.Provider>
     </LearnerDashboardShell>
   );
+
+  // Exam and live routes never animate (DESIGN.md §5): the whole shell, header
+  // flourishes included, holds still. Always rendered, so the shell never remounts.
+  return <MotionStill still={chrome.examOrLive}>{shell}</MotionStill>;
 }

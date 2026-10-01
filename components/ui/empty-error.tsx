@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import { Button } from './button';
 
@@ -18,7 +18,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('section', reducedMotion);
 
   return (
@@ -58,7 +58,7 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({ title = 'This page could not be loaded', message = 'Unable to complete this action. Please retry or check your connection.', onRetry, retryLabel = 'Retry this page', className }: ErrorStateProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('section', reducedMotion);
 
   return (

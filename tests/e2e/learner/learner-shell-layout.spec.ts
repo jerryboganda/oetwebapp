@@ -6,8 +6,8 @@ import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 /**
  * The learner shell is mounted once, by app/(learner)/layout.tsx. A client
  * navigation keeps the chrome mounted, every route renders one #main-content
- * and one workspace container, and focus, public and self-chromed routes keep
- * the chrome they had when each page mounted its own shell.
+ * and one workspace container; focus and public routes keep their own chrome,
+ * and content pages always get the workspace shell (navigation never vanishes).
  */
 
 const MAIN_NAV = 'nav[aria-label="Main navigation"]';
@@ -93,7 +93,7 @@ test.describe('Learner shell layout @learner @smoke', () => {
     await expect(menu).toHaveCount(0);
   });
 
-  test('keeps focus, header-action and self-chromed routes on their own chrome', async ({ page, request }, testInfo) => {
+  test('keeps focus and header-action routes on their own chrome, and gives content pages the workspace shell', async ({ page, request }, testInfo) => {
     skipUnlessLearner(testInfo);
     test.setTimeout(240_000);
 
@@ -109,11 +109,12 @@ test.describe('Learner shell layout @learner @smoke', () => {
     await openAsLearner(page, request, '/subscriptions');
     await expect(page.locator('header').first().getByRole('button', { name: /^Cart \(/ })).toBeVisible({ timeout: 60_000 });
 
+    // Content pages used to render with no navigation at all; they now sit in the
+    // workspace shell (attempt/live players stay bare, covered by the unit tests).
     await openAsLearner(page, request, '/listening/strategies');
     await expect(page.getByRole('heading', { name: 'Strategy Library' })).toBeVisible({ timeout: 60_000 });
-    await expect(page.locator(MAIN_NAV)).toHaveCount(0);
-    await expect(page.locator(BOTTOM_NAV)).toHaveCount(0);
-    await expect(page.locator(WORKSPACE)).toHaveCount(0);
+    await expect(page.locator(WORKSPACE)).toHaveCount(1);
+    await expect(page.locator(`${MAIN_NAV}, ${BOTTOM_NAV}`).first()).toBeAttached();
   });
 
   test('learner dashboard has no serious or critical axe violations', async ({ page, request }, testInfo) => {

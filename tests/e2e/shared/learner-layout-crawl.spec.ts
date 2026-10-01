@@ -171,10 +171,25 @@ function detectLayoutDefects(): { defects: Defect[]; truncated: number } {
   return { defects: Array.from(defects.values()).sort((a, b) => b.px - a.px).slice(0, 40), truncated };
 }
 
+/** Explicit wait: no finite animation or transition is still running (looping spinners excluded). */
+async function animationsSettled(page: Page) {
+  await page
+    .waitForFunction(() => document.getAnimations().every((animation) => (
+      animation.playState !== 'running' || animation.effect?.getComputedTiming().iterations === Infinity
+    )), undefined, { timeout: 5_000 })
+    .catch(() => undefined);
+}
+
+/** Explicit wait: two frames, so a resize has been laid out and painted. */
+async function nextFrames(page: Page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /** Waits for the page, closes the onboarding tour, and scrolls through it so in-view reveals fire. */
 async function settle(page: Page) {
   await page.getByRole('main').first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => undefined);
-  await Promise.race([page.waitForLoadState('networkidle'), page.waitForTimeout(4_000)]).catch(() => undefined);
+  // The page's own loading markers (aria-busy skeletons and panels) have cleared.
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), undefined, { timeout: 10_000 }).catch(() => undefined);
   await page.locator('.driver-popover-close-btn').click({ timeout: 1_000 }).catch(() => undefined);
   await page.evaluate(async () => {
     const main = document.getElementById('main-content');
@@ -188,7 +203,7 @@ async function settle(page: Page) {
     }
     scroller.scrollTop = 0;
   });
-  await page.waitForTimeout(600);
+  await animationsSettled(page);
 }
 
 async function crawlRoute(page: Page, request: APIRequestContext, route: string, testInfo: TestInfo, widths: readonly number[]) {
@@ -208,7 +223,8 @@ async function crawlRoute(page: Page, request: APIRequestContext, route: string,
   let truncated = 0;
   for (const width of widths) {
     await page.setViewportSize({ width, height: width < 768 ? 800 : 900 });
-    await page.waitForTimeout(400);
+    await nextFrames(page);
+    await animationsSettled(page);
     const result = await page.evaluate(detectLayoutDefects);
     truncated = Math.max(truncated, result.truncated);
     for (const defect of result.defects) {

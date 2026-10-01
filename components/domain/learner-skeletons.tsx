@@ -6,7 +6,7 @@ type LearnerSkeletonVariant = 'hero' | 'card-grid' | 'chart-panel' | 'list' | 's
 
 function LearnerHeroSkeleton() {
   return (
-    <Card className="rounded-[24px] p-5 sm:p-6" aria-hidden="true">
+    <Card className="rounded-2xl p-5 sm:p-6" aria-hidden="true">
       <div className="flex items-start gap-4">
         <Skeleton variant="circle" className="h-12 w-12" />
         <div className="min-w-0 flex-1 space-y-3">

@@ -338,7 +338,7 @@ function ManualPaymentContent() {
         description="Pay with any of the methods below, then upload your screenshot. Access is activated after our team verifies your payment."
       />
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-4">
           <PaymentCategory
             title="Payment Inside Egypt"
@@ -362,7 +362,7 @@ function ManualPaymentContent() {
             </p>
             {error && <InlineAlert variant="error" className="mt-4">{error}</InlineAlert>}
 
-            <div className="mt-4 grid gap-4">
+            <div className="mt-4 grid grid-cols-1 gap-4">
               <Input label="Your registered email" type="email" value={registeredEmail} readOnly />
               <Select
                 label="How did you pay?"

@@ -197,7 +197,7 @@ export default function EscalationsPage() {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 rounded-[24px]" />
+              <Skeleton key={i} className="h-24 rounded-2xl" />
             ))}
           </div>
         ) : null}

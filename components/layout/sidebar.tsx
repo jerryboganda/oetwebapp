@@ -7,8 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
+import { motion, useReducedMotionConfig } from 'motion/react';
+import { getSharedLayoutId, getSurfaceMotion, motionTokens, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { useLearnerNavVisibility } from '@/hooks/use-learner-nav-visibility';
 import { PLACEMENT_NAV_HREF } from '@/hooks/use-placement-access';
@@ -282,7 +282,7 @@ function NavSection({
                 className={cn(
                   'pressable group relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
@@ -291,10 +291,10 @@ function NavSection({
                     aria-hidden="true"
                     className="absolute inset-0 rounded-2xl bg-primary/12 shadow-[0_12px_28px_rgba(124,58,237,0.12)] ring-1 ring-primary/15"
                     layoutId={getSharedLayoutId('sidebar-nav-active', 'pill')}
-                    transition={getSurfaceTransition('item', reducedMotion)}
+                    transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.layout}
                   />
                 )}
-                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted group-hover:text-white')}>
+                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted group-hover:text-primary-dark dark:group-hover:text-primary')}>
                   {item.icon}
                 </span>
                 <span className="relative z-10">{item.sidebarLabel ?? item.label}</span>
@@ -333,7 +333,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const activeWorkspaceRole = workspaceRole ?? user?.role;
   const isPrivilegedPath = pathname?.startsWith('/expert') || pathname?.startsWith('/admin');
   const isLearnerWorkspace = activeWorkspaceRole === 'learner' && !isPrivilegedPath;
@@ -450,7 +450,7 @@ export function Sidebar({
               href={getWorkspaceSettingsHref(activeWorkspaceRole)}
               prefetch={false}
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
+              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover-primary"
             >
               <Settings className="h-4 w-4" aria-hidden="true" />
               Settings
@@ -460,7 +460,7 @@ export function Sidebar({
             <a
               href="mailto:support@oetwithdrhesham.co.uk?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
+              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover-primary"
             >
               <HelpCircle className="h-4 w-4" aria-hidden="true" />
               Help & Support

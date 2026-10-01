@@ -108,7 +108,7 @@ export default function VocabListsPage() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
@@ -191,7 +191,7 @@ export default function VocabListsPage() {
             ))}
           </div>
         )}
-      </main>
+      </div>
     </>
   );
 }

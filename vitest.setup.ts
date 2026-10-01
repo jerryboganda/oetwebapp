@@ -4,6 +4,7 @@ import { Children, createElement, Fragment, useEffect, useRef, type ReactNode } 
 
 vi.mock('@/lib/mobile/haptics', () => ({
 	triggerImpactHaptic: vi.fn(),
+	triggerNotificationHaptic: vi.fn(),
 }));
 
 /* ── next/link mock ──
@@ -36,9 +37,10 @@ vi.mock('next/link', () => ({
  */
 const MOTION_PROPS = [
 	'initial', 'animate', 'exit', 'transition', 'variants',
-	'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView',
+	'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView', 'viewport',
 	'custom', 'layout', 'layoutId', 'layoutScroll', 'layoutDependency',
 	'onAnimationStart', 'onAnimationComplete', 'onLayoutAnimationStart', 'onLayoutAnimationComplete',
+	'onViewportEnter', 'onViewportLeave',
 ];
 
 function sanitizeStyle(style: unknown): Record<string, unknown> | undefined {
@@ -119,6 +121,9 @@ function AnimatePresenceMock({
 vi.mock('motion/react', () => ({
 	motion: new Proxy({}, { get: (_target, prop: string) => makeMotionElement(prop) }),
 	useReducedMotion: () => false,
+	useReducedMotionConfig: () => false,
+	// Inert controls: components animate DOM values imperatively (e.g. CountUp).
+	animate: () => ({ stop() {}, cancel() {}, complete() {}, then: (resolve: () => void) => Promise.resolve().then(resolve) }),
 	AnimatePresence: AnimatePresenceMock,
 	MotionConfig: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
 }));

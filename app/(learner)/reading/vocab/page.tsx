@@ -86,7 +86,7 @@ export default function VocabHubPage() {
 
   return (
     <>
-      <main className="space-y-6 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         {/* Hero */}
         <LearnerPageHero
           eyebrow="SM-2 Spaced Repetition"
@@ -204,7 +204,7 @@ export default function VocabHubPage() {
             </div>
           </section>
         ) : null}
-      </main>
+      </div>
     </>
   );
 }

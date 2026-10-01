@@ -17,6 +17,10 @@ export const motionTokens = {
     base: 0.22,
     slow: 0.28,
     hero: 0.36,
+    // One-shot flourishes (a bell nudge, a badge or flame pop).
+    flourish: 0.64,
+    // Count-ups and ring/bar draw-ins: long enough to read as counting.
+    count: 0.8,
   },
   ease: {
     standard: [0.22, 1, 0.36, 1] as MotionPoint,
@@ -24,25 +28,31 @@ export const motionTokens = {
     entrance: [0.16, 1, 0.3, 1] as MotionPoint,
     exit: [0.4, 0, 1, 1] as MotionPoint,
   },
+  // Material 3 Expressive spring physics (damping ratio ζ = damping / 2√(stiffness·mass)).
+  // Reveals settle with a hint of life (ζ ≈ 0.8); sliding indicators stay firm
+  // (ζ ≈ 0.9); `pop` (ζ ≈ 0.6, ~9% overshoot) is only for presses, badges and
+  // celebrations, never for per-row reveals, which must stay cheap while scrolling.
   spring: {
-    route: { type: 'spring', stiffness: 360, damping: 34, mass: 0.95 },
-    section: { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 },
-    item: { type: 'spring', stiffness: 520, damping: 42, mass: 0.8 },
-    overlay: { type: 'spring', stiffness: 300, damping: 30, mass: 1 },
+    route: { type: 'spring', stiffness: 380, damping: 35, mass: 1 },
+    section: { type: 'spring', stiffness: 380, damping: 31, mass: 1 },
+    item: { type: 'spring', stiffness: 380, damping: 31, mass: 1 },
+    overlay: { type: 'spring', stiffness: 420, damping: 33, mass: 1 },
+    layout: { type: 'spring', stiffness: 700, damping: 48, mass: 1 },
+    pop: { type: 'spring', stiffness: 800, damping: 34, mass: 1 },
   },
   distance: {
-    route: 16,
-    list: 10,
-    section: 8,
-    item: 6,
-    overlay: 4,
+    route: 20,
+    list: 12,
+    section: 12,
+    item: 10,
+    overlay: 6,
   },
   scale: {
-    route: 0.992,
+    route: 0.99,
     list: 0.995,
-    section: 0.996,
-    item: 0.994,
-    overlay: 0.985,
+    section: 0.99,
+    item: 0.98,
+    overlay: 0.97,
   },
 } as const;
 
@@ -59,21 +69,21 @@ const motionRuntimeProfiles: Record<AppRuntimeKind, MotionRuntimeProfile> = {
     distanceScale: 1,
     scaleScale: 1,
     durationScale: 1,
-    staggerStep: 0.04,
+    staggerStep: 0.03,
     staggerCap: 0.18,
   },
   desktop: {
     distanceScale: 0.9,
     scaleScale: 0.75,
     durationScale: 0.95,
-    staggerStep: 0.036,
+    staggerStep: 0.027,
     staggerCap: 0.16,
   },
   'capacitor-native': {
     distanceScale: 0.8,
     scaleScale: 0.6,
     durationScale: 0.9,
-    staggerStep: 0.032,
+    staggerStep: 0.024,
     staggerCap: 0.14,
   },
 };
@@ -146,12 +156,7 @@ const motionSurfaceSpecs: Record<
     hidden: { opacity: 0, y: motionTokens.distance.list },
     visible: { opacity: 1, y: 0 },
     exit: { opacity: 0, y: -6 },
-    transition: {
-      type: 'spring',
-      stiffness: 460,
-      damping: 38,
-      mass: 0.86,
-    },
+    transition: motionTokens.spring.section,
     reducedTransition: {
       duration: motionTokens.duration.fast,
       ease: motionTokens.ease.standard,
@@ -284,14 +289,14 @@ export function getMicroHover(reducedMotion = false) {
   if (reducedMotion) return {};
   const profile = getMotionRuntimeProfile();
   const s = 1 + 0.02 * profile.scaleScale;
-  return { scale: s, transition: { type: 'spring' as const, stiffness: 500, damping: 30, mass: 0.5 } };
+  return { scale: s, transition: motionTokens.spring.layout };
 }
 
 export function getMicroTap(reducedMotion = false) {
   if (reducedMotion) return {};
   const profile = getMotionRuntimeProfile();
   const s = 1 - 0.03 * profile.scaleScale;
-  return { scale: s, transition: { type: 'spring' as const, stiffness: 600, damping: 25, mass: 0.5 } };
+  return { scale: s, transition: motionTokens.spring.pop };
 }
 
 export function getMicroFocus(reducedMotion = false) {
@@ -317,7 +322,7 @@ export function getCelebrateMotion(reducedMotion = false) {
     initial: { opacity: 0, scale: 1 - 0.06 * profile.scaleScale, y: 8 * profile.distanceScale },
     animate: { opacity: 1, scale: 1, y: 0 },
     exit: { opacity: 0, scale: 1 - 0.03 * profile.scaleScale, y: -4 * profile.distanceScale },
-    transition: { type: 'spring' as const, stiffness: 400, damping: 22, mass: 0.8 },
+    transition: motionTokens.spring.pop,
   };
 }
 

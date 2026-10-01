@@ -1,26 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { ErrorState } from '@/components/ui/empty-error';
+import { LearnerRouteError, type LearnerRouteErrorProps } from '@/components/domain/learner-route-error';
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  useEffect(() => {
-    console.error('[Achievements Error]', error);
-  }, [error]);
-
-  return (
-    <ErrorState
-      className="mx-auto mt-6 w-full max-w-lg sm:mt-10"
-      title="Achievements Error"
-      message="An unexpected error occurred. Please try again or contact support if the problem persists."
-      onRetry={reset}
-      retryLabel="Try again"
-    />
-  );
+export default function Error(props: LearnerRouteErrorProps) {
+  return <LearnerRouteError {...props} title="Achievements Error" />;
 }

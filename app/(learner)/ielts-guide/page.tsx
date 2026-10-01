@@ -15,7 +15,7 @@ export default function IeltsGuidePage() {
 
   return (
     <>
-      <main className="space-y-6">
+      <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Beta foundation"
           icon={Globe}
@@ -40,7 +40,7 @@ export default function IeltsGuidePage() {
             <Link href="/dashboard">Return to dashboard</Link>
           </Button>
         </div>
-      </main>
+      </div>
     </>
   );
 }

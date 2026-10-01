@@ -133,7 +133,7 @@ export default function ListeningPartPracticePage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <main className="space-y-5 sm:space-y-8" data-testid={`listening-part-${part}-dispatcher`}>
+      <div className="space-y-5 sm:space-y-8" data-testid={`listening-part-${part}-dispatcher`}>
         <Link
           href="/listening"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
@@ -195,7 +195,7 @@ export default function ListeningPartPracticePage() {
             />
           </section>
         )}
-      </main>
+      </div>
     </>
   );
 }

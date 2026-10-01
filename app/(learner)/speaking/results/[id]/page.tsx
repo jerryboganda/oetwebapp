@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertCircle, CheckCircle2, ChevronRight, Download, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import Link from 'next/link';
@@ -44,7 +44,7 @@ function criterionLabel(code: string) {
 }
 
 export default function SpeakingResultSummary() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const recordingPulseTransition = getRecordingPulseTransition(reducedMotion);
   const params = useParams();
   const rawId = params?.id;

@@ -87,6 +87,7 @@ describe('AppShell', () => {
     it.each([
       ['admin', '/admin/users'],
       ['expert', '/expert/queue'],
+      ['learner', '/listening'],
     ] as const)('skips first paint, then adds page-enter after a %s client navigation', (role, nextPath) => {
       const navigate = renderShellAt(`/${role}`, { requiredRole: role, workspaceRole: role });
       expect(screen.getByRole('main')).not.toHaveClass('page-enter');
@@ -110,10 +111,13 @@ describe('AppShell', () => {
       expect(screen.getByRole('main')).toHaveClass('page-enter');
     });
 
-    it('never animates the learner shell', () => {
+    it('never animates a learner exam or live route', () => {
       const navigate = renderShellAt('/reading', { requiredRole: 'learner', workspaceRole: 'learner' });
-      navigate('/listening');
+      navigate('/listening/paper/p1');
       expect(screen.getByRole('main')).not.toHaveClass('page-enter');
+
+      navigate('/listening');
+      expect(screen.getByRole('main')).toHaveClass('page-enter');
     });
   });
 

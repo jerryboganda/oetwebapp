@@ -1,14 +1,14 @@
 'use client';
 
 import { type ComponentPropsWithoutRef } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 
 type LearnerWorkspaceContainerProps = ComponentPropsWithoutRef<typeof motion.div>;
 
 export function LearnerWorkspaceContainer({ className, children, initial = false, ...props }: LearnerWorkspaceContainerProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const workspaceMotion = getSurfaceMotion('section', reducedMotion);
 
   return (

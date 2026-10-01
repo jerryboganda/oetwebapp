@@ -86,6 +86,28 @@ describe('LearnerShellLayout', () => {
     expect(appShellSpy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['an in-shell exam route', '/listening/paper/p1'],
+    ['a self-chromed player', '/listening/player/a1'],
+  ])('holds %s still (DESIGN.md §5) and leaves workspace pages animated', (_label, examPath) => {
+    const { unmount } = renderWithRouter(
+      <LearnerShellLayout>
+        <div>Exam page</div>
+      </LearnerShellLayout>,
+      { pathname: examPath },
+    );
+    expect(screen.getByText('Exam page').closest('[data-motion="still"]')).not.toBeNull();
+    unmount();
+
+    renderWithRouter(
+      <LearnerShellLayout>
+        <div>Workspace page</div>
+      </LearnerShellLayout>,
+      { pathname: '/progress' },
+    );
+    expect(screen.getByText('Workspace page').closest('[data-motion="still"]')).toBeNull();
+  });
+
   it('portals page nav actions into the layout TopNav actions slot', async () => {
     renderWithRouter(
       <LearnerShellLayout>

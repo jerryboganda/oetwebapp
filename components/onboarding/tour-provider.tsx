@@ -4,7 +4,7 @@ import 'driver.js/dist/driver.css';
 import './tour.css';
 
 import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotionConfig } from 'motion/react';
 import { useAuth } from '@/contexts/auth-context';
 import { getTour } from '@/lib/onboarding/tour-registry';
 import { runTour } from '@/lib/onboarding/tour-driver';
@@ -42,7 +42,7 @@ const TourContext = createContext<TourContextValue | null>(null);
  */
 export function TourProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, role } = useAuth();
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
   const { data: state, isLoading } = useTourStateQuery(isAuthenticated);
   const markTour = useMarkTourMutation();
   const runningRef = useRef(false);

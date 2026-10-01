@@ -52,7 +52,7 @@ export default function WritingCanonPage() {
             description={t('writing.canon.library.browse.description')}
             className="mb-4"
           />
-          <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
             <label className="relative block">
               {/* Use logical inline-start so the icon flips for RTL chrome. */}
               <Search className="pointer-events-none absolute start-3 top-3 h-5 w-5 text-muted" />
@@ -73,7 +73,7 @@ export default function WritingCanonPage() {
           </div>
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {(canon?.rules ?? []).map((rule) => {
             const stat = violationLookup.get(rule.ruleId);
             return (
@@ -85,19 +85,19 @@ export default function WritingCanonPage() {
                   {stat ? <Badge variant="warning" size="sm">{t('writing.canon.library.card.seen', { count: stat.count })}</Badge> : null}
                 </div>
                 {/* Canon rule text + examples are Dr Ahmed's authored English content — spec §32. */}
-                <h2 className="text-base font-bold text-navy" dir="ltr">{rule.ruleText}</h2>
+                <h2 className="break-words text-base font-bold text-navy" dir="ltr">{rule.ruleText}</h2>
                 {rule.correctExamples.length > 0 || rule.incorrectExamples.length > 0 ? (
-                  <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                  <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                     {rule.correctExamples.length > 0 ? (
                       <div>
                         <p className="mb-1 font-semibold text-success">{t('writing.canon.library.card.correct')}</p>
-                        <p className="text-muted" dir="ltr">{rule.correctExamples[0]}</p>
+                        <p className="break-words text-muted" dir="ltr">{rule.correctExamples[0]}</p>
                       </div>
                     ) : null}
                     {rule.incorrectExamples.length > 0 ? (
                       <div>
                         <p className="mb-1 font-semibold text-danger">{t('writing.canon.library.card.avoid')}</p>
-                        <p className="text-muted" dir="ltr">{rule.incorrectExamples[0]}</p>
+                        <p className="break-words text-muted" dir="ltr">{rule.incorrectExamples[0]}</p>
                       </div>
                     ) : null}
                   </div>

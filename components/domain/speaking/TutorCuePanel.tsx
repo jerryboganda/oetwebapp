@@ -289,14 +289,14 @@ export function TutorCuePanel({
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
                           ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50',
+                          : 'border-border bg-surface hover:border-primary/50 hover-primary disabled:cursor-not-allowed disabled:opacity-50',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
                     >
                       <MessageSquareQuote
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          delivered ? 'text-emerald-600' : 'text-muted group-hover:text-white',
+                          delivered ? 'text-emerald-600' : 'text-muted group-hover:text-primary',
                         )}
                         aria-hidden
                       />

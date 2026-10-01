@@ -169,11 +169,11 @@ export default function PronunciationReviewPage() {
   if (loading) {
     return (
       <>
-        <main className="mx-auto max-w-xl space-y-6">
+        <div className="mx-auto max-w-xl space-y-6">
           <Skeleton className="h-7 w-48 rounded-lg" />
           <Skeleton className="h-2 w-full rounded-full" />
           <Skeleton className="h-64 w-full rounded-2xl" />
-        </main>
+        </div>
       </>
     );
   }
@@ -182,7 +182,7 @@ export default function PronunciationReviewPage() {
   if (total === 0) {
     return (
       <>
-        <main className="mx-auto max-w-xl space-y-6">
+        <div className="mx-auto max-w-xl space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-navy">Review Session</h1>
             <Link
@@ -205,7 +205,7 @@ export default function PronunciationReviewPage() {
               <Link href="/listening/pronunciation">Back to Library</Link>
             </Button>
           </div>
-        </main>
+        </div>
       </>
     );
   }
@@ -214,7 +214,7 @@ export default function PronunciationReviewPage() {
   if (!currentCard) {
     return (
       <>
-        <main className="mx-auto max-w-xl space-y-6">
+        <div className="mx-auto max-w-xl space-y-6">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <Trophy className="mx-auto h-12 w-12 text-emerald-500" aria-hidden />
             <p className="mt-3 text-2xl font-bold text-navy">All done!</p>
@@ -229,7 +229,7 @@ export default function PronunciationReviewPage() {
               </Button>
             </div>
           </div>
-        </main>
+        </div>
       </>
     );
   }
@@ -238,7 +238,7 @@ export default function PronunciationReviewPage() {
 
   return (
     <>
-      <main className="mx-auto max-w-xl space-y-6">
+      <div className="mx-auto max-w-xl space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-navy">Pronunciation Review</h1>
           <Link
@@ -351,7 +351,7 @@ export default function PronunciationReviewPage() {
             <Star className="h-3 w-3" aria-hidden /> Boost
           </span>
         </div>
-      </main>
+      </div>
     </>
   );
 }

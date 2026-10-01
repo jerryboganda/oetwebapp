@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -74,6 +75,8 @@ vi.mock('@/components/layout/learner-dashboard-shell', () => ({
 vi.mock('@/lib/api', () => ({
   getWritingSubmissionVoiceNote: vi.fn().mockResolvedValue(null),
   fetchAuthorizedObjectUrl: vi.fn(),
+  // The pass celebration's profile query (disabled here: no signed-in user).
+  fetchUserProfile: vi.fn(),
 }));
 
 import WritingSubmissionResultsPage from './page';
@@ -125,6 +128,17 @@ const GRADE = {
   gradedAt: '2026-09-01T00:41:00Z',
 };
 
+
+// The pass celebration reads the learner profile through React Query.
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WritingSubmissionResultsPage />
+    </QueryClientProvider>,
+  );
+}
+
 describe('Writing results page — free review vs. new attempt (Addendum Rev5 §13)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,7 +152,7 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
   });
 
   it('reopens the saved report via GET-only reads: shows the exact original letter, score, and criteria, with zero grading/credit calls', async () => {
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     // The exact stored letter is now part of the same report (was previously
     // missing from this page entirely).
@@ -160,7 +174,7 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
   });
 
   it('keeps "Request tutor review" removed from this AI result flow while "Appeal score" stays', async () => {
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
     await screen.findByText(/I am writing to refer this patient/);
 
     expect(screen.queryByText(/request tutor review/i)).not.toBeInTheDocument();
@@ -168,7 +182,7 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
   });
 
   it('"Practice this again" starts a distinct new attempt via the practice-session entitlement gate, not this attempt\'s id', async () => {
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
     await screen.findByText(/I am writing to refer this patient/);
 
     const practiceAgainLink = screen.getByRole('link', { name: /practiceAgain/i });
@@ -201,7 +215,7 @@ describe('Writing results page — free sample revise & resubmit (retry addendum
 
   it("retry_available on this letter: primary \"Revise & Resubmit\" CTA links to this submission's revise page", async () => {
     listFreeSamples.mockResolvedValue([FREE_ROW]);
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     const cta = await screen.findByTestId('free-sample-revise-cta');
     expect(cta).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
@@ -214,7 +228,7 @@ describe('Writing results page — free sample revise & resubmit (retry addendum
 
   it('completed on this letter: shows "Free sample completed" and no revise CTA', async () => {
     listFreeSamples.mockResolvedValue([{ ...FREE_ROW, state: 'completed', successfulCount: 2, remaining: 0 }]);
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     expect(await screen.findByTestId('free-sample-completed')).toHaveTextContent('freeSample.completed');
     expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
@@ -222,7 +236,7 @@ describe('Writing results page — free sample revise & resubmit (retry addendum
 
   it('a free row for a different scenario never adds the free CTA to this letter', async () => {
     listFreeSamples.mockResolvedValue([{ ...FREE_ROW, contentId: 'other-scenario' }]);
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     await screen.findByText(/I am writing to refer this patient/);
     await waitFor(() => expect(listFreeSamples).toHaveBeenCalled());
@@ -304,7 +318,7 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
   });
 
   it('renders the grounded model answer with every line break preserved, the /500 AI score + grade band as the headline, and all six criteria', async () => {
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     // Model Answer text is rendered exactly as stored — no collapsing, trimming, or splitting.
     const modelAnswer = await screen.findByTestId('grounded-model-answer');
@@ -346,7 +360,7 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
         c6: { ...GRADE.perCriterion.c6, feedback: 'Subject-verb agreement error.', quote: 'the patient have chest pain' },
       },
     });
-    render(<WritingSubmissionResultsPage />);
+    renderPage();
 
     const quote = await screen.findByText('“the patient have chest pain”');
     expect(quote.tagName).toBe('MARK');
