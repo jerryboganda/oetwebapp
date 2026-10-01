@@ -869,6 +869,16 @@ public partial class LearnerService
                         _ => "practice"
                     },
                     durationMinutes = taskDuration,
+                    // Where the task opens: the same content routes as
+                    // LearnerAttemptHistoryService.RouteFor (Speaking has no
+                    // per-item route, so it opens its hub).
+                    route = subtest switch
+                    {
+                        "reading" => $"/reading/paper/{Uri.EscapeDataString(content.Id)}",
+                        "listening" => $"/listening/paper/{Uri.EscapeDataString(content.Id)}",
+                        "writing" => $"/writing/practice/session/{Uri.EscapeDataString(content.Id)}",
+                        _ => $"/{subtest}",
+                    },
                     difficulty = content.Difficulty,
                     isWeakArea = subtestScores.GetValueOrDefault(subtest, (double)OetScoring.ScaledPassGradeCPlus) < OetScoring.ScaledPassGradeB
                 });
