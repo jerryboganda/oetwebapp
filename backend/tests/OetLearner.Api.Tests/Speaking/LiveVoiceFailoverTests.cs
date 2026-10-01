@@ -47,6 +47,10 @@ public sealed class LiveVoiceFailoverTests
         string? provider = null)
         => rig.Service.GetPreflightAsync(session.UserId, session.SessionId, provider, CancellationToken.None);
 
+    /// <summary>The admin's step that lets this learner pin the provider (a requested provider is ignored without it).</summary>
+    private static Task AuthoriseQaPinAsync(LiveVoiceRig rig, SeededLiveVoiceSession session, bool enabled = true)
+        => LiveVoiceTestKit.AuthoriseQaPinAsync(rig.Db, session.UserId, rig.Clock.GetUtcNow(), enabled);
+
     /// <summary>One provider answers with an error; the other keeps working.</summary>
     private static void FailProvider(
         LiveVoiceRig rig,
@@ -125,10 +129,11 @@ public sealed class LiveVoiceFailoverTests
     }
 
     [Fact]
-    public async Task Preflight_SkipsAnOpenProvider_ButPinnedBypassesTheBreaker()
+    public async Task Preflight_SkipsAnOpenProvider_ButAnAuthorisedPinBypassesTheBreaker()
     {
         using var rig = LiveVoiceTestKit.Create();
         var session = await SeedAsync(rig);
+        await AuthoriseQaPinAsync(rig, session);
         rig.State.RecordFailure(LiveVoiceProviders.OpenAi, AiProviderErrorClass.QuotaExhausted);
 
         var unpinned = await PreflightAsync(rig, session);
@@ -137,7 +142,7 @@ public sealed class LiveVoiceFailoverTests
         Assert.Equal(LiveVoiceProviders.Gemini, unpinned.Provider);
         Assert.Equal(new[] { LiveVoiceProviders.Gemini }, unpinned.Candidates!);
         Assert.False(unpinned.Pinned);
-        // The owner's apples-to-apples runs pin a provider: exactly that one, no failover.
+        // The owner's apples-to-apples runs pin a provider (a flagged QA account only): exactly that one, no failover.
         Assert.Equal(LiveVoiceProviders.OpenAi, pinned.Provider);
         Assert.Equal(new[] { LiveVoiceProviders.OpenAi }, pinned.Candidates!);
         Assert.True(pinned.Pinned);
@@ -148,6 +153,7 @@ public sealed class LiveVoiceFailoverTests
     {
         using var rig = LiveVoiceTestKit.Create();
         var session = await SeedAsync(rig);
+        await AuthoriseQaPinAsync(rig, session);
 
         var both = await PreflightAsync(rig, session);
         var pinned = await PreflightAsync(rig, session, "gemini");
@@ -174,6 +180,7 @@ public sealed class LiveVoiceFailoverTests
     {
         using var rig = LiveVoiceTestKit.Create();
         var session = await SeedAsync(rig);
+        await AuthoriseQaPinAsync(rig, session);
         rig.State.Set(LiveVoiceProviders.Gemini, false, "http_403_auth");
 
         var unverified = await Assert.ThrowsAsync<ApiException>(() => PreflightAsync(rig, session, "gemini"));
@@ -183,6 +190,164 @@ public sealed class LiveVoiceFailoverTests
         Assert.True(unverified.Retryable);
         Assert.Equal("live_voice_provider_not_configured", unknown.ErrorCode);
         Assert.False(unknown.Retryable);
+    }
+
+    // A requested provider (?provider= on the preflight) is only a request. It is honoured for a learner
+    // holding an enabled speaking_live_voice_pin:<userId> feature flag and ignored, never refused, for
+    // everybody else: a candidate who merely follows a link carrying it must keep failover and recovery.
+
+    [Fact]
+    public void ThePinFlagKey_IsTheOneTheOwnerTypesIntoAdminFeatureFlags()
+    {
+        // Documented in docs/speaking/live-voice.md and named by the production E2E harness's error message.
+        Assert.Equal("speaking_live_voice_pin:abc-123", LiveVoiceService.PinFlagKey("abc-123"));
+    }
+
+    [Theory]
+    [InlineData("openai")]
+    [InlineData("gemini")]
+    [InlineData(" GEMINI ")]
+    [InlineData("bogus")]
+    public async Task Preflight_APinFromAnOrdinaryLearner_IsIgnored_AndTheNormalOrderAndDisclosureAreServed(string requested)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+
+        // Not even "bogus" is a 503 here: the request is ignored before it is looked at.
+        var preflight = await PreflightAsync(rig, session, requested);
+
+        Assert.False(preflight.Pinned);
+        Assert.Equal(LiveVoiceProviders.OpenAi, preflight.Provider);
+        Assert.Equal(new[] { LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini }, preflight.Candidates!);
+        // Failover can still send the microphone to either provider, so both are disclosed.
+        Assert.Contains("OpenAI GPT-Live", preflight.Disclosure, StringComparison.Ordinal);
+        Assert.Contains("Google Gemini Live", preflight.Disclosure, StringComparison.Ordinal);
+        Assert.Contains("may switch to", preflight.Disclosure, StringComparison.Ordinal);
+        Assert.Empty(rig.Handler.Requests);
+        // One Warning that names the learner and what was asked for, and nothing else about the session.
+        var warning = Assert.Single(rig.Log.Entries, e => e.Level == LogLevel.Warning);
+        Assert.Contains(session.UserId, warning.Text, StringComparison.Ordinal);
+        Assert.Contains(requested.Trim(), warning.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(session.SessionId, warning.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Preflight_APinFromAnOrdinaryLearner_DoesNotBypassTheCircuit()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        rig.State.RecordFailure(LiveVoiceProviders.OpenAi, AiProviderErrorClass.QuotaExhausted);
+
+        var asked = await PreflightAsync(rig, session, "openai");
+
+        // The provider whose circuit is open was asked for and is still skipped.
+        Assert.False(asked.Pinned);
+        Assert.Equal(LiveVoiceProviders.Gemini, asked.Provider);
+        Assert.Equal(new[] { LiveVoiceProviders.Gemini }, asked.Candidates!);
+
+        // With both circuits open the same request gets the ordinary "unavailable", not a served bypass.
+        rig.State.RecordFailure(LiveVoiceProviders.Gemini, AiProviderErrorClass.QuotaExhausted);
+        var bothDown = await Assert.ThrowsAsync<ApiException>(() => PreflightAsync(rig, session, "openai"));
+        Assert.Equal("live_voice_provider_unavailable", bothDown.ErrorCode);
+        Assert.True(bothDown.Retryable);
+    }
+
+    [Fact]
+    public async Task Preflight_APinFromAFlaggedQaAccount_IsHonoured_AndDisclosesOnlyThePinnedProvider()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        await AuthoriseQaPinAsync(rig, session);
+
+        var pinned = await PreflightAsync(rig, session, "gemini");
+
+        Assert.True(pinned.Pinned);
+        Assert.Equal(LiveVoiceProviders.Gemini, pinned.Provider);
+        Assert.Equal(new[] { LiveVoiceProviders.Gemini }, pinned.Candidates!);
+        Assert.Contains("Google Gemini Live", pinned.Disclosure, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenAI", pinned.Disclosure, StringComparison.Ordinal);
+        Assert.Empty(rig.Handler.Requests);
+        Assert.DoesNotContain(rig.Log.Entries, e => e.Level == LogLevel.Warning);
+        // The flag authorises a pin, nothing more: an unknown provider is still refused for a QA account.
+        var unknown = await Assert.ThrowsAsync<ApiException>(() => PreflightAsync(rig, session, "bogus"));
+        Assert.Equal("live_voice_provider_not_configured", unknown.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("no_row")]
+    [InlineData("disabled")]
+    [InlineData("another_learner")]
+    [InlineData("key_without_a_user")]
+    public async Task Preflight_PinAuthorisation_FailsClosed_UnlessThisLearnerHoldsAnEnabledFlag(string scenario)
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var other = await SeedAsync(rig);
+        switch (scenario)
+        {
+            case "disabled":
+                await AuthoriseQaPinAsync(rig, session, enabled: false);
+                break;
+            case "another_learner":
+                await AuthoriseQaPinAsync(rig, other);
+                break;
+            case "key_without_a_user":
+                // The bare prefix: a key that names nobody authorises nobody.
+                await LiveVoiceTestKit.AuthoriseQaPinAsync(rig.Db, string.Empty, rig.Clock.GetUtcNow());
+                break;
+        }
+
+        var preflight = await PreflightAsync(rig, session, "gemini");
+
+        Assert.False(preflight.Pinned);
+        Assert.Equal(new[] { LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini }, preflight.Candidates!);
+        if (scenario == "another_learner")
+        {
+            // The same flag does authorise the learner it names.
+            Assert.True((await PreflightAsync(rig, other, "gemini")).Pinned);
+        }
+    }
+
+    [Fact]
+    public async Task Preflight_PinAuthorisation_FailsClosedWhenTheFlagCannotBeRead()
+    {
+        using var rig = LiveVoiceTestKit.Create(faultingDb: true);
+        var session = await SeedAsync(rig);
+        // The flag exists and is enabled, but it cannot be read right now: nothing is authorised.
+        await AuthoriseQaPinAsync(rig, session);
+        rig.FaultingDb.FailFeatureFlagReads = true;
+
+        var preflight = await PreflightAsync(rig, session, "gemini");
+
+        Assert.False(preflight.Pinned);
+        Assert.Equal(LiveVoiceProviders.OpenAi, preflight.Provider);
+        var warning = Assert.Single(rig.Log.Entries, e => e.Level == LogLevel.Warning);
+        Assert.Contains(session.UserId, warning.Text, StringComparison.Ordinal);
+        Assert.Contains("could not be read", warning.Text, StringComparison.Ordinal);
+        // The failure is named by type only: its message can carry connection details.
+        Assert.Contains(nameof(InvalidOperationException), warning.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Simulated", warning.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Preflight_ABlankOrMissingProvider_IsUnpinned_WithoutReadingTheFlagOrLogging(string blank)
+    {
+        using var rig = LiveVoiceTestKit.Create(faultingDb: true);
+        var session = await SeedAsync(rig);
+        // Any flag read would throw and log: an ordinary preflight must not make one.
+        rig.FaultingDb.FailFeatureFlagReads = true;
+
+        var missing = await PreflightAsync(rig, session);
+        var empty = await PreflightAsync(rig, session, blank);
+
+        foreach (var preflight in new[] { missing, empty })
+        {
+            Assert.False(preflight.Pinned);
+            Assert.Equal(new[] { LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini }, preflight.Candidates!);
+        }
+        Assert.DoesNotContain(rig.Log.Entries, e => e.Level == LogLevel.Warning);
     }
 
     [Fact]
@@ -570,6 +735,29 @@ public sealed class LiveVoiceFailoverTests
     }
 
     [Fact]
+    public async Task ConsentRefusals_NameTheLiveAiPatient_AndNeverARecording()
+    {
+        // These two are shown to the learner as written, and a live conversation records nothing.
+        using var rig = LiveVoiceTestKit.Create();
+        var noSessionConsent = await SeedAsync(rig);
+        var tracked = await rig.Db.SpeakingSessions.SingleAsync(s => s.Id == noSessionConsent.SessionId);
+        tracked.ConsentAcceptedAt = null;
+        var noAccountConsent = await SeedAsync(rig);
+        rig.Db.SpeakingComplianceConsents.RemoveRange(
+            await rig.Db.SpeakingComplianceConsents.Where(c => c.UserId == noAccountConsent.UserId).ToListAsync());
+        await rig.Db.SaveChangesAsync();
+
+        var session = await Assert.ThrowsAsync<ApiException>(() => MintOpenAiAsync(rig, noSessionConsent));
+        var account = await Assert.ThrowsAsync<ApiException>(() => MintGeminiAsync(rig, noAccountConsent));
+
+        Assert.Equal("live_voice_consent_required", session.ErrorCode);
+        Assert.Equal("Accept the Speaking consent before starting the live AI patient.", session.Message);
+        Assert.Equal("live_voice_consent_required", account.ErrorCode);
+        Assert.Equal("Accept the current Speaking consent before starting the live AI patient.", account.Message);
+        Assert.Empty(rig.Handler.Requests);
+    }
+
+    [Fact]
     public async Task BothProvidersFailing_LeavesNoCandidate_AndTheDtoFlagFalse()
     {
         using var rig = LiveVoiceTestKit.Create();
@@ -750,6 +938,7 @@ public sealed class LiveVoiceFailoverTests
     {
         using var rig = LiveVoiceTestKit.Create();
         var session = await SeedAsync(rig);
+        await AuthoriseQaPinAsync(rig, session);
         rig.State.RecordFailure(LiveVoiceProviders.OpenAi, AiProviderErrorClass.QuotaExhausted);
         Assert.Equal(new[] { LiveVoiceProviders.Gemini }, (await PreflightAsync(rig, session)).Candidates!);
 
@@ -837,6 +1026,8 @@ public sealed class LiveVoiceFailoverTests
         Assert.False(turn.Duplicate);
         Assert.Equal("realtime-gemini", transcript.Provider);
         Assert.Equal("realtime-gemini", blankLabel.Provider);
+        // The results endpoint tells a live conversation from a recording by exactly this prefix.
+        Assert.StartsWith(LiveVoiceService.TranscriptProviderPrefix, transcript.Provider, StringComparison.Ordinal);
         var turnRow = await rig.Db.SpeakingPatientTurns.AsNoTracking()
             .SingleAsync(t => t.SessionId == session.SessionId && t.Role == "realtime_turn");
         using var turnJson = JsonDocument.Parse(turnRow.ResponseJson);

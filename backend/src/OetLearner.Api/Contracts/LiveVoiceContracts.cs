@@ -4,8 +4,10 @@ namespace OetLearner.Api.Contracts;
 /// Provider disclosure returned before the browser requests microphone access.
 /// <c>Provider</c> is always <c>Candidates[0]</c>. <c>Candidates</c> is the
 /// server-ordered list of providers the browser may try, in order, when a
-/// session creation is refused. <c>Pinned</c> means the caller asked for one
-/// provider explicitly: a single candidate and no failover.
+/// session creation is refused. <c>Pinned</c> means the server honoured a QA pin
+/// (a provider was requested AND the learner holds an enabled
+/// <c>speaking_live_voice_pin:{userId}</c> feature flag): a single candidate and no
+/// failover. A request from any other account is ignored and <c>Pinned</c> is false.
 /// </summary>
 public sealed record LiveVoicePreflightResponse(
     string Provider,

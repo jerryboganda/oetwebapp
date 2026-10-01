@@ -99,7 +99,7 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapGet("/{id}/results", GetResultsAsync)
-            .WithSummary("Learner-facing grading state: assessmentState (processing|completed|failed), retryable, failureReason, isFreeSample, cardId. 404 only when the session is not the caller's.")
+            .WithSummary("Learner-facing grading state: assessmentState (processing|completed|failed), retryable, failureReason, isFreeSample, cardId, usesV11, inputKind (recording|live_voice|null = nothing received yet). 404 only when the session is not the caller's.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -356,7 +356,30 @@ public static class SpeakingSessionEndpoints
             // Pages call the v1.1 report endpoints only when true; otherwise
             // they 404 on every poll.
             usesV11 = await canonical.UsesV11Async(id, ct),
+            // What the learner handed in, so the pages never say "recording" for a live conversation.
+            inputKind = await ReadInputKindAsync(db, id, ct),
         });
+    }
+
+    /// <summary>
+    /// "recording" when audio was uploaded for the role-play (recorder fallback, or the tutor room's
+    /// egress), archived or not; otherwise "live_voice" when the latest transcript was saved by the live
+    /// voice flow (it has no audio at all); otherwise null (nothing has arrived yet). The unscored
+    /// warm-up recording is not the role-play, so it never counts.
+    /// </summary>
+    private static async Task<string?> ReadInputKindAsync(LearnerDbContext db, string sessionId, CancellationToken ct)
+    {
+        if (await db.SpeakingRecordings.AsNoTracking()
+                .AnyAsync(r => r.SpeakingSessionId == sessionId && !r.IsWarmup, ct))
+        {
+            return "recording";
+        }
+
+        var liveTranscript = await db.SpeakingTranscripts.AsNoTracking()
+            .AnyAsync(t => t.SpeakingSessionId == sessionId
+                && t.IsLatest
+                && t.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix), ct);
+        return liveTranscript ? "live_voice" : null;
     }
 
     // ─────────────────────────────────────────────────────────────────

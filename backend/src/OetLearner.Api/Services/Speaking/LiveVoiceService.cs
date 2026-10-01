@@ -50,6 +50,12 @@ public sealed class LiveVoiceService(
     // conversation could start in production (25 Sep 2026).
     internal const string LiveVoiceSessionRole = "live_session";
     private const string LiveVoiceTurnRole = "realtime_turn";
+    // A transcript saved by this service is labelled this prefix plus the provider ("realtime-openai").
+    // The results endpoint reads it to tell a live conversation, which has no audio, from a recording.
+    internal const string TranscriptProviderPrefix = "realtime-";
+    // The FeatureFlags key that lets ONE learner pin the provider for a QA run (Admin > Feature Flags,
+    // enabled). The key format lives here only, so the tests and the docs share it.
+    internal static string PinFlagKey(string userId) => $"speaking_live_voice_pin:{userId}";
     // Appended to the instructions of a provider session minted after an earlier one (see
     // ComposeInstructionsAsync): the new session starts with no memory of the conversation.
     private const string ConversationSoFarHeader =
@@ -78,8 +84,10 @@ public sealed class LiveVoiceService(
     /// Discloses every provider the microphone may be routed to (see <see cref="BuildDisclosure"/>)
     /// before it is opened and orders the providers the browser may try.
     /// Unpinned: primary first, then the other, each configured, catalog-verified and with
-    /// a breaker that is closed or in probation. Pinned (<paramref name="requestedProvider"/> set):
-    /// exactly that provider, no failover, breaker bypassed so a QA run still exercises it.
+    /// a breaker that is closed or in probation. Pinned (<paramref name="requestedProvider"/> set AND
+    /// the learner holds an enabled <see cref="PinFlagKey"/> flag): exactly that provider, no failover,
+    /// breaker bypassed so a QA run still exercises it. For everybody else the request is only a request:
+    /// it is ignored (a Warning is logged) and the unpinned order is served.
     /// </summary>
     public async Task<LiveVoicePreflightResponse> GetPreflightAsync(
         string userId,
@@ -88,7 +96,10 @@ public sealed class LiveVoiceService(
         CancellationToken ct)
     {
         var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Preflight, ct);
-        var pinned = !string.IsNullOrWhiteSpace(requestedProvider);
+        // The page only ASKS for a provider; the server decides. Read after the session is proven the
+        // caller's, and only when a provider is requested, so an ordinary preflight costs no extra query.
+        var pinned = !string.IsNullOrWhiteSpace(requestedProvider)
+            && await MayPinAsync(userId, requestedProvider, ct);
         IReadOnlyList<string> candidates;
         if (pinned)
         {
@@ -406,7 +417,7 @@ public sealed class LiveVoiceService(
         {
             Id = $"spt_{Guid.NewGuid():N}",
             SpeakingSessionId = context.Session.Id,
-            Provider = $"realtime-{provider}",
+            Provider = $"{TranscriptProviderPrefix}{provider}",
             Language = "en",
             SegmentsJson = JsonSerializer.Serialize(segments, JsonOptions),
             IsLatest = true,
@@ -663,7 +674,7 @@ public sealed class LiveVoiceService(
         {
             throw ApiException.Conflict(
                 "live_voice_consent_required",
-                "Accept the Speaking recording consent before starting realtime voice.");
+                "Accept the Speaking consent before starting the live AI patient.");
         }
 
         var required = new[]
@@ -683,7 +694,7 @@ public sealed class LiveVoiceService(
             {
                 throw ApiException.Conflict(
                     "live_voice_consent_required",
-                    "Accept the current Speaking recording and AI-processing consent before starting realtime voice.");
+                    "Accept the current Speaking consent before starting the live AI patient.");
             }
         }
     }
@@ -706,6 +717,41 @@ public sealed class LiveVoiceService(
                 $"The {provider} realtime voice model has not passed the live account probe yet. Please retry shortly.",
                 retryable: true);
         }
+    }
+
+    /// <summary>
+    /// True only when an enabled <see cref="PinFlagKey"/> flag exists for this learner. Fails CLOSED:
+    /// a flag that cannot be read authorises nothing. A refusal is never an error to the caller (they
+    /// get the normal order); it is one Warning with the user id and the requested value, nothing else.
+    /// </summary>
+    private async Task<bool> MayPinAsync(string userId, string requestedProvider, CancellationToken ct)
+    {
+        var key = PinFlagKey(userId);
+        // The value comes from the query string: only a short plain token may reach the log.
+        var requested = LiveVoiceProviderProbeState.SafeToken(requestedProvider.Trim()) ?? "(unsupported value)";
+        try
+        {
+            if (await db.FeatureFlags.AsNoTracking().AnyAsync(f => f.Key == key && f.Enabled, ct))
+            {
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Type only: never the message, which can carry connection details.
+            logger.LogWarning(
+                "Live voice provider pin ignored for user {UserId} (requested {RequestedProvider}): the QA pin flag could not be read ({ErrorType}).",
+                userId,
+                requested,
+                ex.GetType().Name);
+            return false;
+        }
+
+        logger.LogWarning(
+            "Live voice provider pin ignored for user {UserId} (requested {RequestedProvider}): the account has no enabled QA pin flag.",
+            userId,
+            requested);
+        return false;
     }
 
     private (string Model, string DisplayName) Describe(string provider) => provider switch
