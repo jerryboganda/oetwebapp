@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Brain, CheckCircle2, RotateCcw, ChevronRight } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem, MotionPage } from '@/components/ui/motion-primitives';
+import { EmptyState } from '@/components/ui/empty-error';
+import { CountUp } from '@/components/ui/count-up';
+import { ProgressBar } from '@/components/ui/progress';
+import { MotionFadeSwitch, MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { fetchReviewSummary, fetchDueReviewItems, submitReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { Card } from '@/components/ui/card';
@@ -64,11 +66,6 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [sessionStats, setSessionStats] = useState({ reviewed: 0, correct: 0 });
   const [started, setStarted] = useState(false);
-  const heroHighlights = [
-    { icon: Brain, label: 'Due today', value: `${summary?.dueToday ?? 0}` },
-    { icon: CheckCircle2, label: 'Mastered', value: `${summary?.mastered ?? 0}` },
-    { icon: RotateCcw, label: 'Mode', value: 'Spaced review' },
-  ];
 
   useEffect(() => {
     analytics.track('review_page_viewed');
@@ -106,14 +103,22 @@ export default function ReviewPage() {
     }
   }
 
+  // The overview tiles below carry these counts, so the hero no longer repeats them.
+  const hero = (
+    <LearnerPageHero
+      eyebrow="Daily Review"
+      title="Lock in what you've already learned"
+      description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back."
+      icon={Brain}
+    />
+  );
+
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-        <LearnerPageHero eyebrow="Daily Review" title="Lock in what you've already learned" description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back." icon={Brain} highlights={heroHighlights} />
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
-        </div>
+        {hero}
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton aria-hidden key={i} className="h-24 rounded-2xl" />)}
         </div>
       </>
     );
@@ -121,98 +126,82 @@ export default function ReviewPage() {
 
   return (
     <>
-      <div className="space-y-6">
-      <LearnerPageHero
-        eyebrow="Daily Review"
-        title="Lock in what you've already learned"
-        description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back."
-        icon={Brain}
-        highlights={heroHighlights}
-      />
+      {hero}
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
       {/* Summary cards */}
       {!started && (
-        <div>
-          <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="Your review session at a glance." className="mb-4" />
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
-          {[
-            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger-strong' },
-            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-warning-strong' },
-            { label: 'Total Items', value: summary?.total ?? 0, color: 'text-info' },
-            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success-strong' },
-          ].map(stat => (
-            <Card key={stat.label} className="rounded-2xl p-4 text-center shadow-sm">
-              <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
-              <div className="mt-1 text-sm text-muted">{stat.label}</div>
-            </Card>
-          ))}
-        </div>
-        </div>
+        <section className="space-y-4">
+          <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-4">
+            {[
+              { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger-strong' },
+              { label: 'Total Due', value: summary?.due ?? 0, color: 'text-warning-strong' },
+              { label: 'Total Items', value: summary?.total ?? 0, color: 'text-info' },
+              { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success-strong' },
+            ].map((stat, index) => (
+              <MotionItem key={stat.label} delayIndex={index}>
+                <Card padding="md" className="h-full text-center">
+                  <div className={`text-3xl font-bold ${stat.color}`}><CountUp value={stat.value} /></div>
+                  <div className="mt-1 text-sm text-muted">{stat.label}</div>
+                </Card>
+              </MotionItem>
+            ))}
+          </div>
+        </section>
       )}
 
       {!started && !done && items.length === 0 && (
-        <div className="mx-auto max-w-xl">
-          <Card className="p-8 text-center">
-            <CheckCircle2 className="w-12 h-12 text-success-strong mx-auto mb-3" aria-hidden="true" />
-            <h3 className="text-lg font-bold text-navy mb-2">No items due for review</h3>
-            <p className="text-muted mb-6">You&apos;re all caught up. New items will appear here as you complete more practice activities.</p>
-            <Button
-              onClick={() => { setLoading(true); setError(null); Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => { if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary); if (itemsR.status === 'fulfilled') { const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []); setItems(loadedItems as ReviewItem[]); } setLoading(false); }); }}
-            >
-              <RotateCcw className="w-4 h-4" aria-hidden="true" /> Refresh
-            </Button>
-          </Card>
-        </div>
+        <EmptyState
+          icon={<CheckCircle2 className="h-8 w-8 text-success-strong" />}
+          title="No items due for review"
+          description="You're all caught up. New items will appear here as you complete more practice activities."
+          action={{
+            label: 'Refresh',
+            onClick: () => { setLoading(true); setError(null); Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => { if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary); if (itemsR.status === 'fulfilled') { const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []); setItems(loadedItems as ReviewItem[]); } setLoading(false); }); },
+          }}
+        />
       )}
 
       {!started && !done && items.length > 0 && (
         <div className="flex justify-center">
           <Button size="lg" onClick={() => setStarted(true)}>
-            Start Review ({items.length} items) <ChevronRight className="w-5 h-5" aria-hidden="true" />
+            Start Review ({items.length} items) <ChevronRight className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
           </Button>
         </div>
       )}
 
       {started && !done && currentItem && (
-        <div className="mx-auto max-w-3xl">
-          <LearnerSurfaceSectionHeader eyebrow="Active session" title="Review one item at a time" description="Tackle one item at a time for focused recall." className="mb-4" />
-          {/* Progress */}
-          <div className="mb-4 flex items-center justify-between text-sm text-muted">
-            <span>{current + 1} / {items.length}</span>
-            <span>{sessionStats.correct} correct so far</span>
-          </div>
-          <div className="mb-6 h-2 w-full rounded-full bg-background-light">
-            <div
-              className="h-2 rounded-full bg-primary transition-[width,background-color] duration-300"
-              style={{ width: `${Math.min(100, ((current + 1) / items.length) * 100)}%` }}
-            />
+        <section className="space-y-4">
+          <LearnerSurfaceSectionHeader eyebrow="Active session" title="Review one item at a time" />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm text-muted tabular-nums">
+              <span>{current + 1} / {items.length}</span>
+              <span>{sessionStats.correct} correct so far</span>
+            </div>
+            <ProgressBar value={current + 1} max={items.length} ariaLabel={`Item ${current + 1} of ${items.length}`} />
           </div>
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentItem.id}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              className="mb-6 rounded-2xl border border-border bg-surface p-6 shadow-sm"
-            >
-              <div className="mb-3 text-xs font-medium uppercase text-primary">{currentItem.examTypeCode} · {currentItem.subtestCode || 'General'}</div>
-              <div className="mb-4 text-lg font-medium text-navy">
+          {/* One card at a time: the shared fade switch, not a hand-written slide. */}
+          <MotionFadeSwitch activeKey={currentItem.id}>
+            <Card padding="lg">
+              <div className="eyebrow mb-3 text-primary">{currentItem.examTypeCode} · {currentItem.subtestCode || 'General'}</div>
+              <div className="mb-4 max-w-3xl text-lg font-medium text-navy">
                 {currentQuestionText ?? 'Review item unavailable.'}
               </div>
 
               {!revealed ? (
                 <button
+                  type="button"
                   onClick={() => setRevealed(true)}
-                  className="w-full rounded-2xl border-2 border-dashed border-border py-3 font-medium text-muted transition-colors hover:border-primary hover:text-primary"
+                  className="min-h-11 w-full rounded-2xl border-2 border-dashed border-border py-3 font-medium text-muted transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   Tap to reveal answer
                 </button>
               ) : (
                 <MotionItem>
-                  <div className="mb-5 rounded-2xl border border-border bg-background-light p-4 text-navy/80">
+                  <div className="mb-5 max-w-3xl rounded-xl border border-border bg-background-light p-4 text-navy/80">
                     {currentAnswerText ?? 'Review item unavailable.'}
                   </div>
                   <div className="mb-3 text-center text-sm text-muted">How well did you recall this?</div>
@@ -223,7 +212,7 @@ export default function ReviewPage() {
                         onClick={() => handleRate(q)}
                         disabled={submitting}
                         type="button"
-                        className={`min-h-11 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${QUALITY_COLORS[q]} disabled:opacity-50`}
+                        className={`pressable min-h-11 rounded-control py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${QUALITY_COLORS[q]} disabled:opacity-50`}
                       >
                         {label}
                       </button>
@@ -231,24 +220,26 @@ export default function ReviewPage() {
                   </div>
                 </MotionItem>
               )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+            </Card>
+          </MotionFadeSwitch>
+        </section>
       )}
 
       {done && (
-        <MotionPage className="mx-auto max-w-md py-12 text-center">
-          <CheckCircle2 className="w-16 h-16 text-success-strong mx-auto mb-4" />
-          <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
-          <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
-          <Button
-            onClick={() => { setStarted(false); setDone(false); setCurrent(0); setRevealed(false); setSessionStats({ reviewed: 0, correct: 0 }); }}
-          >
-            <RotateCcw className="w-4 h-4" aria-hidden="true" /> Review Again
-          </Button>
-        </MotionPage>
+        <MotionSection>
+          <Card padding="lg" className="flex flex-col items-center py-10 text-center sm:py-12">
+            {/* One-shot pop for a real event: the session was just finished. */}
+            <CheckCircle2 className="pop-in mb-4 h-16 w-16 text-success-strong" aria-hidden="true" />
+            <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
+            <p className="mb-6 text-muted tabular-nums">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
+            <Button
+              onClick={() => { setStarted(false); setDone(false); setCurrent(0); setRevealed(false); setSessionStats({ reviewed: 0, correct: 0 }); }}
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Review Again
+            </Button>
+          </Card>
+        </MotionSection>
       )}
-      </div>
     </>
   );
 }
