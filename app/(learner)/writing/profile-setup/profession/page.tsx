@@ -97,7 +97,7 @@ export default function ProfileSetupProfessionPage() {
                   />
                   <span className="flex-1">
                     <span className="block text-sm font-bold text-navy">
-                      <Briefcase className="me-1 inline h-4 w-4 text-warning-strong" aria-hidden="true" />
+                      <Briefcase className="me-1 inline h-4 w-4 text-skill-writing" aria-hidden="true" />
                       {option.label}
                     </span>
                     <span id={`profession-${option.id}-desc`} className="block text-xs text-muted">

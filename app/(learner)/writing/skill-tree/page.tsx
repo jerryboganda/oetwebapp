@@ -135,7 +135,7 @@ export default function WritingSkillTreePage() {
                           {/* SKILL_LABELS are OET-authored English content; force LTR inside RTL chrome. */}
                           <h2 className="mt-1 text-sm font-bold text-navy" dir="ltr">{SKILL_LABELS[skill]}</h2>
                         </div>
-                        <Target className="h-5 w-5 shrink-0 text-warning-strong" aria-hidden="true" />
+                        <Target className="h-5 w-5 shrink-0 text-skill-writing" aria-hidden="true" />
                       </header>
                       <div className="mt-3 space-y-1">
                         <div className="flex justify-between text-xs font-bold text-muted">

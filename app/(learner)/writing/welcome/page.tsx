@@ -77,7 +77,7 @@ export default function WritingWelcomePage() {
                       <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums text-primary">
                         {index + 1}
                       </span>
-                      <Icon className="h-5 w-5 text-warning-strong" aria-hidden="true" />
+                      <Icon className="h-5 w-5 text-skill-writing" aria-hidden="true" />
                     </div>
                     <h3 className="text-sm font-semibold text-navy">{t(stage.labelKey)}</h3>
                     <p className="text-xs leading-snug text-muted">{t(stage.descriptionKey)}</p>
