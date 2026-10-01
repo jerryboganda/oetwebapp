@@ -5,6 +5,10 @@ import Link from 'next/link';
 import { CalendarClock, MapPin, Plus, RefreshCw, X } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Input } from '@/components/ui/form-controls';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -17,12 +21,13 @@ import {
 import type { MockAvailabilitySlot } from '@/lib/api';
 import type { MockBooking } from '@/lib/mock-data';
 
-const STATUS_VARIANT: Record<string, 'success' | 'info' | 'warning' | 'danger' | 'default'> = {
+const STATUS_VARIANT: Record<string, 'success' | 'info' | 'warning' | 'danger' | 'muted' | 'default'> = {
   scheduled: 'info',
   confirmed: 'info',
   in_progress: 'warning',
   completed: 'success',
-  cancelled: 'default',
+  // Inactive, so neutral: the default variant is the brand violet.
+  cancelled: 'muted',
   tutor_no_show: 'danger',
   learner_no_show: 'danger',
 };
@@ -148,128 +153,131 @@ export default function MockBookingsPage() {
         title="Your booked mocks"
         description="Speaking mocks use live tutor-calendar availability. You may reschedule before the session starts only to another currently available tutor slot."
         icon={CalendarClock}
+        aside={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => void reload()} disabled={loading}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
+            </Button>
+            <Button asChild>
+              <Link href="/mocks/setup">
+                <Plus className="h-4 w-4" aria-hidden="true" /> Book a mock
+              </Link>
+            </Button>
+          </div>
+        )}
       />
 
-      <div className="mb-4 mt-6 flex flex-wrap items-center gap-2">
-        <Button variant="ghost" onClick={() => void reload()} disabled={loading}>
-          <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh
-        </Button>
-        <Button asChild>
-          <Link href="/mocks/setup">
-            <Plus className="h-4 w-4" aria-hidden="true" /> Book a mock
-          </Link>
-        </Button>
-      </div>
-
-      {error ? <InlineAlert variant="error" className="mb-4">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading your bookings">
+          <Skeleton className="h-32 w-full rounded-2xl" />
+          <Skeleton className="h-32 w-full rounded-2xl" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-12 text-center text-sm text-muted">
-          You have no upcoming bookings. Use the &quot;Book a mock&quot; button to schedule a Speaking or final-readiness mock.
-        </div>
+        <EmptyState
+          icon={<CalendarClock className="h-7 w-7" aria-hidden="true" />}
+          title="You have no upcoming bookings"
+          description={'Use the "Book a mock" button to schedule a Speaking or final-readiness mock.'}
+          action={{ label: 'Book a mock', href: '/mocks/setup' }}
+        />
       ) : (
         <ul className="space-y-3">
-          {items.map((b) => {
+          {items.map((b, index) => {
             const variant = STATUS_VARIANT[b.status] ?? 'default';
             const draft = rescheduleDraft[b.id] ?? '';
             const rescheduleDate = rescheduleDates[b.id] ?? defaultRescheduleDate();
             const slots = availableSlots[b.id] ?? [];
             const isTerminal = b.status === 'completed' || b.status === 'cancelled' || b.status === 'tutor_no_show' || b.status === 'learner_no_show';
             return (
-              <li key={b.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-navy">
-                      {formatScheduled(b.scheduledStartAt, b.timezoneIana)}
+              <li key={b.id}>
+                <MotionItem delayIndex={Math.min(index, 5)}>
+                  <Card>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-navy">
+                          {formatScheduled(b.scheduledStartAt, b.timezoneIana)}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" /> {b.timezoneIana}
+                          <span aria-hidden="true">·</span>
+                          <span>{b.deliveryMode}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="tabular-nums">Reschedules used: {b.rescheduleCount ?? 0}</span>
+                        </div>
+                      </div>
+                      <Badge variant={variant}>{b.status.replace(/_/g, ' ')}</Badge>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                      <MapPin className="h-3 w-3" aria-hidden="true" /> {b.timezoneIana}
-                      <span>·</span>
-                      <span>{b.deliveryMode}</span>
-                      <span>·</span>
-                      <span>Reschedules used: {b.rescheduleCount ?? 0}</span>
-                    </div>
-                  </div>
-                  <Badge variant={variant}>{b.status.replace(/_/g, ' ')}</Badge>
-                </div>
 
-                {!isTerminal ? (
-                  <div className="mt-4 flex flex-wrap items-end gap-2">
-                    <div>
-                      <label htmlFor={`reschedule-date-${b.id}`} className="block text-xs font-medium text-muted mb-1">
-                        Find another tutor slot
-                      </label>
-                      <input
-                        id={`reschedule-date-${b.id}`}
-                        type="date"
-                        className="min-h-11 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        value={rescheduleDate}
-                        min={defaultRescheduleDate()}
-                        onChange={(e) => {
-                          setRescheduleDates((prev) => ({ ...prev, [b.id]: e.target.value }));
-                          setAvailableSlots((prev) => ({ ...prev, [b.id]: [] }));
-                          setRescheduleDraft((prev) => ({ ...prev, [b.id]: '' }));
-                        }}
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => void findAvailableSlots(b)}
-                      disabled={busyId === b.id || slotsLoadingId === b.id}
-                    >
-                      {slotsLoadingId === b.id ? 'Loading slots...' : 'Show available slots'}
-                    </Button>
-                    {slots.length > 0 ? (
-                      <div className="basis-full grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {slots.map((slot) => (
-                          <button
-                            key={slot.startAt}
-                            type="button"
-                            onClick={() => setRescheduleDraft((prev) => ({ ...prev, [b.id]: slot.startAt }))}
-                            className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                              draft === slot.startAt
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border bg-surface text-navy hover:border-border-hover'
-                            }`}
-                            aria-pressed={draft === slot.startAt}
-                          >
-                            <span className="block font-semibold">{formatSlot(slot.startAt, b.timezoneIana)}</span>
-                            <span className="block text-xs text-muted">{slot.tutorDisplayName}</span>
-                          </button>
-                        ))}
+                    {!isTerminal ? (
+                      <div className="mt-4 flex flex-wrap items-end gap-2">
+                        <Input
+                          id={`reschedule-date-${b.id}`}
+                          label="Find another tutor slot"
+                          type="date"
+                          value={rescheduleDate}
+                          min={defaultRescheduleDate()}
+                          onChange={(e) => {
+                            setRescheduleDates((prev) => ({ ...prev, [b.id]: e.target.value }));
+                            setAvailableSlots((prev) => ({ ...prev, [b.id]: [] }));
+                            setRescheduleDraft((prev) => ({ ...prev, [b.id]: '' }));
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={() => void findAvailableSlots(b)}
+                          disabled={busyId === b.id || slotsLoadingId === b.id}
+                        >
+                          {slotsLoadingId === b.id ? 'Loading slots...' : 'Show available slots'}
+                        </Button>
+                        {slots.length > 0 ? (
+                          <div className="grid basis-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {slots.map((slot) => (
+                              <button
+                                key={slot.startAt}
+                                type="button"
+                                onClick={() => setRescheduleDraft((prev) => ({ ...prev, [b.id]: slot.startAt }))}
+                                className={`min-h-11 rounded-control border px-3 py-2 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                                  draft === slot.startAt
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border bg-surface text-navy hover:border-border-hover'
+                                }`}
+                                aria-pressed={draft === slot.startAt}
+                              >
+                                <span className="block font-semibold tabular-nums">{formatSlot(slot.startAt, b.timezoneIana)}</span>
+                                <span className="block text-xs text-muted">{slot.tutorDisplayName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <Button
+                          variant="primary"
+                          onClick={() => void handleReschedule(b.id)}
+                          disabled={!draft || busyId === b.id}
+                        >
+                          Reschedule
+                        </Button>
+                        <span className="basis-full text-xs text-muted">
+                          Cancellation more than 24 hours before start: full refund eligible. At 24 hours or less: full refund unavailable.
+                        </span>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void handleCancel(b.id)}
+                          disabled={busyId === b.id}
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" /> Cancel
+                        </Button>
+                        {b.tutorProfileId ? (
+                          <Button variant="outline" asChild>
+                            <Link href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}>
+                              Open LiveKit tutor room
+                            </Link>
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
-                    <Button
-                      variant="primary"
-                      onClick={() => void handleReschedule(b.id)}
-                      disabled={!draft || busyId === b.id}
-                    >
-                      Reschedule
-                    </Button>
-                    <span className="basis-full text-xs text-muted">
-                      Cancellation more than 24 hours before start: full refund eligible. At 24 hours or less: full refund unavailable.
-                    </span>
-                    <Button
-                      variant="ghost"
-                      onClick={() => void handleCancel(b.id)}
-                      disabled={busyId === b.id}
-                    >
-                      <X className="h-4 w-4" aria-hidden="true" /> Cancel
-                    </Button>
-                    {b.tutorProfileId ? (
-                      <Button variant="outline" asChild>
-                        <Link href={`/mocks/speaking-room/${encodeURIComponent(b.bookingId ?? b.id)}`}>
-                          Open LiveKit tutor room
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
+                  </Card>
+                </MotionItem>
               </li>
             );
           })}

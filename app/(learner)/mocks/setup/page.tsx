@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ElementType } from 'react';
 import {
+  ArrowRight,
   Award,
   Check,
   Clock,
-  CreditCard,
   FileText,
   Headphones,
   Info,
@@ -25,10 +25,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
+import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/motion-primitives';
+import { cn } from '@/lib/utils';
 import {
   createMockBooking,
   createMockSession,
@@ -92,11 +96,12 @@ const ENTITLEMENT_GATED_TYPES: ReadonlySet<MockTypeToken> = new Set<MockTypeToke
   'full', 'lrw', 'sub', 'part', 'final_readiness', 'remedial',
 ]);
 
-const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string }> = {
-  listening: { label: 'Listening', icon: Headphones, active: 'border-primary bg-primary/10 text-primary' },
-  reading: { label: 'Reading', icon: FileText, active: 'border-info bg-info/10 text-info' },
-  writing: { label: 'Writing', icon: PenTool, active: 'border-danger bg-danger/10 text-danger-strong' },
-  speaking: { label: 'Speaking', icon: Mic, active: 'border-primary bg-primary/10 text-primary' },
+/** Sub-test identity (DESIGN.md §2 skill tokens): the icon at rest, the whole tile when chosen. */
+const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string; iconTone: string }> = {
+  listening: { label: 'Listening', icon: Headphones, active: 'border-skill-listening bg-skill-listening/10 text-skill-listening', iconTone: 'text-skill-listening' },
+  reading: { label: 'Reading', icon: FileText, active: 'border-skill-reading bg-skill-reading/10 text-skill-reading', iconTone: 'text-skill-reading' },
+  writing: { label: 'Writing', icon: PenTool, active: 'border-skill-writing bg-skill-writing/10 text-skill-writing', iconTone: 'text-skill-writing' },
+  speaking: { label: 'Speaking', icon: Mic, active: 'border-skill-speaking bg-skill-speaking/10 text-skill-speaking', iconTone: 'text-skill-speaking' },
 };
 
 function isSubtest(value: string | null): value is MockSubType {
@@ -390,23 +395,32 @@ export default function MockSetup() {
 
   const showProfession = isFullShape(mockType) || subType === 'writing' || subType === 'speaking';
 
+  // One selection recipe for every option card on the form: violet is the selection colour, a
+  // check or aria-pressed carries the state, so no option group needs its own hue.
+  const optionClass = (selected: boolean, extra?: string) =>
+    cn(
+      'border text-start transition-colors',
+      selected ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover hover:bg-background-light',
+      extra,
+    );
+
   return (
     <>
-      <div className="space-y-5 sm:space-y-8 pb-24">
-        <LearnerPageHero
-          eyebrow="Mock Setup"
-          icon={Layers}
-          accent="navy"
-          title="Start from a published mock bundle"
-          description="Choose your mock paper, exam mode, timing, and whether to reserve tutor review before you start."
-          highlights={[
-            { icon: Award, label: 'Credits', value: `${availableCredits} available` },
-            { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
-            { icon: Clock, label: 'Timer', value: strictTimer ? 'Strict' : 'Flexible' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Mock Setup"
+        icon={Layers}
+        accent="navy"
+        title="Start from a published mock bundle"
+        description="Choose your mock paper, exam mode, timing, and whether to reserve tutor review before you start."
+        highlights={[
+          { icon: Award, label: 'Credits', value: `${availableCredits} available` },
+          { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
+          { icon: Clock, label: 'Timer', value: strictTimer ? 'Strict' : 'Flexible' },
+        ]}
+      />
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Mock entitlement summary">
+      <MotionSection>
+        <Card padding="lg" role="region" aria-label="Mock entitlement summary">
           <LearnerSurfaceSectionHeader
             eyebrow="Entitlements"
             title="Your mock allowance"
@@ -415,85 +429,83 @@ export default function MockSetup() {
             className="mb-4"
           />
           {entitlementSummaryLoading ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="status" aria-busy="true" aria-label="Loading your mock allowance">
               <Skeleton className="h-20 rounded-xl" />
               <Skeleton className="h-20 rounded-xl" />
             </div>
           ) : !entitlementSummary || entitlementSummary.items.length === 0 ? (
-            <InlineAlert variant="info">
+            <InlineAlert variant="info" live="polite">
               No mock entitlements found yet. Visit billing to choose a plan or top-up that unlocks mock attempts.
             </InlineAlert>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {entitlementSummary.items.map((item) => {
                 const totalForPct = item.granted > 0 ? item.granted : Math.max(1, item.consumed + item.remaining);
                 const usedPct = Math.min(100, Math.round((item.consumed / totalForPct) * 100));
                 const exhausted = item.granted > 0 && item.remaining <= 0;
-                const tone = exhausted
-                  ? 'border-danger bg-danger/5'
-                  : item.remaining <= 1
-                    ? 'border-warning bg-warning/5'
-                    : 'border-border bg-background-light';
-                const barColor = exhausted
-                  ? 'bg-danger'
-                  : item.remaining <= 1
-                    ? 'bg-warning'
-                    : 'bg-primary';
+                const low = !exhausted && item.remaining <= 1;
                 return (
-                  <div key={item.mockType} className={`rounded-xl border p-4 transition-colors ${tone}`}>
+                  <div
+                    key={item.mockType}
+                    className={cn(
+                      'min-w-0 rounded-xl border p-4 transition-colors',
+                      exhausted ? 'border-danger/30 bg-danger/5' : low ? 'border-warning/30 bg-warning/5' : 'border-border bg-background-light',
+                    )}
+                  >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-bold text-navy">{item.label}</p>
-                        <p className="mt-1 text-xs text-muted">
+                        <p className="mt-1 text-xs tabular-nums text-muted">
                           {item.consumed} of {item.granted} used / {item.remaining} remaining
                         </p>
                       </div>
                       {exhausted ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 tile-label text-danger-strong">
-                          <Lock className="h-3 w-3" /> Exhausted
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-danger/10 px-2 py-1 tile-label text-danger-strong">
+                          <Lock className="h-3 w-3" aria-hidden="true" /> Exhausted
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-border/60" role="progressbar" aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label={`${item.label} usage`}>
-                      <div className={`h-full ${barColor} transition-[width,background-color] duration-300`} style={{ width: `${usedPct}%` }} />
-                    </div>
+                    <ProgressBar
+                      value={usedPct}
+                      color={exhausted ? 'danger' : low ? 'warning' : 'primary'}
+                      ariaLabel={`${item.label} usage`}
+                      className="mt-3"
+                    />
                   </div>
                 );
               })}
             </div>
           )}
           {entitlementSummary?.anyExhausted ? (
-            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-danger/40 bg-danger/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger-strong">
-                  <CreditCard className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-sm font-black text-navy">You&apos;ve used all available mocks in at least one bucket.</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    Top up your mocks to keep practising. Billing add-ons unlock additional attempts immediately.
-                  </p>
-                </div>
-              </div>
-              <Button variant="primary" asChild>
-                <Link href="/billing">Top up mocks</Link>
-              </Button>
-            </div>
+            <InlineAlert
+              variant="error"
+              title="You've used all available mocks in at least one bucket."
+              className="mt-5"
+              action={(
+                <Button asChild size="sm">
+                  <Link href="/billing">Top up mocks</Link>
+                </Button>
+              )}
+            >
+              Top up your mocks to keep practising. Billing add-ons unlock additional attempts immediately.
+            </InlineAlert>
           ) : null}
-        </section>
+        </Card>
+      </MotionSection>
 
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-48 rounded-2xl" />
-            <Skeleton className="h-48 rounded-2xl" />
-          </div>
-        ) : null}
+      {loading ? (
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading mock setup options">
+          <Skeleton className="h-48 rounded-2xl" />
+          <Skeleton className="h-48 rounded-2xl" />
+        </div>
+      ) : null}
 
-        {!loading && startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
+      {!loading && startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
 
-        {!loading ? (
-          <>
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+      {!loading ? (
+        <>
+          <MotionSection delayIndex={1}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow="1. Mock Type"
                 title="Choose the simulation that matches your goal"
@@ -501,10 +513,9 @@ export default function MockSetup() {
                 className="mb-4"
               />
               {balanceSentence ? (
-                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-info/30 bg-info/5 px-4 py-3">
-                  <Badge variant="info" className="shrink-0">Balance</Badge>
-                  <p className="text-sm leading-5 text-navy">{balanceSentence}</p>
-                </div>
+                <InlineAlert variant="info" live="polite" title="Balance" className="mb-4">
+                  {balanceSentence}
+                </InlineAlert>
               ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {(() => {
@@ -543,55 +554,57 @@ export default function MockSetup() {
                       && !isUnlimitedEntitlement;
                     const disabled = isGated && remaining <= 0;
                     return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => !disabled && handleMockTypeChange(id)}
-                        disabled={disabled}
-                        aria-disabled={disabled}
-                        className={`relative rounded-2xl border-2 p-5 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-                          isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-border hover:border-border-hover hover:bg-background-light'
-                        } ${disabled ? 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent' : ''}`}
-                      >
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted'}`}>
-                            <Icon className="h-5 w-5" />
-                          </span>
-                          {isSelected ? <Check className="h-5 w-5 text-primary" /> : null}
-                        </div>
-                        <h3 className={`text-lg font-bold ${isSelected ? 'text-primary' : 'text-navy'}`}>{label}</h3>
-                        <p className="mt-1 text-sm text-muted">{desc}</p>
-                        {isGated ? (
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            {disabled ? (
-                              <>
-                                <Badge variant="danger">0 remaining</Badge>
-                                <Link
-                                  href="/billing"
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
-                                >
-                                  Buy more
-                                </Link>
-                              </>
-                            ) : remaining <= 1 ? (
-                              <Badge variant="warning">{remaining} remaining</Badge>
-                            ) : (
-                              <Badge variant="muted">{remaining} remaining</Badge>
-                            )}
+                      // The "Buy more" link sits beside the option button, never inside it.
+                      <div key={id} className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => !disabled && handleMockTypeChange(id)}
+                          disabled={disabled}
+                          aria-disabled={disabled}
+                          aria-pressed={isSelected}
+                          className={cn(
+                            'relative flex-1 rounded-2xl border-2 p-5 text-start transition-[color,background-color,border-color,box-shadow] duration-200',
+                            isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-border hover:border-border-hover hover:bg-background-light',
+                            disabled && 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent',
+                          )}
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-primary-700' : 'bg-background-light text-muted'}`}>
+                              <Icon className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                            {isSelected ? <Check className="h-5 w-5 text-primary" aria-hidden="true" /> : null}
                           </div>
+                          <h3 className={`text-lg font-bold ${isSelected ? 'text-primary' : 'text-navy'}`}>{label}</h3>
+                          <p className="mt-1 text-sm text-muted">{desc}</p>
+                          {isGated ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              {disabled ? (
+                                <Badge variant="danger">0 remaining</Badge>
+                              ) : remaining <= 1 ? (
+                                <Badge variant="warning" className="tabular-nums">{remaining} remaining</Badge>
+                              ) : (
+                                <Badge variant="muted" className="tabular-nums">{remaining} remaining</Badge>
+                              )}
+                            </div>
+                          ) : null}
+                        </button>
+                        {disabled ? (
+                          <Link
+                            href="/billing"
+                            className="hover-primary inline-flex min-h-11 items-center gap-1 self-start rounded-control px-2 text-xs font-bold text-primary transition-colors"
+                          >
+                            Buy more <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
+                          </Link>
                         ) : null}
-                      </button>
+                      </div>
                     );
                   });
                 })()}
               </div>
               {entitlementBlocked ? (
-                <div className="mt-4">
-                  <InlineAlert variant="warning">
-                    You have no remaining attempts for this mock type. Top up from billing to unlock more.
-                  </InlineAlert>
-                </div>
+                <InlineAlert variant="warning" className="mt-4">
+                  You have no remaining attempts for this mock type. Top up from billing to unlock more.
+                </InlineAlert>
               ) : null}
               <MotionCollapse open={isSubShape(mockType)}>
                 <div className="pt-5">
@@ -604,10 +617,11 @@ export default function MockSetup() {
                         <button
                           key={id}
                           type="button"
+                          aria-pressed={subType === id}
                           onClick={() => handleSubTypeChange(id)}
                           className={`rounded-xl border px-4 py-3 transition-colors ${subType === id ? meta.active : 'border-border bg-surface text-muted hover:bg-background-light'}`}
                         >
-                          <Icon className="mx-auto mb-2 h-5 w-5" />
+                          <Icon className={`mx-auto mb-2 h-5 w-5 ${subType === id ? '' : meta.iconTone}`} aria-hidden="true" />
                           <span className="text-sm font-bold">{meta.label}</span>
                         </button>
                       );
@@ -615,11 +629,13 @@ export default function MockSetup() {
                   </div>
                 </div>
               </MotionCollapse>
-            </section>
+            </Card>
+          </MotionSection>
 
-            <MotionPresence>
-              {showProfession ? (
-                <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionPresence>
+            {showProfession ? (
+              <MotionSection delayIndex={2}>
+                <Card padding="lg">
                   <LearnerSurfaceSectionHeader
                     eyebrow="2. Profession"
                     title="Match your profession"
@@ -627,28 +643,32 @@ export default function MockSetup() {
                     icon={Stethoscope}
                     className="mb-4"
                   />
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {(options?.professions ?? []).map((item) => (
                       <button
                         key={item.id}
                         type="button"
+                        aria-pressed={profession === item.id}
                         onClick={() => {
                           setProfession(item.id);
                           setSelectedBundleId(null);
                         }}
-                        className={`rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors ${
-                          profession === item.id ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-surface text-navy hover:bg-background-light'
-                        }`}
+                        className={optionClass(
+                          profession === item.id,
+                          cn('rounded-xl px-4 py-3 text-sm font-bold', profession === item.id ? 'text-primary' : 'text-navy'),
+                        )}
                       >
                         {item.label}
                       </button>
                     ))}
                   </div>
-                </MotionSection>
-              ) : null}
-            </MotionPresence>
+                </Card>
+              </MotionSection>
+            ) : null}
+          </MotionPresence>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionSection delayIndex={3}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '3. Bundle' : '2. Bundle'}
                 title="Pick the authored mock route"
@@ -656,101 +676,107 @@ export default function MockSetup() {
                 className="mb-4"
               />
               {availableBundles.length === 0 ? (
-                <InlineAlert variant="info">
+                <InlineAlert variant="info" live="polite">
                   No published bundle matches this selection yet. Ask an admin to publish one from Content Mock Bundles.
                 </InlineAlert>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {availableBundles.map((bundle) => (
-                    <button
-                      key={bundle.bundleId}
-                      type="button"
-                      onClick={() => setSelectedBundleId(bundle.bundleId)}
-                      className={`rounded-2xl border p-5 text-left transition-colors ${
-                        selectedBundle?.bundleId === bundle.bundleId ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-base font-black text-navy">{bundle.title}</p>
-                          <p className="mt-1 text-sm text-muted">
-                            {bundle.sections.length} section{bundle.sections.length === 1 ? '' : 's'} / {bundle.estimatedDurationMinutes} min
-                          </p>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {availableBundles.map((bundle) => {
+                    const isSelected = selectedBundle?.bundleId === bundle.bundleId;
+                    return (
+                      <button
+                        key={bundle.bundleId}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedBundleId(bundle.bundleId)}
+                        className={optionClass(isSelected, 'rounded-2xl p-5')}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-base font-bold text-navy">{bundle.title}</p>
+                            <p className="mt-1 text-sm tabular-nums text-muted">
+                              {bundle.sections.length} section{bundle.sections.length === 1 ? '' : 's'} / {bundle.estimatedDurationMinutes} min
+                            </p>
+                          </div>
+                          {isSelected ? <Check className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" /> : null}
                         </div>
-                        {selectedBundle?.bundleId === bundle.bundleId ? <Check className="h-5 w-5 text-primary" /> : null}
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {bundle.releasePolicy ? (
-                          <span className="rounded-md bg-warning/10 px-2 py-1 eyebrow text-warning-strong">
-                            {bundle.releasePolicy.replace(/_/g, ' ')}
-                          </span>
-                        ) : null}
-                        {bundle.sourceStatus ? (
-                          <span className="rounded-md bg-background-light px-2 py-1 eyebrow text-muted">
-                            {bundle.sourceStatus.replace(/_/g, ' ')}
-                          </span>
-                        ) : null}
-                        {bundle.sections.map((section) => (
-                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 eyebrow text-muted">
-                            {section.subtest} / {section.timeLimitMinutes}m
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {bundle.releasePolicy ? (
+                            <span className="rounded-md bg-warning/10 px-2 py-1 tile-label text-warning-strong">
+                              {bundle.releasePolicy.replace(/_/g, ' ')}
+                            </span>
+                          ) : null}
+                          {bundle.sourceStatus ? (
+                            <span className="rounded-md bg-background-light px-2 py-1 tile-label text-muted">
+                              {bundle.sourceStatus.replace(/_/g, ' ')}
+                            </span>
+                          ) : null}
+                          {bundle.sections.map((section) => (
+                            <span key={section.id} className="rounded-md bg-background-light px-2 py-1 tile-label tabular-nums text-muted">
+                              {section.subtest} / {section.timeLimitMinutes}m
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
-            </section>
+            </Card>
+          </MotionSection>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionSection delayIndex={4}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '4. Environment' : '3. Environment'}
                 title="Set timing and exam behavior"
                 description="Exam mode enforces strict timing. Practice mode lets you pause and take breaks."
                 className="mb-4"
               />
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <button
                   type="button"
+                  aria-pressed={mode === 'exam'}
                   onClick={() => handleModeChange('exam')}
-                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'exam' ? 'border-danger bg-danger/10' : 'border-border hover:bg-background-light'}`}
+                  className={optionClass(mode === 'exam', 'rounded-2xl p-4')}
                 >
-                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-danger-strong' : 'text-muted'}`} />
+                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-primary' : 'text-muted'}`} aria-hidden="true" />
                   <p className="text-sm font-bold text-navy">Exam Mode</p>
                   <p className="mt-1 text-xs text-muted">Strict timing and full simulation behavior.</p>
                 </button>
                 <button
                   type="button"
+                  aria-pressed={mode === 'practice'}
                   onClick={() => handleModeChange('practice')}
                   disabled={mockType === 'final_readiness'}
-                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'practice' ? 'border-info bg-info/10' : 'border-border hover:bg-background-light'} ${mockType === 'final_readiness' ? 'cursor-not-allowed opacity-60' : ''}`}
+                  className={optionClass(mode === 'practice', cn('rounded-2xl p-4', mockType === 'final_readiness' && 'cursor-not-allowed opacity-60'))}
                 >
-                  <Award className={`mb-3 h-5 w-5 ${mode === 'practice' ? 'text-info' : 'text-muted'}`} />
+                  <Award className={`mb-3 h-5 w-5 ${mode === 'practice' ? 'text-primary' : 'text-muted'}`} aria-hidden="true" />
                   <p className="text-sm font-bold text-navy">Practice Mode</p>
                   <p className="mt-1 text-xs text-muted">Flexible timing for targeted practice.</p>
                 </button>
               </div>
-              <div className="mt-6 rounded-2xl border border-border bg-background-light p-4">
-                <p className="text-sm font-black text-navy">{modePolicy.label}</p>
+              <div className="mt-6">
+                <p className="text-sm font-bold text-navy">{modePolicy.label}</p>
                 <p className="mt-1 text-sm leading-6 text-muted">{modePolicy.description}</p>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {[
                     ['Listening replay', modePolicy.listeningReplayAllowed ? 'Allowed' : 'Locked'],
                     ['Pause timer', modePolicy.pauseAllowed ? 'Allowed' : 'Locked'],
                     ['Writing assistant', modePolicy.writingAssistantAllowed ? 'Allowed' : 'Locked'],
                     ['Review after submit', modePolicy.reviewAfterSubmission ? 'Released' : 'Hidden'],
                   ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl bg-surface px-3 py-2">
+                    <div key={label} className="min-w-0 rounded-xl border border-border bg-background-light px-3 py-2">
                       <p className="tile-label text-muted">{label}</p>
                       <p className="mt-1 text-sm font-bold text-navy">{value}</p>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-background-light p-4">
+              <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div>
                   <p className="eyebrow text-muted">Delivery mode</p>
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid grid-cols-1 gap-2">
                     {(options?.deliveryModes?.length ? options.deliveryModes : [
                       { id: 'computer' as const, label: 'On-screen (computer)' },
                       { id: 'oet_home' as const, label: 'OET@Home (remote)' },
@@ -759,19 +785,21 @@ export default function MockSetup() {
                       <button
                         key={item.id}
                         type="button"
+                        aria-pressed={deliveryMode === item.id}
                         onClick={() => setDeliveryMode(item.id)}
-                        className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition-colors ${
-                          deliveryMode === item.id ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-surface text-navy hover:bg-background-light'
-                        }`}
+                        className={optionClass(
+                          deliveryMode === item.id,
+                          cn('min-h-11 rounded-xl px-3 py-2 text-sm font-bold', deliveryMode === item.id ? 'text-primary' : 'text-navy'),
+                        )}
                       >
                         {item.label}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
+                <div>
                   <p className="eyebrow text-muted">Strictness preset</p>
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid grid-cols-1 gap-2">
                     {(options?.strictnessOptions?.length ? options.strictnessOptions : [
                       { id: 'learning' as const, label: 'Learning', description: 'Pause, replay, and hints allowed.' },
                       { id: 'exam' as const, label: 'Exam', description: 'Strict timers, one-play audio, no hints.' },
@@ -780,6 +808,7 @@ export default function MockSetup() {
                       <button
                         key={item.id}
                         type="button"
+                        aria-pressed={strictness === item.id}
                         onClick={() => {
                           setStrictness(item.id);
                           if (item.id === 'learning') setMode('practice');
@@ -788,9 +817,10 @@ export default function MockSetup() {
                             setStrictTimer(true);
                           }
                         }}
-                        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-                          strictness === item.id ? 'border-danger bg-danger/10 text-danger-strong' : 'border-border bg-surface text-navy hover:bg-background-light'
-                        }`}
+                        className={optionClass(
+                          strictness === item.id,
+                          cn('min-h-11 rounded-xl px-3 py-2', strictness === item.id ? 'text-primary' : 'text-navy'),
+                        )}
                       >
                         <span className="text-sm font-bold">{item.label}</span>
                         {item.description ? <span className="mt-1 block text-xs font-normal leading-5 text-muted">{item.description}</span> : null}
@@ -799,51 +829,48 @@ export default function MockSetup() {
                   </div>
                 </div>
               </div>
-              <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
-                <div className="pr-4">
-                  <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
+              <div className="mt-6 flex items-center justify-between gap-4 border-t border-border pt-6">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> Strict Timer</p>
                   <p className="mt-1 text-xs text-muted">Use the official timing for each section automatically.</p>
                   {mode === 'exam' ? (
                     <p className="mt-2 flex items-center gap-1 tile-label text-danger-strong">
-                      <Info className="h-3 w-3" /> Required in exam mode
+                      <Info className="h-3 w-3 shrink-0" aria-hidden="true" /> Required in exam mode
                     </p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
+                <Switch
+                  checked={strictTimer}
+                  onChange={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
                   disabled={mode === 'exam'}
-                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${strictTimer ? 'bg-primary' : 'bg-border'} ${mode === 'exam' ? 'cursor-not-allowed opacity-50' : ''}`}
-                  role="switch"
-                  aria-checked={strictTimer}
-                >
-                  <span className="sr-only">Use strict timer</span>
-                  <span className={`inline-block h-6 w-6 rounded-full bg-white shadow transition-transform ${strictTimer ? 'translate-x-7' : 'translate-x-1'}`} />
-                </button>
+                  label="Use strict timer"
+                />
               </div>
               {mockType === 'final_readiness' ? (
                 <p className="mt-3 text-xs font-semibold text-danger-strong">
                   Final-readiness mocks always run in exam mode with the strict OET@Home-style preset.
                 </p>
               ) : null}
-            </section>
+            </Card>
+          </MotionSection>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionSection delayIndex={5}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '5. Workflow Contract' : '4. Workflow Contract'}
                 title="Attempt → Review → Remediation"
                 description="Practice mode teaches. Mock mode tests. Review mode improves."
                 className="mb-4"
               />
-              <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className="rounded-2xl border border-border bg-background-light p-4">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div>
                   <p className="eyebrow text-muted">Official-style route</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {MOCK_EXAM_FLOW_STAGES.map((stage) => (
-                      <div key={stage.id} className="rounded-xl bg-surface p-3">
+                      <div key={stage.id} className="min-w-0 rounded-xl border border-border bg-background-light p-3">
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-sm font-bold text-navy">{stage.label}</p>
-                          <span className="shrink-0 rounded-full bg-background-light px-2 py-0.5 tile-label text-muted">
+                          <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 tile-label tabular-nums text-muted">
                             {stage.duration}
                           </span>
                         </div>
@@ -853,18 +880,18 @@ export default function MockSetup() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-border bg-background-light p-4">
+                <div>
                   <p className="eyebrow text-muted">Selected bundle policy</p>
                   {selectedBundle ? (
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-3 space-y-3">
                       {selectedBundlePolicies.map((policy) => (
-                        <div key={policy.subtest} className="rounded-xl bg-surface p-3">
+                        <div key={policy.subtest} className="rounded-xl border border-border bg-background-light p-3">
                           <p className="text-sm font-bold text-navy">{policy.label} · {policy.timing}</p>
                           <p className="mt-1 text-xs leading-5 text-muted">{policy.examRule}</p>
                           <p className="mt-1 text-xs leading-5 text-muted">{policy.reviewRule}</p>
                         </div>
                       ))}
-                      <InlineAlert variant={teacherMarkedSectionCount > 0 && selectedReviewSelection === 'none' ? 'warning' : 'info'}>
+                      <InlineAlert variant={teacherMarkedSectionCount > 0 && selectedReviewSelection === 'none' ? 'warning' : 'info'} live="polite">
                         {teacherMarkedSectionCount > 0
                           ? selectedReviewSelection === 'none'
                             ? 'This bundle includes Writing/Speaking. Add tutor review for a final readiness-grade report.'
@@ -873,42 +900,47 @@ export default function MockSetup() {
                       </InlineAlert>
                     </div>
                   ) : (
-                    <p className="mt-4 text-sm text-muted">Select a published bundle to see its timing, review, and release policy.</p>
+                    <p className="mt-3 text-sm text-muted">Select a published bundle to see its timing, review, and release policy.</p>
                   )}
                 </div>
               </div>
-            </section>
+            </Card>
+          </MotionSection>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionSection delayIndex={5}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '6. Review Credits' : '5. Review Credits'}
                 title="Reserve tutor review at mock start"
                 description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />
-              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label text-warning-strong">
+              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label tabular-nums text-warning-strong">
                 {availableCredits} credits available
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {reviewOptions.map((option) => {
                   const disabled = option.cost > availableCredits;
+                  const isSelected = selectedReviewSelection === option.id;
                   return (
                     <button
                       key={option.id}
                       type="button"
                       disabled={disabled}
+                      aria-pressed={isSelected}
                       onClick={() => setReviewSelection(option.id)}
-                      className={`rounded-2xl border p-4 text-left transition-colors ${
-                        selectedReviewSelection === option.id
-                          ? 'border-warning bg-warning/10'
+                      className={cn(
+                        'rounded-2xl border p-4 text-start transition-colors',
+                        isSelected
+                          ? 'border-primary bg-primary/5'
                           : disabled
                             ? 'cursor-not-allowed border-border bg-background-light opacity-60'
-                            : 'border-border bg-surface hover:border-border-hover'
-                      }`}
+                            : 'border-border bg-surface hover:border-border-hover',
+                      )}
                     >
                       <p className="text-sm font-bold text-navy">{option.label}</p>
                       <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
-                      <p className="mt-3 eyebrow text-muted">
+                      <p className="mt-3 tile-label tabular-nums text-muted">
                         {option.cost} credit{option.cost === 1 ? '' : 's'}
                       </p>
                     </button>
@@ -916,20 +948,20 @@ export default function MockSetup() {
                 })}
               </div>
               {insufficientCredits ? (
-                <div className="mt-4">
-                  <InlineAlert variant="warning">This review selection needs more credits before the mock can start.</InlineAlert>
-                </div>
+                <InlineAlert variant="warning" className="mt-4">This review selection needs more credits before the mock can start.</InlineAlert>
               ) : null}
-            </section>
+            </Card>
+          </MotionSection>
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+          <MotionSection delayIndex={5}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '7. Scheduling' : '6. Scheduling'}
                 title="Book final-readiness or live Speaking mocks"
                 description="Scheduled mocks use the OET@Home-style pre-check flow and release results by the selected bundle policy."
                 className="mb-4"
               />
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <Input
                   label="Scheduled start"
                   type="datetime-local"
@@ -949,30 +981,30 @@ export default function MockSetup() {
               <p className="mt-3 text-xs leading-5 text-muted">
                 Speaking bookings hide interlocutor cards from learners and expose them only to tutors.
               </p>
-            </section>
+            </Card>
+          </MotionSection>
 
-            {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
+          {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
 
-            <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
-              <Button
-                onClick={handleStart}
-                disabled={starting || !selectedBundle || insufficientCredits || entitlementBlocked}
-                size="lg"
-                className="w-full gap-2 py-5 text-base font-black"
-              >
-                {starting ? 'Starting...' : 'Start Mock Test'}
-              </Button>
-              <p className="mt-3 text-center text-xs text-muted">
-                {entitlementBlocked
-                  ? 'No remaining attempts for this mock type. Top up from billing to continue.'
-                  : selectedBundle
-                    ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes`
-                    : 'Select a published bundle to continue.'}
-              </p>
-            </div>
-          </>
-        ) : null}
-      </div>
+          <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
+            <Button
+              onClick={handleStart}
+              disabled={starting || !selectedBundle || insufficientCredits || entitlementBlocked}
+              size="lg"
+              fullWidth
+            >
+              {starting ? 'Starting...' : 'Start Mock Test'}
+            </Button>
+            <p className="mt-3 text-center text-xs text-muted">
+              {entitlementBlocked
+                ? 'No remaining attempts for this mock type. Top up from billing to continue.'
+                : selectedBundle
+                  ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes`
+                  : 'Select a published bundle to continue.'}
+            </p>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

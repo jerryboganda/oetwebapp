@@ -2,54 +2,61 @@
 
 import { useEffect } from 'react';
 import { Shuffle, Zap, BookOpen, Headphones, Mic, PenLine } from 'lucide-react';
-import Link from 'next/link';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Card } from '@/components/ui/card';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { CardLink } from '@/components/ui/card-link';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
 
+// Sub-test modes carry their skill identity colour (DESIGN.md §2); the rest use the brand violet.
 const PRACTICE_MODES = [
   {
     href: '/practice/interleaved',
     icon: Shuffle,
     title: 'Interleaved Practice',
     description: 'Mixed sub-test session with AI-selected tasks that target your weak areas.',
+    tone: 'bg-primary/10 text-primary',
   },
   {
     href: '/vocabulary/quiz',
     icon: Zap,
     title: 'Quick Vocabulary Quiz',
     description: 'A short medical-vocabulary quiz built from your own word bank.',
+    tone: 'bg-primary/10 text-primary',
   },
   {
     href: '/writing',
     icon: PenLine,
     title: 'Writing Practice',
     description: 'Practise referral letters, discharge summaries, and more.',
+    tone: 'bg-skill-writing/10 text-skill-writing',
   },
   {
     href: '/speaking',
     icon: Mic,
     title: 'Speaking Practice',
     description: 'Role plays, handovers, and speaking clarity drills.',
+    tone: 'bg-skill-speaking/10 text-skill-speaking',
   },
   {
     href: '/recalls/words',
     icon: Headphones,
     title: 'Recalls Audio',
     description: 'Click recall words to hear British clinical pronunciation on paid plans.',
+    tone: 'bg-primary/10 text-primary',
   },
   {
     href: '/reading',
     icon: BookOpen,
     title: 'Reading Practice',
     description: 'Part A, B, and C tasks with timed conditions.',
+    tone: 'bg-skill-reading/10 text-skill-reading',
   },
   {
     href: '/listening',
     icon: Headphones,
     title: 'Listening Practice',
     description: 'Extracts, consultations, and presentations.',
+    tone: 'bg-skill-listening/10 text-skill-listening',
   },
 ];
 
@@ -60,45 +67,36 @@ export default function PracticePage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Practice"
-          title="Choose your practice mode"
-          description="Pick a practice style that fits your schedule and focus area."
-          icon={Shuffle}
-          highlights={[
-            { icon: Shuffle, label: 'Modes', value: `${PRACTICE_MODES.length} available` },
-            { icon: Zap, label: 'Quick session', value: 'Under 15 min' },
-            { icon: BookOpen, label: 'Focus', value: 'All sub-tests' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Practice"
+        title="Choose your practice mode"
+        description="Pick a practice style that fits your schedule and focus area."
+        icon={Shuffle}
+      />
 
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Practice modes"
-            title="Pick a mode to get started"
-            description="Choose between mixed practice, quick sessions, or individual sub-tests."
-            className="mb-4"
-          />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {PRACTICE_MODES.map((mode, i) => (
-              <MotionItem key={mode.href} delayIndex={i}>
-                <Link href={mode.href} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                  <Card className="group flex h-full items-start gap-3 p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                      <mode.icon className="h-5 w-5" aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">{mode.title}</h3>
-                      <p className="mt-1 text-xs text-muted">{mode.description}</p>
-                    </div>
-                  </Card>
-                </Link>
-              </MotionItem>
-            ))}
-          </div>
-        </section>
-      </div>
+      <MotionSection>
+        <LearnerSurfaceSectionHeader
+          eyebrow="Practice modes"
+          title="Pick a mode to get started"
+          description="Choose between mixed practice, quick sessions, or individual sub-tests."
+          className="mb-4"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {PRACTICE_MODES.map((mode, i) => (
+            <MotionItem key={mode.href} delayIndex={Math.min(i, 5)} className="h-full">
+              <CardLink href={mode.href} className="group flex h-full items-start gap-3">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${mode.tone}`}>
+                  <mode.icon className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">{mode.title}</h3>
+                  <p className="mt-1 text-xs text-muted">{mode.description}</p>
+                </div>
+              </CardLink>
+            </MotionItem>
+          ))}
+        </div>
+      </MotionSection>
     </>
   );
 }

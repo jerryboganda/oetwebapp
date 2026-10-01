@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { GraduationCap, Mic, Users } from 'lucide-react';
-import { LearnerSurfaceCard } from '@/components/domain/learner-surface';
+import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain/learner-surface';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { fetchMockSpeakingAccess } from '@/lib/api';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { FREE_SPEAKING_SAMPLE_COPY } from '@/components/domain/speaking/SpeakingRulesConsent';
+import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /**
  * Full Mock Speaking gateway (W8). AI grades the Speaking section on the
@@ -37,10 +40,11 @@ export default function MockSpeakingGatewayPage() {
   const forwardedQuery = searchParams?.toString() ?? '';
   const aiHref = `/speaking/exam?${forwardedQuery}`;
   const tutorHref = `/mocks/bookings/new?${forwardedQuery}`;
+  // Brand and neutral accents: these are two ways to take the section, not statuses.
   const aiCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'backend_task',
-    accent: 'indigo',
+    accent: 'primary',
     eyebrow: 'AI Exam',
     eyebrowIcon: GraduationCap,
     title: 'Start AI Speaking Exam',
@@ -51,22 +55,34 @@ export default function MockSpeakingGatewayPage() {
   const tutorCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'frontend_navigation',
-    accent: 'emerald',
+    accent: 'navy',
     eyebrow: 'Live Tutor',
     eyebrowIcon: Users,
     title: 'Book a Tutor',
     description: 'Optional extra: book a human tutor for additional review. AI grading still releases your mock result.',
-    primaryAction: { label: 'Book a Tutor', href: tutorHref },
+    primaryAction: { label: 'Book a Tutor', href: tutorHref, variant: 'outline' },
   };
 
   return (
     <>
+      {/* Title and subtitle this route carried as its shell header before the shell was unwrapped. */}
+      <LearnerPageHero
+        eyebrow="Mocks"
+        icon={Mic}
+        title="Mock Speaking"
+        description="Choose how to complete this mock's Speaking section."
+      />
+
       {loadError ? (
-        <p className="text-sm text-danger-strong">{loadError}</p>
+        <InlineAlert variant="error">{loadError}</InlineAlert>
       ) : !access ? (
-        <p className="text-sm text-muted">Checking your Speaking options…</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" role="status" aria-busy="true" aria-label="Checking your Speaking options…">
+          <Skeleton className="h-56 rounded-2xl" />
+          <Skeleton className="h-56 rounded-2xl" />
+        </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <MotionSection className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Renders nothing until a free sample exists, so it is not a motion item (an empty cell). */}
           <FreeSampleLauncher
             subtest="speaking"
             icon={Mic}
@@ -75,9 +91,13 @@ export default function MockSpeakingGatewayPage() {
             description={FREE_SPEAKING_SAMPLE_COPY}
             className="sm:col-span-2"
           />
-          <LearnerSurfaceCard card={aiCard} />
-          <LearnerSurfaceCard card={tutorCard} />
-        </div>
+          <MotionItem className="h-full">
+            <LearnerSurfaceCard card={aiCard} />
+          </MotionItem>
+          <MotionItem delayIndex={1} className="h-full">
+            <LearnerSurfaceCard card={tutorCard} />
+          </MotionItem>
+        </MotionSection>
       )}
     </>
   );

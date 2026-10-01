@@ -6,9 +6,12 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CountUp } from '@/components/ui/count-up';
+import { ErrorState } from '@/components/ui/empty-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface SimConfig {
   examType: string;
@@ -22,6 +25,14 @@ interface SimConfig {
 
 const apiRequest = apiClient.request;
 
+/** Sub-test identity (DESIGN.md §2 skill tokens) for the timing tiles. */
+const SUBTEST_TONE: Record<string, string> = {
+  listening: 'text-skill-listening',
+  reading: 'text-skill-reading',
+  writing: 'text-skill-writing',
+  speaking: 'text-skill-speaking',
+};
+
 export default function ExamSimulationPage() {
   const [config, setConfig] = useState<SimConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,63 +44,73 @@ export default function ExamSimulationPage() {
 
   return (
     <>
-      <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions: strict timing, no pauses, sequential subtests." />
+      <LearnerPageHero
+        eyebrow="Mocks"
+        icon={Timer}
+        title="Exam Simulation Mode"
+        description="Practice under real exam conditions: strict timing, no pauses, sequential subtests."
+      />
 
-      <MotionSection className="space-y-6">
-        {loading ? (
-          <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
-        ) : config ? (
-          <>
-            <MotionItem>
-              <Card className="p-6">
-                <div className="flex items-start gap-4">
-                  {config.unlocked ? <CheckCircle2 className="w-8 h-8 text-success-strong flex-shrink-0" /> : <Lock className="w-8 h-8 text-warning-strong flex-shrink-0" />}
-                  <div>
-                    <h3 className="text-lg font-semibold">{config.unlocked ? 'Simulation Mode Unlocked' : 'Simulation Mode Locked'}</h3>
-                    <p className="text-sm text-muted mt-1">{config.recommendation}</p>
-                    <p className="text-sm text-muted mt-1">Completed simulations: <strong>{config.completedSimulations}</strong></p>
-                  </div>
-                </div>
-              </Card>
-            </MotionItem>
+      {loading ? (
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading simulation settings">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        </div>
+      ) : config ? (
+        <>
+          <MotionSection>
+            <Card className="flex items-start gap-4">
+              {config.unlocked
+                ? <CheckCircle2 className="h-8 w-8 shrink-0 text-success-strong" aria-hidden="true" />
+                : <Lock className="h-8 w-8 shrink-0 text-warning-strong" aria-hidden="true" />}
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-navy">{config.unlocked ? 'Simulation Mode Unlocked' : 'Simulation Mode Locked'}</h2>
+                <p className="mt-1 text-sm text-muted">{config.recommendation}</p>
+                <p className="mt-1 text-sm text-muted">
+                  Completed simulations: <strong className="tabular-nums text-navy"><CountUp value={config.completedSimulations} /></strong>
+                </p>
+              </div>
+            </Card>
+          </MotionSection>
 
-            <LearnerSurfaceSectionHeader title="Simulation Rules" />
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {Object.entries(config.simulationMode).map(([key, val]) => (
-                <MotionItem key={key}>
-                  <Card className="p-4 text-center">
-                    {val ? <Shield className="w-5 h-5 mx-auto mb-2 text-primary" /> : <AlertCircle className="w-5 h-5 mx-auto mb-2 text-muted" />}
-                    <p className="text-sm font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+          <MotionSection delayIndex={1}>
+            <LearnerSurfaceSectionHeader title="Simulation Rules" className="mb-4" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {Object.entries(config.simulationMode).map(([key, val], index) => (
+                <MotionItem key={key} delayIndex={Math.min(index, 5)} className="h-full">
+                  <Card padding="sm" className="h-full text-center">
+                    {val
+                      ? <Shield className="mx-auto mb-2 h-5 w-5 text-primary" aria-hidden="true" />
+                      : <AlertCircle className="mx-auto mb-2 h-5 w-5 text-muted" aria-hidden="true" />}
+                    <p className="text-sm font-medium capitalize text-navy">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
                     <Badge variant={val ? 'default' : 'outline'} className="mt-1">{val ? 'Active' : 'Off'}</Badge>
                   </Card>
                 </MotionItem>
               ))}
             </div>
+          </MotionSection>
 
-            <LearnerSurfaceSectionHeader title="Subtest Timings" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(config.subtestTimings).map(([subtest, timing]) => (
-                <MotionItem key={subtest}>
-                  <Card className="p-4 text-center">
-                    <Timer className="w-5 h-5 mx-auto mb-2 text-info" />
-                    <p className="text-lg font-bold">{timing.durationMinutes} min</p>
-                    <p className="text-sm font-medium capitalize">{subtest}</p>
-                    <p className="text-xs text-muted">{timing.sections} section{timing.sections > 1 ? 's' : ''}</p>
+          <MotionSection delayIndex={2}>
+            <LearnerSurfaceSectionHeader title="Subtest Timings" className="mb-4" />
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {Object.entries(config.subtestTimings).map(([subtest, timing], index) => (
+                <MotionItem key={subtest} delayIndex={Math.min(index, 5)} className="h-full">
+                  <Card padding="sm" className="h-full text-center">
+                    <Timer className={cn('mx-auto mb-2 h-5 w-5', SUBTEST_TONE[subtest.toLowerCase()] ?? 'text-muted')} aria-hidden="true" />
+                    <p className="text-lg font-bold tabular-nums text-navy">{timing.durationMinutes} min</p>
+                    <p className="text-sm font-medium capitalize text-navy">{subtest}</p>
+                    <p className="text-xs tabular-nums text-muted">{timing.sections} section{timing.sections > 1 ? 's' : ''}</p>
                   </Card>
                 </MotionItem>
               ))}
             </div>
-
-            <MotionItem>
-              <Card className="p-4 text-center bg-muted/50">
-                <p className="text-sm text-muted">Total exam duration: <strong>{config.totalDurationMinutes} minutes</strong></p>
-              </Card>
-            </MotionItem>
-          </>
-        ) : (
-          <Card className="p-8 text-center text-muted"><p>Unable to load simulation configuration.</p></Card>
-        )}
-      </MotionSection>
+            <p className="mt-4 text-sm text-muted">
+              Total exam duration: <strong className="tabular-nums text-navy">{config.totalDurationMinutes} minutes</strong>
+            </p>
+          </MotionSection>
+        </>
+      ) : (
+        <ErrorState title="Unable to load simulation configuration" />
+      )}
     </>
   );
 }

@@ -3,6 +3,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Sparkles, ArrowRight, Target } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 export interface WeaknessNarrativeTag {
   tag: string;
@@ -56,101 +58,86 @@ export function WeaknessNarrative({
   if (!hasNarrative && !hasTags) {
     if (!fallback) {
       return (
-        <div
-          className={
-            'bg-danger/10 rounded-2xl border border-danger/30 p-6 sm:p-8 ' +
-            (className ?? '')
-          }
-        >
+        <Card padding="lg" className={cn('border-danger/30 bg-danger/10', className)}>
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-6 h-6 text-danger-strong" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-danger/10">
+              <AlertTriangle className="h-6 w-6 text-danger-strong" aria-hidden="true" />
             </div>
-            <div>
-              <h3 className="text-lg font-black text-danger-strong mb-2">Area for Improvement</h3>
-              <p className="text-sm text-danger-strong/80 leading-relaxed">
+            <div className="min-w-0">
+              <h3 className="mb-2 text-lg font-bold text-danger-strong">Area for Improvement</h3>
+              <p className="text-sm leading-relaxed text-danger-strong">
                 Review your sub-test breakdown to identify priority focus areas.
               </p>
             </div>
           </div>
-        </div>
+        </Card>
       );
     }
 
     return (
-      <div
-        className={
-          'bg-danger/10 rounded-2xl border border-danger/30 p-6 sm:p-8 ' +
-          (className ?? '')
-        }
-      >
+      <Card padding="lg" className={cn('border-danger/30 bg-danger/10', className)}>
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-6 h-6 text-danger-strong" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-danger/10">
+            <AlertTriangle className="h-6 w-6 text-danger-strong" aria-hidden="true" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+          <div className="min-w-0">
+            <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="eyebrow text-danger-strong">
                 {fallback.subtest}
               </span>
-              <span className="text-danger-strong/40">•</span>
+              <span className="text-danger-strong/40" aria-hidden="true">•</span>
               <span className="eyebrow text-danger-strong">
                 Weakest Criterion
               </span>
             </div>
-            <h3 className="text-lg font-black text-danger-strong mb-2">{fallback.criterion}</h3>
-            <p className="text-sm text-danger-strong/80 leading-relaxed">{fallback.description}</p>
+            <h3 className="mb-2 text-lg font-bold text-danger-strong">{fallback.criterion}</h3>
+            <p className="text-sm leading-relaxed text-danger-strong">{fallback.description}</p>
           </div>
         </div>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div
-      className={
-        'rounded-2xl border border-danger/30 bg-danger/5 p-6 sm:p-8 shadow-sm ' +
-        (className ?? '')
-      }
-    >
+    <Card padding="lg" className={cn('border-danger/30 bg-danger/5', className)}>
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-          <Sparkles className="w-6 h-6 text-danger-strong" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-danger/10">
+          <Sparkles className="h-6 w-6 text-danger-strong" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <span className="eyebrow text-danger-strong">
               Personalised weakness analysis
             </span>
           </div>
           {headline ? (
-            <h3 className="text-lg font-black text-navy mb-2 leading-tight">{headline}</h3>
+            <h3 className="mb-2 text-lg font-bold leading-tight text-navy">{headline}</h3>
           ) : null}
           {body ? (
-            <p className="text-sm text-navy/80 leading-relaxed">{body}</p>
+            <p className="text-sm leading-relaxed text-navy/80">{body}</p>
           ) : null}
 
           {hasTags ? (
             <div className="mt-5">
               <div className="mb-2 flex items-center gap-2 eyebrow text-muted">
-                <Target className="w-3.5 h-3.5" />
+                <Target className="h-3.5 w-3.5" aria-hidden="true" />
                 Targeted drills
               </div>
-              <ul className="grid gap-2 sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {tags!.map((t, idx) => {
                   const href = t.drillRouteHref ?? null;
                   const chipBase =
-                    'group flex h-full items-start gap-2 rounded-xl border border-border bg-surface p-3 text-left transition-colors';
+                    'group flex h-full items-start gap-2 rounded-xl border border-border bg-surface p-3 text-start transition-colors';
                   const chipInteractive =
-                    'hover:border-primary/40 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/40';
+                    'hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
                   const inner = (
                     <>
                       <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                          <span className="text-sm font-black text-navy">{t.tag}</span>
+                          <span className="text-sm font-bold text-navy">{t.tag}</span>
                           {t.subtest ? (
                             <span className="tile-label text-muted">
                               {t.subtest}
@@ -181,7 +168,7 @@ export function WeaknessNarrative({
           ) : null}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

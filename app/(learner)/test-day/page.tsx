@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { ClipboardCheck, FileText, Clock, MapPin, CheckCircle2, Circle, BookOpen, AlertTriangle } from 'lucide-react';
+import { ClipboardCheck, FileText, Clock, MapPin, CheckCircle2, Circle, BookOpen, AlertTriangle, ArrowRight } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
 import { ProgressBar } from '@/components/ui/progress';
 import { analytics } from '@/lib/analytics';
+import type { LucideIcon } from 'lucide-react';
 
 interface ChecklistItem {
   id: string;
@@ -37,11 +38,11 @@ const CHECKLIST: ChecklistItem[] = [
   { id: 'o4', label: 'Read all instructions carefully', description: 'Don\'t rush through the rubric. Note word limits and task requirements.', category: 'on_the_day' },
 ];
 
-const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  documents: { label: 'Documents', icon: <FileText className="w-5 h-5" />, color: 'text-info' },
-  logistics: { label: 'Logistics', icon: <MapPin className="w-5 h-5" />, color: 'text-success-strong' },
-  preparation: { label: 'Final Preparation', icon: <BookOpen className="w-5 h-5" />, color: 'text-primary' },
-  on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-warning-strong' },
+const CATEGORY_META: Record<ChecklistItem['category'], { label: string; icon: LucideIcon }> = {
+  documents: { label: 'Documents', icon: FileText },
+  logistics: { label: 'Logistics', icon: MapPin },
+  preparation: { label: 'Final Preparation', icon: BookOpen },
+  on_the_day: { label: 'On the Day', icon: Clock },
 };
 
 export default function TestDayPrepPage() {
@@ -67,56 +68,54 @@ export default function TestDayPrepPage() {
       <LearnerPageHero
         title="Test-Day Preparation"
         description="Your comprehensive checklist and tips for OET exam day success."
-        icon={<ClipboardCheck className="w-7 h-7" />}
+        icon={ClipboardCheck}
       />
 
-      {/* Progress Bar */}
       <MotionSection>
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-2">
+        <Card>
+          <div className="mb-2 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-navy">Preparation Progress</h2>
-            <span className="text-sm font-medium text-primary">{completedItems}/{totalItems}</span>
+            <span className="text-sm font-medium tabular-nums text-primary">{completedItems}/{totalItems}</span>
           </div>
           <ProgressBar value={progressPct} size="md" ariaLabel="Test-day preparation progress" />
           {progressPct === 100 && (
-            <p className="mt-2 text-sm text-success-strong font-medium" role="status">
+            <p className="mt-2 text-sm font-medium text-success-strong" role="status">
               All done! You&apos;re ready for test day.
             </p>
           )}
         </Card>
       </MotionSection>
 
-      {/* Checklist by Category */}
-      {categories.map((cat) => {
+      {categories.map((cat, categoryIndex) => {
         const meta = CATEGORY_META[cat];
         const items = CHECKLIST.filter((i) => i.category === cat);
         return (
-          <MotionSection key={cat} className="mt-6">
+          <MotionSection key={cat} delayIndex={Math.min(categoryIndex + 1, 5)}>
             <LearnerSurfaceSectionHeader icon={meta.icon} title={meta.label} />
-            <div className="space-y-2 mt-3">
-              {items.map((item) => {
+            <div className="mt-3 space-y-2">
+              {items.map((item, index) => {
                 const isChecked = checked.has(item.id);
                 return (
-                  <MotionItem key={item.id}>
+                  <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
                     <button
                       type="button"
                       aria-pressed={isChecked}
                       onClick={() => toggleItem(item.id)}
-                      className={`w-full flex items-start gap-3 p-3 rounded-xl border transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      className={`flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isChecked
-                          ? 'bg-success/10 border-success/30'
-                          : 'bg-surface border-border hover:border-primary/30'
+                          ? 'border-success/30 bg-success/10'
+                          : 'border-border bg-surface hover:border-primary/30'
                       }`}
                     >
                       {isChecked
-                        ? <CheckCircle2 className="w-5 h-5 text-success-strong mt-0.5 flex-shrink-0" aria-hidden="true" />
-                        : <Circle className="w-5 h-5 text-muted/60 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
+                        : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-muted/60" aria-hidden="true" />
                       }
-                      <div>
-                        <p className={`text-sm font-medium ${isChecked ? 'line-through text-muted' : 'text-navy'}`}>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium ${isChecked ? 'text-muted line-through' : 'text-navy'}`}>
                           {item.label}
                         </p>
-                        <p className="text-xs text-muted mt-0.5">{item.description}</p>
+                        <p className="mt-0.5 text-xs text-muted">{item.description}</p>
                       </div>
                     </button>
                   </MotionItem>
@@ -127,20 +126,19 @@ export default function TestDayPrepPage() {
         );
       })}
 
-      {/* Strategies link */}
-      <MotionSection className="mt-8">
+      <MotionSection delayIndex={5}>
         <LearnerSurfaceSectionHeader
-          icon={<AlertTriangle className="w-5 h-5" />}
+          icon={AlertTriangle}
           title="Exam-day strategies"
           description="Subtest-specific pacing, scanning, and rapport techniques used by high-scorers."
         />
-        <MotionItem>
-          <Link href="/strategies" className="mt-3 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-            <Card className="p-4 bg-warning/5 border-warning/30 hover:bg-warning/10 transition-colors">
-              <p className="text-sm font-semibold text-warning-strong">View detailed strategies →</p>
-              <p className="text-xs text-muted mt-1">Listening, Reading, Writing, and Speaking tactical guides.</p>
-            </Card>
-          </Link>
+        <MotionItem className="mt-3">
+          <CardLink href="/strategies" className="group">
+            <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+              View detailed strategies <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
+            </p>
+            <p className="mt-1 text-xs text-muted">Listening, Reading, Writing, and Speaking tactical guides.</p>
+          </CardLink>
         </MotionItem>
       </MotionSection>
     </>
