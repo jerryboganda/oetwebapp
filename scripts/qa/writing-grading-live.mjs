@@ -8,6 +8,7 @@ async function request(path, token, method = 'GET', body) {
     headers: {
       'Content-Type': 'application/json',
       'X-OET-Client-Platform': 'web',
+      'X-OET-Device-Id': '4c8726d2-b537-4dea-9d49-daf0a2fb80e1',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -30,23 +31,14 @@ async function signIn(email, password) {
 
 const admin = await signIn(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD);
 const learner = await signIn(process.env.QA_EMAIL, process.env.QA_PASSWORD);
-const profile = await request('/v1/writing/v2/profile', learner);
-assert.ok(profile.userId && profile.profession, 'The QA learner needs an existing Writing profile');
-const operations = await request('/v1/admin/ai/operations?featureCode=writing.grade&pageSize=200', admin);
-const candidates = [...new Set(operations.rows
-  .filter(row => row.userId === profile.userId && row.state === 'FailedTerminal')
-  .map(row => row.resourceId))].slice(0, 5);
+const submissionId = process.env.TARGET_SUBMISSION_ID;
+assert.match(submissionId ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+const source = await request(`/v1/writing/submissions/${submissionId}`, learner);
+assert.ok(source.userId && source.scenarioId, 'An owned persisted source submission is required');
+assert.ok(source.letterContent.trim(), 'A nonblank original letter is required');
+assert.notEqual(source.mode, 'mock', 'Mock Writing must remain human-marked');
 let submission;
-for (const id of candidates) {
-  const candidate = await request(`/v1/writing/submissions/${encodeURIComponent(id)}`, learner);
-  if (candidate.status === 'failed' && candidate.mode !== 'mock') {
-    submission = candidate;
-    break;
-  }
-}
-const scenario = submission ? null : await request(`/v1/writing/scenarios/random?profession=${encodeURIComponent(profile.profession)}`, learner);
-assert.ok(submission || scenario?.id, 'An eligible QA scenario is required');
-const usagePath = `/v1/admin/ai/usage?featureCode=writing.grade&userId=${encodeURIComponent(profile.userId)}&pageSize=100`;
+const usagePath = `/v1/admin/ai/usage?featureCode=writing.grade&userId=${encodeURIComponent(source.userId)}&pageSize=100`;
 const before = await request(usagePath, admin);
 const previousUsage = new Set(before.rows.map(row => row.id));
 const previous = await request('/v1/admin/ai/writing-provider', admin);
@@ -56,21 +48,14 @@ try {
   await request('/v1/admin/ai/writing-provider', admin, 'PUT', { mode: 'codex' });
   const selected = await request('/v1/admin/ai/writing-provider', admin);
   assert.equal(selected.currentPrimary.provider, 'writing-codex-sub');
-  if (submission) {
-    const resumed = await request(`/v1/writing/submissions/${submission.id}/retry-grade`, learner, 'POST', {});
-    assert.equal(resumed.id, submission.id);
-    submission = resumed;
-    console.log('QA_RESUMED_SAME_SUBMISSION', submission.id);
-  } else {
-    const letter = 'Dear Doctor,\n\nI am writing to request your assessment and ongoing management of this patient. Please review the clinical information in the supplied case notes and advise on appropriate follow-up. Thank you for your assistance.\n\nYours faithfully,\nDoctor';
-    submission = await request('/v1/writing/submissions', learner, 'POST', {
-      scenarioId: scenario.id, mode: 'practice', letterContent: letter,
-      wordCount: letter.trim().split(/\s+/).length, timeSpentSeconds: 120,
-      inputSource: 'typed', simulationMode: null,
-      idempotencyKey: `writing-incident-qa-${process.env.GITHUB_RUN_ID}`,
-    });
-    console.log('QA_CREATED_SUBMISSION', submission.id);
-  }
+  submission = await request('/v1/writing/submissions', learner, 'POST', {
+    scenarioId: source.scenarioId, mode: 'practice', letterContent: source.letterContent,
+    wordCount: source.wordCount, timeSpentSeconds: source.timeSpentSeconds,
+    inputSource: 'typed', simulationMode: null,
+    idempotencyKey: `writing-incident-qa-${process.env.GITHUB_RUN_ID}`,
+  });
+  assert.notEqual(submission.id, source.id, 'QA must leave the original submission untouched');
+  console.log('QA_CREATED_SUBMISSION', submission.id);
 
   const deadline = Date.now() + 8 * 60 * 1000;
   while (submission.status !== 'graded') {

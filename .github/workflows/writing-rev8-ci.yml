@@ -36,6 +36,11 @@ on:
         required: false
         default: ""
         type: string
+      qa_source_submission:
+        description: "Owned source submission UUID for live QA; the original submission is not changed"
+        required: false
+        default: ""
+        type: string
       verify_subscription_grading:
         description: "Owner-authorized one-assessment live QA; temporarily use Codex subscription and restore provider mode"
         required: false
@@ -66,6 +71,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_ADMIN_PASSWORD }}
           QA_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_EMAIL }}
           QA_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_PASSWORD }}
+          TARGET_SUBMISSION_ID: ${{ inputs.qa_source_submission }}
         run: node scripts/qa/writing-grading-live.mjs
 
   production-diagnostics:
