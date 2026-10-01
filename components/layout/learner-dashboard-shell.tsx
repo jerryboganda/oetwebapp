@@ -59,8 +59,12 @@ export function LearnerDashboardShell({
       workspaceRole="learner"
     >
       <LearnerWorkspaceContainer className={workspaceClassName}>
-        {!distractionFree ? <LearnerBreadcrumbs /> : null}
-        {children}
+        {distractionFree ? children : (
+          <>
+            <LearnerBreadcrumbs />
+            <div className="learner-page-flow">{children}</div>
+          </>
+        )}
       </LearnerWorkspaceContainer>
     </AppShell>
   );

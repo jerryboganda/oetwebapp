@@ -25,9 +25,8 @@ describe('LearnerDashboardShell', () => {
     expect(container).toHaveClass('px-4');
     expect(container).toHaveClass('sm:px-6');
     expect(container).toHaveClass('lg:px-8');
-    expect(container).toHaveClass('py-2');
-    expect(container).toHaveClass('sm:py-4');
-    expect(container).toHaveClass('lg:py-6');
+    // <main> owns the vertical padding; a second layer here doubled it.
+    expect(container.className).not.toMatch(/(^|\s)(sm:|lg:)?py-/);
     expect(container).toHaveClass('space-y-8');
     const appShellProps = appShellSpy.mock.calls[0]?.[0] as {
       navItems?: Array<{ label: string }>;

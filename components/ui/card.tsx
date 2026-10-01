@@ -10,12 +10,14 @@ export type CardPadding = NonNullable<CardProps['padding']>;
 
 // Mobile-dense, desktop-comfortable: tighter padding on phones (higher
 // information density, native-app feel), scaling back up at `sm:` so desktop
-// spacing is unchanged.
+// spacing is unchanged. The breakpoint lives in a variable so a caller's own
+// `p-*` replaces the whole default (tailwind-merge drops `p-(--card-pad)`);
+// a plain `sm:p-5` here used to survive the merge and override `p-6` above 640px.
 const paddingStyles: Record<CardPadding, string> = {
   none: '',
-  sm: 'p-2.5 sm:p-4',
-  md: 'p-3 sm:p-5',
-  lg: 'p-3.5 sm:p-6',
+  sm: 'p-(--card-pad) [--card-pad:0.625rem] sm:[--card-pad:1rem]',
+  md: 'p-(--card-pad) [--card-pad:0.75rem] sm:[--card-pad:1.25rem]',
+  lg: 'p-(--card-pad) [--card-pad:0.875rem] sm:[--card-pad:1.5rem]',
 };
 
 export function cardClassName({

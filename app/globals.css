@@ -284,6 +284,30 @@
   --color-admin-success-tint-strong: var(--admin-success-tint-strong);
 }
 
+/* DESIGN.md §3 eyebrow: the small uppercase label above a heading or value.
+   Sets type only; pair it with a colour (usually text-muted). */
+@utility eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+@layer components {
+  /* Learner page rhythm: even spacing between a workspace page's top-level
+     blocks, so pages need no ad-hoc margins. Lives below the utilities layer,
+     so a block's own margin utility still wins. Positioned overlays skipped. */
+  .learner-page-flow > * + *:not(.fixed, .absolute) {
+    margin-top: 1.5rem;
+  }
+
+  @media (min-width: 40rem) {
+    .learner-page-flow > * + *:not(.fixed, .absolute) {
+      margin-top: 2rem;
+    }
+  }
+}
+
 @layer utilities {
   html {
     -webkit-overflow-scrolling: touch;

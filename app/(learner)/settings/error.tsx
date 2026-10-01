@@ -15,13 +15,11 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <ErrorState
-        className="w-full max-w-md"
-        title="Settings Error"
-        message="An unexpected error occurred. Please try again or contact support if the problem persists."
-        onRetry={reset}
-      />
-    </div>
+    <ErrorState
+      className="mx-auto mt-6 w-full max-w-lg sm:mt-10"
+      title="Settings Error"
+      message="An unexpected error occurred. Please try again or contact support if the problem persists."
+      onRetry={reset}
+    />
   );
 }
