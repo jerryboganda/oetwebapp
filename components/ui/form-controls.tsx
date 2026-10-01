@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, forwardRef } from 'react';
 import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
@@ -40,7 +41,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+            'rounded-control border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
             error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
             className,
@@ -51,7 +52,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         />
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-danger-strong overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -81,7 +82,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'min-h-[80px] resize-y rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+            'min-h-[80px] resize-y rounded-control border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
             error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
             className,
@@ -92,7 +93,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         />
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-danger-strong overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -120,26 +121,30 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">{label}</label>}
-        <select
-          ref={ref}
-          id={inputId}
-          className={cn(
-            'appearance-none rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
-            'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
-            error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
-            className,
-          )}
-          aria-invalid={!!error}
-          {...props}
-        >
-          {placeholder && <option value="">{placeholder}</option>}
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
-          ))}
-        </select>
+        {/* appearance-none drops the native arrow, so the chevron says "this opens a list". */}
+        <div className="relative">
+          <select
+            ref={ref}
+            id={inputId}
+            className={cn(
+              'w-full appearance-none rounded-control border border-border bg-background-light py-3 ps-4 pe-10 text-sm text-navy shadow-sm transition-[border-color,box-shadow,color,background-color] duration-200',
+              'focus:outline-none focus:ring-4 focus:ring-primary/15 focus:border-primary focus:bg-surface',
+              error ? 'border-danger focus:ring-danger/20' : 'hover:border-border-hover',
+              className,
+            )}
+            aria-invalid={!!error}
+            {...props}
+          >
+            {placeholder && <option value="">{placeholder}</option>}
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
+            ))}
+          </select>
+          <ChevronDown aria-hidden="true" className="pointer-events-none absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+        </div>
         <AnimatePresence mode="wait" initial={false}>
           {error && (
-            <motion.p key="error" {...errorReveal} className="text-xs text-red-600 dark:text-red-400 overflow-hidden">{error}</motion.p>
+            <motion.p key="error" {...errorReveal} className="text-xs text-danger-strong overflow-hidden">{error}</motion.p>
           )}
           {hint && !error && (
             <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
@@ -167,7 +172,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
         {...props}
       />
       <span className="flex-1 text-sm text-navy">{label}</span>
-      {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
+      {error && <span className="text-xs text-danger-strong">{error}</span>}
     </label>
   ),
 );
@@ -212,7 +217,7 @@ export function CheckboxGroup({ label, options, values, onChange, error, classNa
           </label>
         ))}
       </div>
-      {error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{error}</p>}
+      {error && <p className="text-xs text-danger-strong mt-1">{error}</p>}
     </fieldset>
   );
 }
@@ -256,7 +261,7 @@ export function RadioGroup({ name, label, options, value, onChange, error, class
           </label>
         ))}
       </div>
-      {error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{error}</p>}
+      {error && <p className="text-xs text-danger-strong mt-1">{error}</p>}
     </fieldset>
   );
 }
