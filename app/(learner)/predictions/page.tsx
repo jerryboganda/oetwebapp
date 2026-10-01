@@ -7,6 +7,7 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CountUp } from '@/components/ui/count-up';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
@@ -100,148 +101,141 @@ export default function ScoreEstimatorPage() {
     try { return JSON.parse(json); } catch { return null; }
   }
 
-  if (loading) {
-    return (
-      <>
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-10 w-60" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
-          </div>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
       <LearnerPageHero
         title="Score Estimator"
         description="AI-powered predictions based on your practice history and improvement trends."
-        icon={<TrendingUp className="w-7 h-7" />}
+        icon={TrendingUp}
       />
 
       <InlineAlert variant="info" title="AI Practice Score">
         AI Practice Score — not an official OET result. Reading and Listening predictions appear only after owner-approved score conversion is available.
       </InlineAlert>
 
-      {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden="true">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
+        </div>
+      ) : (
+        <>
+          {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
 
-      <MotionSection>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {SUBTESTS.map((subtest) => {
-            const pred = getPrediction(subtest);
-            const factors = pred ? parseFactors(pred.factorsJson) : null;
-            const badge = pred ? CONFIDENCE_BADGE[pred.confidenceLevel] ?? CONFIDENCE_BADGE.insufficient : null;
+          <MotionSection>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              {SUBTESTS.map((subtest, index) => {
+                const pred = getPrediction(subtest);
+                const factors = pred ? parseFactors(pred.factorsJson) : null;
+                const badge = pred ? CONFIDENCE_BADGE[pred.confidenceLevel] ?? CONFIDENCE_BADGE.insufficient : null;
 
-            return (
-              <MotionItem key={subtest}>
-                <Card className="p-5 h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-navy capitalize">{subtest}</h3>
-                    {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
-                  </div>
-
-                  {pred ? (
-                    <>
-                      {/* Score Range Visualization */}
-                      <div className="mb-4">
-                        <div className="flex items-end gap-1 mb-2">
-                          <span className="text-3xl font-bold text-primary">{pred.predictedScoreMid}</span>
-                          <span className="text-sm text-muted mb-1">/500</span>
-                        </div>
-                        <div className="relative h-3 bg-border rounded-full overflow-hidden">
-                          <div
-                            className="absolute h-full bg-primary/20 rounded-full"
-                            style={{ left: `${(pred.predictedScoreLow / 500) * 100}%`, width: `${((pred.predictedScoreHigh - pred.predictedScoreLow) / 500) * 100}%` }}
-                          />
-                          <div
-                            className="absolute h-full w-1 bg-primary rounded-full"
-                            style={{ left: `${(pred.predictedScoreMid / 500) * 100}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between mt-1 text-xs text-muted/60">
-                          <span>{pred.predictedScoreLow}</span>
-                          <span>{pred.predictedScoreHigh}</span>
-                        </div>
+                return (
+                  <MotionItem key={subtest} delayIndex={Math.min(index, 5)} className="h-full">
+                    <Card className="flex h-full flex-col">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="font-semibold capitalize text-navy">{subtest}</h2>
+                        {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
                       </div>
 
-                      {/* Factors */}
-                      {factors && (
-                        <div className="space-y-1 text-xs text-muted flex-1">
-                          <p>Based on <strong>{factors.evaluationCount}</strong> evaluations</p>
-                          <p>Recent average: <strong>{factors.recentAverage}</strong></p>
-                          <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-success-strong' : factors.trendDirection === 'declining' ? 'text-danger-strong' : 'text-muted'}>
-                            {factors.trendDirection === 'improving' ? '↑ Improving' : factors.trendDirection === 'declining' ? '↓ Declining' : '→ Stable'}
-                            {factors.trend != null && ` (${factors.trend > 0 ? '+' : ''}${factors.trend})`}
-                          </span></p>
+                      {pred ? (
+                        <>
+                          {/* Score Range Visualization */}
+                          <div className="mb-4">
+                            <div className="mb-2 flex items-end gap-1">
+                              <span className="text-3xl font-bold tabular-nums text-primary"><CountUp value={pred.predictedScoreMid} /></span>
+                              <span className="mb-1 text-sm text-muted">/500</span>
+                            </div>
+                            <div className="relative h-3 overflow-hidden rounded-full bg-border rtl:-scale-x-100" aria-hidden="true">
+                              <div
+                                className="absolute h-full rounded-full bg-primary/20"
+                                style={{ left: `${(pred.predictedScoreLow / 500) * 100}%`, width: `${((pred.predictedScoreHigh - pred.predictedScoreLow) / 500) * 100}%` }}
+                              />
+                              <div
+                                className="absolute h-full w-1 rounded-full bg-primary"
+                                style={{ left: `${(pred.predictedScoreMid / 500) * 100}%` }}
+                              />
+                            </div>
+                            <div className="mt-1 flex justify-between text-xs tabular-nums text-muted">
+                              <span>{pred.predictedScoreLow}</span>
+                              <span>{pred.predictedScoreHigh}</span>
+                            </div>
+                          </div>
+
+                          {/* Factors */}
+                          {factors && (
+                            <div className="flex-1 space-y-1 text-xs text-muted">
+                              <p>Based on <strong className="tabular-nums">{factors.evaluationCount}</strong> evaluations</p>
+                              <p>Recent average: <strong className="tabular-nums">{factors.recentAverage}</strong></p>
+                              <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-success-strong' : factors.trendDirection === 'declining' ? 'text-danger-strong' : 'text-muted'}>
+                                {factors.trendDirection === 'improving' ? '↑ Improving' : factors.trendDirection === 'declining' ? '↓ Declining' : '→ Stable'}
+                                {factors.trend != null && ` (${factors.trend > 0 ? '+' : ''}${factors.trend})`}
+                              </span></p>
+                            </div>
+                          )}
+
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted">
+                              Updated {new Date(pred.computedAt).toLocaleDateString()}
+                            </span>
+                            <Button size="sm" variant="ghost" onClick={() => handleCompute(subtest)} disabled={computing === subtest} aria-label="Generate Prediction">
+                              <RefreshCw className={`h-3.5 w-3.5 ${computing === subtest ? 'animate-spin' : ''}`} aria-hidden="true" />
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
+                          <BarChart3 className="mb-2 h-8 w-8 text-muted" aria-hidden="true" />
+                          <p className="mb-3 text-sm text-muted">No prediction yet</p>
+                          <Button size="sm" onClick={() => handleCompute(subtest)} disabled={computing === subtest}>
+                            {computing === subtest ? 'Computing…' : 'Generate Prediction'}
+                          </Button>
                         </div>
                       )}
-
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-xs text-muted/60">
-                          Updated {new Date(pred.computedAt).toLocaleDateString()}
-                        </span>
-                        <Button size="sm" variant="ghost" onClick={() => handleCompute(subtest)} disabled={computing === subtest}>
-                          <RefreshCw className={`w-3.5 h-3.5 ${computing === subtest ? 'animate-spin' : ''}`} />
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center flex-1 py-6 text-center">
-                      <BarChart3 className="w-8 h-8 text-muted/40 mb-2" />
-                      <p className="text-sm text-muted mb-3">No prediction yet</p>
-                      <Button size="sm" onClick={() => handleCompute(subtest)} disabled={computing === subtest}>
-                        {computing === subtest ? 'Computing…' : 'Generate Prediction'}
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              </MotionItem>
-            );
-          })}
-        </div>
-      </MotionSection>
-
-      {/* Overall prediction summary */}
-      {predictions.length >= 2 && (
-        <MotionSection className="mt-6">
-          <Card className="p-5 bg-primary/10 border-primary/30">
-            <LearnerSurfaceSectionHeader
-              icon={<Target className="w-5 h-5" />}
-              title="Overall AI Practice Score"
-            />
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-xs text-muted">Estimated Range</p>
-                <p className="text-lg font-bold text-primary">
-                  {Math.round(predictions.reduce((s, p) => s + p.predictedScoreLow, 0) / predictions.length)}–
-                  {Math.round(predictions.reduce((s, p) => s + p.predictedScoreHigh, 0) / predictions.length)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted">Best Estimate</p>
-                <p className="text-lg font-bold text-primary">
-                  {Math.round(predictions.reduce((s, p) => s + p.predictedScoreMid, 0) / predictions.length)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted">Subtests Analyzed</p>
-                <p className="text-lg font-bold text-primary">{predictions.length}/4</p>
-              </div>
+                    </Card>
+                  </MotionItem>
+                );
+              })}
             </div>
-          </Card>
-        </MotionSection>
+          </MotionSection>
+
+          {/* Overall prediction summary */}
+          {predictions.length >= 2 && (
+            <MotionSection>
+              <Card padding="lg" className="border-primary/30 bg-primary/10">
+                <LearnerSurfaceSectionHeader
+                  icon={Target}
+                  title="Overall AI Practice Score"
+                />
+                <div className="mt-3 grid grid-cols-1 gap-4 text-center sm:grid-cols-3">
+                  <div>
+                    <p className="tile-label text-muted">Estimated Range</p>
+                    <p className="text-lg font-bold tabular-nums text-primary">
+                      {Math.round(predictions.reduce((s, p) => s + p.predictedScoreLow, 0) / predictions.length)}–
+                      {Math.round(predictions.reduce((s, p) => s + p.predictedScoreHigh, 0) / predictions.length)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="tile-label text-muted">Best Estimate</p>
+                    <p className="text-lg font-bold tabular-nums text-primary">
+                      <CountUp value={Math.round(predictions.reduce((s, p) => s + p.predictedScoreMid, 0) / predictions.length)} />
+                    </p>
+                  </div>
+                  <div>
+                    <p className="tile-label text-muted">Subtests Analyzed</p>
+                    <p className="text-lg font-bold tabular-nums text-primary">{predictions.length}/4</p>
+                  </div>
+                </div>
+              </Card>
+            </MotionSection>
+          )}
+        </>
       )}
 
-      <MotionSection className="mt-6">
-        <InlineAlert variant="info" title="How predictions work">
-          Predictions are based on your evaluation history using weighted trend analysis. More evaluations improve accuracy.
-          Compute predictions regularly to track your progress toward your target score.
-        </InlineAlert>
-      </MotionSection>
+      <InlineAlert variant="info" title="How predictions work">
+        Predictions are based on your evaluation history using weighted trend analysis. More evaluations improve accuracy.
+        Compute predictions regularly to track your progress toward your target score.
+      </InlineAlert>
+
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
 }
