@@ -87,7 +87,11 @@ Webhook events are append-only into `SpeakingLiveRoom.WebhookEventsJson` with HM
 
 ## Credits: AI exam and practice card
 
-Added 2026-10-01 (pre-launch hardening; **pending production verification**). The audit behind it found no path that debits an
+Added 2026-10-01 (pre-launch hardening). **Verified in production on 1 Oct 2026** for the hold timing and the "exactly 4, once"
+invariant: a clean OpenAI mock moved the QA learner's Speaking pool 42 -> 40 (Card A hold) -> 38 (Card B hold) -> 38 (after grading
+and a repeated grade), a mock with a page refresh 36 -> 34 -> 32 -> 32, each with exactly two `GradingDeduct` rows. A refused
+hold (402 leaves the exam in `Intro`) and the rejection of `ai_exam` on `POST /v1/speaking/sessions` are covered by tests only.
+The audit behind it found no path that debits an
 exam card twice. It found paths that could charge too little (a card running without its hold) and one window that could leave a
 debit without its reservation row; the changes below close the ones that were cheap to close.
 
