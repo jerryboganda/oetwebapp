@@ -36,6 +36,10 @@ const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }>
   Speaking:  { icon: Mic,        badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' },
 };
 
+// The server sends a ready-to-show label: a score ("192/500") reads as a result, anything else
+// ("Marking in progress") is a state and gets the attention tone.
+const SCORE_LABEL = /^\d+\/\d+$/;
+
 function formatSubmissionAttemptDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -146,7 +150,7 @@ function SubmissionHistoryInner() {
             ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
             : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
           highlights={[
-            { icon: History, label: 'Attempts', value: `${visibleSubmissions.length} recorded` },
+            { icon: History, label: 'Attempts', value: `${Math.max(visibleSubmissions.length, visibleAttempts?.length ?? 0)} recorded` },
             { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
             { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
           ]}
@@ -197,6 +201,14 @@ function SubmissionHistoryInner() {
                           <span className={attempt.status === 'in_progress' ? 'font-bold text-warning' : 'font-bold text-success'}>
                             {attempt.status === 'in_progress' ? 'In progress' : 'Completed'}
                           </span>
+                          {attempt.resultLabel ? (
+                            <>
+                              {' · '}
+                              <span className={SCORE_LABEL.test(attempt.resultLabel) ? 'font-bold text-navy' : 'font-bold text-warning'}>
+                                {attempt.resultLabel}
+                              </span>
+                            </>
+                          ) : null}
                           {attempt.balanceSource || attempt.creditsUsed > 0 ? (
                             <>
                               {' · '}
@@ -239,7 +251,9 @@ function SubmissionHistoryInner() {
           <InlineAlert variant="error">{error}</InlineAlert>
         ) : null}
 
-        {!loading && !error && visibleSubmissions.length === 0 ? (
+        {/* A Speaking-only learner has a Full Speaking Mock under "Attempt activity" but no Past Evidence
+            card (those rows have no Evaluation), so wait for the attempt list before saying history is empty. */}
+        {!loading && !error && visibleSubmissions.length === 0 && (writingOnly || (attempts !== null && visibleAttempts?.length === 0)) ? (
           <EmptyState
             title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
             description={writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
