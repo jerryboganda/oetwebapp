@@ -88,6 +88,8 @@ export default function ReadinessCenter() {
     }
   }
 
+  // The hero stays up in every state (one h1); its chips hold their place until real data arrives.
+  const pending = error ? '—' : 'Loading...';
   const hero = (
     <LearnerPageHero
       eyebrow="Readiness Focus"
@@ -95,11 +97,11 @@ export default function ReadinessCenter() {
       accent="primary"
       title="Close the gap to exam day with evidence"
       description="Live signal from mocks, practice, tutor reviews, vocabulary mastery, and study-plan progress. Each panel links to the next best action."
-      highlights={data ? [
-        { icon: Calendar, label: 'Target date', value: data.targetDate },
-        { icon: data.overallRisk === 'High' ? ShieldAlert : data.overallRisk === 'Moderate' ? Shield : ShieldCheck, label: 'Current risk', value: data.overallRisk },
-        { icon: Clock, label: 'Recommended', value: `${data.recommendedStudyHours} hrs/week` },
-      ] : undefined}
+      highlights={[
+        { icon: Calendar, label: 'Target date', value: data ? data.targetDate : pending },
+        { icon: data?.overallRisk === 'High' ? ShieldAlert : data?.overallRisk === 'Moderate' ? Shield : ShieldCheck, label: 'Current risk', value: data ? data.overallRisk : pending },
+        { icon: Clock, label: 'Recommended', value: data ? `${data.recommendedStudyHours} hrs/week` : pending },
+      ]}
     />
   );
 
