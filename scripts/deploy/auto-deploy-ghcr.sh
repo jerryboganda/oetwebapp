@@ -224,6 +224,7 @@ echo "--- public verify ---"
 ok=true
 publiccheck "$APP_PUBLIC_URL/api/health" "public web" || ok=false
 publiccheck "$API_PUBLIC_URL/health/ready" "public api" || ok=false
+publiccheck "$API_PUBLIC_URL/health/live" "public api liveness" || ok=false
 if [ "$ok" != true ]; then
   echo "[deploy] public gates failed; rolling routers back to $prev_slot" >&2
   compose "$prev_slot" up -d --no-build --force-recreate web learner-api || true

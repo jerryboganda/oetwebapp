@@ -6,8 +6,9 @@ Last updated: 2026-10-01
 
 - Fixed misleading exemplar progress and failure visibility without refresh; focused UI/backend Actions checks passed.
 - Diagnosed Codex HTTP 404: seeded root BaseUrl posts `/chat/completions`, while the sidecar accepted only `/v1/chat/completions`. The shared handler accepts both routes; red/green protocol evidence is in runs `36785645083` / `36785869736`.
-- Verified sidecar rollout and main deploy at `63751c35bc0b87e70445340c25c433620fd44786` in `36786478009` / `36786477912`; credential volumes preserved.
-- Preserved concurrent Speaking PR #305. Latest HEAD `ea039f209930c47536c87466599845b06b093717`: final main deploy `36809780621` and authorized Codex-only QA `36809805030` remain pending.
+- Fixed the large-prompt Codex argv transport with the existing stdin path; offline red/green runs `36814911854` / `36815163321`, including actual-image CLI checks with no network or inference. Sidecars at `2be1986a5385b83c4702e1869e5d1811c9ace5c1` are Healthy; credential volumes preserved.
+- Preserved concurrent Speaking PR #305. Main deploy `36824151971` succeeded at `ed834765d4c6548e778f3cc52ad3a50503800e35` with exact web/API image tags and public health gates.
+- Real Codex-only recovery passed in `36825878639`, job `110251344304`: same QA submission `8af5d137-6f43-4e28-b278-af936d6bf165`, saved grade `b9cd9019-e6e3-43f7-a34f-0009fd6bea62`, visible six-criterion report `4e1b550c-1e1d-41f3-bb00-122a1226d4e2`. Already-graded retry reused the grade with no new provider call; prior `auto` mode restored. Scoped frontend/backend/compile/canonical gates passed.
 - User authorized one subscription-only QA assessment and incident-specific Jev waiver; paid Writing APIs remain forbidden. Original user submission untouched. Current task details live in `.github/agent-state.local.md`.
 
 ## Current Checkpoint - UBAG provider board: per-model full-pipeline test (2026-09-07)
