@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Mic } from 'lucide-react';
+import { cardClassName } from '@/components/ui/card';
 import { fetchAuthorizedObjectUrl, getWritingSubmissionVoiceNote } from '@/lib/api';
 
 export interface TutorVoiceNotePlayerProps {
@@ -55,7 +56,7 @@ export function TutorVoiceNotePlayer({ submissionId, className }: TutorVoiceNote
   return (
     <section
       aria-labelledby="tutor-voice-note-heading"
-      className={className ?? 'rounded-2xl border border-border bg-surface p-5 shadow-sm'}
+      className={className ?? cardClassName({ padding: 'lg' })}
     >
       <h2 id="tutor-voice-note-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
         <Mic className="h-5 w-5 text-primary" aria-hidden="true" /> Tutor voice feedback
