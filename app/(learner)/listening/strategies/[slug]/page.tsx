@@ -3,8 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft, Check, Lightbulb } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { apiClient } from '@/lib/api';
 
@@ -67,9 +72,9 @@ export default function ListeningStrategyDetailPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6" aria-busy="true">
+      <div aria-busy="true" className="learner-page-flow">
         <p className="sr-only">Loading strategy…</p>
-        <Skeleton className="h-9 w-2/3 rounded-lg" />
+        <Skeleton className="h-32 rounded-2xl" />
         <CardSkeleton />
       </div>
     );
@@ -77,37 +82,43 @@ export default function ListeningStrategyDetailPage() {
 
   if (!strategy) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-bold text-navy">Strategy not found</h1>
-        <Button asChild size="sm">
-          <Link href="/listening/strategies">Back to library</Link>
-        </Button>
-      </div>
+      <EmptyState
+        icon={<Lightbulb className="h-8 w-8" aria-hidden />}
+        title="Strategy not found"
+        action={{ label: 'Back to library', href: '/listening/strategies' }}
+      />
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <header>
-        <span className="eyebrow text-muted">
-          {strategy.category.replace('_', ' ')}
-        </span>
-        <h1 className="text-3xl font-bold tracking-tight text-navy">{strategy.title}</h1>
-        <p className="mt-1 text-sm text-muted">~{strategy.estimatedReadMinutes} min read</p>
-      </header>
-
-      <MarkdownContent
-        markdown={strategy.bodyMarkdownEn}
-        className="rounded-2xl border border-border bg-surface p-6 shadow-sm text-navy"
+    <>
+      <LearnerPageHero
+        eyebrow={strategy.category.replace('_', ' ')}
+        icon={Lightbulb}
+        accent="purple"
+        title={strategy.title}
+        description={`~${strategy.estimatedReadMinutes} min read`}
       />
 
-      <div className="flex flex-wrap gap-3">
+      <MotionSection>
+        <Card padding="lg">
+          {/* Long-form text: cap the line length, not the page. */}
+          <MarkdownContent markdown={strategy.bodyMarkdownEn} className="max-w-prose text-navy" />
+        </Card>
+      </MotionSection>
+
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           size="sm"
           onClick={markRead}
           disabled={strategy.progress?.markedAsRead}
         >
-          {strategy.progress?.markedAsRead ? '✓ Marked as read' : 'Mark as read'}
+          {strategy.progress?.markedAsRead ? (
+            <>
+              <Check className="h-4 w-4" aria-hidden />
+              Marked as read
+            </>
+          ) : 'Mark as read'}
         </Button>
         <Button
           size="sm"
@@ -117,11 +128,14 @@ export default function ListeningStrategyDetailPage() {
         >
           {strategy.progress?.favorited ? '⭐ Favorited' : '☆ Favorite'}
         </Button>
+        <Link
+          href="/listening/strategies"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-control text-sm font-medium text-primary transition-colors hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ms-auto"
+        >
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden />
+          All strategies
+        </Link>
       </div>
-
-      <Link href="/listening/strategies" className="text-sm text-primary underline transition-colors hover:text-primary-dark">
-        ← All strategies
-      </Link>
-    </div>
+    </>
   );
 }

@@ -18,12 +18,11 @@
 // pre-roll. Anonymous-allowed (no learner data is fetched here).
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Headphones, Pencil, ShieldCheck, Timer, Volume2 } from 'lucide-react';
+import { CheckCircle2, Headphones, Pencil, ShieldCheck, Timer, Volume2 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { getListeningTestRulesPolicy, type ListeningTestRulesPolicyDto } from '@/lib/listening-api';
 
 const DEFAULT_RULES: ListeningTestRulesPolicyDto = {
@@ -58,108 +57,110 @@ export default function ListeningTestRulesPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Listening Test Rules"
-          title="How the OET Listening sub-test works"
-          description="A two-minute brief covering exam timing, item types, and the computer-based rules you must follow. Read this before your first real attempt."
+      <LearnerPageHero
+        eyebrow="Listening Test Rules"
+        icon={Headphones}
+        accent="purple"
+        title="How the OET Listening sub-test works"
+        description="A two-minute brief covering exam timing, item types, and the computer-based rules you must follow. Read this before your first real attempt."
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <RuleCard
+          index={0}
+          icon={Timer}
+          title={`One play. ${numberWord(rules.questionCount)} questions. ~${rules.durationMinutes} minutes.`}
+          points={[
+            'You hear the audio ONCE. There is no rewind during the computer-based attempt.',
+            `Three parts: A (${rules.partA.items} short-answers, ${rules.partA.extracts} consultations), B (${rules.partB.items} MCQs, workplace extracts), C (${rules.partC.items} MCQs, ${rules.partC.extracts} presentations).`,
+            'Enter answers directly in the computer-based player while you listen.',
+          ]}
         />
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <RuleCard
-            icon={Timer}
-            title={`One play. ${numberWord(rules.questionCount)} questions. ~${rules.durationMinutes} minutes.`}
-            points={[
-              'You hear the audio ONCE. There is no rewind during the computer-based attempt.',
-              `Three parts: A (${rules.partA.items} short-answers, ${rules.partA.extracts} consultations), B (${rules.partB.items} MCQs, workplace extracts), C (${rules.partC.items} MCQs, ${rules.partC.extracts} presentations).`,
-              'Enter answers directly in the computer-based player while you listen.',
-            ]}
-          />
-          <RuleCard
-            icon={CheckCircle2}
-            title="No negative marking"
-            points={[
-              'A wrong answer scores zero. A blank answer scores zero. Always write something.',
-              rules.passRawAnchor != null && rules.passScaledAnchor != null
-                ? `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled according to owner table ${rules.conversionTableVersion ?? 'version unavailable'}.`
-                : 'The owner-approved pass threshold is not configured for this release. Your raw score remains auditable; no scaled pass claim is shown.',
-              'This platform grades spelling strictly: a misspelling receives zero even when the meaning is clear. Only the canonical answer or an explicitly authorised variant can receive credit.',
-            ]}
-          />
-          <RuleCard
-            icon={Pencil}
-            title={`Part A gap-fill (${rules.partA.items} items)`}
-            points={[
-              'Listen for the exact word the speaker says. Re-using the words from the gap stem is the safest bet.',
-              'Numbers, dosages, dates, and units count exactly: "5 mg" ≠ "5 g".',
-              'Plural / singular, articles, numbers, units, and word order must match the keyed answer unless an authorised variant explicitly permits the form.',
-            ]}
-          />
-          <RuleCard
-            icon={Volume2}
-            title="Parts B & C: MCQs (3-option)"
-            points={[
-              'Distractors are designed to sound like the right answer. Watch for "too strong / too weak", opposite meaning, wrong speaker, or a re-used keyword.',
-              'In Part C, listen for the speaker\'s attitude (concerned / optimistic / doubtful / critical / neutral).',
-              'Read the stem and options before the audio starts. You have a short reading window.',
-            ]}
-          />
-          <RuleCard
-            icon={ShieldCheck}
-            title="Exam integrity (computer mode)"
-            points={[
-              'Once you start the computer-based attempt the audio plays end-to-end and answers cannot be revised after submit.',
-              'Headphones recommended. Keep the test window visible when possible; focus changes are recorded as non-blocking technical guidance.',
-              'Transcripts are NOT shown during the attempt. They unlock per-item in your post-attempt review.',
-            ]}
-            tone="amber"
-          />
-          <RuleCard
-            icon={Headphones}
-            title="Strategy that actually works"
-            points={[
-              'Predict the answer type before you listen (number? job title? medication?).',
-              'If you miss an item, write your best guess and move on. The audio will not wait.',
-              'Use the post-attempt review to study why each distractor was wrong. That is where the score gain lives.',
-            ]}
-          />
-        </div>
-
-        <MotionItem>
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'indigo',
-              eyebrow: 'Ready?',
-              title: 'Start your Listening attempt',
-              description: 'Choose computer-based practice or exam mode. The real-exam flow is one-play with no replay.',
-              primaryAction: { label: 'Open Listening Home', href: '/listening' },
-              secondaryAction: { label: 'View Mocks', href: '/mocks' },
-            }}
-          />
-        </MotionItem>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Badge variant="muted">Static briefing · no data collected on this page</Badge>
-          <Link
-            href="/listening"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary-dark"
-          >
-            Back to Listening <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-          </Link>
-        </div>
+        <RuleCard
+          index={1}
+          icon={CheckCircle2}
+          title="No negative marking"
+          points={[
+            'A wrong answer scores zero. A blank answer scores zero. Always write something.',
+            rules.passRawAnchor != null && rules.passScaledAnchor != null
+              ? `${rules.passRawAnchor}/${rules.questionCount} raw ≡ ${rules.passScaledAnchor}/${rules.scaledMax} scaled according to owner table ${rules.conversionTableVersion ?? 'version unavailable'}.`
+              : 'The owner-approved pass threshold is not configured for this release. Your raw score remains auditable; no scaled pass claim is shown.',
+            'This platform grades spelling strictly: a misspelling receives zero even when the meaning is clear. Only the canonical answer or an explicitly authorised variant can receive credit.',
+          ]}
+        />
+        <RuleCard
+          index={2}
+          icon={Pencil}
+          title={`Part A gap-fill (${rules.partA.items} items)`}
+          points={[
+            'Listen for the exact word the speaker says. Re-using the words from the gap stem is the safest bet.',
+            'Numbers, dosages, dates, and units count exactly: "5 mg" ≠ "5 g".',
+            'Plural / singular, articles, numbers, units, and word order must match the keyed answer unless an authorised variant explicitly permits the form.',
+          ]}
+        />
+        <RuleCard
+          index={3}
+          icon={Volume2}
+          title="Parts B & C: MCQs (3-option)"
+          points={[
+            'Distractors are designed to sound like the right answer. Watch for "too strong / too weak", opposite meaning, wrong speaker, or a re-used keyword.',
+            'In Part C, listen for the speaker\'s attitude (concerned / optimistic / doubtful / critical / neutral).',
+            'Read the stem and options before the audio starts. You have a short reading window.',
+          ]}
+        />
+        <RuleCard
+          index={4}
+          icon={ShieldCheck}
+          title="Exam integrity (computer mode)"
+          points={[
+            'Once you start the computer-based attempt the audio plays end-to-end and answers cannot be revised after submit.',
+            'Headphones recommended. Keep the test window visible when possible; focus changes are recorded as non-blocking technical guidance.',
+            'Transcripts are NOT shown during the attempt. They unlock per-item in your post-attempt review.',
+          ]}
+          tone="amber"
+        />
+        <RuleCard
+          index={5}
+          icon={Headphones}
+          title="Strategy that actually works"
+          points={[
+            'Predict the answer type before you listen (number? job title? medication?).',
+            'If you miss an item, write your best guess and move on. The audio will not wait.',
+            'Use the post-attempt review to study why each distractor was wrong. That is where the score gain lives.',
+          ]}
+        />
       </div>
+
+      <MotionSection>
+        {/* The card's "Open Listening Home" is the way back, so the separate
+            "Back to Listening" link that followed it is gone. */}
+        <LearnerSurfaceCard
+          card={{
+            kind: 'navigation',
+            sourceType: 'frontend_navigation',
+            accent: 'primary',
+            eyebrow: 'Ready?',
+            title: 'Start your Listening attempt',
+            description: 'Choose computer-based practice or exam mode. The real-exam flow is one-play with no replay.',
+            primaryAction: { label: 'Open Listening Home', href: '/listening' },
+            secondaryAction: { label: 'View Mocks', href: '/mocks' },
+          }}
+        />
+      </MotionSection>
+
+      <Badge variant="muted" className="w-fit">Static briefing · no data collected on this page</Badge>
     </>
   );
 }
 
 function RuleCard({
+  index,
   icon: Icon,
   title,
   points,
   tone,
 }: {
+  index: number;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   points: string[];
@@ -167,11 +168,11 @@ function RuleCard({
 }) {
   const accent = tone === 'amber' ? 'text-warning-strong' : 'text-primary';
   return (
-    <MotionItem>
-      <Card padding="lg">
+    <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+      <Card padding="lg" className="h-full">
         <div className="flex items-start gap-3">
           <Icon className={`h-5 w-5 shrink-0 ${accent}`} aria-hidden />
-          <h2 className="text-lg font-semibold text-navy">{title}</h2>
+          <h2 className="text-lg font-bold text-navy">{title}</h2>
         </div>
         <ul className="mt-4 space-y-2 text-sm text-muted">
           {points.map((point, i) => (

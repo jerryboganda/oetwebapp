@@ -257,7 +257,7 @@ export default function ReadingHome() {
                         <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                       </div>
                       <PlayCircle
-                        className="h-4 w-4 shrink-0 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                        className="h-4 w-4 shrink-0 self-center text-primary opacity-0 transition-opacity group-hoverable:opacity-100 group-focus-visible:opacity-100"
                         aria-hidden
                       />
                     </CardLink>
