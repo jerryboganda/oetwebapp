@@ -5,8 +5,11 @@ import { useTranslations } from 'next-intl';
 import { Sparkles, Filter } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { listShowcasePosts } from '@/lib/writing/api';
 import type {
   WritingLetterType,
@@ -23,6 +26,10 @@ export default function WritingShowcasePage() {
   const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [letterType, setLetterType] = useState<WritingLetterType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The filter whose list last settled; anything else is still loading.
+  const filterKey = `${profession ?? ''}|${letterType ?? ''}`;
+  const [settledKey, setSettledKey] = useState<string | null>(null);
+  const loading = settledKey !== filterKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -38,78 +45,89 @@ export default function WritingShowcasePage() {
       .catch((err) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : t('writing.showcase.error.load'));
+      })
+      .finally(() => {
+        if (!cancelled) setSettledKey(`${profession ?? ''}|${letterType ?? ''}`);
       });
     return () => {
       cancelled = true;
     };
   }, [profession, letterType, t]);
 
+  const selectClassName = 'min-h-11 rounded-control border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow={t('writing.showcase.eyebrow')}
-          icon={Sparkles}
-          accent="amber"
-          title={t('writing.showcase.title')}
-          description={t('writing.showcase.description')}
-          highlights={[]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.showcase.eyebrow')}
+        icon={Sparkles}
+        accent="amber"
+        title={t('writing.showcase.title')}
+        description={t('writing.showcase.description')}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <fieldset className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm" aria-label={t('writing.showcase.filters.legend')}>
+      <Card padding="sm">
+        <fieldset className="flex flex-wrap items-center gap-3" aria-label={t('writing.showcase.filters.legend')}>
           <legend className="sr-only">{t('writing.showcase.filters.legend')}</legend>
-          <span className="eyebrow text-muted">
-            <Filter className="mr-1 inline h-3 w-3" aria-hidden="true" /> {t('writing.showcase.filters.professionLabel')}
-          </span>
-          <select
-            value={profession ?? ''}
-            onChange={(e) => setProfession((e.target.value || null) as WritingProfession | null)}
-            className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <option value="">{t('writing.showcase.filters.all')}</option>
-            {PROFESSIONS.map((p) => <option key={p} value={p}>{t(`writing.practice.library.profession.${p}`)}</option>)}
-          </select>
+          <label className="flex items-center gap-2">
+            <span className="eyebrow text-muted">
+              <Filter className="me-1 inline h-3 w-3" aria-hidden="true" /> {t('writing.showcase.filters.professionLabel')}
+            </span>
+            <select
+              value={profession ?? ''}
+              onChange={(e) => setProfession((e.target.value || null) as WritingProfession | null)}
+              className={selectClassName}
+            >
+              <option value="">{t('writing.showcase.filters.all')}</option>
+              {PROFESSIONS.map((p) => <option key={p} value={p}>{t(`writing.practice.library.profession.${p}`)}</option>)}
+            </select>
+          </label>
 
-          <span className="eyebrow text-muted">{t('writing.showcase.filters.letterTypeLabel')}</span>
-          <select
-            value={letterType ?? ''}
-            onChange={(e) => setLetterType((e.target.value || null) as WritingLetterType | null)}
-            className="min-h-9 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <option value="">{t('writing.showcase.filters.all')}</option>
-            {LETTER_TYPES.map((lt) => <option key={lt} value={lt}>{lt}</option>)}
-          </select>
+          <label className="flex items-center gap-2">
+            <span className="eyebrow text-muted">{t('writing.showcase.filters.letterTypeLabel')}</span>
+            <select
+              value={letterType ?? ''}
+              onChange={(e) => setLetterType((e.target.value || null) as WritingLetterType | null)}
+              className={selectClassName}
+            >
+              <option value="">{t('writing.showcase.filters.all')}</option>
+              {LETTER_TYPES.map((lt) => <option key={lt} value={lt}>{lt}</option>)}
+            </select>
+          </label>
         </fieldset>
+      </Card>
 
-        <ul className="grid gap-3 md:grid-cols-2" aria-label={t('writing.showcase.list.label')}>
-          {posts.length === 0 ? (
-            <li className="col-span-full"><p className="text-sm text-muted">{t('writing.showcase.list.empty')}</p></li>
-          ) : null}
-          {posts.map((post) => (
-            <li key={post.id}>
-              <Card padding="md">
-                <CardContent>
+      {loading && posts.length === 0 ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : posts.length === 0 ? (
+        error ? null : <EmptyState icon={<Sparkles className="h-8 w-8" />} title={t('writing.showcase.list.empty')} />
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2" aria-label={t('writing.showcase.list.label')} aria-busy={loading}>
+          {posts.map((post, index) => (
+            <li key={post.id} className="min-w-0">
+              <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                <Card padding="md" className="h-full">
                   <header className="flex flex-wrap items-center justify-between gap-1">
                     <div className="flex flex-wrap items-center gap-1">
                       <Badge variant="success" size="sm">{t('writing.showcase.list.aGrade')}</Badge>
                       <Badge variant="muted" size="sm">{post.letterType}</Badge>
                       <Badge variant="info" size="sm" className="capitalize">{post.profession}</Badge>
                     </div>
-                    <span className="text-xs text-muted">{new Date(post.publishedAt).toLocaleDateString()}</span>
+                    <span className="text-xs tabular-nums text-muted">{new Date(post.publishedAt).toLocaleDateString()}</span>
                   </header>
                   {/* The anonymised letter is learner-authored English content. */}
-                  <pre className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs leading-relaxed font-sans" dir="ltr">
+                  <pre className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-control border border-border bg-background p-3 font-sans text-xs leading-relaxed" dir="ltr">
                     {post.anonymizedLetterContent}
                   </pre>
-                  <footer className="mt-2 text-xs text-muted">{t('writing.showcase.list.reactions', { count: post.reactionCount })}</footer>
-                </CardContent>
-              </Card>
+                  <footer className="mt-2 text-xs tabular-nums text-muted">{t('writing.showcase.list.reactions', { count: post.reactionCount })}</footer>
+                </Card>
+              </MotionItem>
             </li>
           ))}
         </ul>
-      </div>
+      )}
     </>
   );
 }
