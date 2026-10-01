@@ -51,6 +51,16 @@ on:
         required: false
         default: false
         type: boolean
+      verify_production_report:
+        description: "Read-only real browser check against the live site; no submission, model call, or credit debit"
+        required: false
+        default: false
+        type: boolean
+      qa_report_submission:
+        description: "Owned already-graded production submission UUID for the read-only browser check"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -60,9 +70,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  production-report-qa:
+    name: Live production Writing report (read-only browser)
+    if: ${{ inputs.verify_production_report == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check live QA script syntax
+        run: node --check scripts/qa/writing-grading-live.mjs
+      - name: Install isolated production browser
+        run: |
+          mkdir -p "$RUNNER_TEMP/writing-browser"
+          npm install --prefix "$RUNNER_TEMP/writing-browser" --no-package-lock --no-save playwright@1.58.2
+          "$RUNNER_TEMP/writing-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify live redirect, six criteria, and desktop/mobile refresh
+        env:
+          VERIFY_PRODUCTION_REPORT: "true"
+          REPORT_SUBMISSION_ID: ${{ inputs.qa_report_submission }}
+          QA_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_EMAIL }}
+          QA_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_PASSWORD }}
+        run: |
+          cp scripts/qa/writing-grading-live.mjs "$RUNNER_TEMP/writing-browser/check.mjs"
+          node "$RUNNER_TEMP/writing-browser/check.mjs"
+
   production-grading-qa:
     name: Authorized subscription-only Writing QA
-    if: ${{ inputs.verify_subscription_grading == true }}
+    if: ${{ inputs.verify_subscription_grading == true && inputs.verify_production_report != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -202,6 +239,7 @@ jobs:
 
   rulebooks:
     name: Canonical Writing rulebooks (build + --check)
+    if: ${{ inputs.verify_production_report != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -226,6 +264,7 @@ jobs:
 
   backend:
     name: Backend Writing/Rulebook tests (.NET)
+    if: ${{ inputs.verify_production_report != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # No Postgres service: [PostgreSqlFact] tests self-skip without
@@ -276,6 +315,7 @@ jobs:
 
   backend-build:
     name: Backend compile gate (whole solution)
+    if: ${{ inputs.verify_production_report != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -288,6 +328,7 @@ jobs:
 
   frontend:
     name: Frontend (tsc + scoped vitest + changed-file lint)
+    if: ${{ inputs.verify_production_report != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
