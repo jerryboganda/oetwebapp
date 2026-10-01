@@ -247,6 +247,13 @@ async function collectBrowserPerformance(
       return;
     }
 
+    // The placement test is gated: its status route answers 404, as if absent,
+    // until the learner may open it, and the app reads that as "hide the entry".
+    if (response.status() === 404 && pathname.endsWith('/v1/placement/status')) {
+      messages.push(`responsefeatureabsent: ${response.request().method()} ${pathname} (404)`);
+      return;
+    }
+
     responseErrors += 1;
     messages.push(`responseerror: ${response.request().method()} ${pathname} (${response.status()})`);
   });
