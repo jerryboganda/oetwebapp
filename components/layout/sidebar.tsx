@@ -116,11 +116,11 @@ export const mainNavItems: NavItem[] = [
 // platform-specific gating. Permissions are enforced inside each area; the
 // nav link always renders.
 export const learnerMainNavItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
-  { href: '/listening', label: 'Listening', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
-  { href: '/reading', label: 'Reading', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
-  { href: '/writing', label: 'Writing', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
-  { href: '/speaking', label: 'Speaking', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
+  { href: '/', label: 'Dashboard', mobileLabel: 'Home', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
+  { href: '/listening', label: 'Listening', mobileLabel: 'Listen', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
+  { href: '/reading', label: 'Reading', mobileLabel: 'Read', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
+  { href: '/writing', label: 'Writing', mobileLabel: 'Write', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
+  { href: '/speaking', label: 'Speaking', mobileLabel: 'Speak', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   // Free General English placement test. Shown only when the learner can
   // actually open it (flag on + inside any active beta) — see usePlacementAccess.
   { href: PLACEMENT_NAV_HREF, label: 'Placement Test', icon: <ClipboardCheck className="w-5 h-5" />, matchPrefix: PLACEMENT_NAV_HREF },

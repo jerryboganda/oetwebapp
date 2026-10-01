@@ -99,19 +99,14 @@ export default function AiSettingsPage() {
 
   return (
     <>
-      <div className="relative min-h-[calc(100dvh-4rem)] bg-background-light">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
-        
-        <div className="mx-auto max-w-4xl px-4 py-8 space-y-6 sm:space-y-10 relative z-10 pb-20">
           <Button
             variant="ghost"
             onClick={() => router.push('/settings')}
-            className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4"
+            className="gap-2"
           >
             <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to Settings
           </Button>
 
-          <div className="bg-surface p-2 sm:p-2 border border-border shadow-sm overflow-hidden relative rounded-3xl">
             <LearnerPageHero
               title="AI Settings"
               description="Bring your own AI provider key or use your platform allowance. Keys are encrypted at rest; we only ever show the last 4 characters."
@@ -120,7 +115,6 @@ export default function AiSettingsPage() {
                 { icon: Shield, label: 'Mode', value: prefs?.mode ?? (loading ? '…' : '-') },
               ]}
             />
-          </div>
 
           {error && <InlineAlert variant="error" className="shadow-sm">{error}</InlineAlert>}
 
@@ -325,8 +319,6 @@ export default function AiSettingsPage() {
               </div>
             </div>
           </Modal>
-        </div>
-      </div>
     </>
   );
 }

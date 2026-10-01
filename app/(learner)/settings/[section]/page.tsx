@@ -1395,17 +1395,12 @@ export default function LearnerSettingsSectionPage() {
 
   return (
     <>
-      <div className="relative min-h-[calc(100dvh-4rem)]">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
-        
-        <div className="space-y-4 sm:space-y-5 relative z-10 px-4 sm:px-0 pb-12">
-          <Button variant="ghost" className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4" onClick={() => router.push('/settings')}>
+          <Button variant="ghost" className="gap-2" onClick={() => router.push('/settings')}>
             <ArrowLeft className="h-4 w-4" />
             Back to Settings
           </Button>
 
           {config ? (
-            <div className="bg-surface p-2 sm:p-2 border border-border shadow-sm overflow-hidden relative rounded-3xl">
               <LearnerPageHero
                 eyebrow={config.eyebrow}
                 icon={config.icon}
@@ -1418,7 +1413,6 @@ export default function LearnerSettingsSectionPage() {
                   { icon: Settings2, label: 'Save state', value: saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to edit' },
                 ]}
               />
-            </div>
           ) : null}
 
           {loading ? (
@@ -1518,8 +1512,6 @@ export default function LearnerSettingsSectionPage() {
               </div>
             </div>
           ) : null}
-        </div>
-      </div>
     </>
   );
 }

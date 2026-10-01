@@ -17,7 +17,7 @@ vi.mock('@/lib/mobile/haptics', () => ({
   triggerImpactHaptic: vi.fn(),
 }));
 
-import { Sidebar, learnNavItems, mobileNavItems, type NavGroup } from '../sidebar';
+import { Sidebar, learnNavItems, learnerMobileNavItems, mobileNavItems, type NavGroup } from '../sidebar';
 import { BottomNav } from '../bottom-nav';
 import { within } from '@testing-library/react';
 
@@ -73,6 +73,16 @@ describe('Sidebar route matching', () => {
     ]);
     expect(screen.getByRole('link', { name: /study plan/i })).toHaveAttribute('href', '/study-plan');
     expect(screen.getByRole('link', { name: /mocks/i })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('gives every learner bottom-nav tab a label that fits a 360px phone without truncating', () => {
+    renderWithRouter(<BottomNav items={learnerMobileNavItems} />, { pathname: '/listening' });
+
+    const labels = learnerMobileNavItems.map((item) => item.mobileLabel ?? item.label);
+    expect(labels).toEqual(['Home', 'Listen', 'Read', 'Write', 'Speak', 'Mocks', 'Videos']);
+    // Seven tabs leave ~44px each at 360px: about six 10px characters.
+    for (const label of labels) expect(label.length).toBeLessThanOrEqual(6);
+    expect(screen.getByRole('link', { name: 'Listen' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('renders the live Billing Ops badge pill when a positive count is provided', () => {

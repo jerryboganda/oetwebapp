@@ -25,6 +25,9 @@ import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsS
 import { queryKeys } from '@/lib/query/hooks';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 type SettingType = 'link' | 'toggle';
@@ -179,104 +182,82 @@ export default function Settings() {
 
   return (
     <>
-      <div className="relative min-h-[calc(100dvh-4rem)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
-        <div className="space-y-7 sm:space-y-12 pb-16 relative z-10 px-4 sm:px-0">
-          
-          <div className="bg-surface p-6 sm:p-10 rounded-surface border border-border shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-200 overflow-hidden relative">
-            <LearnerPageHero
-              eyebrow="Control Center"
-              icon={SettingsIcon}
-              accent="primary"
-              title="Adjust account and study settings without hunting for them"
-              description="Use this page to move quickly between identity, goals, app preferences, and accessibility controls with the impact of each change kept obvious."
-              highlights={[
-                { icon: User, label: 'Profile', value: loading ? 'Loading...' : profileName || 'Learner' },
-                { icon: Bell, label: 'Account email', value: loading ? 'Loading...' : profileEmail || 'No email available' },
-                { icon: Wifi, label: 'Low-bandwidth mode', value: toggles['low-bandwidth'] ? 'On' : 'Off' },
-              ]}
-            />
-          </div>
+      <LearnerPageHero
+        eyebrow="Control Center"
+        icon={SettingsIcon}
+        accent="primary"
+        title="Adjust account and study settings without hunting for them"
+        description="Use this page to move quickly between identity, goals, app preferences, and accessibility controls with the impact of each change kept obvious."
+        highlights={[
+          { icon: User, label: 'Profile', value: loading ? 'Loading...' : profileName || 'Learner' },
+          { icon: Bell, label: 'Account email', value: loading ? 'Loading...' : profileEmail || 'No email available' },
+          { icon: Wifi, label: 'Low-bandwidth mode', value: toggles['low-bandwidth'] ? 'On' : 'Off' },
+        ]}
+      />
 
-          {error ? <InlineAlert variant="error" className="shadow-sm">{error}</InlineAlert> : null}
-          {isFrozen ? (
-            <InlineAlert variant="warning" className="shadow-sm">
-              Your account is currently frozen, so settings are view-only until the freeze ends. You can still review your information, but updates are paused.
-            </InlineAlert>
-          ) : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {isFrozen ? (
+        <InlineAlert variant="warning">
+          Your account is currently frozen, so settings are view-only until the freeze ends. You can still review your information, but updates are paused.
+        </InlineAlert>
+      ) : null}
 
-          <div className="space-y-6 sm:space-y-10">
-            {settingsGroups.map((group, groupIndex) => (
-              <MotionSection
-                key={group.title}
-                delayIndex={groupIndex}
-                className="space-y-6"
-              >
-                <div className="px-2">
-                  <h2 className="text-sm font-black uppercase tracking-widest text-primary">{group.title}</h2>
-                  <p className="text-xs text-muted font-medium mt-1">Each setting is labeled by what it controls</p>
+      {settingsGroups.map((group, groupIndex) => (
+        <MotionSection key={group.title} delayIndex={groupIndex} className="space-y-3">
+          <LearnerSurfaceSectionHeader title={group.title} />
+          <Card padding="none" className="divide-y divide-border overflow-hidden">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const isDanger = item.id === 'danger-zone';
+              const isLink = item.type === 'link';
+
+              return (
+                <div
+                  key={item.id}
+                  role={isLink ? 'button' : 'group'}
+                  tabIndex={isLink ? 0 : undefined}
+                  onClick={isLink ? () => handleOpen(item.id) : undefined}
+                  onKeyDown={isLink ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleOpen(item.id);
+                    }
+                  } : undefined}
+                  className={cn(
+                    'group flex items-center gap-4 px-4 py-4 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-5',
+                    isLink && (isDanger ? 'cursor-pointer hover:bg-danger/5' : 'cursor-pointer hover:bg-background-light'),
+                    isLink && isFrozen && 'cursor-not-allowed opacity-60',
+                  )}
+                >
+                  <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', isDanger ? 'bg-danger/10 text-danger' : 'bg-lavender text-primary')}>
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className={cn('text-base font-semibold', isDanger ? 'text-danger' : 'text-navy')}>{item.title}</h3>
+                    <p className={cn('mt-0.5 text-sm', isDanger ? 'text-danger/80' : 'text-muted')}>{item.description}</p>
+                  </div>
+                  {isLink ? (
+                    <ChevronRight
+                      className={cn(
+                        'h-5 w-5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5',
+                        isDanger ? 'text-danger' : 'text-muted group-hover:text-primary',
+                      )}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Switch
+                      checked={Boolean(toggles[item.id])}
+                      onChange={() => handleToggle(item.id)}
+                      disabled={savingId === item.id || isFrozen}
+                      label={`Toggle ${item.title}`}
+                    />
+                  )}
                 </div>
-
-                <div className="grid gap-4">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const isDanger = item.id === 'danger-zone';
-                    
-                    return (
-                      <div
-                        key={item.id}
-                        role={item.type === 'link' ? 'button' : 'group'}
-                        tabIndex={item.type === 'link' ? 0 : undefined}
-                        onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
-                        onKeyDown={item.type === 'link' ? (event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            handleOpen(item.id);
-                          }
-                        } : undefined}
-                        className={`group relative flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 items-center justify-between overflow-hidden rounded-surface p-5 sm:p-8 border transition-[box-shadow,border-color,transform] duration-300 ${isDanger ? 'bg-danger/5 hover:bg-danger/10 border-danger/15 cursor-pointer' : 'bg-surface border-border hover:border-border-hover shadow-sm hover:shadow-clinical hoverable:-translate-y-1 cursor-pointer'} ${item.type === 'toggle' ? 'cursor-default hoverable:-translate-y-0 hover:shadow-sm' : ''} ${item.type === 'link' && isFrozen ? 'cursor-not-allowed opacity-60' : ''}`}
-                      >
-                        <div className="flex items-start gap-6 relative z-10 w-full pr-4">
-                          <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center transition-colors duration-300 ${isDanger ? 'bg-danger/10 text-danger' : 'bg-lavender text-primary group-hover:bg-primary/15'}`}>
-                            <Icon className="w-7 h-7" aria-hidden="true" />
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className={`text-xl font-black tracking-tight ${isDanger ? 'text-danger' : 'text-navy group-hover:text-primary transition-colors'}`}>{item.title}</h3>
-                            <p className={`text-sm font-medium mt-1.5 leading-relaxed ${isDanger ? 'text-danger/70' : 'text-muted'}`}>{item.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 relative z-10 flex">
-                          {item.type === 'link' ? (
-                            <div className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-colors duration-300 ${isDanger ? 'bg-danger/10 text-danger group-hover:bg-danger/20' : 'bg-background-light text-muted group-hover:bg-primary/10 group-hover:text-primary border border-border'}`}>
-                              <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hoverable:translate-x-1" aria-hidden="true" />
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleToggle(item.id)}
-                              disabled={savingId === item.id || isFrozen}
-                              className={`relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 focus-visible:ring-offset-2 overflow-hidden shadow-inner border border-border ${toggles[item.id] ? 'bg-primary' : 'bg-navy/10 hover:bg-navy/15'}`}
-                              role="switch"
-                              aria-checked={toggles[item.id]}
-                              aria-label={`Toggle ${item.title}`}
-                            >
-                              <span className="sr-only">Toggle {item.title}</span>
-                              <span
-                                className={`inline-block h-8 w-8 transform rounded-full bg-surface shadow-sm transition-transform duration-200 ease-out ${toggles[item.id] ? 'translate-x-10' : 'translate-x-1'}`}
-                              />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </MotionSection>
-            ))}
-          </div>
-        </div>
-      </div>
+              );
+            })}
+          </Card>
+        </MotionSection>
+      ))}
     </>
   );
 }

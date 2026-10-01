@@ -29,7 +29,7 @@ import {
 import { cloneNotificationPreferences, useNotificationCenter } from '@/contexts/notification-center-context';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { NotificationSwitch } from '@/components/settings/notification-switch';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type {
   NotificationEmailMode,
@@ -456,7 +456,7 @@ export function NotificationsSettingsView() {
                       <p className="text-sm font-semibold leading-tight text-navy">{row.label}</p>
                       <p className="mt-0.5 text-xs leading-snug text-muted">{row.hint}</p>
                     </div>
-                    <NotificationSwitch checked={row.checked} onChange={row.onChange} label={row.label} />
+                    <Switch checked={row.checked} onChange={row.onChange} label={row.label} />
                   </div>
                 );
               })}
@@ -627,7 +627,7 @@ export function NotificationsSettingsView() {
 
                         <span className="flex justify-center">
                           {showInApp ? (
-                            <NotificationSwitch
+                            <Switch
                               size="sm"
                               checked={Boolean(eventPreference.inAppEnabled)}
                               onChange={() => mutateEvent(eventKey, { inAppEnabled: !eventPreference.inAppEnabled })}
@@ -637,7 +637,7 @@ export function NotificationsSettingsView() {
                         </span>
                         <span className="flex justify-center">
                           {showEmail ? (
-                            <NotificationSwitch
+                            <Switch
                               size="sm"
                               checked={Boolean(eventPreference.emailEnabled)}
                               onChange={() => mutateEvent(eventKey, { emailEnabled: !eventPreference.emailEnabled })}
@@ -647,7 +647,7 @@ export function NotificationsSettingsView() {
                         </span>
                         <span className="flex justify-center">
                           {showPush ? (
-                            <NotificationSwitch
+                            <Switch
                               size="sm"
                               checked={Boolean(eventPreference.pushEnabled)}
                               onChange={() => mutateEvent(eventKey, { pushEnabled: !eventPreference.pushEnabled })}

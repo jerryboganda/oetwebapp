@@ -207,15 +207,15 @@ export function LearnerPageHero({
               <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
           </div>
-
-          {highlights.length > 0 ? (
-            <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2.5">
-              {highlights.map(renderHighlight)}
-            </div>
-          ) : null}
         </div>
         {aside ? <div className="shrink-0 lg:max-w-sm">{aside}</div> : null}
       </div>
+      {/* Full width under both columns, so an aside never leaves the row short. */}
+      {highlights.length > 0 ? (
+        <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2.5">
+          {highlights.map(renderHighlight)}
+        </div>
+      ) : null}
       {footer ? <div className="mt-3 border-t border-border pt-3 sm:mt-4 sm:pt-4">{footer}</div> : null}
     </section>
   );
