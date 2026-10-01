@@ -19,7 +19,7 @@ export function ReadinessBlockerCard({ blocker }: ReadinessBlockerCardProps) {
   const tokens = SEVERITY_TOKENS[severity] ?? SEVERITY_TOKENS.medium;
   const impact = blocker.impactScore ?? 0;
   return (
-    <div className={`bg-surface rounded-[24px] border ${tokens.border} p-5 shadow-sm flex flex-col gap-3`}>
+    <div className={`bg-surface rounded-surface border ${tokens.border} p-5 shadow-sm flex flex-col gap-3`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${tokens.chip}`}>

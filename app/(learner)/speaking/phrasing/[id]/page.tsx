@@ -118,7 +118,7 @@ function BetterPhrasingContent() {
           </div>
         </div>
       </LearnerNavActions>
-      <main className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
           {disclaimer ? (
             <InlineAlert variant="info">{disclaimer}</InlineAlert>
@@ -201,7 +201,7 @@ function BetterPhrasingContent() {
               </Card>
           </MotionFadeSwitch>
         </div>
-      </main>
+      </div>
 
       {/* Footer Controls */}
       <footer className="bg-surface border-t border-border p-6 z-20 shrink-0">

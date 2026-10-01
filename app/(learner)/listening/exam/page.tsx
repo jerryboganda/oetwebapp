@@ -148,7 +148,7 @@ export default function ListeningFullExamPage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <main className="space-y-5 sm:space-y-8" data-testid="listening-full-exam">
+      <div className="space-y-5 sm:space-y-8" data-testid="listening-full-exam">
         <Link
           href="/listening"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
@@ -236,7 +236,7 @@ export default function ListeningFullExamPage() {
             }}
           />
         )}
-      </main>
+      </div>
     </>
   );
 }

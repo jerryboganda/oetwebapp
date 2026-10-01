@@ -68,7 +68,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
             <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted">{topic.description}</p>
           ) : null}
 
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,6.5rem),1fr))] gap-2">
             <StatPill icon={LayoutGrid} label="Lessons" value={topic.lessonCount} />
             <StatPill icon={CheckCircle2} label="Done" value={topic.completedLessonCount} />
             <StatPill icon={Trophy} label="Mastered" value={topic.masteredLessonCount} />
@@ -405,11 +405,11 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
 
 function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-surface px-3 py-2 shadow-sm">
-      <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-muted">
-        <Icon className="h-3.5 w-3.5" /> {label}
+    <div className="min-w-0 rounded-2xl border border-border/60 bg-surface px-3 py-2 shadow-sm">
+      <div className="eyebrow flex min-w-0 items-center gap-1.5 text-muted">
+        <Icon className="h-3.5 w-3.5 shrink-0" /> {label}
       </div>
-      <div className="mt-0.5 text-base font-bold text-navy">{value}</div>
+      <div className="mt-0.5 text-base font-bold tabular-nums text-navy">{value}</div>
     </div>
   );
 }

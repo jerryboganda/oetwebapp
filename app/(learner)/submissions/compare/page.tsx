@@ -39,7 +39,7 @@ export default function SubmissionComparisonPage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
+            {[1, 2].map((item) => <Skeleton key={item} className="h-40 rounded-surface" />)}
           </div>
         ) : null}
 
@@ -66,7 +66,7 @@ export default function SubmissionComparisonPage() {
               <>
                 <section className="grid gap-6 md:grid-cols-2">
                   {[comparison.left, comparison.right].map((side, index) => (
-                    <div key={side?.attemptId ?? index} className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+                    <div key={side?.attemptId ?? index} className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">{index === 0 ? 'Baseline attempt' : 'Comparison attempt'}</p>
                       <h2 className="mt-3 text-xl font-black text-navy">{side?.subtest ?? 'Unknown subtest'}</h2>
                       <p className="mt-2 text-sm text-muted">Attempt id: {side?.attemptId}</p>
@@ -75,7 +75,7 @@ export default function SubmissionComparisonPage() {
                   ))}
                 </section>
 
-                <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+                <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                   <LearnerSurfaceSectionHeader
                     eyebrow="What changed"
                     title="Keep the progress narrative short and explicit"

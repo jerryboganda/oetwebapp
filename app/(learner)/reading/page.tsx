@@ -198,7 +198,7 @@ export default function ReadingHome() {
 
   return (
     <>
-      <main className="space-y-6 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module focus"
           icon={BookOpen}
@@ -301,7 +301,7 @@ export default function ReadingHome() {
             recentResults={home.recentResults}
           />
         ) : null}
-      </main>
+      </div>
     </>
   );
 }

@@ -129,7 +129,7 @@ function ExpertReviewRequestContent() {
 
   return (
     <>
-      <main className="flex-1">
+      <div className="flex-1">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
 
           {/* AI vs Human Distinction */}
@@ -265,7 +265,7 @@ function ExpertReviewRequestContent() {
             </p>
           )}
         </form>
-      </main>
+      </div>
     </>
   );
 }

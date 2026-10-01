@@ -57,7 +57,7 @@ export default function ReadingStatsPage() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         {/* Back link */}
         <Link
           href="/reading"
@@ -159,7 +159,7 @@ export default function ReadingStatsPage() {
             </div>
           </>
         )}
-      </main>
+      </div>
     </>
   );
 }

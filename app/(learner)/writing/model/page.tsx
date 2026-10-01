@@ -96,7 +96,7 @@ export default function ModelAnswerExplainer() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Study Guide"
           icon={FileCheck}
@@ -184,7 +184,7 @@ export default function ModelAnswerExplainer() {
             </MotionItem>
           ))}
         </div>
-      </main>
+      </div>
     </>
   );
 }

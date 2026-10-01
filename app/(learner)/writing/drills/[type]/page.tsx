@@ -54,7 +54,7 @@ export default async function WritingDrillsTypeListPage({
         <h1 className="text-3xl sm:text-4xl font-bold mt-2">{TYPE_TITLES[type]}</h1>
       </header>
 
-      <main className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16">
+      <div className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16">
         {drills.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center text-muted">
@@ -102,7 +102,7 @@ export default async function WritingDrillsTypeListPage({
             ))}
           </ul>
         )}
-      </main>
+      </div>
     </>
   );
 }

@@ -233,7 +233,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         {loading ? <Skeleton className="h-96" /> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -423,7 +423,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {review.partBreakdown.map((part) => (
-                  <div key={part.partCode} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                  <div key={part.partCode} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                     <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">Part {part.partCode}</p>
                     <div className="mt-2 flex items-baseline gap-2">
                       <p className="text-2xl font-semibold text-navy">{part.rawScore}/{part.maxRawScore}</p>
@@ -453,7 +453,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {review.skillBreakdown.map((skill) => (
-                  <div key={skill.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                  <div key={skill.label} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{skill.label}</p>
                       <Badge variant="muted">{skill.totalCount} item(s)</Badge>
@@ -476,7 +476,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               {review.clusters.length ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {review.clusters.map((cluster) => (
-                    <div key={cluster.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <div key={cluster.label} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{cluster.label}</p>
                       <p className="mt-2 text-2xl font-semibold text-navy">{cluster.incorrectCount} missed</p>
                       <p className="mt-1 text-sm text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
@@ -484,7 +484,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[20px] border border-border bg-surface p-5 text-sm font-semibold text-muted shadow-sm">
+                <div className="rounded-2xl border border-border bg-surface p-5 text-sm font-semibold text-muted shadow-sm">
                   No incorrect clusters on this attempt.
                 </div>
               )}
@@ -538,7 +538,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
             ) : null}
           </>
         ) : null}
-      </main>
+      </div>
     </>
   );
 }
