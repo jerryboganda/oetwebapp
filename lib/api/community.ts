@@ -35,9 +35,11 @@ export async function fetchForumCategories(examTypeCode?: string) {
   return apiRequest(`/v1/community/categories${p}`);
 }
 
-export async function fetchForumThreads(categoryId?: string, page = 1, pageSize = 20) {
+/** `mine` lists only the caller's own threads (matched by user id on the server). */
+export async function fetchForumThreads(categoryId?: string, page = 1, pageSize = 20, mine = false) {
   const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (categoryId) p.set('categoryId', categoryId);
+  if (mine) p.set('mine', 'true');
   return apiRequest(`/v1/community/threads?${p}`);
 }
 

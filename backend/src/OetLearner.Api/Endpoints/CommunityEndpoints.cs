@@ -42,15 +42,23 @@ public static class CommunityEndpoints
 
         // ── Forum threads ────────────────────────────────────────────────
         community.MapGet("/threads", async (
+            HttpContext http,
             [FromQuery] string? categoryId,
-            [FromQuery] int page,
-            [FromQuery] int pageSize,
+            [FromQuery] bool? mine,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
             var query = db.ForumThreads.AsQueryable();
             if (!string.IsNullOrEmpty(categoryId)) query = query.Where(t => t.CategoryId == categoryId);
-            var ps = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 100);
-            var pg = page <= 0 ? 1 : page;
+            // "My threads" by user id: a display name is neither unique nor stable.
+            if (mine == true)
+            {
+                var userId = http.UserId();
+                query = query.Where(t => t.AuthorUserId == userId);
+            }
+            var ps = Math.Clamp(pageSize is > 0 ? pageSize.Value : 20, 1, 100);
+            var pg = page is > 0 ? page.Value : 1;
             var total = await query.CountAsync(ct);
             var threads = await query.OrderByDescending(t => t.IsPinned).ThenByDescending(t => t.LastActivityAt)
                 .Skip((pg - 1) * ps)

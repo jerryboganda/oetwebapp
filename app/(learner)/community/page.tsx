@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton, EmptyState } from '@/components/ui';
-import { useAuth } from '@/contexts/auth-context';
 import { fetchForumCategories, fetchForumThreads } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -61,7 +60,6 @@ function formatRelativeDate(dateStr: string) {
 
 export default function CommunityPage() {
   const router = useRouter();
-  const { user } = useAuth();
 
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
@@ -86,7 +84,7 @@ export default function CommunityPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchForumThreads(catId || undefined, p, pageSize) as ThreadsResponse;
+      const res = await fetchForumThreads(catId || undefined, p, pageSize, showMyThreads) as ThreadsResponse;
       setThreads(res.threads ?? []);
       setTotal(res.total ?? 0);
     } catch (e) {
@@ -94,7 +92,7 @@ export default function CommunityPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageSize]);
+  }, [pageSize, showMyThreads]);
 
   useEffect(() => {
     loadCategories();
@@ -108,9 +106,8 @@ export default function CommunityPage() {
 
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
-  const displayedThreads = showMyThreads && user
-    ? threads.filter(t => t.authorDisplayName === user.displayName)
-    : threads;
+  // The server filters "My threads" by user id, across every page.
+  const displayedThreads = threads;
 
   // Pagination below already shows the page position, so the hero keeps to real totals.
   const heroHighlights = [
