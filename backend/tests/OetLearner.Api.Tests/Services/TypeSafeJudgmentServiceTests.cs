@@ -185,6 +185,21 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.Throws<TypeSafeHttpException>(() => TypeSafeJudgmentClient.ParseResponse(body));
     }
 
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.1)]
+    public void ParseResponse_RejectsNoulOutsideProbabilityRange(double probability)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model = "jev-1.13.0",
+            answers = new { signal = new { type = "noul", noul = probability } },
+            usage = new { input_tokens = 1, output_tokens = 1 },
+        });
+
+        Assert.Throws<TypeSafeHttpException>(() => TypeSafeJudgmentClient.ParseResponse(body));
+    }
+
     // ── Transport: transient-only retries ───────────────────────────────────
 
     [Fact]

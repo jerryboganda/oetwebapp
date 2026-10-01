@@ -1,0 +1,45 @@
+name: Jev integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/OetLearner.Api/Services/Ai/TypeSafe/**'
+      - 'backend/src/OetLearner.Api/Configuration/TypeSafeOptions.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
+      - 'scripts/ai/**'
+      - '.github/workflows/jev-integration.yml'
+  pull_request:
+    paths:
+      - 'backend/src/OetLearner.Api/Services/Ai/TypeSafe/**'
+      - 'backend/src/OetLearner.Api/Configuration/TypeSafeOptions.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
+      - 'scripts/ai/**'
+      - '.github/workflows/jev-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jev-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  judgments:
+    name: Jev typed judgment contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test Jev contracts without live providers
+        run: >
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          --configuration Debug --nologo
+          --logger "console;verbosity=normal"
+          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev"
