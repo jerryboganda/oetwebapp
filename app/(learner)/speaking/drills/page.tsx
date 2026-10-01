@@ -142,7 +142,7 @@ function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
         <p className="eyebrow text-skill-speaking">
           {kindLabel(drill.kind)}
         </p>
-        <h3 className="text-base font-bold leading-tight text-navy">{drill.title}</h3>
+        <h2 className="text-base font-bold leading-tight text-navy">{drill.title}</h2>
       </div>
 
       {drill.caseNotes ? (
