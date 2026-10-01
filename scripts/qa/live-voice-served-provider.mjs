@@ -1,6 +1,7 @@
 // Which provider(s) served a live-voice E2E run, and the conversation record attributed to them
 // (used by speaking-live-voice-browser-e2e.mjs; the workflow copies this file next to it, so keep it self-contained).
-// It also holds the two pure helpers of the fault-injection runs (parseFault, recoveredAsRequested), at the end.
+// It also holds the pure helpers of the fault-injection runs (parseFault, recoveredAsRequested) and of the console
+// check (isNavigationAbortNoise), at the end.
 //
 // Data-channel events, socket frames and create calls also come from a leg that failed over (an error event, a close,
 // a 503), so none of them says who served. What each connected card's panel reports (data-live-provider) does. A build
@@ -80,4 +81,12 @@ export function recoveredAsRequested({ fault, recoveries, errorShown, patientAt 
   if (!fault.firedAt) return false;
   const since = fault.recoveredAt ?? fault.firedAt;
   return (recoveries ?? 0) >= 1 && errorShown !== true && patientAt.some((t) => t > since);
+}
+
+// The harness's own navigations abort the AI Assistant hub's connect (a SignalR long-poll, not the product under
+// test). SignalR words that abort differently depending on how far the connect had got, always ending in the
+// browser's "Failed to fetch": all of them are noise when a navigation just happened.
+const NAVIGATION_ABORT = /(Connection disconnected with error|Failed to start the (transport|connection)|Failed to complete negotiation with the server|\[AI Assistant\] Connection failed)[\s\S]*Failed to fetch/;
+export function isNavigationAbortNoise(text) {
+  return NAVIGATION_ABORT.test(String(text));
 }

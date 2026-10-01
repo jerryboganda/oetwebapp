@@ -877,7 +877,12 @@ export function useSpeakingRealtimeVoice(
       if (span) {
         candidateSpansRef.current.push(span);
         if (candidateSpansRef.current.length > 40) candidateSpansRef.current.shift();
-        if (span.endMs - span.startMs >= MIN_ANSWERABLE_SPEECH_MS) candidateSpokeUntilRef.current = span.endMs;
+        if (span.endMs - span.startMs >= MIN_ANSWERABLE_SPEECH_MS) {
+          // The stall clock runs from the OLDEST sentence the patient still owes an answer to: a candidate who
+          // keeps talking to a silent patient must not keep pushing the restore back (94 s in production on 1 Oct 2026).
+          const owed = candidateSpokeUntilRef.current;
+          if (owed === null || lastPatientOutputAtRef.current >= owed) candidateSpokeUntilRef.current = span.endMs;
+        }
       }
       meterFrameRef.current = window.requestAnimationFrame(tick);
     };

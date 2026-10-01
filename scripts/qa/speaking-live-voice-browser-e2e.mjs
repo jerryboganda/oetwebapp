@@ -26,7 +26,7 @@
 import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
 import { installProbes } from './live-voice-browser-probes.mjs';
-import { createServedRecord, parseFault, recoveredAsRequested } from './live-voice-served-provider.mjs';
+import { createServedRecord, isNavigationAbortNoise, parseFault, recoveredAsRequested } from './live-voice-served-provider.mjs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
 const {
@@ -151,15 +151,14 @@ page.on('websocket', (ws) => {
 // Every browser-side error of the run, for the "no socket / page errors" check.
 const errors = { console: [], page: [], http: [], requestFailed: [] };
 const redact = (t) => t.replace(/access_token=[^'" ]+/g, 'access_token=REDACTED').slice(0, 600);
-// The harness's own navigations abort the open AI Assistant long-poll ("Failed to fetch");
-// that is the harness, not the product.
+// The harness's own navigations abort the AI Assistant hub's connect or open long-poll ("Failed to fetch");
+// that is the harness, not the product (see isNavigationAbortNoise).
 let lastNavAt = 0;
 const nav = (action) => { lastNavAt = Date.now(); return action(); };
-const BENIGN_ON_NAVIGATION = /Connection disconnected with error 'TypeError: Failed to fetch'/;
 page.on('console', (m) => {
   if (m.type() !== 'error') return;
   const text = redact(m.text());
-  if (BENIGN_ON_NAVIGATION.test(text) && Date.now() - lastNavAt < 5_000) return;
+  if (isNavigationAbortNoise(text) && Date.now() - lastNavAt < 5_000) return;
   errors.console.push(text);
   log('console.error', text);
 });
@@ -521,7 +520,7 @@ try {
   log('signed in');
 
   if (MODE === 'exam') {
-    await page.goto(`${APP}/speaking/exam`);
+    await nav(() => page.goto(`${APP}/speaking/exam`));
     // A click before hydration is silently lost (no exam, no credits); retry
     // once. The button disables itself while an exam is being created.
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
@@ -580,7 +579,7 @@ try {
     metrics.examDto = examDto;
     await nav(() => page.goto(resultsUrl));
   } else {
-    await page.goto(`${APP}/speaking/roleplay/${CARD_ID}`);
+    await nav(() => page.goto(`${APP}/speaking/roleplay/${CARD_ID}`));
     const consent = page.getByTestId('speaking-rules-consent');
     await consent.waitFor({ timeout: 60_000 });
     await shot('1-rules-consent');

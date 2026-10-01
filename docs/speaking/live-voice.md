@@ -177,7 +177,7 @@ connection drops or the patient goes silent) starts with no memory, so its instr
 lines, oldest first, capped at 4000 characters (the newest turns that fit, with an `(earlier turns omitted)` line when older
 ones were dropped). The browser flushes the turn in progress before it asks, the first mint of a role-play is unchanged, and
 the history goes to the provider only (never logged, audited or returned); each recovery mint still counts towards
-`MaxProviderSessionsPerRolePlay` ([Hard duration cap](#hard-duration-cap)). **Pending: not yet verified in production.**
+`MaxProviderSessionsPerRolePlay` ([Hard duration cap](#hard-duration-cap)). Verified in production on 1 Oct 2026: after the injected drop the patient carried on coherently (it answered the questions asked after the recovery).
 
 ## Mid-session recovery
 
@@ -191,7 +191,10 @@ into the new session's instructions ([Recovery sessions](#provider-failover)).
   peer connection `failed` (a `disconnected` link gets 5 s to heal first), an `error` event, or `session.closed` with a
   reason other than `close_requested`, `expired` or `content` (the provider's own time or content end is final).
   (2) A **stall**: the candidate finished a real sentence (a microphone burst of at least 1 s) and the patient produced no
-  audio or transcript for **20 s** (`STALL_MS`; healthy replies take ~2-3 s, the slowest healthy one seen was ~19 s).
+  audio or transcript for **20 s** (`STALL_MS`; healthy replies take ~2-3 s, the slowest healthy one seen was ~19 s). The
+  20 s run from the **oldest** sentence the patient still owes an answer to: a candidate who keeps talking to a silent
+  patient ("Hello? Can you hear me?") does not push the restore back (the first production stall run, 1 Oct 2026, restored
+  94 s after the stall because every new sentence restarted the clock).
 - **Procedure.** Flush the turn in progress (so the server's history is complete) -> tear down the dead transport ->
   mint a new session: the **same provider first**, then the other one; on the **second** restore of a card the other
   provider goes first. A definite server answer (409 time over or session limit, any other 4xx) stops the attempts and shows
@@ -541,7 +544,7 @@ starts. One fault per run: `fault_drop_at_s` wins when both are set (`metrics.fa
 - The 26 Sep two-card mock ended red; only 1 of 4 exam runs that completed both cards was ever graded (bugs fixed by #259/#264).
 - Gemini vs OpenAI: one matched pair (n=1 each); no complete graded Gemini run. Claude grading cost unmeasured.
 - Live-voice sessions store no audio; the results copy still says "We received your recording".
-- Recovery is best-effort (two restores per card, none for a pinned provider, unverified against a real provider stall until the E2E fault runs are read); `?voiceProvider=` is not restricted (any learner can force the costlier provider or bypass the circuit);
+- Recovery is best-effort (two restores per card, none for a pinned provider). Measured in production on 1 Oct 2026 (OpenAI, build 74ca2607b, compare script, unpinned): a dropped data channel at 60 s had a new session offered 0.6 s later and connected 1.7 s after the drop (2 OpenAI offers, 16 saved segments, no split sentence, 308/500); a stalled provider was restored 94 s after the stall (the sentence-clock defect above, fixed since). Gemini recovery is covered by unit tests only, because the fault runs cannot pin a provider; `?voiceProvider=` is not restricted (any learner can force the costlier provider or bypass the circuit);
   hidden information is prompt-only.
 - A provider session that was created but never connected (failover after a successful create, or a dead tab) cannot be
   closed by the browser. For OpenAI the server keeps the raw session id in the `live_session` audit row (wiped by the

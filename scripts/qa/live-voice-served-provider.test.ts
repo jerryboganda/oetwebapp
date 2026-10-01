@@ -1,4 +1,4 @@
-import { createServedRecord } from './live-voice-served-provider.mjs';
+import { createServedRecord, isNavigationAbortNoise } from './live-voice-served-provider.mjs';
 
 type Panel = { provider: string | null; failedOver?: boolean } | undefined;
 type Word = { at: number; who: 'candidate' | 'patient'; text: string };
@@ -131,5 +131,28 @@ describe('live voice E2E: which provider served', () => {
 
     expect(r.servedProviders()).toEqual([]);
     expect(r.transcript).toEqual({ candidate: '', patient: '' });
+  });
+});
+
+describe('live voice E2E: console noise from the harness own navigations', () => {
+  const noise = [
+    "[2026-10-01T00:15:43.098Z] Error: Failed to start the transport 'LongPolling': TypeError: Failed to fetch",
+    "[2026-10-01T00:15:43.098Z] Error: Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: Error: 'WebSockets' is disabled by the client. ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. Error: LongPolling failed: TypeError: Failed to fetch",
+    "[AI Assistant] Connection failed: c: Unable to connect to the server with any of the available transports. LongPolling failed: TypeError: Failed to fetch\n    at G._createTransport (https://app.example/_next/static/chunks/a.js:1:45400)",
+    '[2026-09-30T21:45:42.439Z] Error: Failed to complete negotiation with the server: TypeError: Failed to fetch',
+    "[2026-09-30T21:31:25.640Z] Error: Connection disconnected with error 'TypeError: Failed to fetch'.",
+  ];
+
+  it.each(noise)('treats an aborted AI Assistant connect as noise: %s', (text) => {
+    expect(isNavigationAbortNoise(text)).toBe(true);
+  });
+
+  it.each([
+    ['a page script error', "TypeError: Cannot read properties of undefined (reading 'segments')"],
+    ['a failed product request', 'Error: Failed to fetch /v1/speaking/sessions/s1/transcript'],
+    ['the assistant hub refusing the token', '[AI Assistant] Connection failed: Error: Unauthorized'],
+    ['a refused connection that is not an abort', 'Error: Failed to start the connection: Error: Unauthorized'],
+  ])('still reports %s', (_label, text) => {
+    expect(isNavigationAbortNoise(text)).toBe(false);
   });
 });
