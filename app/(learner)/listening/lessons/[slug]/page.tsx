@@ -41,6 +41,20 @@ const STEPS = [
   { key: 'quiz', label: '✅ Mini-quiz', minutes: 2 },
 ] as const;
 
+// Each step's own progress field. Building `${key}Completed` only matched the
+// three drills, so Watch, Read and Mini-quiz never showed as done.
+function isStepDone(progress: LessonDetail['progress'], key: (typeof STEPS)[number]['key']): boolean {
+  if (!progress) return false;
+  switch (key) {
+    case 'video': return progress.videoWatched;
+    case 'body': return progress.bodyRead;
+    case 'drill1': return progress.drill1Completed;
+    case 'drill2': return progress.drill2Completed;
+    case 'drill3': return progress.drill3Completed;
+    case 'quiz': return progress.quizScore !== null;
+  }
+}
+
 export default function ListeningLessonPage() {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug ?? '';
@@ -99,7 +113,7 @@ export default function ListeningLessonPage() {
         <Card padding="none">
           <ol className="divide-y divide-border">
             {STEPS.map((step, i) => {
-              const done = Boolean(lesson.progress?.[(step.key + 'Completed') as keyof typeof lesson.progress]);
+              const done = isStepDone(lesson.progress, step.key);
               return (
                 <li key={step.key}>
                   <MotionItem delayIndex={Math.min(i, 5)} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
