@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotionConfig } from 'motion/react';
 import { getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
+import { CountUp } from './count-up';
 
 /* ─── Linear Progress Bar ─── */
 interface ProgressBarProps {
@@ -85,7 +86,7 @@ export function CircularProgress({ value, size = 120, strokeWidth = 8, label, su
         </svg>
         <div className="absolute inset-0 flex items-center justify-center flex-col">
           <span className="text-2xl font-bold text-navy leading-none">
-            {Math.round(value)}<span className="text-sm">%</span>
+            <CountUp value={Math.round(value)} /><span className="text-sm">%</span>
           </span>
         </div>
       </div>

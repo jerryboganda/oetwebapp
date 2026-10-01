@@ -157,18 +157,18 @@ export default function StudyPlanCalendarPage() {
 
       <div className="mt-6 space-y-4">
         {/* Toolbar */}
-        <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 py-3 sm:px-4">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="sm" onClick={navigatePrev} aria-label="Previous">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[180px] text-center text-sm font-medium text-navy">
+            <span className="min-w-0 text-center text-sm font-medium text-navy sm:min-w-[180px]">
               {view === 'week' ? formatWeekRange(cursor) : formatMonthYear(cursor)}
             </span>
             <Button variant="ghost" size="sm" onClick={navigateNext} aria-label="Next">
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={goToday} className="ml-2 text-xs">
+            <Button variant="ghost" size="sm" onClick={goToday} className="text-xs sm:ml-2">
               Today
             </Button>
           </div>

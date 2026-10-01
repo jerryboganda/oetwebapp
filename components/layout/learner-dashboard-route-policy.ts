@@ -146,22 +146,18 @@ export interface LearnerChrome {
   examOrLive: boolean;
 }
 
-/** Pages that render AppShell, LearnerLiveRoomShell or a local shell themselves, or no shell. */
+/**
+ * Pages that render AppShell, LearnerLiveRoomShell or a local shell themselves,
+ * or no shell: attempt/live screens, a transient payment return, and the
+ * full-bleed package page. Content, hub and results pages belong in the
+ * workspace chrome so the learner always has navigation.
+ */
 export const LEARNER_SELF_CHROMED_ROUTES = [
   '/billing/payment-return',
-  '/listening/lessons',
-  '/listening/lessons/[slug]',
   '/listening/mocks/[sessionId]',
-  '/listening/mocks/[sessionId]/results',
   '/listening/player/[id]',
-  '/listening/stats',
-  '/listening/strategies',
-  '/listening/strategies/[slug]',
   '/marketplace/packages/[id]',
-  '/speaking/exam',
   '/speaking/exam/[id]',
-  '/speaking/exam/[id]/results',
-  '/speaking/mocks',
   '/speaking/sessions/[id]',
   '/speaking/sessions/[id]/live-tutor',
   '/speaking/sessions/[id]/prep',

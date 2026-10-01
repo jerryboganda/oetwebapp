@@ -36,6 +36,7 @@ import {
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
+import { CountUp } from '@/components/ui/count-up';
 
 const POLL_INTERVAL_MS = 4_000;
 /** ~10 minutes of polling, then "Check again" (the result persists server-side). */
@@ -201,7 +202,7 @@ export default function SpeakingExamResultsPage() {
 
   if (error && !results) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12 text-center">
+      <div className="mx-auto max-w-lg py-6 text-center">
         <p className="text-sm text-danger">{error}</p>
         <Button className="mt-4" variant="outline" onClick={() => void refresh()}>
           Retry
@@ -215,7 +216,7 @@ export default function SpeakingExamResultsPage() {
   const firstCardSessionId = results.cards.find((card) => card.sessionId)?.sessionId ?? examId;
   if (v11Combined) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mx-auto max-w-5xl">
         <SpeakingSimulationV11ReportView
           sessionId={firstCardSessionId}
           response={v11Combined}
@@ -238,7 +239,7 @@ export default function SpeakingExamResultsPage() {
   if (firstV11Entry) {
     const [firstV11SessionId, firstV11Card] = firstV11Entry;
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mx-auto max-w-5xl">
         {gradingNotices}
         <SpeakingSimulationV11ReportView
           sessionId={firstV11SessionId}
@@ -260,7 +261,7 @@ export default function SpeakingExamResultsPage() {
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-2xl">
       <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1>
       <div className="mt-4">{gradingNotices}</div>
 
@@ -281,7 +282,11 @@ export default function SpeakingExamResultsPage() {
             title="Combined result"
             subtitle={results.readinessBand ? `Readiness band ${results.readinessBand}` : undefined}
             gaugeValue={typeof results.combinedScaledScore === 'number' ? (results.combinedScaledScore / 500) * 100 : 0}
-            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{results.combinedScaledScore ?? '—'}</span>}
+            gaugeCenter={
+              typeof results.combinedScaledScore === 'number'
+                ? <CountUp value={results.combinedScaledScore} className="text-2xl font-black text-navy dark:text-white" />
+                : <span className="text-2xl font-black text-navy dark:text-white">—</span>
+            }
             gaugeLabel="/ 500"
             gaugeColor="var(--color-success)"
             grade={results.readinessBand ? { label: `Band ${results.readinessBand}`, tone: 'success' } : null}

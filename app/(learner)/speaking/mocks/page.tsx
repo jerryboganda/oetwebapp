@@ -22,7 +22,7 @@ export default function RetiredSpeakingMocksIndexPage() {
   }, [router]);
 
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center px-4 text-center" role="status">
+    <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center text-center" role="status">
       <Loader2 className="h-6 w-6 animate-spin text-muted" aria-hidden="true" />
       <h1 className="mt-4 text-lg font-semibold text-navy">Speaking mocks have moved</h1>
       <p className="mt-2 text-sm text-muted">

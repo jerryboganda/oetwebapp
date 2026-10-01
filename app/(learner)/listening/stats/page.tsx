@@ -39,7 +39,7 @@ export default function ListeningStatsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-6xl px-4 py-12 space-y-6" aria-busy="true">
+      <div className="mx-auto max-w-6xl space-y-6" aria-busy="true">
         <p className="sr-only">Loading your Listening stats…</p>
         <Skeleton className="h-10 w-72 max-w-full rounded-lg" />
         <div className="grid gap-8 md:grid-cols-2">
@@ -47,12 +47,12 @@ export default function ListeningStatsPage() {
           <CardSkeleton className="h-80" />
         </div>
         <CardSkeleton />
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-12 space-y-6 sm:space-y-10">
+    <div className="mx-auto max-w-6xl space-y-6 sm:space-y-10">
       <header className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-navy">Listening Analytics</h1>
         <p className="text-muted">
@@ -136,6 +136,6 @@ export default function ListeningStatsPage() {
           <Link href="/listening/pathway">View full pathway</Link>
         </Button>
       </nav>
-    </main>
+    </div>
   );
 }
