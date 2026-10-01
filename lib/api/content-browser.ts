@@ -23,17 +23,38 @@ export async function fetchContentTracks(programId: string) {
   return apiRequest(`/v1/programs/${encodeURIComponent(programId)}/tracks`);
 }
 
+type RawPackage = Record<string, unknown> & { comparisonFeatures?: unknown; comparisonFeaturesJson?: unknown };
+
+/**
+ * The packages API returns the stored entity, whose features are a JSON string
+ * column (`comparisonFeaturesJson`), while `ContentPackage` promises a
+ * `comparisonFeatures` array. Parse it here so every caller gets the array.
+ */
+function withComparisonFeatures(pkg: RawPackage) {
+  if (Array.isArray(pkg.comparisonFeatures)) return pkg;
+  let comparisonFeatures: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(typeof pkg.comparisonFeaturesJson === 'string' ? pkg.comparisonFeaturesJson : '[]');
+    if (Array.isArray(parsed)) comparisonFeatures = parsed.filter((feature): feature is string => typeof feature === 'string');
+  } catch {
+    // A malformed column means no features, not a crashed page.
+  }
+  return { ...pkg, comparisonFeatures };
+}
+
 export async function fetchContentPackages(params?: { type?: string; page?: number; pageSize?: number }) {
   const p = new URLSearchParams();
   if (params?.type) p.set('type', params.type);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   const qs = p.toString();
-  return apiRequest(`/v1/packages${qs ? `?${qs}` : ''}`);
+  const response = await apiRequest<{ items?: RawPackage[] } & Record<string, unknown>>(`/v1/packages${qs ? `?${qs}` : ''}`);
+  return Array.isArray(response?.items) ? { ...response, items: response.items.map(withComparisonFeatures) } : response;
 }
 
 export async function fetchContentPackage(packageId: string) {
-  return apiRequest(`/v1/packages/${encodeURIComponent(packageId)}`);
+  const pkg = await apiRequest<RawPackage | null>(`/v1/packages/${encodeURIComponent(packageId)}`);
+  return pkg ? withComparisonFeatures(pkg) : pkg;
 }
 
 export async function fetchFreePreviewAssets() {
