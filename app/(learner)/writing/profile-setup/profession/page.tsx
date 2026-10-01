@@ -4,7 +4,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardList, ArrowRight, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import { getWritingV2Profile } from '@/lib/writing/api';
 import type { WritingProfession } from '@/lib/writing/types';
 import { readWizardState, writeWizardState } from '../wizard-state';
@@ -56,93 +58,90 @@ export default function ProfileSetupProfessionPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Step 1 of 4"
-          icon={ClipboardList}
-          accent="amber"
-          title="Tell us who you are"
-          description="Your profession decides letter types we drill, scenarios we surface, and exemplar libraries we compare against."
-          highlights={[]}
-        />
+      <LearnerPageHero
+        eyebrow="Step 1 of 4"
+        icon={ClipboardList}
+        accent="amber"
+        title="Tell us who you are"
+        description="Your profession decides letter types we drill, scenarios we surface, and exemplar libraries we compare against."
+      />
 
-        <StepperNav currentStep="profession" />
+      <StepperNav currentStep="profession" />
 
-        <form
-          onSubmit={onSubmit}
-          aria-labelledby="profession-step-heading"
-          className="space-y-6 rounded-2xl border border-border bg-surface p-5 shadow-sm"
-        >
-          <fieldset>
-            <legend id="profession-step-heading" className="text-base font-bold text-navy">
-              Profession
-            </legend>
-            <p className="mt-1 mb-4 text-sm text-muted">Choose the one that matches your day-to-day work.</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {PROFESSIONS.map((option) => {
-                const selected = profession === option.id;
-                return (
-                  <label
-                    key={option.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-primary ${selected ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-primary/40'}`}
-                  >
-                    <input
-                      type="radio"
-                      name="profession"
-                      value={option.id}
-                      checked={selected}
-                      onChange={() => setProfession(option.id)}
-                      className="mt-1 accent-primary"
-                      aria-describedby={`profession-${option.id}-desc`}
-                    />
-                    <span className="flex-1">
-                      <span className="block text-sm font-bold text-navy">
-                        <Briefcase className="mr-1 inline h-4 w-4 text-warning-strong" aria-hidden="true" />
-                        {option.label}
-                      </span>
-                      <span id={`profession-${option.id}-desc`} className="block text-xs text-muted">
-                        {option.description}
-                      </span>
+      <form
+        onSubmit={onSubmit}
+        aria-labelledby="profession-step-heading"
+        className={cn(cardClassName({ padding: 'lg' }), 'space-y-6')}
+      >
+        <fieldset>
+          <legend id="profession-step-heading" className="text-base font-bold text-navy">
+            Profession
+          </legend>
+          <p className="mt-1 mb-4 text-sm text-muted">Choose the one that matches your day-to-day work.</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {PROFESSIONS.map((option) => {
+              const selected = profession === option.id;
+              return (
+                <label
+                  key={option.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-primary ${selected ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-primary/40'}`}
+                >
+                  <input
+                    type="radio"
+                    name="profession"
+                    value={option.id}
+                    checked={selected}
+                    onChange={() => setProfession(option.id)}
+                    className="mt-1 accent-primary"
+                    aria-describedby={`profession-${option.id}-desc`}
+                  />
+                  <span className="flex-1">
+                    <span className="block text-sm font-bold text-navy">
+                      <Briefcase className="me-1 inline h-4 w-4 text-skill-writing" aria-hidden="true" />
+                      {option.label}
                     </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              Sub-discipline (optional)
-              <input
-                type="text"
-                value={subDiscipline}
-                onChange={(e) => setSubDiscipline(e.target.value)}
-                placeholder="e.g. paediatrics, oncology, community pharmacy"
-                maxLength={120}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              Years of experience (optional)
-              <input
-                type="number"
-                min={0}
-                max={60}
-                value={yearsExperience}
-                onChange={(e) => setYearsExperience(e.target.value)}
-                placeholder="e.g. 5"
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </label>
+                    <span id={`profession-${option.id}-desc`} className="block text-xs text-muted">
+                      {option.description}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
+        </fieldset>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button type="submit" size="md">
-              Continue <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            Sub-discipline (optional)
+            <input
+              type="text"
+              value={subDiscipline}
+              onChange={(e) => setSubDiscipline(e.target.value)}
+              placeholder="e.g. paediatrics, oncology, community pharmacy"
+              maxLength={120}
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            Years of experience (optional)
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={yearsExperience}
+              onChange={(e) => setYearsExperience(e.target.value)}
+              placeholder="e.g. 5"
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="submit" size="md">
+            Continue <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+        </div>
+      </form>
     </>
   );
 }

@@ -46,8 +46,8 @@ export function OrderingDrillComponent({ drill, onGraded }: OrderingDrillProps) 
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted">
             Re-order the paragraphs into a logical letter sequence (purpose first, action last).
           </p>

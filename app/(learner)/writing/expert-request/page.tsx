@@ -9,15 +9,15 @@ import {
   CreditCard,
   ShieldCheck,
   Zap,
-  Info,
   CheckCircle2,
 } from 'lucide-react';
-import { MotionPage } from '@/components/ui/motion-primitives';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchTurnaroundOptions, fetchFocusAreas, fetchBilling, isApiError, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -93,138 +93,120 @@ function WritingExpertReviewContent() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-24 rounded-2xl" />
-          <Skeleton className="h-40 rounded-2xl" />
-          <Skeleton className="h-32 rounded-2xl" />
-        </div>
+        <LearnerSkeleton variant="hero" />
+        <LearnerSkeleton variant="card-grid" />
       </>
     );
   }
 
   if (isSuccess) {
     return (
-      <>
-        <div className="flex items-center justify-center min-h-[60vh] p-4">
-          <MotionPage>
-            <Card className="p-8 max-w-md w-full text-center">
-              <div className="w-20 h-20 bg-success/10 text-success-strong rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" aria-hidden="true" /></div>
-              <h1 className="text-2xl font-bold text-navy mb-2">Request Submitted!</h1>
-              <p className="text-muted mb-8">Your submission has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used{estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.</p>
-              <div className="text-sm text-muted/60 motion-safe:animate-pulse">Redirecting to results…</div>
-            </Card>
-          </MotionPage>
-        </div>
-      </>
+      <LearnerPageHero
+        eyebrow="Human-in-the-loop"
+        icon={CheckCircle2}
+        accent="emerald"
+        title="Request Submitted!"
+        description={`Your submission has been queued for tutor review. ${selectedCost} review credit${selectedCost > 1 ? 's were' : ' was'} used${estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.`}
+        footer={<p role="status" className="text-sm text-muted">Redirecting to results…</p>}
+      />
     );
   }
 
+  const sectionHeading = 'mb-4 flex items-center gap-2 text-lg font-bold text-navy';
+
   return (
     <>
-      {/* Sticky header */}
-      <header className="bg-surface border-b border-border sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
-          <Link href={submissionId ? `/writing/result?id=${submissionId}` : '/writing'} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Back"><ChevronLeft className="w-5 h-5" aria-hidden="true" /></Link>
-          <h1 className="font-bold text-lg text-navy leading-tight">Request Tutor Review</h1>
-        </div>
-      </header>
-
-      <div className="py-8">
-        {/* Context Banner */}
-        <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden dark:border dark:border-border dark:bg-surface dark:text-navy">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-info eyebrow mb-2"><ShieldCheck className="w-4 h-4" /> Human-in-the-loop</div>
-            <h2 className="text-xl font-bold mb-1">Writing Submission</h2>
-            <div className="text-sm text-info/70">{availableCredits} credits available</div>
-          </div>
-        </div>
-
-        {!submissionId ? (
-          <div className="mb-6">
-            <InlineAlert variant="warning">
-              Open tutor review requests from a completed writing result or your submissions history so the correct attempt is attached. <Link href="/submissions" className="font-bold underline">Go to submissions</Link>
-            </InlineAlert>
-          </div>
-        ) : null}
-
-        <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-8">
-          {/* 1. Turnaround Speed */}
-          <section>
-            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Clock className="w-4 h-4" /> 1. Turnaround Speed</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {turnaroundOptions.map(option => (
-                <label key={option.id} className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-[border-color,box-shadow,background-color] duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
-                  <input type="radio" name="speed" className="sr-only" checked={speed === option.id} onChange={() => setSpeed(option.id)} />
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-navy">{option.label}</span>
-                    {option.id === 'express' && <Zap className="w-4 h-4 text-primary" />}
-                  </div>
-                  <div className="text-2xl font-black text-primary mb-1">{option.time}</div>
-                  <div className="text-xs text-muted leading-snug">{option.description}</div>
-                  <div className="mt-3 pt-3 border-t border-border text-xs font-bold text-navy">Cost: {option.cost} {option.cost === 1 ? 'Credit' : 'Credits'}</div>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          {/* 2. Focus Areas */}
-          <section>
-            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Target className="w-4 h-4" /> 2. Focus Areas</h3>
-            <p className="text-xs text-muted mb-4 italic">Select up to 3 areas you want the tutor to prioritize.</p>
-            <div className="flex flex-wrap gap-2">
-              {focusAreaOptions.map(area => {
-                const isSelected = selectedFocus.includes(area.id);
-                const isDisabled = !isSelected && selectedFocus.length >= 3;
-                return (
-                  <button key={area.id} type="button" disabled={isDisabled} aria-pressed={isSelected} onClick={() => toggleFocus(area.id)}
-                    className={`min-h-10 px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected ? 'bg-primary border-primary text-white dark:bg-primary-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
-                    {area.label}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* 3. Notes */}
-          <section>
-            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> 3. Notes for Reviewer</h3>
-            <textarea aria-label="Notes for reviewer" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 resize-none text-sm bg-surface text-navy placeholder:text-muted" />
-          </section>
-
-          {/* 4. Credits */}
-          <section>
-            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><CreditCard className="w-4 h-4" /> 4. Review Credits</h3>
-            <div className={`flex items-center justify-between p-4 rounded-xl border-2 ${hasEnoughCredits ? 'border-primary bg-primary/5' : 'border-warning/40 bg-warning/10'}`}>
-              <div>
-                <div className="font-bold text-navy">Use Review Credits</div>
-                <div className="text-xs text-muted">{availableCredits} credits available</div>
-              </div>
-              <div className="font-black text-navy">{selectedCost} Credit{selectedCost > 1 ? 's' : ''}</div>
-            </div>
-            {!hasEnoughCredits ? (
-              <div className="mt-3">
-                <InlineAlert variant="warning">
-                  This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
-                </InlineAlert>
-              </div>
-            ) : null}
-          </section>
-
-          {/* Disclaimer */}
-          <div className="bg-background-light rounded-xl p-4 flex items-start gap-3">
-            <Info className="w-5 h-5 text-muted/60 shrink-0 mt-0.5" />
-            <p className="text-xs text-muted leading-relaxed">Tutor reviews are conducted by certified OET trainers. Unlike AI evaluations, these provide nuanced human judgment and specific pedagogical advice. Turnaround times are guaranteed.</p>
-          </div>
-
-          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-
-          {/* Submit */}
-          <Button type="submit" fullWidth loading={isSubmitting} disabled={isSubmitting || !submissionId || !speed || !hasEnoughCredits}>
-            Submit Tutor Review Request ({selectedCost} Credit{selectedCost > 1 ? 's' : ''})
+      {/* One page header: the old sticky bar and the navy "Writing Submission"
+          banner were two headers for the same page; the credit balance shows
+          once, in step 4. */}
+      <LearnerPageHero
+        eyebrow="Human-in-the-loop"
+        icon={ShieldCheck}
+        title="Request Tutor Review"
+        description="Tutor reviews are conducted by certified OET trainers. Unlike AI evaluations, these provide nuanced human judgment and specific pedagogical advice. Turnaround times are guaranteed."
+        aside={
+          <Button asChild variant="outline" size="sm">
+            <Link href={submissionId ? `/writing/result?id=${submissionId}` : '/writing'}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back
+            </Link>
           </Button>
-        </form>
-      </div>
+        }
+      />
+
+      {!submissionId ? (
+        <InlineAlert variant="warning">
+          Open tutor review requests from a completed writing result or your submissions history so the correct attempt is attached. <Link href="/submissions" className="font-bold underline">Go to submissions</Link>
+        </InlineAlert>
+      ) : null}
+
+      <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+        {/* 1. Turnaround Speed */}
+        <MotionSection delayIndex={0}>
+          <h2 className={sectionHeading}><Clock className="h-4 w-4 text-primary" aria-hidden="true" /> 1. Turnaround Speed</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {turnaroundOptions.map(option => (
+              <label key={option.id} className={`relative flex min-w-0 cursor-pointer flex-col rounded-xl border-2 p-4 transition-[border-color,box-shadow,background-color] duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
+                <input type="radio" name="speed" className="sr-only" checked={speed === option.id} onChange={() => setSpeed(option.id)} />
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="font-bold text-navy">{option.label}</span>
+                  {option.id === 'express' && <Zap className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+                </div>
+                <div className="mb-1 text-2xl font-bold tabular-nums text-primary">{option.time}</div>
+                <div className="text-xs leading-snug text-muted">{option.description}</div>
+                <div className="mt-3 border-t border-border pt-3 text-xs font-bold tabular-nums text-navy">Cost: {option.cost} {option.cost === 1 ? 'Credit' : 'Credits'}</div>
+              </label>
+            ))}
+          </div>
+        </MotionSection>
+
+        {/* 2. Focus Areas */}
+        <MotionSection delayIndex={1}>
+          <h2 className={sectionHeading}><Target className="h-4 w-4 text-primary" aria-hidden="true" /> 2. Focus Areas</h2>
+          <p className="mb-4 text-xs italic text-muted">Select up to 3 areas you want the tutor to prioritize.</p>
+          <div className="flex flex-wrap gap-2">
+            {focusAreaOptions.map(area => {
+              const isSelected = selectedFocus.includes(area.id);
+              const isDisabled = !isSelected && selectedFocus.length >= 3;
+              return (
+                <button key={area.id} type="button" disabled={isDisabled} aria-pressed={isSelected} onClick={() => toggleFocus(area.id)}
+                  className={`pressable min-h-11 rounded-full border px-4 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSelected ? 'border-primary bg-primary text-white shadow-sm dark:bg-primary-700' : isDisabled ? 'cursor-not-allowed border-border bg-background-light text-muted/40' : 'hover-primary border-border bg-surface text-muted hover:border-border-hover'}`}>
+                  {area.label}
+                </button>
+              );
+            })}
+          </div>
+        </MotionSection>
+
+        {/* 3. Notes */}
+        <MotionSection delayIndex={2}>
+          <h2 className={sectionHeading}><MessageSquare className="h-4 w-4 text-primary" aria-hidden="true" /> 3. Notes for Reviewer</h2>
+          <textarea aria-label="Notes for reviewer" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="h-32 w-full resize-none rounded-control border border-border bg-surface p-4 text-sm text-navy outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted focus:border-primary focus-visible:ring-2 focus-visible:ring-primary" />
+        </MotionSection>
+
+        {/* 4. Credits */}
+        <MotionSection delayIndex={3}>
+          <h2 className={sectionHeading}><CreditCard className="h-4 w-4 text-primary" aria-hidden="true" /> 4. Review Credits</h2>
+          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 p-4 ${hasEnoughCredits ? 'border-primary bg-primary/5' : 'border-warning/40 bg-warning/10'}`}>
+            <div className="min-w-0">
+              <div className="font-bold text-navy">Use Review Credits</div>
+              <div className="text-xs tabular-nums text-muted">{availableCredits} credits available</div>
+            </div>
+            <div className="font-bold tabular-nums text-navy">{selectedCost} Credit{selectedCost > 1 ? 's' : ''}</div>
+          </div>
+          {!hasEnoughCredits ? (
+            <InlineAlert variant="warning" className="mt-3">
+              This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
+            </InlineAlert>
+          ) : null}
+        </MotionSection>
+
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {/* Submit */}
+        <Button type="submit" fullWidth loading={isSubmitting} disabled={isSubmitting || !submissionId || !speed || !hasEnoughCredits}>
+          Submit Tutor Review Request ({selectedCost} Credit{selectedCost > 1 ? 's' : ''})
+        </Button>
+      </form>
     </>
   );
 }

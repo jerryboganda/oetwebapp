@@ -8,7 +8,8 @@ import { CircleDot, FileSearch, Sparkles, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { getWritingSubmission, retryWritingGrade } from '@/lib/writing/api';
 import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
@@ -143,43 +144,43 @@ export default function WritingSubmissionGradingPage() {
 
   return (
     <>
-      <div className="space-y-6" aria-busy={!failed && submission?.status !== 'graded'}>
-        <LearnerPageHero
-          eyebrow={t('writing.submissions.grading.eyebrow')}
-          icon={Sparkles}
-          accent="amber"
-          title={t('writing.submissions.grading.title')}
-          description={t('writing.submissions.grading.description')}
-          highlights={[
-            { icon: Award, label: t('writing.submissions.grading.highlights.status'), value: submission?.status ?? 'queued' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.submissions.grading.eyebrow')}
+        icon={Sparkles}
+        accent="amber"
+        title={t('writing.submissions.grading.title')}
+        description={t('writing.submissions.grading.description')}
+        highlights={[
+          { icon: Award, label: t('writing.submissions.grading.highlights.status'), value: submission?.status ?? 'queued' },
+        ]}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {failed ? (
-          <Card padding="lg" aria-live="polite" role="alert">
-            <CardContent>
-              <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.failedTitle')}</p>
-              <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.failedDescription')}</p>
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/writing/practice/library">
-                    {t('writing.submissions.grading.backToLibrary')}
-                  </Link>
-                </Button>
-                <Button size="sm" onClick={handleRetry} disabled={retrying}>
-                  {retrying
-                    ? t('writing.submissions.grading.retrying')
-                    : t('writing.submissions.grading.retry')}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
+      {failed ? (
+        <Card padding="lg" aria-live="polite" role="alert">
+          <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.failedTitle')}</p>
+          <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.failedDescription')}</p>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/writing/practice/library">
+                {t('writing.submissions.grading.backToLibrary')}
+              </Link>
+            </Button>
+            <Button size="sm" onClick={handleRetry} disabled={retrying}>
+              {retrying
+                ? t('writing.submissions.grading.retrying')
+                : t('writing.submissions.grading.retry')}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
-        {!failed ? <Card padding="lg" aria-live="polite" role="status">
-          <CardContent>
+      {/* No looping pulse on the active step (WCAG 2.2.2): its tint and
+          "In progress" badge carry the state. */}
+      {!failed ? (
+        <MotionSection delayIndex={0}>
+          <Card padding="lg" aria-live="polite" role="status" aria-busy={submission?.status !== 'graded'}>
             <p className="text-sm text-muted">{statusMessage}</p>
             <ol className="mt-4 space-y-3" aria-label={t('writing.submissions.grading.pipelineLabel')}>
               {STEPS.map((step, idx) => {
@@ -189,14 +190,14 @@ export default function WritingSubmissionGradingPage() {
                 const tone = done
                   ? 'bg-success/10 text-success-strong border-success/30'
                   : active
-                    ? 'bg-warning/10 text-warning-strong border-warning/30 motion-safe:animate-pulse'
+                    ? 'bg-warning/10 text-warning-strong border-warning/30'
                     : 'bg-background-light text-muted border-border';
                 return (
-                  <li key={step.code as StepCode} className={`flex items-center gap-3 rounded-lg border p-3 ${tone}`}>
+                  <li key={step.code as StepCode} className={`flex items-center gap-3 rounded-xl border p-3 ${tone}`}>
                     <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <p className="text-sm font-bold">{t(step.labelKey)}</p>
-                    {done ? <Badge variant="success" size="sm" className="ml-auto">{t('writing.submissions.grading.status.done')}</Badge> : null}
-                    {active ? <Badge variant="warning" size="sm" className="ml-auto">{t('writing.submissions.grading.status.inProgress')}</Badge> : null}
+                    <p className="min-w-0 text-sm font-bold">{t(step.labelKey)}</p>
+                    {done ? <Badge variant="success" size="sm" className="ms-auto shrink-0">{t('writing.submissions.grading.status.done')}</Badge> : null}
+                    {active ? <Badge variant="warning" size="sm" className="ms-auto shrink-0">{t('writing.submissions.grading.status.inProgress')}</Badge> : null}
                   </li>
                 );
               })}
@@ -208,9 +209,9 @@ export default function WritingSubmissionGradingPage() {
                 </Link>
               </Button>
             </div>
-          </CardContent>
-        </Card> : null}
-      </div>
+          </Card>
+        </MotionSection>
+      ) : null}
     </>
   );
 }

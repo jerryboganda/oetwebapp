@@ -30,8 +30,8 @@ export function ToneDrillComponent({ drill, onGraded }: ToneDrillProps) {
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted">
             Rewrite each casual sentence in a professional clinical register.
           </p>

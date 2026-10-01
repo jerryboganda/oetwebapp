@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { ArrowLeft, ChevronRight, Dumbbell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { CardLink } from '@/components/ui/card-link';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { listDrills } from '@/lib/writing-drills/loader';
 import { DrillTypeSchema, type DrillType } from '@/lib/writing-drills/types';
 
@@ -16,6 +20,10 @@ const TYPE_TITLES: Record<DrillType, string> = {
   abbreviation: 'Abbreviations',
 };
 
+function typeDescription(type: DrillType) {
+  return `OET Writing practice: ${TYPE_TITLES[type].toLowerCase()} drills.`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -26,7 +34,7 @@ export async function generateMetadata({
   if (!parsed.success) return { title: 'Writing drills' };
   return {
     title: `${TYPE_TITLES[parsed.data]} drills`,
-    description: `OET Writing practice: ${TYPE_TITLES[parsed.data].toLowerCase()} drills.`,
+    description: typeDescription(parsed.data),
   };
 }
 
@@ -44,65 +52,60 @@ export default async function WritingDrillsTypeListPage({
 
   return (
     <>
-      <header className="bg-navy dark:bg-surface text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/writing/drills"
-          className="text-info text-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-info rounded"
-        >
-          ← All drill categories
-        </Link>
-        <h1 className="text-3xl sm:text-4xl font-bold mt-2">{TYPE_TITLES[type]}</h1>
-      </header>
+      {/* A server page: icons go to the client hero as elements, not components. */}
+      <LearnerPageHero
+        eyebrow="Writing Practice"
+        icon={<Dumbbell />}
+        accent="amber"
+        title={TYPE_TITLES[type]}
+        description={typeDescription(type)}
+        aside={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/writing/drills">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> All drill categories
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16">
-        {drills.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center text-muted">
-              No drills available yet for this category.
-            </CardContent>
-          </Card>
-        ) : (
-          <ul className="space-y-3">
-            {drills.map((d) => (
-              <li key={d.id}>
-                <Link
-                  href={`/writing/drills/${type}/${d.id}`}
-                  className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-                >
-                  <Card className="transition-shadow group-hover:shadow-md">
-                    <CardContent className="p-5 flex items-center gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="muted" size="sm">
-                            {d.profession}
-                          </Badge>
-                          {d.letterType && (
-                            <Badge variant="info" size="sm">
-                              {d.letterType.replaceAll('_', ' ')}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" size="sm">
-                            {d.difficulty}
-                          </Badge>
-                          <span className="text-xs text-muted">~{d.estimatedMinutes} min</span>
-                        </div>
-                        <h2 className="text-lg font-semibold text-navy group-hover:text-primary transition-colors">
-                          {d.title}
-                        </h2>
-                        <p className="text-sm text-muted line-clamp-2">{d.brief}</p>
-                      </div>
-                      <ChevronRight
-                        className="w-5 h-5 text-muted group-hover:text-primary"
-                        aria-hidden
-                      />
-                    </CardContent>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {drills.length === 0 ? (
+        <EmptyState icon={<Dumbbell className="h-8 w-8" />} title="No drills available yet for this category." />
+      ) : (
+        <ul className="space-y-3">
+          {drills.map((d, index) => (
+            <li key={d.id}>
+              <MotionItem delayIndex={Math.min(index, 5)}>
+                <CardLink href={`/writing/drills/${type}/${d.id}`} className="group flex items-center gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <Badge variant="muted" size="sm">
+                        {d.profession}
+                      </Badge>
+                      {d.letterType && (
+                        <Badge variant="info" size="sm">
+                          {d.letterType.replaceAll('_', ' ')}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" size="sm">
+                        {d.difficulty}
+                      </Badge>
+                      <span className="text-xs tabular-nums text-muted">~{d.estimatedMinutes} min</span>
+                    </div>
+                    <h2 className="text-lg font-semibold text-navy transition-colors group-hover:text-primary">
+                      {d.title}
+                    </h2>
+                    <p className="line-clamp-2 text-sm text-muted">{d.brief}</p>
+                  </div>
+                  <ChevronRight
+                    className="h-5 w-5 shrink-0 text-muted group-hover:text-primary rtl:rotate-180"
+                    aria-hidden
+                  />
+                </CardLink>
+              </MotionItem>
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }

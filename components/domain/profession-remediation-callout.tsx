@@ -1,8 +1,9 @@
 'use client';
 
 import { Stethoscope, Lightbulb } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { getProfessionRemediationTips, type ProfessionRemediationTip } from '@/lib/writing-remediation-professions';
 
 export default function ProfessionRemediationCallout({
@@ -16,41 +17,39 @@ export default function ProfessionRemediationCallout({
   if (resolvedTips.length === 0) return null;
 
   return (
-    <MotionSection delayIndex={4}>
-      <Card className="border-border bg-surface p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <Stethoscope className="w-4 h-4 text-primary" />
+    <MotionSection>
+      <Card padding="lg">
+        <div className="mb-5 flex items-center gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Stethoscope className="h-4 w-4 text-primary" aria-hidden="true" />
           </div>
           <h2 className="text-lg font-bold text-navy">{profession ? `${profession}-specific coaching` : 'Profession-specific coaching'}</h2>
         </div>
-        <p className="text-sm text-muted mb-4">
+        <p className="mb-4 text-sm text-muted">
           These tips are tailored to your profession. They highlight the most common writing gaps for your field and show how a strong response differs from a weak one.
         </p>
-        <div className="space-y-4">
-          {resolvedTips.map((tip) => (
-            <div key={tip.criterionCode} className="rounded-xl border border-border bg-background-light p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Lightbulb className="w-4 h-4 text-primary shrink-0" />
-                <h3 className="text-sm font-bold text-navy">{tip.title}</h3>
-                <span className={`text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                  tip.priority === 'high' ? 'bg-danger/10 text-danger-strong' : 'bg-warning/10 text-warning-strong'
-                }`}>
+        <div className="space-y-3">
+          {resolvedTips.map((tip, index) => (
+            <MotionItem key={tip.criterionCode} delayIndex={Math.min(index, 5)} className="rounded-xl bg-background-light p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <Lightbulb className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <h3 className="min-w-0 text-sm font-bold text-navy">{tip.title}</h3>
+                <Badge variant={tip.priority === 'high' ? 'danger' : 'warning'} size="sm" className="capitalize">
                   {tip.priority}
-                </span>
+                </Badge>
               </div>
-              <p className="text-xs text-muted mb-3 leading-relaxed">{tip.description}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg bg-danger/5 border border-danger/10 p-3">
-                  <p className="eyebrow text-danger-strong mb-1">Weak example</p>
-                  <p className="text-xs text-navy italic leading-relaxed">{tip.exampleWeak}</p>
+              <p className="mb-3 text-xs leading-relaxed text-muted">{tip.description}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 rounded-lg border border-danger/10 bg-danger/5 p-3">
+                  <p className="eyebrow mb-1 text-danger-strong">Weak example</p>
+                  <p className="text-xs italic leading-relaxed text-navy">{tip.exampleWeak}</p>
                 </div>
-                <div className="rounded-lg bg-success/5 border border-success/10 p-3">
-                  <p className="eyebrow text-success-strong mb-1">Strong example</p>
-                  <p className="text-xs text-navy leading-relaxed">{tip.exampleStrong}</p>
+                <div className="min-w-0 rounded-lg border border-success/10 bg-success/5 p-3">
+                  <p className="eyebrow mb-1 text-success-strong">Strong example</p>
+                  <p className="text-xs leading-relaxed text-navy">{tip.exampleStrong}</p>
                 </div>
               </div>
-            </div>
+            </MotionItem>
           ))}
         </div>
       </Card>

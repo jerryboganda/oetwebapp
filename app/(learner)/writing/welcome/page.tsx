@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { PenTool, Compass, BookOpen, Target, Award, ArrowRight, Sparkles } from 'lucide-react';
+import { PenTool, Compass, BookOpen, Target, Award, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { getWritingV2Profile } from '@/lib/writing/api';
 
@@ -43,22 +44,19 @@ export default function WritingWelcomePage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8" aria-busy={checking}>
-        <LearnerPageHero
-          eyebrow={t('writing.welcome.eyebrow')}
-          icon={PenTool}
-          accent="amber"
-          title={t('writing.welcome.hero.title')}
-          description={t('writing.welcome.hero.description')}
-          highlights={[
-            { icon: Sparkles, label: t('writing.welcome.highlights.pathway'), value: t('writing.welcome.highlights.pathwayValue') },
-            { icon: Award, label: t('writing.welcome.highlights.target'), value: t('writing.welcome.highlights.targetValue') },
-          ]}
-        />
+      {/* No highlight chips: "AI-driven" and "B / B+ / A" were static copy, not data. */}
+      <LearnerPageHero
+        eyebrow={t('writing.welcome.eyebrow')}
+        icon={PenTool}
+        accent="amber"
+        title={t('writing.welcome.hero.title')}
+        description={t('writing.welcome.hero.description')}
+      />
 
+      <MotionSection delayIndex={0}>
         <section
           aria-labelledby="pathway-stages-heading"
-          className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
+          className={cardClassName({ padding: 'lg' })}
         >
           <header className="mb-5">
             <h2 id="pathway-stages-heading" className="text-lg font-bold text-navy">
@@ -69,32 +67,31 @@ export default function WritingWelcomePage() {
             </p>
           </header>
 
-          <ol className="grid gap-3 md:grid-cols-2 lg:grid-cols-5" aria-label={t('writing.welcome.pathway.heading')}>
+          <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t('writing.welcome.pathway.heading')}>
             {STAGES.map((stage, index) => {
               const Icon = stage.icon;
-              const label = t(stage.labelKey);
               return (
-                <li
-                  key={stage.code}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-background p-4"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                      {index + 1}
-                    </span>
-                    <Icon className="h-5 w-5 text-warning-strong" aria-hidden="true" />
-                    <Badge variant="muted" size="sm">{label}</Badge>
-                  </div>
-                  <p className="text-sm text-navy font-semibold">{label}</p>
-                  <p className="text-xs text-muted leading-snug">{t(stage.descriptionKey)}</p>
+                <li key={stage.code} className="min-w-0">
+                  <MotionItem delayIndex={Math.min(index, 5)} className="flex h-full flex-col gap-2 rounded-xl bg-background-light p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums text-primary">
+                        {index + 1}
+                      </span>
+                      <Icon className="h-5 w-5 text-skill-writing" aria-hidden="true" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-navy">{t(stage.labelKey)}</h3>
+                    <p className="text-xs leading-snug text-muted">{t(stage.descriptionKey)}</p>
+                  </MotionItem>
                 </li>
               );
             })}
           </ol>
         </section>
+      </MotionSection>
 
-        <section className="flex flex-col items-start gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <MotionSection delayIndex={1}>
+        <Card padding="lg" className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between" aria-busy={checking}>
+          <div className="min-w-0">
             <h2 className="text-base font-bold text-navy">{t('writing.welcome.cta.heading')}</h2>
             <p className="mt-1 text-sm text-muted">
               {t('writing.welcome.cta.subtitle')}
@@ -102,11 +99,11 @@ export default function WritingWelcomePage() {
           </div>
           <Button asChild size="lg" disabled={checking}>
             <Link href="/writing/profile-setup/profession" aria-label={t('writing.welcome.cta.aria')}>
-              {t('writing.welcome.cta.start')} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              {t('writing.welcome.cta.start')} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
             </Link>
           </Button>
-        </section>
-      </div>
+        </Card>
+      </MotionSection>
     </>
   );
 }

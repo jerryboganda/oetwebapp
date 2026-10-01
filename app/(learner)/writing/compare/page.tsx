@@ -5,11 +5,13 @@ import { FileText, BookOpen, ArrowLeftRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-error';
+import { PageSkeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchWritingResult, fetchModelAnswer } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -46,50 +48,41 @@ function WritingCompareContent() {
   // (Dr. Ahmed Hesham). The compare page no longer surfaces or computes counts.
 
   if (!resultId) {
-    return (
-      <>
-        <div className="p-6">
-          <InlineAlert variant="warning">Open compare from a completed writing result.</InlineAlert>
-        </div>
-      </>
-    );
+    return <EmptyState icon={<ArrowLeftRight className="h-8 w-8" />} title="Open compare from a completed writing result." />;
   }
 
   if (loading) {
     return (
       <>
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-10 w-60" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Skeleton className="h-96 w-full rounded-xl" />
-            <Skeleton className="h-96 w-full rounded-xl" />
-          </div>
-        </div>
+        <LearnerSkeleton variant="hero" />
+        <LearnerSkeleton variant="card-grid" />
       </>
     );
   }
 
   return (
     <>
-      <div className="mb-4">
-        <Link href={`/writing/result?id=${resultId}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-          <ChevronLeft className="w-4 h-4" /> Back to result
-        </Link>
-      </div>
-
       <LearnerPageHero
         title="Writing Comparison"
         description="Compare your response with the model answer side by side."
-        icon={<ArrowLeftRight className="w-7 h-7" />}
+        icon={ArrowLeftRight}
+        aside={
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/writing/result?id=${resultId}`}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to result
+            </Link>
+          </Button>
+        }
       />
 
       {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
 
       {/* View Mode Toggle */}
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant={viewMode === 'side-by-side' ? 'primary' : 'outline'}
+          aria-pressed={viewMode === 'side-by-side'}
           onClick={() => setViewMode('side-by-side')}
         >
           Side by Side
@@ -97,6 +90,7 @@ function WritingCompareContent() {
         <Button
           size="sm"
           variant={viewMode === 'overlay' ? 'primary' : 'outline'}
+          aria-pressed={viewMode === 'overlay'}
           onClick={() => setViewMode('overlay')}
         >
           Stacked View
@@ -105,15 +99,12 @@ function WritingCompareContent() {
 
       {/* Criteria Scores */}
       {result?.criteria && (
-        <MotionSection className="mb-6">
-          <LearnerSurfaceSectionHeader
-            icon={<FileText className="w-5 h-5" />}
-            title="Criteria Scores"
-          />
+        <MotionSection className="space-y-3">
+          <LearnerSurfaceSectionHeader icon={FileText} title="Criteria Scores" />
           <div className="flex flex-wrap gap-3">
-            {result.criteria.map((c) => (
-              <MotionItem key={c.name}>
-                <Badge variant="muted" className="text-sm px-3 py-1.5">
+            {result.criteria.map((c, index) => (
+              <MotionItem key={c.name} delayIndex={Math.min(index, 5)}>
+                <Badge variant="muted" size="md" className="tabular-nums">
                   {c.name}: {c.score}/{c.maxScore}
                 </Badge>
               </MotionItem>
@@ -123,56 +114,50 @@ function WritingCompareContent() {
       )}
 
       {/* Comparison View */}
-      <div className={viewMode === 'side-by-side' ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'space-y-6'}>
+      <div className={viewMode === 'side-by-side' ? 'grid grid-cols-1 gap-6 lg:grid-cols-2' : 'space-y-6'}>
         {/* Learner's Response */}
-        <MotionSection>
-          <Card className="h-full">
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-info" />
-                <h3 className="font-semibold text-navy">Your Response</h3>
-              </div>
+        <MotionItem delayIndex={0} className="min-w-0">
+          <Card padding="none" className="h-full">
+            <div className="flex items-center gap-2 border-b border-border p-4 sm:p-5">
+              <FileText className="h-5 w-5 text-info" aria-hidden="true" />
+              <h2 className="font-semibold text-navy">Your Response</h2>
             </div>
-            <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
+            <div className="max-h-[600px] overflow-y-auto whitespace-pre-wrap p-4 text-sm leading-relaxed text-navy sm:p-5" dir="ltr">
               {(result as Record<string, unknown> | null)?.letterBody as string ?? 'No response available.'}
             </div>
           </Card>
-        </MotionSection>
+        </MotionItem>
 
         {/* Model Answer */}
-        <MotionSection>
-          <Card className="h-full">
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-success-strong" />
-                <h3 className="font-semibold text-navy">Model Answer</h3>
-              </div>
+        <MotionItem delayIndex={1} className="min-w-0">
+          <Card padding="none" className="h-full">
+            <div className="flex items-center gap-2 border-b border-border p-4 sm:p-5">
+              <BookOpen className="h-5 w-5 text-success-strong" aria-hidden="true" />
+              <h2 className="font-semibold text-navy">Model Answer</h2>
             </div>
-            <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
+            <div className="max-h-[600px] overflow-y-auto whitespace-pre-wrap p-4 text-sm leading-relaxed text-navy sm:p-5" dir="ltr">
               {model?.paragraphs?.map(p => p.text).join('\n\n') ?? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted/60">
-                  <BookOpen className="w-10 h-10 mb-3 opacity-60" />
+                <div className="flex flex-col items-center justify-center py-12 text-muted">
+                  <BookOpen className="mb-3 h-10 w-10 opacity-60" aria-hidden="true" />
                   <p className="text-sm">Model answer not available for this task.</p>
                 </div>
               )}
             </div>
           </Card>
-        </MotionSection>
+        </MotionItem>
       </div>
 
       {/* Key Differences callout */}
       {model && result && (
-        <MotionSection className="mt-6">
-          <Card className="bg-primary/10 border-primary/30">
-            <div className="p-5">
-              <h3 className="text-sm font-semibold text-primary mb-2">Study Tips</h3>
-              <ul className="list-disc list-inside text-sm text-primary space-y-1">
-                <li>Compare the opening and closing paragraphs for tone and formality.</li>
-                <li>Note how the model answer organizes key clinical information.</li>
-                <li>Look at transition phrases and cohesive devices used in the model.</li>
-                <li>Notice how the model letter favours conciseness and reader-aware structure (target body length is 180-200 words, guidance only).</li>
-              </ul>
-            </div>
+        <MotionSection>
+          <Card padding="lg" className="border-primary/30 bg-primary/10">
+            <h2 className="mb-2 text-sm font-semibold text-primary">Study Tips</h2>
+            <ul className="list-inside list-disc space-y-1 text-sm text-primary">
+              <li>Compare the opening and closing paragraphs for tone and formality.</li>
+              <li>Note how the model answer organizes key clinical information.</li>
+              <li>Look at transition phrases and cohesive devices used in the model.</li>
+              <li>Notice how the model letter favours conciseness and reader-aware structure (target body length is 180-200 words, guidance only).</li>
+            </ul>
           </Card>
         </MotionSection>
       )}

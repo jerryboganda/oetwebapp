@@ -13,10 +13,10 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
 import { fetchModelAnswer, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { ModelAnswer } from '@/lib/mock-data';
@@ -73,118 +73,119 @@ export default function ModelAnswerExplainer() {
     };
   }, [taskId]);
 
+  const backToWriting = (
+    <Button asChild variant="outline">
+      <Link href="/writing">Back to writing</Link>
+    </Button>
+  );
+
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-32 rounded-2xl" />
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
-        </div>
+        <LearnerSkeleton variant="hero" />
+        <LearnerSkeleton variant="list" />
       </>
     );
   }
 
   if (!model) {
+    // The header always renders, so a gated or missing answer still says where the learner is.
     return (
-      <>
-        <div className="p-6">
-          <InlineAlert variant="warning">{error ?? 'Model answer not found.'}</InlineAlert>
-        </div>
-      </>
+      <LearnerPageHero
+        eyebrow="Study Guide"
+        icon={FileCheck}
+        accent="primary"
+        title="Model Answer Explainer"
+        description={error ?? 'Model answer not found.'}
+        aside={backToWriting}
+      />
     );
   }
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Study Guide"
-          icon={FileCheck}
-          accent="primary"
-          title="Model Answer Explainer"
-          description={model.taskTitle}
-          highlights={[
-            { icon: Stethoscope, label: 'Profession', value: model.profession },
-            { icon: BookOpen, label: 'Format', value: 'Annotated response' },
-            { icon: Target, label: 'Goal', value: 'High-scoring writing' },
-          ]}
-          aside={
-            <Link href="/writing" className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
-              Back to writing
-            </Link>
-          }
-        />
+      <LearnerPageHero
+        eyebrow="Study Guide"
+        icon={FileCheck}
+        accent="primary"
+        title="Model Answer Explainer"
+        description={model.taskTitle}
+        highlights={[
+          { icon: Stethoscope, label: 'Profession', value: model.profession },
+        ]}
+        aside={backToWriting}
+      />
 
-        <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="mb-3 text-2xl font-bold text-navy">Why this is a strong response</h2>
-          <p className="max-w-3xl leading-relaxed text-muted">
+      <MotionSection>
+        <Card padding="lg">
+          <h2 className="text-lg font-bold text-navy sm:text-xl">Why this is a strong response</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted sm:text-base">
             This model answer demonstrates a high-scoring response. Below, the letter is broken down paragraph by paragraph. Review the annotations to understand the <strong>rationale</strong>, <strong>scoring criteria</strong>, <strong>included / excluded details</strong>, and <strong>profession-specific language</strong> choices.
           </p>
-        </MotionSection>
+        </Card>
+      </MotionSection>
 
+      <section className="space-y-6 sm:space-y-10">
         <LearnerSurfaceSectionHeader
           eyebrow="Paragraph Analysis"
           title="Annotated breakdown"
-          description="Each paragraph is paired with rationale, inclusion logic, and profession-specific language notes."
         />
 
-        <div className="space-y-7 sm:space-y-12">
-          {model.paragraphs.map((paragraph, index) => (
-            <MotionItem key={paragraph.id} delayIndex={index} className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        {model.paragraphs.map((paragraph, index) => (
+          <MotionItem key={paragraph.id} delayIndex={Math.min(index, 5)} className="flex flex-col gap-4 lg:flex-row lg:gap-8">
 
-              {/* Left: Paragraph text */}
-              <div className="w-full lg:w-5/12 shrink-0">
-                <div className="sticky top-24">
-                  <Card className="relative border-border bg-background-light p-6">
-                    <div className="absolute -left-3 -top-3 w-8 h-8 bg-primary text-white dark:bg-primary-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-surface">{index + 1}</div>
-                    {/* pre-line keeps in-paragraph line breaks (salutation / Re: line, address blocks). */}
-                    <p className="whitespace-pre-line text-lg leading-relaxed text-navy font-serif">{paragraph.text}</p>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Right: Annotations */}
-              <div className="w-full lg:w-7/12 space-y-4">
-                {/* Rationale */}
-                <Card className="border-border bg-surface p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
-                    <h3 className="text-sm font-bold text-navy uppercase tracking-wider flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" /> Rationale</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {paragraph.criteria.map(crit => (
-                        <Badge key={crit} variant="muted" size="sm"><Target className="w-3 h-3 mr-1 inline" />{crit}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-navy leading-relaxed text-sm">{paragraph.rationale}</p>
+            {/* Start: Paragraph text */}
+            <div className="w-full shrink-0 lg:w-5/12">
+              <div className="sticky top-24">
+                <Card padding="lg" className="relative bg-background-light">
+                  <div aria-hidden="true" className="absolute -start-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full border-2 border-surface bg-primary text-sm font-bold tabular-nums text-white shadow-sm dark:bg-primary-700">{index + 1}</div>
+                  {/* pre-line keeps in-paragraph line breaks (salutation / Re: line, address blocks). */}
+                  <p className="whitespace-pre-line font-serif text-base leading-relaxed text-navy sm:text-lg">{paragraph.text}</p>
                 </Card>
-
-                {/* Include / Exclude */}
-                <Card className="border-border bg-surface p-5">
-                  <h3 className="text-sm font-bold text-navy uppercase tracking-wider mb-4">Include / Exclude Logic</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="eyebrow text-success-strong mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Included</h4>
-                      <ul className="space-y-2">{paragraph.included.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
-                    </div>
-                    {paragraph.excluded.length > 0 && (
-                      <div>
-                        <h4 className="eyebrow text-danger-strong mb-2 flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Excluded</h4>
-                        <ul className="space-y-2">{paragraph.excluded.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-
-                {/* Language Notes */}
-                <div className="rounded-2xl border border-info/30 bg-info/10 p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-info uppercase tracking-wider mb-2 flex items-center gap-2"><Stethoscope className="w-4 h-4" /> {model.profession} Language Notes</h3>
-                  <p className="text-info leading-relaxed text-sm">{paragraph.languageNotes}</p>
-                </div>
               </div>
-            </MotionItem>
-          ))}
-        </div>
-      </div>
+            </div>
+
+            {/* End: Annotations */}
+            <div className="w-full min-w-0 space-y-4 lg:w-7/12">
+              {/* Rationale */}
+              <Card>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-navy"><BookOpen className="h-4 w-4 text-primary" aria-hidden="true" /> Rationale</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {paragraph.criteria.map(crit => (
+                      <Badge key={crit} variant="muted" size="sm"><Target className="me-1 inline h-3 w-3" aria-hidden="true" />{crit}</Badge>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-navy">{paragraph.rationale}</p>
+              </Card>
+
+              {/* Include / Exclude */}
+              <Card>
+                <h3 className="mb-4 text-sm font-bold text-navy">Include / Exclude Logic</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <h4 className="eyebrow mb-2 flex items-center gap-1.5 text-success-strong"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Included</h4>
+                    <ul className="space-y-2">{paragraph.included.map((item, i) => (<li key={i} className="flex items-start gap-2 text-sm text-navy"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-success" /><span className="leading-snug">{item}</span></li>))}</ul>
+                  </div>
+                  {paragraph.excluded.length > 0 && (
+                    <div className="min-w-0">
+                      <h4 className="eyebrow mb-2 flex items-center gap-1.5 text-danger-strong"><XCircle className="h-4 w-4" aria-hidden="true" /> Excluded</h4>
+                      <ul className="space-y-2">{paragraph.excluded.map((item, i) => (<li key={i} className="flex items-start gap-2 text-sm text-navy"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-danger" /><span className="leading-snug">{item}</span></li>))}</ul>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Language Notes */}
+              <Card className="border-info/30 bg-info/10">
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-info"><Stethoscope className="h-4 w-4" aria-hidden="true" /> {model.profession} Language Notes</h3>
+                <p className="text-sm leading-relaxed text-info">{paragraph.languageNotes}</p>
+              </Card>
+            </div>
+          </MotionItem>
+        ))}
+      </section>
     </>
   );
 }

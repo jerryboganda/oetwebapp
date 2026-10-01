@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Target, ArrowRight, ArrowLeft, Calendar, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import { readWizardState, writeWizardState, type WritingProfileWizardState } from '../wizard-state';
 import { StepperNav } from '../StepperNav';
 
@@ -63,122 +65,119 @@ export default function ProfileSetupGoalsPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Step 2 of 4"
-          icon={Target}
-          accent="amber"
-          title="Set your target and your weekly budget"
-          description="The plan generator uses these to size your daily work and lock the trajectory toward your exam date."
-          highlights={[]}
-        />
+      <LearnerPageHero
+        eyebrow="Step 2 of 4"
+        icon={Target}
+        accent="amber"
+        title="Set your target and your weekly budget"
+        description="The plan generator uses these to size your daily work and lock the trajectory toward your exam date."
+      />
 
-        <StepperNav currentStep="goals" />
+      <StepperNav currentStep="goals" />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <form
-          onSubmit={onSubmit}
-          aria-labelledby="goals-step-heading"
-          className="space-y-6 rounded-2xl border border-border bg-surface p-5 shadow-sm"
-        >
-          <h2 id="goals-step-heading" className="sr-only">Goals and practice budget</h2>
+      <form
+        onSubmit={onSubmit}
+        aria-labelledby="goals-step-heading"
+        className={cn(cardClassName({ padding: 'lg' }), 'space-y-6')}
+      >
+        <h2 id="goals-step-heading" className="sr-only">Goals and practice budget</h2>
 
-          <fieldset>
-            <legend className="text-base font-bold text-navy">Target band</legend>
-            <p className="mt-1 mb-3 text-sm text-muted">The band you need for your registration.</p>
-            <div className="flex flex-wrap gap-2">
-              {TARGET_BANDS.map((band) => {
-                const selected = targetBand === band;
-                return (
-                  <button
-                    key={band}
-                    type="button"
-                    onClick={() => setTargetBand(band)}
-                    aria-pressed={selected}
-                    className={`min-w-12 rounded-lg border px-4 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
-                  >
-                    {band}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              <span className="flex items-center gap-1">
-                <Calendar className="h-4 w-4 text-warning-strong" aria-hidden="true" />
-                Exam date (optional)
-              </span>
-              <input
-                type="date"
-                value={examDate}
-                onChange={(e) => setExamDate(e.target.value)}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-describedby="exam-date-hint"
-              />
-              <span id="exam-date-hint" className="text-xs font-normal text-muted">We&apos;ll compress or relax the plan to fit.</span>
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              Target country
-              <select
-                value={targetCountry}
-                onChange={(e) => setTargetCountry(e.target.value)}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                {COUNTRIES.map(([code, label]) => (
-                  <option key={code} value={code}>{label}</option>
-                ))}
-              </select>
-            </label>
+        <fieldset>
+          <legend className="text-base font-bold text-navy">Target band</legend>
+          <p className="mt-1 mb-3 text-sm text-muted">The band you need for your registration.</p>
+          <div className="flex flex-wrap gap-2">
+            {TARGET_BANDS.map((band) => {
+              const selected = targetBand === band;
+              return (
+                <button
+                  key={band}
+                  type="button"
+                  onClick={() => setTargetBand(band)}
+                  aria-pressed={selected}
+                  className={`pressable min-h-11 min-w-12 rounded-control border px-4 py-2 tabular-nums text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+                >
+                  {band}
+                </button>
+              );
+            })}
           </div>
+        </fieldset>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4 text-warning-strong" aria-hidden="true" />
-                Days per week
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={7}
-                value={daysPerWeek}
-                onChange={(e) => setDaysPerWeek(Number(e.target.value))}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-describedby="days-hint"
-              />
-              <span id="days-hint" className="text-xs font-normal text-muted">3-5 days/week is realistic for working professionals.</span>
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
-              Minutes per day
-              <input
-                type="number"
-                min={15}
-                max={240}
-                step={15}
-                value={minutesPerDay}
-                onChange={(e) => setMinutesPerDay(Number(e.target.value))}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-describedby="minutes-hint"
-              />
-              <span id="minutes-hint" className="text-xs font-normal text-muted">Recommended: 45-60 minutes a session.</span>
-            </label>
-          </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-4 w-4 text-skill-writing" aria-hidden="true" />
+              Exam date (optional)
+            </span>
+            <input
+              type="date"
+              value={examDate}
+              onChange={(e) => setExamDate(e.target.value)}
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-describedby="exam-date-hint"
+            />
+            <span id="exam-date-hint" className="text-xs font-normal text-muted">We&apos;ll compress or relax the plan to fit.</span>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            Target country
+            <select
+              value={targetCountry}
+              onChange={(e) => setTargetCountry(e.target.value)}
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {COUNTRIES.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button asChild variant="outline" size="md">
-              <Link href="/writing/profile-setup/profession" aria-label="Back to profession step">
-                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
-              </Link>
-            </Button>
-            <Button type="submit" size="md">
-              Continue <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            <span className="flex items-center gap-1">
+              <Clock className="h-4 w-4 text-skill-writing" aria-hidden="true" />
+              Days per week
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={7}
+              value={daysPerWeek}
+              onChange={(e) => setDaysPerWeek(Number(e.target.value))}
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-describedby="days-hint"
+            />
+            <span id="days-hint" className="text-xs font-normal text-muted">3-5 days/week is realistic for working professionals.</span>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
+            Minutes per day
+            <input
+              type="number"
+              min={15}
+              max={240}
+              step={15}
+              value={minutesPerDay}
+              onChange={(e) => setMinutesPerDay(Number(e.target.value))}
+              className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-normal text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-describedby="minutes-hint"
+            />
+            <span id="minutes-hint" className="text-xs font-normal text-muted">Recommended: 45-60 minutes a session.</span>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button asChild variant="outline" size="md">
+            <Link href="/writing/profile-setup/profession" aria-label="Back to profession step">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back
+            </Link>
+          </Button>
+          <Button type="submit" size="md">
+            Continue <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+        </div>
+      </form>
     </>
   );
 }
