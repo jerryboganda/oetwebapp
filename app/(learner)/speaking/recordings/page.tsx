@@ -7,11 +7,16 @@
  * countdown, and exposes the existing GDPR delete endpoint.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { Mic } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import {
   deleteSpeakingRecording,
   fetchMySpeakingRecordings,
@@ -72,60 +77,66 @@ export default function SpeakingRecordingsPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-5xl space-y-6 py-8">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">My speaking recordings</h1>
-          <p className="text-muted">
-            Manage the audio captured during your role-plays. No audio recording is stored for live AI
-            patient conversations (only a text transcript is kept), so they are not listed here. You can delete a
-            recording at any time. Recordings are also automatically removed after the retention
-            window expires.
-          </p>
-        </header>
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Mic}
+        accent="speaking"
+        title="My speaking recordings"
+        description="Manage the audio captured during your role-plays. No audio recording is stored for live AI patient conversations (only a text transcript is kept), so they are not listed here. You can delete a recording at any time. Recordings are also automatically removed after the retention window expires."
+      />
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-        {!rows ? (
-          <Skeleton className="h-48 w-full rounded-xl" />
-        ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-muted">
-            You don&apos;t have any saved recordings. No audio recording is stored for live AI patient
-            conversations, so they don&apos;t appear here.
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {rows.map((r) => (
-              <Card key={r.recordingId} className="p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{r.scenarioTitle}</span>
-                      <Badge variant="default">{r.mode}</Badge>
-                      <Badge variant="default">{r.professionId}</Badge>
-                      {r.isArchived && <Badge variant="warning">archived</Badge>}
-                    </div>
-                    <div className="text-xs text-muted">
-                      Captured {formatDate(r.createdAt)} · Duration {formatDuration(r.durationSeconds)}
-                      {r.retentionExpiresAt
-                        ? ` · Auto-deletes ${formatDate(r.retentionExpiresAt)}`
-                        : ''}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleDelete(r.recordingId)}
-                      disabled={busyId === r.recordingId || r.isArchived}
-                    >
-                      {busyId === r.recordingId ? 'Deleting…' : 'Delete'}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+      {!rows ? (
+        // A failed first load offers a retry instead of a skeleton that never resolves.
+        error ? <ErrorState message={error} onRetry={reload} /> : <LearnerSkeleton variant="list" />
+      ) : (
+        <>
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={<Mic className="h-8 w-8" />}
+              title="You don't have any saved recordings."
+              description="No audio recording is stored for live AI patient conversations, so they don't appear here."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {rows.map((r, index) => (
+                <li key={r.recordingId}>
+                  <MotionItem delayIndex={Math.min(index, 5)}>
+                    <Card padding="md">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-navy">{r.scenarioTitle}</span>
+                            <Badge variant="muted">{r.mode}</Badge>
+                            <Badge variant="muted">
+                              {WRITING_PROFESSION_LABELS[r.professionId as keyof typeof WRITING_PROFESSION_LABELS] ?? r.professionId}
+                            </Badge>
+                            {r.isArchived && <Badge variant="warning">archived</Badge>}
+                          </div>
+                          <p className="text-xs tabular-nums text-muted">
+                            Captured {formatDate(r.createdAt)} · Duration {formatDuration(r.durationSeconds)}
+                            {r.retentionExpiresAt
+                              ? ` · Auto-deletes ${formatDate(r.retentionExpiresAt)}`
+                              : ''}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="shrink-0 self-start sm:self-auto"
+                          onClick={() => handleDelete(r.recordingId)}
+                          disabled={busyId === r.recordingId || r.isArchived}
+                        >
+                          {busyId === r.recordingId ? 'Deleting…' : 'Delete'}
+                        </Button>
+                      </div>
+                    </Card>
+                  </MotionItem>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </>
   );
 }

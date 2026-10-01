@@ -11,8 +11,11 @@
 import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, GraduationCap, FileText } from 'lucide-react';
+import { Loader2, GraduationCap, Mic } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { createSpeakingExam } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
 import {
@@ -62,53 +65,56 @@ export default function SpeakingExamLauncherPage() {
     }
   }, [router, starting, mockAttemptId, mockSectionId]);
 
+  // No reveal motion here: the production E2E clicks "Start AI exam" right after load.
   return (
-    <div className="mx-auto max-w-xl">
-      <h1 className="text-2xl font-semibold text-foreground">Speaking exam</h1>
-      <p className="mt-2 text-sm leading-relaxed text-muted">
-        A full OET-style Speaking exam: a short unscored introduction, then two role-play cards
-        (Card A and Card B). Each card gives you 3 minutes to prepare and 5 minutes to speak. The
-        second card appears automatically when the first finishes.
-      </p>
+    <>
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Mic}
+        accent="speaking"
+        title="Speaking exam"
+        description="A full OET-style Speaking exam: a short unscored introduction, then two role-play cards (Card A and Card B). Each card gives you 3 minutes to prepare and 5 minutes to speak. The second card appears automatically when the first finishes."
+      />
 
-      <div className="mt-5 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-navy">
-        <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning-strong" aria-hidden="true" />
-        <span>
-          Have a <strong>blank sheet of paper and a pen</strong> ready for rough notes during
-          preparation.
-        </span>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <GraduationCap className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="font-semibold text-foreground">AI examiner</h2>
-            <p className="text-sm text-muted">
-              The AI plays the patient and marks your result. Uses 4 AI credits per exam (2 per card).
-            </p>
+      {/* Two columns from lg, so the full-width start button stays a card's width, not the workspace's. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+        <Card padding="lg">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-skill-speaking/10 text-skill-speaking">
+              <GraduationCap className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-bold text-navy">AI examiner</h2>
+              <p className="text-sm text-muted">
+                The AI plays the patient and marks your result. Uses 4 AI credits per exam (2 per card).
+              </p>
+            </div>
           </div>
-        </div>
-        {error ? (
-          <p className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger-strong" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <Button className="mt-4 w-full" onClick={startAiExam} disabled={starting}>
-          {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Start AI exam
-        </Button>
-      </div>
+          {error ? (
+            <InlineAlert variant="error" className="mt-3">
+              {error}
+            </InlineAlert>
+          ) : null}
+          <Button className="mt-4 w-full" onClick={startAiExam} disabled={starting}>
+            {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Start AI exam
+          </Button>
+        </Card>
 
-      <p className="mt-4 text-center text-sm text-muted">
-        Prefer a human examiner?{' '}
-        <Link href="/speaking" className="font-medium text-primary hover:underline">
-          Book a tutor session
-        </Link>
-        .
-      </p>
+        <div className="space-y-4">
+          <InlineAlert variant="warning" live="polite">
+            Have a <strong>blank sheet of paper and a pen</strong> ready for rough notes during
+            preparation.
+          </InlineAlert>
+          <p className="text-sm text-muted">
+            Prefer a human examiner?{' '}
+            <Link href="/speaking" className="font-medium text-primary hover:underline">
+              Book a tutor session
+            </Link>
+            .
+          </p>
+        </div>
+      </div>
 
       <InsufficientCreditsModal
         open={creditMessage !== null}
@@ -117,6 +123,6 @@ export default function SpeakingExamLauncherPage() {
         ctaHref={creditHref}
         ctaLabel="Buy AI Credits"
       />
-    </div>
+    </>
   );
 }

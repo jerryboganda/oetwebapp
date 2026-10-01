@@ -6,10 +6,17 @@
 // "speaking_drill" — see LearnerService.SpeakingDrills.cs).
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { Dumbbell } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Select } from '@/components/ui/form-controls';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { CRITERION_LABEL, type SpeakingCriterionCode } from '@/lib/api/speaking-assessments';
 import {
   fetchSpeakingDrills,
   type SpeakingDrillRow,
@@ -30,6 +37,11 @@ const CRITERION_FILTERS: Array<{ value: string; label: string }> = [
 
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+/** Drills carry criterion codes (`patientPerspective`); learners read the criterion's name. */
+function criterionLabel(code: string): string {
+  return CRITERION_LABEL[code as SpeakingCriterionCode] ?? code.replace(/_/g, ' ');
 }
 
 export default function SpeakingDrillsPage() {
@@ -67,119 +79,102 @@ export default function SpeakingDrillsPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-black text-navy">Speaking drills</h1>
-          <p className="text-sm text-muted">
-            Short, focused practice tasks targeting one criterion at a time. Drills
-            are not graded. They exist to build the muscle memory that powers your
-            full role-plays.
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Dumbbell}
+        accent="speaking"
+        title="Speaking drills"
+        description="Short, focused practice tasks targeting one criterion at a time. Drills are not graded. They exist to build the muscle memory that powers your full role-plays."
+      />
+
+      <Card padding="lg" className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-2xl">
+          <Select
+            label="Drill kind"
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value)}
+            options={[
+              { value: '', label: 'All kinds' },
+              ...(data?.kinds ?? []).map((k) => ({ value: k, label: kindLabel(k) })),
+            ]}
+          />
+          <Select
+            label="Criterion focus"
+            value={criterionFilter}
+            onChange={(e) => setCriterionFilter(e.target.value)}
+            options={CRITERION_FILTERS}
+          />
+        </div>
+
+        {data ? (
+          <p className="text-xs tabular-nums text-muted">
+            {data.totalCount} drill{data.totalCount === 1 ? '' : 's'} ·{' '}
+            <span className="font-semibold text-primary">{completionPercent}%</span> completed
           </p>
-        </header>
-
-        <Card className="space-y-4 p-4 sm:p-6">
-          <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 eyebrow text-muted">
-              Drill kind
-              <select
-                value={kindFilter}
-                onChange={(e) => setKindFilter(e.target.value)}
-                className="min-w-[10rem] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy"
-              >
-                <option value="">All kinds</option>
-                {(data?.kinds ?? []).map((k) => (
-                  <option key={k} value={k}>
-                    {kindLabel(k)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 eyebrow text-muted">
-              Criterion focus
-              <select
-                value={criterionFilter}
-                onChange={(e) => setCriterionFilter(e.target.value)}
-                className="min-w-[14rem] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy"
-              >
-                {CRITERION_FILTERS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {data ? (
-            <p className="text-xs text-muted">
-              {data.totalCount} drill{data.totalCount === 1 ? '' : 's'} ·{' '}
-              <span className="font-semibold text-primary">{completionPercent}%</span> completed
-            </p>
-          ) : null}
-        </Card>
-
-        {error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
         ) : null}
+      </Card>
 
-        {loading ? (
-          <Card className="p-6 text-center text-sm text-muted">Loading drills…</Card>
-        ) : data && data.items.length === 0 ? (
-          <Card className="p-6 text-center text-sm text-muted">
-            No drills match these filters. Try clearing them.
-          </Card>
-        ) : (
-          <ul className="grid gap-4 md:grid-cols-2">
-            {(data?.items ?? []).map((drill) => (
-              <DrillCard key={drill.id} drill={drill} />
-            ))}
-          </ul>
-        )}
-      </div>
+      {error ? (
+        <InlineAlert variant="error">{error}</InlineAlert>
+      ) : loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : data && data.items.length === 0 ? (
+        <EmptyState
+          icon={<Dumbbell className="h-8 w-8" />}
+          title="No drills match these filters."
+          description="Try clearing them."
+        />
+      ) : (
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {(data?.items ?? []).map((drill, index) => (
+            <li key={drill.id} className="min-w-0">
+              <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                <DrillCard drill={drill} />
+              </MotionItem>
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }
 
 function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
   return (
-    <li>
-      <Card className="flex h-full flex-col gap-3 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="eyebrow text-primary">
-              {kindLabel(drill.kind)}
-            </p>
-            <h3 className="text-base font-black leading-tight text-navy">{drill.title}</h3>
-          </div>
-        </div>
+    <Card padding="md" className="flex h-full flex-col gap-3">
+      <div className="space-y-1">
+        <p className="eyebrow text-skill-speaking">
+          {kindLabel(drill.kind)}
+        </p>
+        <h3 className="text-base font-bold leading-tight text-navy">{drill.title}</h3>
+      </div>
 
-        {drill.caseNotes ? (
-          <p className="text-sm text-muted">{drill.caseNotes}</p>
-        ) : null}
+      {drill.caseNotes ? (
+        <p className="text-sm text-muted">{drill.caseNotes}</p>
+      ) : null}
 
-        <div className="flex flex-wrap gap-1">
-          {drill.criteriaFocus.map((c) => (
-            <Badge key={c} variant="info">
-              {c.replace(/_/g, ' ')}
-            </Badge>
-          ))}
-        </div>
+      <div className="flex flex-wrap gap-1.5">
+        {drill.criteriaFocus.map((c) => (
+          <Badge key={c} variant="muted">
+            {criterionLabel(c)}
+          </Badge>
+        ))}
+      </div>
 
-        <div className="mt-auto flex items-center justify-between gap-3">
-          <span className="text-xs text-muted">
-            ≈ {drill.estimatedDurationMinutes} min
-          </span>
-          {drill.completed ? (
-            <Badge variant="success">Completed</Badge>
-          ) : (
-            <Button type="button" variant="primary" asChild>
-              <Link href={`/speaking/drills/${encodeURIComponent(drill.drillId || drill.id)}`}>
-                Start drill
-              </Link>
-            </Button>
-          )}
-        </div>
-      </Card>
-    </li>
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs tabular-nums text-muted">
+          ≈ {drill.estimatedDurationMinutes} min
+        </span>
+        {drill.completed ? (
+          <Badge variant="success">Completed</Badge>
+        ) : (
+          <Button type="button" variant="primary" asChild>
+            <Link href={`/speaking/drills/${encodeURIComponent(drill.drillId || drill.id)}`}>
+              Start drill
+            </Link>
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
