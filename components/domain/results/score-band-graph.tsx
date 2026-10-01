@@ -47,30 +47,34 @@ export function ScoreBandGraph({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="eyebrow text-primary-dark">Practice score band</p>
-          <p className="mt-1 text-sm font-semibold text-navy dark:text-white">
+          <p className="mt-1 text-sm font-semibold tabular-nums text-navy">
             {hasConversion ? `${scaledScore}/500${grade ? ` · Grade ${grade}` : ''}` : `Scaled score unavailable · ${rawScore}/${maxRawScore} raw`}
           </p>
         </div>
-        <p className="text-right text-xs font-semibold text-muted">
+        <p className="text-end text-xs font-semibold text-muted">
           {hasConversion ? `Table ${tableVersion}` : 'Owner-approved table required'}
         </p>
       </div>
 
       <div className="mt-5" role="img" aria-label={hasConversion ? `Practice scaled score ${scaledScore} out of 500` : `Raw practice score ${rawScore} out of ${maxRawScore}; scaled score unavailable`}>
-        <div className="relative h-4 rounded-full bg-[linear-gradient(90deg,#4f46e5_0%,#06b6d4_62%,#f59e0b_70%,#f97316_100%)] shadow-inner">
+        {/* Runs from the inline start like the 0 … max labels below, so it mirrors in RTL:
+            the band flips with a transform, the markers are placed from the inline start. */}
+        <div className="relative h-4">
+          <div className="absolute inset-0 rounded-full bg-[linear-gradient(90deg,#4f46e5_0%,#06b6d4_62%,#f59e0b_70%,#f97316_100%)] shadow-inner rtl:-scale-x-100" aria-hidden />
           <span
-            className="absolute -top-1.5 h-7 w-1 rounded-full bg-navy shadow-md dark:bg-white"
-            style={{ left: `calc(${position} - 2px)` }}
+            className="absolute -top-1.5 h-7 w-1 -translate-x-1/2 rounded-full bg-navy shadow-sm rtl:translate-x-1/2"
+            style={{ insetInlineStart: position }}
             aria-hidden
           />
+          {/* bg-navy flips light in dark mode, so the text takes the surface colour to stay legible. */}
           <span
-            className="absolute -top-7 -translate-x-1/2 rounded-md bg-navy px-2 py-1 text-3xs font-black text-white dark:bg-white dark:text-navy"
-            style={{ left: position }}
+            className="absolute -top-7 -translate-x-1/2 rounded-md bg-navy px-2 py-1 text-3xs font-bold tabular-nums text-surface rtl:translate-x-1/2"
+            style={{ insetInlineStart: position }}
           >
             {hasConversion ? scaledScore : `${rawScore}/${maxRawScore}`}
           </span>
         </div>
-        <div className="mt-2 flex justify-between tile-label text-muted">
+        <div className="mt-2 flex justify-between tile-label tabular-nums text-muted">
           <span>0</span>
           <span>{hasConversion ? '350 reference' : `Raw scale · ${maxRawScore}`}</span>
           <span>{hasConversion ? '500' : maxRawScore}</span>

@@ -87,7 +87,7 @@ export function ReportAnswerControl({
           disabled={reported}
           aria-label={reported ? 'Reported' : 'Report this answer'}
         >
-          <Flag className="mr-2 h-4 w-4" aria-hidden />
+          <Flag className="h-4 w-4" aria-hidden />
           {reported ? 'Reported' : 'Report this answer'}
         </Button>
         <p className="text-xs text-muted">
@@ -114,7 +114,7 @@ export function ReportAnswerControl({
                 <Button
                   key={option.value}
                   type="button"
-                  variant={reason === option.value ? 'primary' : 'secondary'}
+                  variant={reason === option.value ? 'primary' : 'outline'}
                   aria-pressed={reason === option.value}
                   onClick={() => {
                     setReason(option.value);
