@@ -16,7 +16,12 @@ import {
 import { toast } from 'sonner';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatCard } from '@/components/ui/stat-card';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import {
   getDictationStats,
@@ -207,52 +212,52 @@ export default function DictationDrillPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Phase 4 · Listening pathway"
-          icon={Headphones}
-          title="Dictation Drills"
-          description="Train your ear and your spelling at the same time. Dictation uses the same strict marking contract as Listening: only the canonical answer or an explicitly authorised variant receives credit."
+      <LearnerPageHero
+        eyebrow="Phase 4 · Listening pathway"
+        icon={Headphones}
+        accent="purple"
+        title="Dictation Drills"
+        description="Train your ear and your spelling at the same time. Dictation uses the same strict marking contract as Listening: only the canonical answer or an explicitly authorised variant receives credit."
+      />
+
+      <StatsStrip stats={stats} loading={statsLoading} />
+
+      {phase === 'idle' && (
+        <IdlePanel onStart={handleStart} hasHistory={(stats?.totalAttempted ?? 0) > 0} />
+      )}
+
+      {phase === 'starting' && <StartingPanel />}
+
+      {/* The drill itself (audio, answer box, review) is the exercise: left exactly as it was. */}
+      {(phase === 'attempting' || phase === 'reviewing') && currentDrill && (
+        <DrillPanel
+          drill={currentDrill}
+          index={currentIndex}
+          total={drills.length}
+          phase={phase}
+          answer={answer}
+          onAnswerChange={setAnswer}
+          onSubmit={handleSubmit}
+          onNext={handleNext}
+          audioRef={audioRef}
+          inputRef={inputRef}
+          audioPlaying={audioPlaying}
+          onAudioPlay={playAudio}
+          onAudioStateChange={setAudioPlaying}
+          secondsOnDrill={secondsOnDrill}
+          submitting={submitting}
+          result={currentResult}
         />
+      )}
 
-        <StatsStrip stats={stats} loading={statsLoading} />
-
-        {phase === 'idle' && (
-          <IdlePanel onStart={handleStart} hasHistory={(stats?.totalAttempted ?? 0) > 0} />
-        )}
-
-        {phase === 'starting' && <StartingPanel />}
-
-        {(phase === 'attempting' || phase === 'reviewing') && currentDrill && (
-          <DrillPanel
-            drill={currentDrill}
-            index={currentIndex}
-            total={drills.length}
-            phase={phase}
-            answer={answer}
-            onAnswerChange={setAnswer}
-            onSubmit={handleSubmit}
-            onNext={handleNext}
-            audioRef={audioRef}
-            inputRef={inputRef}
-            audioPlaying={audioPlaying}
-            onAudioPlay={playAudio}
-            onAudioStateChange={setAudioPlaying}
-            secondsOnDrill={secondsOnDrill}
-            submitting={submitting}
-            result={currentResult}
-          />
-        )}
-
-        {phase === 'complete' && (
-          <CompletePanel
-            correct={totalAnsweredCorrectly}
-            total={drills.length}
-            onAgain={handleStart}
-            onRestart={handleRestart}
-          />
-        )}
-      </div>
+      {phase === 'complete' && (
+        <CompletePanel
+          correct={totalAnsweredCorrectly}
+          total={drills.length}
+          onAgain={handleStart}
+          onRestart={handleRestart}
+        />
+      )}
     </>
   );
 }
@@ -261,37 +266,27 @@ export default function DictationDrillPage() {
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** DESIGN.md §7: the stat strip sizes to its container. */
+const STAT_GRID = 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-3';
+
 function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading: boolean }) {
+  // Counts, not statuses: one neutral tile style with an icon each (the old
+  // per-tile status and violet/blue tints only decorated).
+  const count = (value: number | undefined) => (value == null ? '-' : <CountUp value={value} />);
   const cards = [
-    { label: 'Mastered', value: stats?.mastered ?? '-', icon: Trophy, accent: 'emerald' },
-    { label: 'Struggling', value: stats?.struggling ?? '-', icon: AlertCircle, accent: 'amber' },
+    { label: 'Mastered', value: count(stats?.mastered), icon: Trophy },
+    { label: 'Struggling', value: count(stats?.struggling), icon: AlertCircle },
     {
       label: 'Accuracy',
-      value: stats ? `${Math.round(stats.accuracyPercentage)}%` : '-',
+      value: stats ? <CountUp value={Math.round(stats.accuracyPercentage)} suffix="%" /> : '-',
       icon: CheckCircle2,
-      accent: 'violet',
     },
-    {
-      label: 'Total attempts',
-      value: stats?.totalAttempted ?? '-',
-      icon: Sparkles,
-      accent: 'blue',
-    },
-  ] as const;
-
-  const accentMap: Record<string, string> = {
-    emerald:
-      'bg-success/10 border-success/20 text-success-strong',
-    amber:
-      'bg-warning/10 border-warning/20 text-warning-strong',
-    violet:
-      'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
-    blue: 'bg-info/10 border-info/20 text-info',
-  };
+    { label: 'Total attempts', value: count(stats?.totalAttempted), icon: Sparkles },
+  ];
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className={STAT_GRID}>
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
@@ -300,18 +295,11 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {cards.map(({ label, value, icon: Icon, accent }) => (
-        <div
-          key={label}
-          className={`flex flex-col gap-2 rounded-xl border px-5 py-4 ${accentMap[accent]}`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="eyebrow opacity-70">{label}</span>
-            <Icon className="h-4 w-4 opacity-60" aria-hidden />
-          </div>
-          <p className="text-2xl font-bold">{value}</p>
-        </div>
+    <div className={STAT_GRID}>
+      {cards.map(({ label, value, icon: Icon }, index) => (
+        <MotionItem key={label} delayIndex={index}>
+          <StatCard label={label} value={value} icon={<Icon />} />
+        </MotionItem>
       ))}
     </div>
   );
@@ -319,34 +307,36 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
 
 function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: boolean }) {
   return (
-    <section className="rounded-2xl border border-border bg-surface px-8 py-10 text-center">
-      <Headphones className="mx-auto h-12 w-12 text-primary-500" aria-hidden />
-      <h2 className="mt-4 text-xl font-bold text-navy">
-        {hasHistory ? 'Ready for another set?' : 'Start your first dictation set'}
-      </h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-        We&apos;ll play 8 short healthcare clips. Type what you hear: single terms,
-        short phrases, full sentences. Mix of due reviews and fresh drills.
-      </p>
-      <Button onClick={onStart} size="lg" className="mt-6">
-        <Play className="h-4 w-4" aria-hidden />
-        Start a dictation set
-      </Button>
-      <p className="mt-3 text-xs text-muted">
-        Takes about 8&ndash;10 minutes.
-      </p>
-    </section>
+    <MotionSection>
+      <Card padding="lg" className="py-10 text-center">
+        <Headphones className="mx-auto h-12 w-12 text-skill-listening" aria-hidden />
+        <h2 className="mt-4 text-xl font-bold text-navy">
+          {hasHistory ? 'Ready for another set?' : 'Start your first dictation set'}
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          We&apos;ll play 8 short healthcare clips. Type what you hear: single terms,
+          short phrases, full sentences. Mix of due reviews and fresh drills.
+        </p>
+        <Button onClick={onStart} size="lg" className="mt-6">
+          <Play className="h-4 w-4" aria-hidden />
+          Start a dictation set
+        </Button>
+        <p className="mt-3 text-xs text-muted">
+          Takes about 8&ndash;10 minutes.
+        </p>
+      </Card>
+    </MotionSection>
   );
 }
 
 function StartingPanel() {
   return (
-    <section className="flex h-48 items-center justify-center rounded-2xl border border-border bg-surface">
+    <Card className="flex h-48 items-center justify-center" role="status">
       <div className="flex items-center gap-3 text-sm text-muted">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
         Loading your dictation set…
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -561,7 +551,7 @@ function SpellingDiffLine({ canonical, typed }: { canonical: string; typed: stri
           className={
             cell.kind === 'equal'
               ? 'text-navy'
-              : 'text-danger-strong underline decoration-rose-400'
+              : 'text-danger-strong underline decoration-danger'
           }
         >
           {cell.char === ' ' ? ' ' : cell.char}
@@ -603,6 +593,7 @@ function CompletePanel({
   onRestart: () => void;
 }) {
   const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+  // The tint keeps its meaning: how well this set went.
   const tone =
     score >= 80
       ? 'bg-success/10 border-success/20'
@@ -611,34 +602,34 @@ function CompletePanel({
       : 'bg-danger/10 border-danger/20';
 
   return (
-    <section
-      className={`space-y-6 rounded-2xl border px-8 py-10 text-center ${tone}`}
-    >
-      <Trophy className="mx-auto h-12 w-12 text-primary-500" aria-hidden />
-      <div>
-        <h2 className="text-2xl font-bold text-navy">
-          Set complete!
-        </h2>
-        <p className="mt-2 text-3xl font-bold text-navy">
-          {correct} correct / {total}
-        </p>
-        <p className="mt-1 text-sm text-muted">
-          {score}% accuracy on this set
-        </p>
-      </div>
-      <div className="flex flex-wrap justify-center gap-3">
-        <Button onClick={onAgain}>
-          <RefreshCw className="h-4 w-4" aria-hidden />
-          Continue practicing
-        </Button>
-        <Button variant="outline" onClick={onRestart} className="bg-surface">
-          Back to start
-        </Button>
-        <Button asChild variant="outline" className="bg-surface">
-          <Link href="/listening">Listening hub</Link>
-        </Button>
-      </div>
-    </section>
+    <MotionSection>
+      <Card padding="lg" className={cn('space-y-6 py-10 text-center', tone)}>
+        <Trophy className="mx-auto h-12 w-12 text-primary" aria-hidden />
+        <div>
+          <h2 className="text-2xl font-bold text-navy">
+            Set complete!
+          </h2>
+          <p className="mt-2 text-3xl font-bold text-navy">
+            <CountUp value={correct} suffix={` correct / ${total}`} />
+          </p>
+          <p className="mt-1 text-sm tabular-nums text-muted">
+            {score}% accuracy on this set
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button onClick={onAgain}>
+            <RefreshCw className="h-4 w-4" aria-hidden />
+            Continue practicing
+          </Button>
+          <Button variant="outline" onClick={onRestart} className="bg-surface">
+            Back to start
+          </Button>
+          <Button asChild variant="outline" className="bg-surface">
+            <Link href="/listening">Listening hub</Link>
+          </Button>
+        </div>
+      </Card>
+    </MotionSection>
   );
 }
 
