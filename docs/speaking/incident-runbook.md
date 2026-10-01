@@ -70,8 +70,9 @@ only retry.
 3. Then `POST /v1/admin/ai/live-voice/{provider}/reset` closes the circuit at once (audited); otherwise the next real success
    after the open period closes it, and a restart clears it. The circuit is per API process.
 4. `LIVEVOICE__PRIMARYPROVIDER` only changes which provider is tried first (an owner-approved env edit plus an API slot
-   recreate, see live-voice.md); it is not needed to restore service while the other provider works. `?voiceProvider=` is a
-   QA pin (no failover, circuit bypassed), not a mitigation.
+   recreate, see live-voice.md); it is not needed to restore service while the other provider works. `?voiceProvider=` is
+   honoured only for flagged QA accounts (`speaking_live_voice_pin:<learner user id>`, see
+   [QA provider pin](live-voice.md#qa-provider-pin)); a normal learner cannot use it, and it is not a mitigation.
 
 ---
 

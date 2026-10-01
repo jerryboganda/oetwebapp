@@ -1,5 +1,38 @@
 # Speaking live voice agent (AI patient)
 
+> **Status 1 Oct 2026 (pre-launch hardening).** A second change set after the 30 Sep close-out, written from the 1 Oct audit of
+> the production runs and reconciled with the code of branch `feat/speaking-final-verification-2026-10-01`. What changed, one
+> line each (the linked sections hold the detail):
+>
+> - **QA provider pin:** `?voiceProvider=` only asks. The server honours it for an account with an enabled
+>   `speaking_live_voice_pin:<learner user id>` feature flag and ignores it for everyone else, and the browser trusts only the
+>   server's `pinned` ([QA provider pin](#qa-provider-pin)).
+> - **One transcript clock per role-play:** saved segment times are milliseconds since the first provider session went live, so
+>   a recovery no longer merges the conversation after it into earlier segments ([Transcript time base](#transcript-time-base)).
+> - **Refresh-safe transcript:** a copy of the conversation in the tab's `sessionStorage` is restored when the same card
+>   reloads, and turn ids no longer repeat across page instances ([Refresh behaviour](#refresh-behaviour)).
+> - **Transcript details:** a silence of more than 10 s starts a new segment, a lone-space delta no longer fuses two words and a
+>   Gemini role-play waits 2 s before it stops ([Pause rule](#pause-rule), [Whitespace deltas](#whitespace-deltas),
+>   [Stopping a Gemini role-play](#stopping-a-gemini-role-play)).
+> - **Honest results wording:** `GET /v1/speaking/sessions/{id}/results` returns `inputKind`; the results pages, two backend
+>   failure texts and the grader's input stop implying an audio recording for a live conversation
+>   ([Results wording by input kind](#results-wording-by-input-kind)), and the exam results page shows the band by label, an
+>   advisory note, per-card links and an honest not-completed state ([Exam results page](#exam-results-page)).
+> - **Microphone wording** names the live control and never a recording ([Microphone error wording](#microphone-error-wording)).
+> - **Credits:** the Card A hold is taken first in `finish-intro` (a refused hold leaves the exam in Intro), `ai_exam` can no
+>   longer be created through `POST /v1/speaking/sessions`, and the reservation insert survives a cancelled request
+>   ([state-machines.md](state-machines.md#credits-ai-exam-and-practice-card)).
+> - **History:** a Speaking mock is one "Full Speaking Mock" row with a result label, and session-bound Speaking attempts leave
+>   Past Evidence ([api-surface.md](api-surface.md#history-notes)).
+> - **Production E2E:** faults combine with `fail_primary`; new `fault_reload_at_s`, `verify_credits` and `grade_retry` inputs;
+>   saved-transcript, credit, History, pin and wording checks; a run matrix ([Production E2E](#production-e2e)).
+>
+> **Not verified in production: every item above.** None of it has run against the deployed build, so each is pending until the
+> production E2E has been run against it (a pinned run also needs the feature flag to exist first). The 1 Oct production runs
+> did verify the late-fragment rule on clean OpenAI runs ([Behaviour and limits](#behaviour-and-limits)) and that a dropped
+> OpenAI link is restored with a coherent patient ([Mid-session recovery](#mid-session-recovery)); they also exposed the
+> recovery transcript defect that the time base change addresses.
+
 Record of the September 2026 rollout and testing. Written 2026-09-30 from the code, GitHub Actions logs and the
 run artifacts of the 25-26 Sep production E2E runs; extended the same day with the close-out of the 30 Sep incident
 (OpenAI session creation answered 429, so learners saw "could not start this conversation" and there was no
@@ -9,15 +42,16 @@ pending until the production E2E below has been run against it.
 
 Reconciled on 2026-09-30 with the final code of the close-out branch (`feat/speaking-resilience-2026-09-30`), which is the
 source of truth where this file and the code differ: `LiveVoiceOptions`, `LiveVoiceService`,
-`LiveVoiceProviderProbeState`, `SpeakingExamAutoAdvanceWorker` and `SpeakingSessionService`. Nothing in the close-out has
-run in production yet.
+`LiveVoiceProviderProbeState`, `SpeakingExamAutoAdvanceWorker` and `SpeakingSessionService`. Parts of the close-out have since
+run in production (30 Sep - 1 Oct; see the measurements below and [Known open items](#known-open-items) for what is still
+unverified).
 
 ## Providers
 
 | | OpenAI GPT-Live (production default) | Gemini Live |
 | --- | --- | --- |
 | Model | `gpt-live-1`, WebRTC via `POST /v1/live/sessions` | `models/gemini-3.8-live`, browser WebSocket with an ephemeral token |
-| First choice | `LIVEVOICE__PRIMARYPROVIDER=openai` (code default, `appsettings.json`, compose): the first candidate whenever it is configured, verified and its circuit is not open; Gemini is then the failover | `LIVEVOICE__PRIMARYPROVIDER=gemini`; or `?voiceProvider=gemini` on the practice/exam page, which **pins** the run to that provider (no failover, circuit bypassed). Any learner can pin if the provider is configured and verified; there is no role or flag gate |
+| First choice | `LIVEVOICE__PRIMARYPROVIDER=openai` (code default, `appsettings.json`, compose): the first candidate whenever it is configured, verified and its circuit is not open; Gemini is then the failover | `LIVEVOICE__PRIMARYPROVIDER=gemini`; or, for a flagged QA learner only, `?voiceProvider=gemini` on the practice/exam page, which **pins** the run to that provider (no failover, circuit bypassed). The page value only asks: the server honours it only for an account holding an enabled `speaking_live_voice_pin:<learner user id>` feature flag ([QA provider pin](#qa-provider-pin)); for everyone else it is ignored |
 | Billing (published) | $0.05 per minute of session, billed per second | Tokens: $0.75/M text in, $3.00/M audio in, $4.50/M text out, $12.00/M audio out |
 | Measured usage | provider `session.closed` -> `usage.seconds`: 286 s per 5-minute role play, 298 s per exam card | `usageMetadata` per turn |
 
@@ -69,14 +103,25 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   transcript of the 26 Sep two-card mock still read "...How can I help you" / Patient "Uh." / Candidate "today".
   `isLateFragment` additionally rejoins a mid-sentence continuation (lowercase or punctuation start) that follows a
   short (<= 3 words) backchannel of the other speaker. Whole sentences keep the provider's order.
-  **Pending: not yet verified in production** (run the E2E and read `noSplitSentences`).
+  **Verified in production on 1 Oct 2026** for GPT-Live runs without a recovery (run labels such as E1 or F1 name the 1 Oct
+  production run artifacts): the E1 exam (both cards) and the O2, O4, O5b and O6 runs showed 0 split sentences
+  (`noSplitSentences`) and a clean order. Replaying their saved provider events shows the rule joining a late tail 6 times
+  (once on E1 Card A, three times on O4, twice on O6), every time a plausible continuation. `noSplitSentences` only matches a
+  lowercase continuation sandwiched by a backchannel of at most 3 words, so it could not see the split a recovery caused before
+  the 1 Oct time base change ([Transcript time base](#transcript-time-base)); the [transcript checks](#transcript-checks) of the
+  production E2E can. How the saved times, pauses, whitespace and a reload are handled: [Saved transcript](#saved-transcript).
 - Prompt rules: candidate-first; TEACH-BACK (never fill the gap from the card; RULE_18 is the separate honest-response
   rule); and, added with this change and **pending verification**, never attribute unsaid treatments, tests or
   referrals to the doctor (2 of 5 post-#257 teach-back replies did).
-- No audio is stored ("Recording unavailable" on the transcript page); grading sees the transcript only.
+- No audio is stored. The learner results pages say what was handed in: for a live conversation "We saved the transcript of
+  your live conversation{ on DATE} and queued it for marking." (banner, practice sessions only), "Your live conversation
+  transcript is being marked." while grading and, on the Transcript tab, the audio player strip is hidden and an info note says
+  "No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked." Grading sees
+  the transcript only ([Results wording by input kind](#results-wording-by-input-kind)).
 - A connection that drops mid-conversation, or a patient that stays silent, is restored automatically up to twice per card
-  ([Mid-session recovery](#mid-session-recovery)); after that (or for a pinned provider) the error is shown as before. A
-  provider that cannot *start* is replaced by the other one automatically ([Provider failover](#provider-failover)). The recorder fallback is used
+  ([Mid-session recovery](#mid-session-recovery)); after that (or for a run the server pinned, QA accounts only) the error is
+  shown as before. A provider that cannot *start* is replaced by the other one automatically
+  ([Provider failover](#provider-failover)). The recorder fallback is used
   only while **no** provider is usable (`liveVoiceAvailable` = at least one candidate; it was primary-only before). The
   flag is computed whenever a session or exam DTO is read, and each page fixes the mode of a card when the card starts
   (see the client fail-open rules under [Hard duration cap](#hard-duration-cap)).
@@ -100,8 +145,11 @@ and the Gemini leg needs the browser to open the WebSocket: the server cannot fi
 
 - `GET /v1/speaking/realtime/sessions/{id}/preflight[?provider=]` returns its usual fields plus `candidates` (the
   providers to try, in order: the configured primary first, then the other, each only if it is configured,
-  catalog-verified and its circuit is not open; `provider` is always `candidates[0]`) and `pinned` (true when the caller
-  forced a provider: one candidate, circuit bypassed). No `candidates` (old server) means one attempt with `provider`.
+  catalog-verified and its circuit is not open; `provider` is always `candidates[0]`) and `pinned` (true only when the
+  server honoured a QA pin: a provider was requested **and** the signed-in learner holds the enabled flag, see
+  [QA provider pin](#qa-provider-pin). There is then one candidate, no failover and the circuit is bypassed. A request from
+  any other account is ignored: the normal automatic order (primary first, circuit respected) and `pinned: false`, with
+  nothing in the response saying it was ignored). No `candidates` (old server) means one attempt with `provider`.
   `disclosure` names every candidate ([Consent and disclosure](#consent-and-disclosure)).
 - `POST .../openai/offer` and `POST .../gemini/token` keep their shapes and add `hardStopAt` (ISO time).
 - Whatever a provider answers (401, 429, 400, 5xx, a timeout, an unreadable 200) the browser only sees a generic
@@ -115,7 +163,9 @@ and the Gemini leg needs the browser to open the WebSocket: the server cannot fi
 **Client loop** (`useSpeakingRealtimeVoice`):
 
 1. Preflight gives the plan (`planProviders`): the server's candidates, de-duplicated, or `[provider]` when there are none,
-   or `[provider]` when the run is pinned or the page forced `?voiceProvider=`.
+   or `[provider]` when the server pinned the run (`preflight.pinned`, QA accounts only). The browser trusts only the server's
+   `pinned`, never the page's `?voiceProvider=`, which only asks for a pin and never shrinks the plan
+   ([QA provider pin](#qa-provider-pin)).
 2. `start()` is single-flight and asks for the microphone **once**; the stream and level meter are reused by every attempt.
    `stop()` and unmount release a microphone that was opened while `AudioContext.resume()` is still pending (it can stay
    pending on WebKit and WebViews), so the microphone can never be left open by a cancelled start.
@@ -138,9 +188,9 @@ and the Gemini leg needs the browser to open the WebSocket: the server cannot fi
 | Leg fails before live: peer connection failed, disconnected or closed, provider error event, socket error or close before setup, 15 s deadline, no WebRTC | Yes |
 | Any other 4xx on the create call: consent missing, session not active, content not ready, 400 SDP, 409 `live_voice_time_limit_reached` or `live_voice_session_limit_reached` | No: terminal, the server's own text is shown |
 | 429 `rate_limited` (our per-user limiter, not the provider) | No: one retry on the same provider after about 1.5 s |
-| Microphone refused or missing | No: a device problem (shown with the microphone message, which on the live and recorder panels ends "press Start speaking again", and, in the apps, an "Open app settings" button) |
-| After the connection was live, or once any transcript text exists | Not at start: a dead link is restored by [Mid-session recovery](#mid-session-recovery) (same provider first, the other one on the second restore); the transcript stays one continuous list |
-| Pinned run (`?voiceProvider=` or `pinned: true`) | Never |
+| Microphone refused or missing | No: a device problem (shown with the microphone message ([wording](#microphone-error-wording)), which on the live and recorder panels ends "press Start speaking again", and, in the apps, an "Open app settings" button) |
+| After the connection was live, or once any transcript text exists | Not at start: a dead link is restored by [Mid-session recovery](#mid-session-recovery) (same provider first, the other one on the second restore); the saved transcript stays one list on one clock ([Transcript time base](#transcript-time-base)) |
+| Run pinned by the server (`pinned: true`, QA accounts only; the page's `?voiceProvider=` only asks) | Never |
 
 The create calls are never retried by the API client (`maxRetries: 0`, 22 s timeout): a repeat POST after a
 post-creation failure could open a second billed session, and the failover chain is the retry.
@@ -162,8 +212,9 @@ on the mic indicator (for the harness and support screenshots), and the saved tr
 `realtime-<provider>`.
 
 **Exam.** Each card has its own hook instance, preflight, provider session and transcript, so failover is per card and
-Card B asks the server again (it uses OpenAI again if OpenAI recovered). A forced `?voiceProvider=` pins both cards.
-Card A and Card B can therefore end up on different providers; grading reads transcripts only.
+Card B asks the server again (it uses OpenAI again if OpenAI recovered). A requested `?voiceProvider=` pins both cards only
+for a flagged QA account (each card's preflight answers `pinned`); for anyone else it is ignored. Card A and Card B can
+therefore end up on different providers; grading reads transcripts only.
 
 **Limits of the design.** A provider session that was created but never connected cannot be closed from the browser. For
 OpenAI the server hangs it up with the rest of the role-play's sessions at the hard stop
@@ -178,6 +229,16 @@ lines, oldest first, capped at 4000 characters (the newest turns that fit, with 
 ones were dropped). The browser flushes the turn in progress before it asks, the first mint of a role-play is unchanged, and
 the history goes to the provider only (never logged, audited or returned); each recovery mint still counts towards
 `MaxProviderSessionsPerRolePlay` ([Hard duration cap](#hard-duration-cap)). Verified in production on 1 Oct 2026: after the injected drop the patient carried on coherently (it answered the questions asked after the recovery).
+
+### Microphone error wording
+
+`describeMicrophoneError(error, native, { live: true })` (`lib/mobile/speaking-recorder.ts`) words a microphone start failure
+for the live AI patient: the learner speaks (the control reads "Start speaking") and nothing is called a recording. The live
+variants are "The microphone could not start: ..." (an error that carries a message), "This microphone does not support the
+requested audio settings. Try another device.", "This browser does not support the audio mode needed for Speaking practice."
+and, for a blocked permission, a recovery that ends "then press Start speaking again". The live hook passes the option itself
+and no longer rewrites the recorder text; without the option the wording is the recorder's, unchanged. **Pending: not yet
+verified in production.**
 
 ## Mid-session recovery
 
@@ -201,11 +262,15 @@ into the new session's instructions ([Recovery sessions](#provider-failover)).
   "The live conversation ended ...". The panel shows "Reconnecting the patient…" meanwhile and exposes
   `data-live-recoveries` for the QA harness.
 - **Limits.** At most `MAX_RECOVERIES` = 2 per card (the server allows 3 provider sessions per role-play: the first plus two
-  restores). A provider forced with `?voiceProvider=` or pinned by the server **never recovers**, so comparison and QA runs
-  measure the raw stability of the provider they asked for. No restore after the learner pressed stop or left.
+  restores). A run the server pinned (`pinned: true`, QA accounts only) **never recovers**, so comparison and QA runs
+  measure the raw stability of the provider they asked for; a `?voiceProvider=` the server did not honour changes nothing
+  here. No restore after the learner pressed stop or left.
 - **Known limits.** Audio spoken while the link is down is lost. The candidate's last unanswered sentence is in the replayed
   history, so the patient waits for the candidate to speak next; a candidate who is waiting for the answer must speak again.
-  The stall detector reads the microphone level (no echo handling beyond the browser's echo cancellation).
+  The stall detector reads the microphone level (no echo handling beyond the browser's echo cancellation). The saved
+  transcript keeps one clock across a restore; the remaining offsets are listed under
+  [Transcript time base](#transcript-time-base). A page reload is not a link drop: see
+  [Refresh behaviour](#refresh-behaviour).
 
 ### Gemini candidate timing
 
@@ -214,7 +279,158 @@ the text arrived), which the grader flagged ("the candidate segment has zero dur
 hid the real order of speech. The hook now finds the candidate's speech bursts from the microphone level
 (`createSpeechTracker`: level >= 0.05 on the meter's scale, a burst ends after 700 ms of quiet, bursts under 400 ms are
 dropped) and gives a transcript fragment the span of its burst: the closed bursts since the last fragment, or the burst so
-far when the text arrives mid-sentence. Patient segments keep their arrival time. OpenAI keeps its own `start_ms`/`end_ms`.
+far when the text arrives mid-sentence. Patient segments keep their arrival time. OpenAI keeps its own `start_ms`/`end_ms`,
+shifted by the session offset; every source is then on the role-play clock ([Transcript time base](#transcript-time-base)).
+**Pending: not yet verified in production**: no Gemini run has been made on a build with this burst timing. Every Gemini
+transcript saved so far (G1-G4, E4, P1, U1) predates it and has zero-length candidate segments (for example G4: 10 of 12 on
+Card A, 14 of 14 on Card B).
+
+## Saved transcript
+
+The transcript is built in the browser while the conversation runs (`hooks/useSpeakingRealtimeVoice.ts`), saved once when the
+role-play stops and graded verbatim. This section says what its times mean and how it survives a restore, a reload and a stop.
+Everything in it was added on 1 Oct 2026 and is **pending: not yet verified in production**.
+
+### Transcript time base
+
+Every segment time in the saved transcript is milliseconds since the **first** provider session of that role-play went live
+(the role-play clock; close to the card start, because the panel connects when the card opens). GPT-Live's `start_ms` and
+`end_ms` count from the start of its own provider session and restart at 0 in every restore, so the browser adds the offset
+between the first link going live and the current one (`sessionOffsetMs`). Gemini gives the candidate's transcript no timing:
+candidate spans come from the microphone bursts ([Gemini candidate timing](#gemini-candidate-timing)) and patient segments
+from the arrival time of the chunk, both converted to the same clock. A restore (on the same provider or the other one) and a
+manual restart keep the origin, a reload rebuilds it from the stored copy ([Refresh behaviour](#refresh-behaviour)) and only a
+different Speaking session starts a clock of its own.
+
+Result: after an OpenAI restore the saved list alternates candidate and patient, `startMs` is non-decreasing and nothing is
+merged across the restore. Before this, GPT-Live's clock restarting at 0 made the late-fragment rule merge everything after a
+restore into earlier segments: the three 1 Oct recovery runs F1, F2 and F3 saved 16, 8 and 14 segments instead of the 24, 12
+and 20 of a correct timeline, with five scripted lines fused into one candidate segment on F1 and F3, while every check of
+those runs was green. Gemini times are card-relative too (the first segment is near 0, not at the page's uptime).
+
+Known remainder: OpenAI's own clock starts at provider-session creation while the origin is the moment the link goes live, so
+its times carry the connect delay (about 1-6 s) as a constant offset. Across an OpenAI restore only the difference of the two
+connect delays is left (0.1-0.3 s when the saved events of F1-F3 are replayed), and across an OpenAI to Gemini switch a `startMs` can step
+back by up to the first session's connect delay (nothing is merged). Gemini patient durations are still arrival-based (about
+3.5 times too short).
+
+### Pause rule
+
+A fragment from the same speaker extends that speaker's last segment only when the gap between the fragment's start and that
+segment's end is at most 10 s (`MAX_SAME_SPEAKER_GAP_MS` = 10 000). After a longer silence a new segment starts, so the pause
+is visible to the grader and to the v1.1 evidence capture (pause count, monologue flag) and the candidate's talk time is not
+inflated (1 Oct: 45 s of silence sat inside one 54 s candidate segment). The late-tail rejoin (a candidate's last word arriving
+after the patient's backchannel, see [Behaviour and limits](#behaviour-and-limits)) is unchanged and ignores this limit.
+Consequence: two consecutive segments by the same speaker are legitimate when more than 10 s of silence lies between them.
+
+### Whitespace deltas
+
+GPT-Live sometimes sends the space between two words as a delta of its own. It is appended to the end of the **same**
+speaker's last segment (so " Doctor." + " " + "Well," is saved as "Doctor. Well,"), never starts a segment (the server rejects a
+blank segment and would fail the whole save), never takes the late-tail path and never moves the segment's end. Before this
+such a delta was dropped and the two words were fused in the saved text ("Doctor.Well" on F1, "butI" on O4).
+
+### Refresh behaviour
+
+While a provider session is live, the browser keeps a copy of the conversation in this tab's `sessionStorage` under
+`oet.speaking.live.<speaking session id>`: `{sessionId, segments, turnIndex, originEpochMs, savedAt}`. Only the conversation of
+that session and the numbers needed to carry on are stored (no provider session id, no token).
+
+- **Written** at most once a second while the conversation changes, immediately when the page is hidden (`pagehide`,
+  `visibilitychange` to hidden) and once more when the card is left.
+- **Restored** when the hook mounts again for the **same** session id and the copy is younger than 15 minutes
+  (`CHECKPOINT_TTL_MS`): the segments and the turn number come back and the role-play clock is rebuilt from `originEpochMs`, so
+  the new provider session lands after everything that was restored. A copy that is malformed, belongs to another session or is
+  older than 15 minutes is ignored and removed.
+- Starting again after a reload still mints a **new** provider session (the server replays the saved turns into it, see
+  [Recovery sessions](#provider-failover)); the combined transcript is saved at the end under that new provider session id.
+- **Removed** after the transcript POST succeeds or when the server will never take it (a 4xx other than 401, 408 and 429); a
+  failed save worth retrying keeps it.
+- Turn ids are `voice-turn:<per-mount random tag>:<n>` and the number continues from the restored value, so two page instances
+  never reuse an id that the server would drop as a duplicate.
+- If `sessionStorage` is unavailable everything behaves as before (memory only).
+- **Not covered:** a reload that is never followed by Start speaking, a closed tab or a crash still save no transcript (a stored
+  copy cannot be POSTed without a live provider session id; see [Known open items](#known-open-items)). A reload may leave the
+  panel waiting for a tap on "Start speaking" (the browser's gesture rule), and each reload uses one of the 3 provider sessions
+  per card. A browser that copies `sessionStorage` into a duplicated tab can restore the same copy there (the server still
+  accepts one active role-play per session). The copy holds the words of both speakers, in that tab only, and no provider
+  session id or token.
+
+### Stopping a Gemini role-play
+
+Gemini transcribes a sentence about 1.5 s after it was spoken and has no close handshake, so `stop()` keeps a Gemini link (and
+its handlers) up for `GEMINI_STOP_DRAIN_MS` = 2 s before it closes it and saves the transcript: a candidate still talking at the
+buzzer keeps the end of the last sentence. The wait is skipped when the socket is not open, and GPT-Live drains through its own
+`session.closed`. A Gemini card therefore saves its transcript about 2 s later (the exam page already polls). No production run
+has had speech in flight at the close yet, so neither drain has been exercised by data.
+
+## Results wording by input kind
+
+Live voice stores no audio, so a results page that says "We received your recording" is wrong for it. The pages therefore say
+what was actually handed in. **Pending: not yet verified in production** (the production E2E reads it through
+`inputKindLiveVoice` and `resultsWordingHonest`, see [Credits, History and wording checks](#credits-history-and-wording-checks)).
+
+- **Server: `inputKind`.** `GET /v1/speaking/sessions/{id}/results` returns it besides `assessmentState`, `retryable`,
+  `failureReason`, `isFreeSample`, `cardId` and `usesV11` (camelCase; `null` is serialised as JSON `null`):
+  - `"recording"`: the session has a non-warm-up `SpeakingRecording` row, archived or not (it wins over a transcript);
+  - `"live_voice"`: otherwise, its latest transcript was saved by the live voice flow (its `Provider` starts with
+    `LiveVoiceService.TranscriptProviderPrefix`, `realtime-`): no audio exists;
+  - `null`: otherwise, meaning nothing has been received yet (a recorder card before its upload lands, or a live transcript
+    save that failed or has not arrived) or an older server.
+- **Browser.** One pure module, `lib/speaking/input-kind.ts`, decides the wording: `speakingInputKind(isTutorRoom, serverKind)`
+  is `"recording"` for a tutor room (session mode `live_tutor`, always recorded), otherwise the server's value, otherwise
+  `null`. `null` always gets the neutral "role-play" wording; the recorder fallback and tutor rooms keep the original recording
+  wording character for character. A retry ("Try grading again") keeps the kind.
+- Persistent results copy never contains "processing", "being graded", "analysing" or "Check again": the production QA script
+  (`waitForGrade` in `scripts/qa/speaking-live-voice-browser-e2e.mjs`) reads those words as "still grading".
+- **Transcript tab and report.** `TranscriptPlayerWithComments` takes an opt-in `hideAudioPlayer` (default `false`: the expert
+  console is unchanged). The learner page passes `hideAudioPlayer={inputKind !== 'recording'}`, which drops the audio player
+  strip, turns the `[mm:ss]` chips into plain text and no longer marks the first segment as playing, and shows the note
+  "No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked." only for
+  `live_voice`. The V1.1 report view takes an optional `inputKind`: omitted or `recording` keeps "Transcript and source audio";
+  `live_voice` says "Transcript of your live conversation" and that no audio recording is stored for live conversations (and words its
+  technical-review notice from the transcript, not from audio); `null` says "Transcript".
+- **Backend texts that changed** (learner-visible). The live voice consent refusals now read "Accept the Speaking consent before
+  starting the live AI patient." and "Accept the current Speaking consent before starting the live AI patient."; the grading
+  failure reasons read "We couldn't finish grading your role-play. Try grading again. You won't be charged twice." and "Your
+  role-play could not be scored automatically. Try grading again." The recorder-only texts "No speech could be detected in the
+  recording." and "We couldn't transcribe your recording. Try grading again." are kept.
+- **Grader.** For a transcript whose `Provider` starts with `realtime-`, the classic grader's input carries one extra line before
+  the transcript saying that the role-play had no audio recording (transcript only) and that the feedback must never tell the
+  candidate to listen to or check a recording. The template id (`speaking.score.v2`), rubric, scoring rules and output schema are
+  unchanged. The gateway's request digest covers the input, so a live-voice grade that straddles the deploy can be asked of the
+  provider twice; the stored assessment is still deduplicated by its identity hash and the hold is committed once.
+- **Not changed on purpose** (owner/legal decision): the Rules and consent screen (it still reads "Your audio is recorded and
+  graded by AI" before each card), the consent versions and the backend consent and retention texts.
+
+Copy by kind:
+
+| | Live conversation (`live_voice`) | Recording (`recording`) | Not known (`null`) |
+| --- | --- | --- | --- |
+| "Submission received" banner body (practice sessions only; an exam card is never submitted) | We saved the transcript of your live conversation{ on DATE} and queued it for marking. | We received your recording{ on DATE} and queued it for marking. | We received your role-play{ on DATE} and queued it for marking. |
+| While grading | Your live conversation transcript is being marked. This page updates automatically. | Your recording is being transcribed and marked. This page updates automatically. | Your role-play is being marked. This page updates automatically. |
+| Failed grade, fallback body (the server's own reason is shown when it sends one) | Your transcript is saved. No credits were used for this failed grade. | Your recording is saved. No credits were used for this failed grade. | Your role-play is saved. No credits were used for this failed grade. |
+| Exam notice once polling gives up (named by the kind all cards share, otherwise role-plays) | Grading is taking longer than usual. Your transcripts are saved and the result will appear here. | Grading is taking longer than usual. Your recordings are saved and the result will appear here. | Grading is taking longer than usual. Your role-plays are saved and the result will appear here. |
+
+### Exam results page
+
+`/speaking/exam/{id}/results` (also **pending: not yet verified in production**):
+
+- shows the readiness band by label (Not yet ready, Developing, Borderline, Exam ready, Strong) with a tone by band, never the
+  raw code;
+- shows "AI practice estimate, not an official OET result." (a tutor-marked exam says "Practice estimate, not an official OET
+  result.");
+- each card has "View details and transcript" (to `/speaking/sessions/{cardSessionId}/results`), and "View history" (to
+  `/submissions`) sits next to "Back to Speaking";
+- an exam whose state is expired or cancelled shows "This exam was not completed." with "Start a new exam" (to
+  `/speaking/exam`), stops polling and shows no spinner;
+- a failed card shows the server's `failureReason`, and a failed "Try grading again" shows its error under the card (a browser
+  timeout is not an error: grading continues on the server and the next poll shows it).
+
+Exam-card pages show no submission banner (the card's `submittedAt` stays empty): for cards the live wording appears while
+grading and in the Transcript tab note. Other copy was aligned the same way: the Speaking tour ("How your answers are saved"),
+the recordings page (no audio recording is stored for live conversations, so they are not listed there), the AI tooltip ("based on your
+transcript") and the admin "Submission received" toggle.
 
 ## Consent and disclosure
 
@@ -223,8 +439,8 @@ far when the text arrives mid-sentence. Patient segments keep their arrival time
 - The server's preflight `disclosure` names **every** candidate, in try order, each with its model. With two candidates it
   names the first, says the service may switch to the next one if the first cannot start the conversation, names that
   one too and says the microphone audio goes to "whichever of these providers serves your session". With one candidate
-  (pinned through `?voiceProvider=`, or only one healthy) it names that provider only, as before. It no longer names only
-  the primary.
+  (pinned through `?voiceProvider=` for a flagged QA account, or only one healthy) it names that provider only, as before.
+  It no longer names only the primary.
 - A silent failover therefore still changes the data processor under generic consent copy. Whether that needs a new
   consent step (or rendering `disclosure`) is an **owner/legal decision** and is open.
 
@@ -258,8 +474,8 @@ be created (30 Sep: OpenAI's catalog probe was green while session creation answ
 - Candidates are `[primary, other]` filtered by configured, verified and not open (closed or on probation). No
   candidate: preflight answers 503 (`_not_configured` when nothing is configured, otherwise `_unavailable`, retryable) and
   the session and exam DTOs report `liveVoiceAvailable: false`, which selects the recorder fallback at page load. A
-  pinned request bypasses the circuit (it still needs the provider configured and verified) and its outcome is still
-  recorded.
+  pinned request (QA accounts only) bypasses the circuit (it still needs the provider configured and verified) and its
+  outcome is still recorded.
 - State is in memory in the API process that serves learners (one upstream at a time). A restart, a deploy or a
   blue/green swap starts from a clean state: the cost is at most one fast failed attempt per hard-failing provider,
   failed over transparently.
@@ -439,13 +655,17 @@ Card No. 7"); it never labels an exam card, and an unknown slot prints no letter
 ## Production E2E
 
 Workflow **Speaking live voice E2E (production)** (`.github/workflows/speaking-live-voice-prod-e2e.yml`), harness
-`scripts/qa/speaking-live-voice-browser-e2e.mjs` with in-page probes in `scripts/qa/live-voice-browser-probes.mjs` and the
-served-provider attribution in `scripts/qa/live-voice-served-provider.mjs` (the workflow copies all three next to `e2e.mjs`).
-Real Chromium, fake microphone playing a scripted candidate once (6 s lead-in, no loop), the QA learner, the real provider.
-Runs queue one at a time (concurrency group), never dispatch during a deploy.
+`scripts/qa/speaking-live-voice-browser-e2e.mjs` with in-page probes in `scripts/qa/live-voice-browser-probes.mjs`, the
+served-provider attribution and the pure verdict helpers in `scripts/qa/live-voice-served-provider.mjs` and the pure
+saved-transcript judgement in `scripts/qa/live-voice-transcript-quality.mjs` (the workflow copies all four files into one
+folder, the harness as `e2e.mjs`). Real Chromium, fake microphone playing a scripted candidate once (6 s lead-in, no loop), the
+QA learner, the real provider. Runs queue one at a time (concurrency group), never dispatch during a deploy. How to dispatch,
+the inputs added on 1 Oct 2026, the checks and the order of runs are under
+[Dispatching and options](#dispatching-and-options) onwards.
 
 - Inputs: `mode` practice | exam; `script`; `voice` piper | espeak; `voice_provider` (blank = the server's candidates,
-  primary first; a provider set here is **pinned**, so it never fails over and every check stays strict); `expected_primary`
+  primary first; a provider set here asks the server for a pin, which it honours for a flagged QA learner only; a pinned run
+  never fails over, so every check stays strict: [Dispatching and options](#dispatching-and-options)); `expected_primary`
   (blank = no assertion; fails an unpinned run if the first provider call goes elsewhere; **ignored when `voice_provider`
   pins a provider**: `metrics.expectedPrimaryIgnored` is true, a log line says so and `primaryProviderIsExpected` stays
   null); `fail_primary` (answers the expected primary's create call with a 503 in the browser and asserts the failover;
@@ -455,7 +675,8 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
   at 5:00). Scripts: `compare` (about 4 minutes of tape with room for the patient to finish, an early teach-back probe
   before any explanation and a late one after it) and `full-lactose` are written for the lactose practice card and are
   rejected in exam mode; `smoke` is the behaviour probe (barge-in, 25/45/60 s silences, teach-back before explaining);
-  `short` and `generic` are minimal.
+  `short` and `generic` are minimal; `smoke-A` and `smoke-B` are `smoke` with a different closing sentence, to tell two runs
+  apart.
 - Artifacts (`live-voice-e2e`): `metrics.json` (usage, latency, barge-in / talk-over / silences, stability incl.
   WebSocket close codes and RTC states, `providerCalls` (every create call, failed ones included), `providerAttempts`
   (call, HTTP status, the app's error code, `hardStopAt`; never a body or token), `failoverObserved`, `hardStopAt`,
@@ -465,7 +686,8 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
   see the microphone released between cards), checks),
   `timeline-events.json` (timed words incl. provider `start_ms`/`end_ms`), `saved-transcript-<session>.json` (the
   transcript API body the grader reads), `card-text.json`, `patient-audio-<n>.webm` (what was audible, both providers),
-  screenshots.
+  screenshots. Since 1 Oct 2026 `metrics.json` also carries the credit, History, reload, grade-retry, wording and
+  per-transcript quality records described below; the artifact is kept for 3 days.
 - Attribution follows the provider that **served**, never "some OpenAI data-channel event exists": the transcript text,
   `providerErrors`, `sessionClosed`, the timeline words, `providerUsage` and `noSplitSentences` come from the serving
   provider(s), and a leg that failed over (its error event, its close, its 503) is ignored. `providerUsage` carries
@@ -478,25 +700,58 @@ Runs queue one at a time (concurrency group), never dispatch during a deploy.
   `staysInRole`, `noBrowserErrors`, `bargeInPatientStops`, `noPatientTalkOver`, `survivesSilences`,
   `primaryProviderIsExpected` (only with `expected_primary` and a blank `voice_provider`), `pinnedProviderServed` (only
   with `voice_provider`: every connected card's panel reports the pinned provider, exam mode too), `failoverAsRequested`
-  (only with `fail_primary`: per card exactly one call to the failed primary then one to the other provider, and the page
-  reports the other one serving), `recoveredAsRequested` (only with a fault input, see [Fault injection](#fault-injection-mid-session-recovery))
-  and `cardLabelsBySlot` (exam: Card A's text says "Role-Play Card A", Card B's says
-  "Role-Play Card B"). A 503 on one provider followed by a success on the other is a *failover*, not a browser error, but
-  only in an unpinned run; usage and `noSplitSentences` follow the provider that actually served. Gemini patient speech
-  is measured from playback timing, so its barge-in/talk-over numbers are not comparable with GPT-Live's pass/fail
-  thresholds without care.
-  `metrics.leakCheck` (exam) is a bag-of-words suspect list, not a check: read both transcripts. Teach-back is judged by
-  reading the saved transcript, not by the harness.
-- What to run after this change: an unpinned exam with `expected_primary` set to the current first choice; the same with
-  `fail_primary` (practice and exam); a pinned run per provider for the like-for-like comparison. A `fail_primary` run
-  proves the client failover only. The circuit, `hardStopAt` and the OpenAI hang-up need a real, unfaked run plus a read
-  of `providerAttempts`, `GET /v1/admin/ai/live-voice/health` and the ai-worker's hang-up log lines.
+  (only with `fail_primary`: per card exactly one call to the failed primary then one to the other provider, plus the calls a
+  recovery or a reload adds on the first card, and the page reports the other one serving), `recoveredAsRequested` (only with
+  a drop or stall fault input, see [Fault injection](#fault-injection-mid-session-recovery)) and `cardLabelsBySlot` (exam:
+  Card A's text says "Role-Play Card A", Card B's says "Role-Play Card B"). The checks added on 1 Oct 2026 are described under
+  [Dispatching and options](#dispatching-and-options), [Transcript checks](#transcript-checks) and
+  [Credits, History and wording checks](#credits-history-and-wording-checks). A 503 on one provider followed by a success on
+  the other is a *failover*, not a browser error, but only in an unpinned run; usage and `noSplitSentences` follow the
+  provider that actually served. Gemini patient speech is measured from playback timing, so its barge-in/talk-over numbers are
+  not comparable with GPT-Live's pass/fail thresholds without care.
+  `metrics.leakCheck` (exam) is a bag-of-words suspect list, not a check: read both transcripts (the cross-card checks under
+  [Transcript checks](#transcript-checks) are the judged version). Teach-back is judged by reading the saved transcript, not by
+  the harness.
+- What to run after the 30 Sep change: an unpinned exam with `expected_primary` set to the current first choice; the same with
+  `fail_primary` (practice and exam); a pinned run per provider for the like-for-like comparison (it needs the QA pin flag,
+  [QA provider pin](#qa-provider-pin)). A `fail_primary` run proves the client failover only. The circuit, `hardStopAt` and
+  the OpenAI hang-up need a real, unfaked run plus a read of `providerAttempts`, `GET /v1/admin/ai/live-voice/health` and the
+  ai-worker's hang-up log lines. The 1 Oct 2026 changes have their own order of runs: [Run matrix](#run-matrix).
+
+### Dispatching and options
+
+Dispatch from a branch, never by merging: `gh workflow run speaking-live-voice-prod-e2e.yml --ref <branch> -f name=value ...`.
+Every push to `main` redeploys production (new slot, the in-memory provider breaker is reset, in-flight grading is requeued), so
+a harness-only change is never merged to run it. Dispatch one run at a time and wait for each to finish (GitHub keeps one
+pending run per concurrency group). The first workflow step fails the run while `deploy.yml` has a run in progress or queued.
+The artifact (QA transcripts, the patient's audio, screenshots) is kept for 3 days. `scripts/qa/live-voice-workflow.test.ts`
+fails CI when a module the script imports is not copied, an environment variable the script reads is not wired, an input
+description would break YAML (a colon-space in a plain scalar once made a push run fail with 0 jobs) or a script option has no
+file.
+
+The 13 inputs: `mode` (practice | exam), `card_id`, `script` (`short`, `full-lactose`, `generic`, `smoke`, `smoke-A`, `smoke-B`,
+`compare`), `voice`, `speak_seconds`, `voice_provider`, `expected_primary`, `fail_primary`, `fault_drop_at_s`, `fault_stall_at_s`,
+`fault_reload_at_s`, `verify_credits` and `grade_retry`. What is new on 1 Oct 2026:
+
+- `voice_provider` asks the server to pin a provider. The server honours it only for a QA learner with an enabled feature flag
+  `speaking_live_voice_pin:<learner user id>` ([QA provider pin](#qa-provider-pin)); for anyone else it answers 200,
+  `pinned: false` and the normal order. The run fails fast, naming that flag (the learner id is read from the sign-in token),
+  when the server ignored the pin, and `checks.pinHonoured` judges the server's answer on every preflight that carried
+  `provider=` (a run that merely landed on the primary proves nothing). A pinned provider never fails over or recovers.
+- `fail_primary` (needs `expected_primary` and a blank `voice_provider`) answers the primary's create call with a 503 in the
+  browser; the API never sees it. It now combines with the fault inputs: the fault then hits the fallback provider
+  (`checks.faultHitFallback`) and the create calls must be exactly [primary, secondary] per card plus what a recovery (the first
+  restore retries the serving provider, the second one tries the other provider first) or a reload (primary, secondary again)
+  adds on the first card (`failoverCallsOk`).
+- `fault_drop_at_s`, `fault_stall_at_s` and `fault_reload_at_s`: [Fault injection](#fault-injection-mid-session-recovery).
+- `verify_credits` and `grade_retry`: [Credits, History and wording checks](#credits-history-and-wording-checks).
 
 ### Fault injection (mid-session recovery)
 
-Two optional inputs (blank = off, the run is unchanged) break the live link on purpose so the app's mid-session recovery can be
-measured. They hit only the first live conversation (practice, or exam Card A), N seconds after the candidate microphone tape
-starts. One fault per run: `fault_drop_at_s` wins when both are set (`metrics.fault.stallIgnored`).
+Three optional inputs (blank = off, the run is unchanged) break the live link on purpose so the app's mid-session recovery and
+its page-refresh behaviour can be measured. They hit only the first live conversation (practice, or exam Card A), N seconds after
+the candidate microphone tape starts. One fault per run: `fault_drop_at_s` wins over `fault_stall_at_s`, which wins over
+`fault_reload_at_s` (`metrics.fault.stallIgnored` and `reloadIgnored` record what lost).
 
 - `fault_drop_at_s` (env `FAULT_DROP_AT_S`): kills the live provider connection from inside the page. Gemini: its WebSocket is
   closed (marked `injected` in `stability.wsClose`). OpenAI: the `oai-events` data channel is closed, because its `close` event
@@ -507,18 +762,158 @@ starts. One fault per run: `fault_drop_at_s` wins when both are set (`metrics.fa
   silence watchdog, so the candidate must still speak after the stall began. Gemini's wire-level records (`transcript.json`,
   the timeline words, usage, `patient-audio-raw.wav`) still include what the stall hid from the app; what the learner could
   hear is the speech spans and `patient-audio-<n>.webm`.
-- Rejected with `voice_provider` (a pinned provider never recovers, so the fault would only kill the session) and with
-  `fail_primary` (its check expects one create call per provider, a recovery makes another): by a workflow guard step and again
-  by the harness, before any provider is billed. The fault time must be before the conversation ends (`speak_seconds`, or 280 in
-  exam mode). Use `short` or `generic`: `smoke`'s 25-60 s silences would turn `survivesSilences` red for the wrong reason.
-- Metrics: `metrics.fault` = `{ kind: 'drop' | 'stall' | null, atSeconds, firedAt (epoch ms, null = it never fired), provider
-  (the transport hit), recoveredAt (the first provider create call after the fault, once the panel reports a recovery),
-  swallowed (stall: messages hidden from the app), stallIgnored, error (only when no live transport was found) }`.
+- `fault_reload_at_s` (env `FAULT_RELOAD_AT_S`): the learner presses F5. The harness reloads the page, presses "Start speaking"
+  (or "Retry connection", up to three presses) when the panel does not reconnect by itself, and records `metrics.reload` =
+  `{ resumed, presses, autoStarted, resumeMs, providerAfter, preReloadRecall }`. `checks.reloadResumed` (the panel came back
+  live and did not end in its error state) and `checks.reloadKeepsTranscript` (the words said before the refresh, both
+  speakers, at least 80% of the provider's words, are in the saved transcript: [Refresh behaviour](#refresh-behaviour)) judge
+  it. The tape restarts in the new document, so a reload run's latency is not comparable and the tape comparisons (Q4, Q5, Q10,
+  Q11) are skipped for that card.
+- Combinations. A drop or a stall needs a blank `voice_provider` (a pinned provider never recovers, so the fault would only
+  kill the session): refused by a workflow guard step and again by the harness, before any provider is billed. A reload may pin
+  one. All three work with `fail_primary`. The fault time must be before the conversation ends (`speak_seconds`, or 280 in exam
+  mode). Use `short` or `generic`: `smoke`'s 25-60 s silences would turn `survivesSilences` red for the wrong reason.
+- Metrics: `metrics.fault` = `{ kind: 'drop' | 'stall' | 'reload' | null, atSeconds, firedAt (epoch ms, null = it never fired),
+  provider (the transport hit), recoveredAt (the first provider create call after the fault, once the panel reports a
+  recovery), swallowed (stall: messages hidden from the app), stallIgnored, reloadIgnored, error (only when no live transport
+  was found) }`.
   `metrics.recoveries` = the panel's `data-live-recoveries` (exam: the total, with `recoveriesA` / `recoveriesB`; 0 when the
   attribute is absent, null when the panel was never read). It is recorded on every run, fault or not.
-- Check `recoveredAsRequested` (null without a fault): the fault fired, the faulted card's panel reports at least 1 recovery,
-  the patient produced a speech span or a transcript delta after the recovery session was asked for, and the panel did not show
-  its error alert at its last live reading. The "Reconnecting the patient…" text is not required.
+- Check `recoveredAsRequested` (null without a drop or stall fault, and null for a reload, which has no recovery: see
+  `metrics.reload`): the fault fired, the faulted card's panel reports at least 1 recovery, the patient produced a speech span or
+  a transcript delta after the recovery session was asked for, and the panel did not show its error alert at its last live
+  reading. The "Reconnecting the patient…" text is not required. It does not look at the saved transcript (the 1 Oct recovery
+  runs passed it while their saved transcripts were corrupted): the [transcript checks](#transcript-checks) do.
+
+### Transcript checks
+
+Every saved transcript (per card in an exam) is judged the way the grader reads it: `metrics.savedTranscripts[id].quality`,
+summarised in `checks.transcriptQuality`. The earlier checks could not see a corrupted transcript (the three 1 Oct recovery runs
+passed all of them, see [Transcript time base](#transcript-time-base)). The rules, calibrated on 21 real production transcripts
+from the 1 Oct runs:
+
+| | Rule |
+| --- | --- |
+| Q1 | no two segments of one speaker less than 10 s apart (after a longer silence a same-speaker neighbour is legitimate: [Pause rule](#pause-rule)) |
+| Q2 | segment starts non-decreasing (1.5 s tolerance) |
+| Q3 | opposite-speaker overlap at most 1.5 s |
+| Q4 | candidate segments at least 0.75 x the scripted lines played |
+| Q5 | the lines that start a segment sit at one constant offset from the tape (spread at most 2 s), and at least 70% of the lines start one |
+| Q6 | at most 10% zero-length candidate segments |
+| Q7 | all times within 0..330 s |
+| Q8 | no fused words |
+| Q9 | no segment over 30 s |
+| Q10 | candidate word error rate at most 10% |
+| Q11 | the script's closing line said exactly once |
+
+Lines the run itself hid (a stalled or dropped link) are excluded. The unit tests replay two real artifacts: the clean OpenAI
+Card A of E1 passes everything except Q9 (a 54 s segment that hid 45 s of silence, which the [pause rule](#pause-rule) now
+splits) and the corrupted recovery run F1 fails exactly Q4, Q5 (a 59.9 s jump) and Q8 ("Doctor.Well").
+
+`metrics.savedTranscripts[id].wire` compares the saved text with what the provider sent in that card's window
+(`checks.transcriptsMatchWire`: multiset recall and precision at least 0.95 per speaker), the labels
+(`checks.candidateLabelsAreTheTape`: the saved candidate words are the tape's, the saved patient words are not) and whether every
+saved patient segment is the patient's own words of this card (`checks.noCrossCardLeak`, plus at most one long patient sentence saved
+identically in both cards: the TEACH-BACK line "you haven't told me what it is yet" can legitimately come back, a card saved twice repeats many). `checks.savedProviderMatchesServed`: the server's transcript provider (`realtime-openai` or
+`realtime-gemini`) is the one the panel showed. Because one fake-microphone file plays the same tape in both cards of an exam, the
+two cards cannot carry different sentinel lines; use `smoke-A` and `smoke-B` for two separate runs.
+
+### Credits, History and wording checks
+
+- `verify_credits` reads `GET /v1/me/ai-package-credits?pageSize=200` through the page's own bearer (not `/v1/me/ai/credits`, the
+  old token ledger) before anything is spent and refuses to start (nothing billed) when the account is funded another way
+  (unlimited Speaking, a mock exam unit for an exam, a free-sample practice card), cannot fund the run or has credits expiring
+  within two days. It then reads the balance when each card's hold exists (exam: -2 after Card A, -4 in total after Card B;
+  practice: -2), after grading and at the end. `checks.creditsDeductedOnce`: exactly the expected `GradingDeduct` rows
+  (`exam:<examId>:cardA` and `:cardB`, or `practice:<sessionId>`), 2 credits each, no refund or mock row, and the balance moved by
+  exactly 4 (exam) or 2 (practice) ([state-machines.md](state-machines.md#credits-ai-exam-and-practice-card)). The proof assumes
+  the QA learner has no other credit activity during the run.
+- It then opens `/submissions` and judges History (`checks.historyListsExam`, [api-surface.md](api-surface.md#history-notes)): one
+  row (exam: titled "Full Speaking Mock", `attemptId` and `contentRef` = the exam id, route `/speaking/exam/<id>/results`, status
+  `completed`, `creditsUsed` 4; practice: route `/speaking/sessions/<id>/results`, `creditsUsed` 2), a `resultLabel` "N/500" equal to
+  the score the results page showed and shown on the page, and no Speaking attempt of the run in Past Evidence
+  (`/v1/submissions`).
+- `grade_retry` asks for the grade once more per card after grading (`POST /ai-assess`, at most two a minute) and expects 200 or
+  202, the same `assessmentId` and an unchanged ledger (`checks.gradeRetryIdempotent`; `metrics.gradeRetry`, and
+  `metrics.aiAssessCalls` counts the calls the page made itself).
+- `checks.inputKindLiveVoice`: `GET .../results` says `live_voice` for every session. `checks.resultsWordingHonest`: no results
+  page says "recording" outside the Transcript tab or shows an audio player, each says it was a live conversation, and the exam
+  results show a readable band with the advisory sentence, never a raw code such as `exam_ready` ([Results wording by input
+  kind](#results-wording-by-input-kind)). It flags any "recording" outside the Transcript tab, including text the AI grader wrote
+  (the grader note reduces but cannot guarantee that), and `metrics.resultsWording.problems` quotes the offending line.
+  `checks.noProviderNamesInUi`: the live screens never name OpenAI, Gemini or GPT-Live.
+- `metrics.softChecks.gradedByClaude` reports the grader from the page's own answers and never fails the run.
+  `metrics.conversation.latency` now has `p95Ms` (nearest rank) and `samplesMs` (the raw values, so several runs can be pooled for
+  a percentile; a single run has about 11 candidate lines per card) next to `samples`, `medianMs` and `p90Ms`. Gemini usage frames
+  carry the socket index, so a recovery run can be costed per session.
+
+### Run matrix
+
+For the 1 Oct 2026 changes: dispatch one run at a time, from a branch, against the final deployed build, adding the flags below to
+`gh workflow run speaking-live-voice-prod-e2e.yml --ref <branch>`. The new checks have never run, so a first red can be a harness
+bug rather than a product defect: start with RUN 1 as a rehearsal.
+
+- **RUN 0** (free): the deploy finished and the live build verified; admin `GET /v1/admin/ai/live-voice/health` shows
+  `candidateOrder` `[openai, gemini]` with both circuits closed (note the baseline attempts and failures); the Gemini key is on a
+  paid project; the QA learner has no mock exam units, no unlimited Speaking, no unused free sample and at least 8 AI credits;
+  the pin flag exists if a pinned run is wanted; the repository is public for the run window if the owner's CI rule requires it;
+  nobody else is testing.
+- **RUN 1** (rehearsal, Gemini fallback, practice, about 12 min, -2 credits): `-f mode=practice -f script=short -f voice=piper -f expected_primary=openai -f fail_primary=true -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token]`, `failoverObserved`, the role-play panel on `gemini` with `failedOver`, `creditsDeductedOnce`, `gradeRetryIdempotent`, `historyListsExam`, `transcriptsMatchWire`, `savedProviderMatchesServed` (`realtime-gemini`) and `recoveredAsRequested` null.
+- **RUN 2** (Gemini drop recovery): RUN 1 plus `-f fault_drop_at_s=40 -f speak_seconds=150`. Expect `providerCalls` `[openai/offer, gemini/token, gemini/token]`, 1 recovery, `faultHitFallback`, `recoveredAsRequested` and `failoverAsRequested`.
+- **RUN 3** (Gemini stall recovery): RUN 1 plus `-f fault_stall_at_s=40 -f speak_seconds=200` (no `fault_drop_at_s`). Expect `fault.swallowed` above 0 and a restore about 25-40 s after the stall.
+- **RUN 4** (the main proof: Gemini serves a real two-card exam, recovery on Card A; about 28 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fail_primary=true -f fault_drop_at_s=45 -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token, gemini/token, openai/offer, gemini/token]`, both panels on `gemini` with `failedOver`, credits -2 after the Card A hold, -4 after the Card B hold, -4 after grading and at the end with exactly two ledger rows, and every transcript check green.
+- **RUN 5** (refresh on real OpenAI; about 28 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fault_reload_at_s=60 -f verify_credits=true`. Expect three `openai/offer` calls, `metrics.reload` (`autoStarted` true or false, `resumeMs`), `reloadResumed`, `reloadKeepsTranscript` and credits -4 once (a refresh costs no second hold).
+- **RUN 6** (clean acceptance on the final SHA; about 25 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f verify_credits=true -f grade_retry=true`. Optionally repeat with `-f script=smoke-A` and then `smoke-B`. Pool `conversation.latency.samplesMs` of RUN 5 and 6 for the p95.
+- **Pinned comparison run:** add `-f voice_provider=gemini` (practice) only when the pin flag exists; otherwise the run fails fast
+  naming the flag. Two faults in one run are not supported.
+- **After every run** (admin): `GET /v1/admin/ai/live-voice/health` (OpenAI failures and attempts unchanged for RUN 1-4; Gemini
+  attempts up by the number of Gemini mints; both circuits closed; reset with `POST /v1/admin/ai/live-voice/<provider>/reset` if a
+  run tripped one), `GET /v1/admin/ai/operations?featureCode=speaking.grade` (one Completed operation per graded card) and
+  `GET /v1/admin/ai-package-credits/<qaUserId>` (no `GradingDeduct` reference with more than one row).
+
+## QA provider pin
+
+**Pending: not yet verified in production** (the verification steps are at the end of this section).
+
+- **What it is.** `?voiceProvider=openai|gemini` on the practice or exam page (and the workflow input `voice_provider`, see
+  [Dispatching and options](#dispatching-and-options)) is only a **request**.
+  `GET /v1/speaking/realtime/sessions/{id}/preflight?provider=` honours it only when the signed-in learner has an **enabled**
+  `FeatureFlags` row whose key is exactly `speaking_live_voice_pin:<learner user id>` (key format: `LiveVoiceService.PinFlagKey`;
+  the id is the `NameIdentifier` claim of the sign-in token, which equals `SpeakingSession.UserId` and the learner's id in the
+  `/admin/users/<id>` address; the key is case-sensitive and only `Enabled` is read, a rollout percentage is ignored). The flag is
+  read only after the session is proven the caller's and only when a provider is requested, so an ordinary preflight costs no
+  extra query.
+- **Enable** (owner; do it **before** the deploy, because a row is inert on the old build): Admin > Feature Flags > Create Flag >
+  Name `Live voice QA pin - <label>`, Key `speaking_live_voice_pin:<learner user id>`, Type Operational, Owner QA, Description
+  (who authorised it and why), Initial state Enabled > Save. It takes effect on the next preflight, with no deploy, and is audited
+  and notified. Kill switch: press Disable. Anyone holding the `feature_flags` admin permission can authorise an account this way
+  (an accepted trade-off).
+- **Unauthorised caller.** HTTP 200, the normal order and `pinned: false`, never a 403 or 503: a candidate who merely follows a
+  link carrying the parameter must keep failover and recovery. Even `?provider=bogus` is ignored. One Warning per request (a
+  candidate who keeps a `?voiceProvider=` URL produces one or two per card):
+  `Live voice provider pin ignored for user <id> (requested <value>): the account has no enabled QA pin flag.` The requested
+  value is logged only as a short plain token, else as `(unsupported value)`. **It fails closed:** if the flag cannot be read,
+  the pin is not honoured and the Warning ends `the QA pin flag could not be read (<ExceptionType>).` instead (the exception
+  type, never its message).
+- **Honoured pin.** One candidate, no failover, circuit bypassed (the provider must still be configured and verified; an unknown
+  provider is a 503 `live_voice_provider_not_configured`), `pinned: true`, the disclosure names only that provider, and a pinned
+  run never recovers mid-session.
+- **Browser side.** The page value is sent as `?provider=` on the preflight and nothing more. The browser trusts only the
+  preflight's `pinned`: a pinned run makes one attempt with the named provider and never fails over or recovers; when the server
+  answers `pinned: false` (any account without the flag) the normal candidate order, failover and mid-session recovery apply even
+  though the page asked for one provider.
+- **Accepted residual.** The create routes (`POST .../openai/offer`, `POST .../gemini/token`) are not gated, so a signed-in
+  candidate with devtools can still choose between two healthy providers. Bounded: both providers get the same persona
+  instructions, the grading and credit path is the same, the saved transcript's provider is the server-recorded one, and at most
+  3 provider sessions are allowed per active role-play. Refusing an open-circuit provider on the create routes for non-QA callers
+  was deliberately not done (it reverses the note on `EnsureProviderConfigured`).
+- **Verify on production after the deploy** (needs a learner token). As an ordinary learner, with any AI-mode session id,
+  `GET /v1/speaking/realtime/sessions/{id}/preflight?provider=gemini` must answer 200 with `pinned: false`,
+  `provider: 'openai'`, `candidates: ['openai','gemini']` and a disclosure naming both providers with "may switch to"; repeat with
+  `?provider=openai` and `?provider=bogus` (200, not 503). As the flagged QA learner the same call must answer `pinned: true`,
+  `provider: 'gemini'`, `candidates: ['gemini']`; press Disable on the flag and repeat: `pinned: false`. As the ordinary learner,
+  open a card with `?voiceProvider=gemini` appended: `data-live-provider` must be the primary and there must be no
+  `data-live-failover`.
 
 ## Not implemented
 
@@ -535,17 +930,39 @@ starts. One fault per run: `fault_drop_at_s` wins when both are set (`metrics.fa
 
 ## Known open items
 
-- Nothing in this close-out has run in production yet: failover, the health model, the hard duration cap, the OpenAI
-  hang-up, the card labels and the client fail-open are all unverified. No E2E has run since 26 Sep 19:27 UTC either, so
-  PR #265 (AI Assistant 401 loop, grading retry) and every later change are unverified too.
+- Verified in production on 30 Sep - 1 Oct (OpenAI primary, builds 74ca2607b and 7e9a4a58a): the provider order
+  `[openai, gemini]`, the browser failover (a faked OpenAI 503 served by Gemini, run E4), mid-session recovery (a dropped data
+  channel and a stalled provider, runs F1-F3), the card labels by slot and `hardStopAt` on the session response. Still
+  unverified: the OpenAI hang-up at the hard stop (read the ai-worker hang-up log lines), the server circuit with a REAL
+  provider outage (the harness's faked 503 never reaches it) and the client fail-open rules.
 - The exact cause of the 30 Sep OpenAI 429 (quota, rate limit or project budget) is unread: the provider's body used to be
   discarded. The provider's error code and, for a 429 or a 5xx from the vendor host, its redacted message are now in the
   failure log line, and the class, status and code are on the admin health endpoint; read it there.
 - The 26 Sep two-card mock ended red; only 1 of 4 exam runs that completed both cards was ever graded (bugs fixed by #259/#264).
 - Gemini vs OpenAI: one matched pair (n=1 each); no complete graded Gemini run. Claude grading cost unmeasured.
-- Live-voice sessions store no audio; the results copy still says "We received your recording".
-- Recovery is best-effort (two restores per card, none for a pinned provider). Measured in production on 1 Oct 2026 (OpenAI, build 74ca2607b, compare script, unpinned): a dropped data channel at 60 s had a new session offered 0.6 s later and connected 1.7 s after the drop (2 OpenAI offers, 16 saved segments, no split sentence, 308/500); a stalled provider was restored 94 s after the stall (the sentence-clock defect above, fixed since). Gemini recovery is covered by unit tests only, because the fault runs cannot pin a provider; `?voiceProvider=` is not restricted (any learner can force the costlier provider or bypass the circuit);
-  hidden information is prompt-only.
+- The Rules and consent screen still reads "Your audio is recorded and graded by AI" before a live conversation, which stores
+  no audio: an owner/legal decision. The results copy itself was fixed on 1 Oct 2026 ([Results wording by input
+  kind](#results-wording-by-input-kind), pending production verification).
+- Recovery is best-effort (two restores per card, none for a run the server pinned). Measured in production on 1 Oct 2026
+  (OpenAI, build 74ca2607b, compare script, unpinned): a dropped data channel at 60 s had a new session offered 0.6 s later and
+  connected 1.7 s after the drop (2 OpenAI offers, 308/500), but the saved transcript was corrupted: 16 segments instead of the
+  24 of a correct timeline, five scripted lines fused into one candidate segment, while every check of that run was green (the
+  time base defect, fixed in code and pending verification: [Transcript time base](#transcript-time-base)); a stalled provider
+  was restored 94 s after the stall (the sentence-clock defect above, fixed since). Gemini recovery runs in production through
+  `fail_primary` plus `fault_drop_at_s` or `fault_stall_at_s` ([Run matrix](#run-matrix), RUN 2-4); record the measured restore
+  times here after the first runs. The harness still cannot prove a real server-side outage, a circuit that is actually open
+  (`candidates = [gemini]`), provider-side orphan billing, native apps or voice quality, and it does not judge a card whose
+  second restore switched providers mid-card (the wire words are attributed by the panel's first-connect provider). Hidden
+  information is prompt-only.
+- A signed-in candidate can still choose between two healthy providers by calling a create route directly: the accepted residual
+  of the pin gate, bounded as described under [QA provider pin](#qa-provider-pin).
+- A closed tab, a crash, or a reload that is never followed by Start speaking saves no transcript (the browser's copy needs a live
+  provider session to be saved, [Refresh behaviour](#refresh-behaviour)). The grader then waits (it retries every minute for up
+  to an hour) and fails the card, "Try grading again" cannot succeed, and the exam results page's slow-grading notice still says
+  the role-plays are saved. Building the transcript from the saved turn rows on the server is an **owner decision**.
+- No server-side completeness check: a truncated transcript is graded and scored normally (a Gemini exam Card A saved as 2
+  segments and 62 words was graded 141/500). The policy (a low-confidence banner, a free retry or a refusal) is an **owner
+  decision**.
 - A provider session that was created but never connected (failover after a successful create, or a dead tab) cannot be
   closed by the browser. For OpenAI the server keeps the raw session id in the `live_session` audit row (wiped by the
   retention sweep, `LIVEVOICE__RETENTIONDAYS`, 30 by default) and hangs it up at the hard stop
