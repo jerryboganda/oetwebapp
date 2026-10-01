@@ -59,8 +59,17 @@ async function verifyProductionReport() {
     await page.goto(`${app}/sign-in`, { waitUntil: 'domcontentloaded' });
     await page.locator('input[type="email"]').fill(process.env.QA_EMAIL);
     await page.locator('input[type="password"]').fill(process.env.QA_PASSWORD);
+    const signInRead = page.waitForResponse(response =>
+      new URL(response.url()).pathname.endsWith('/v1/auth/sign-in')
+      && response.request().method() === 'POST');
     await page.getByRole('button', { name: /sign in|log in/i }).first().click();
-    await page.waitForURL(url => url.origin === app && !url.pathname.includes('/sign-in'));
+    const signInResponse = await signInRead;
+    const signInResult = await signInResponse.json();
+    const signInCode = signInResult.errorCode ?? signInResult.code ?? signInResult.error?.code ?? 'none';
+    console.log('QA_LIVE_BROWSER_SIGN_IN', JSON.stringify({ status: signInResponse.status(), code: signInCode }));
+    assert.equal(signInResponse.status(), 200, `Production browser sign-in failed (${signInCode})`);
+    assert.ok(signInResult.accessToken, 'Production browser sign-in requires a challenge before report access');
+    await page.waitForURL(url => url.origin === app && !url.pathname.includes('/sign-in'), { waitUntil: 'domcontentloaded' });
     let savedGradeId;
     let savedReportId;
     for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
@@ -76,7 +85,7 @@ async function verifyProductionReport() {
       } else {
         await page.goto(`${app}/writing/submissions/${reportSubmissionId}/grading`, { waitUntil: 'domcontentloaded' });
       }
-      await page.waitForURL(url => url.pathname === `/writing/submissions/${reportSubmissionId}/results`);
+      await page.waitForURL(url => url.pathname === `/writing/submissions/${reportSubmissionId}/results`, { waitUntil: 'domcontentloaded' });
       const [gradeResponse, reportResponse] = await Promise.all([gradeRead, reportRead]);
       assert.equal(gradeResponse.status(), 200, 'Production grade read failed');
       assert.equal(reportResponse.status(), 200, 'Production assessment read failed');
