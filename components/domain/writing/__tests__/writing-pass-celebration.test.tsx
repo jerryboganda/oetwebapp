@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthContext, type AuthContextValue } from '@/contexts/auth-context';
 import { queryKeys } from '@/lib/query/keys';
-import { WritingPassCelebration } from '../writing-pass-celebration';
+import { WritingPassCelebration, writingGaugeColor } from '../writing-pass-celebration';
 
 vi.mock('@/lib/api', () => ({ fetchUserProfile: vi.fn() }));
 
@@ -45,5 +45,17 @@ describe('WritingPassCelebration', () => {
   it('assumes nothing without a target or a resolvable country', () => {
     renderFor({ targetScores: { Writing: null }, targetCountry: '' }, 480);
     expect(particles()).toHaveLength(0);
+  });
+});
+
+describe('writingGaugeColor', () => {
+  it("colours against the learner's own pass mark, never an assumed one", () => {
+    // US / Qatar pass at C+ (300): a 320 passes there.
+    expect(writingGaugeColor(320, 300)).toBe('var(--color-success)');
+    // The same 320 sits one band under a Grade B (350) mark.
+    expect(writingGaugeColor(320, 350)).toBe('var(--color-warning)');
+    expect(writingGaugeColor(290, 350)).toBe('var(--color-danger)');
+    // Unknown country and no target: neutral, no pass or fail claim.
+    expect(writingGaugeColor(420, null)).toBe('var(--color-primary)');
   });
 });
