@@ -24,28 +24,28 @@ const accentTokens = {
     eyebrow: 'bg-navy/10 text-navy border-navy/20',
   },
   amber: {
-    icon: 'bg-amber-50 text-amber-700',
-    eyebrow: 'bg-amber-50 text-amber-700 border-amber-200',
+    icon: 'bg-warning/10 text-warning',
+    eyebrow: 'bg-warning/10 text-warning border-warning/20',
   },
   blue: {
-    icon: 'bg-blue-50 text-blue-700',
-    eyebrow: 'bg-blue-50 text-blue-700 border-blue-200',
+    icon: 'bg-info/10 text-info',
+    eyebrow: 'bg-info/10 text-info border-info/20',
   },
   indigo: {
-    icon: 'bg-indigo-50 text-indigo-700',
-    eyebrow: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    icon: 'bg-info/10 text-info',
+    eyebrow: 'bg-info/10 text-info border-info/20',
   },
   purple: {
-    icon: 'bg-purple-50 text-purple-700',
-    eyebrow: 'bg-purple-50 text-purple-700 border-purple-200',
+    icon: 'bg-primary/10 text-primary',
+    eyebrow: 'bg-primary/10 text-primary border-primary/20',
   },
   rose: {
-    icon: 'bg-rose-50 text-rose-700',
-    eyebrow: 'bg-rose-50 text-rose-700 border-rose-200',
+    icon: 'bg-danger/10 text-danger',
+    eyebrow: 'bg-danger/10 text-danger border-danger/20',
   },
   emerald: {
-    icon: 'bg-emerald-50 text-emerald-700',
-    eyebrow: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    icon: 'bg-success/10 text-success',
+    eyebrow: 'bg-success/10 text-success border-success/20',
   },
   slate: {
     icon: 'bg-background-light text-muted',
@@ -146,13 +146,13 @@ export function LearnerSurfaceSectionHeader({
     <div className={cn('flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4', className)}>
       <div>
         {eyebrow ? (
-          <p className="text-2xs font-bold text-muted uppercase tracking-wider mb-1 sm:mb-1.5 sm:text-xs">{eyebrow}</p>
+          <p className="eyebrow mb-1 text-muted sm:mb-1.5">{eyebrow}</p>
         ) : null}
         <div className="flex items-center gap-2">
           {icon ? <span className="text-primary">{renderIcon(icon, 'h-4 w-4')}</span> : null}
           <h2 className="text-lg font-bold text-navy sm:text-xl">{title}</h2>
         </div>
-        {description ? <p className="text-[13px] text-muted mt-0.5 sm:mt-1 sm:text-sm">{description}</p> : null}
+        {description ? <p className="mt-0.5 text-sm text-muted sm:mt-1">{description}</p> : null}
       </div>
       {action}
     </div>
@@ -184,7 +184,7 @@ export function LearnerPageHero({
           </div>
         ) : null}
         <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted sm:text-2xs sm:tracking-[0.16em]">{item.label}</p>
+          <p className="text-3xs font-bold uppercase tracking-[0.12em] text-muted sm:text-2xs sm:tracking-[0.16em]">{item.label}</p>
           <p className="text-xs font-semibold text-navy break-words sm:text-sm">{item.value}</p>
         </div>
       </div>
@@ -203,7 +203,7 @@ export function LearnerPageHero({
           ) : null}
             <div className="min-w-0">
               {eyebrow ? <p className="mb-0.5 text-3xs font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
-              <h1 className="text-[17px] font-bold leading-tight tracking-tight text-navy sm:text-[1.75rem]">{title}</h1>
+              <h1 className="text-balance text-lg font-bold leading-tight tracking-tight text-navy sm:text-3xl">{title}</h1>
               <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function LearnerSurfaceCard({
             {card.statusLabel ? <Badge variant="muted">{card.statusLabel}</Badge> : null}
           </div>
           <h3 className="mt-2.5 text-base font-bold text-navy sm:mt-4 sm:text-xl">{card.title}</h3>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted sm:mt-2 sm:text-sm">{card.description}</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted sm:mt-2">{card.description}</p>
           <LearnerSurfaceMetaRow items={card.metaItems} className="mt-3 sm:mt-4" />
           {children ? <div className="mt-3.5 sm:mt-5">{children}</div> : null}
         </div>

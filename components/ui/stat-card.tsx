@@ -141,7 +141,7 @@ export function StatCard({
     >
       {/* Top Header: Label & Icon */}
       <div className="flex items-start justify-between gap-2">
-        <h3 className={cn('text-2xs font-bold uppercase tracking-[0.10em] line-clamp-1', activeTone.label)}>
+        <h3 className={cn('min-w-0 text-2xs font-bold uppercase tracking-[0.10em]', activeTone.label)}>
           {label}
         </h3>
         {icon && (
@@ -155,7 +155,7 @@ export function StatCard({
       {/* Main Content: Value & Sparkline */}
       <div className="mt-2 flex items-end justify-between flex-1 gap-2">
         <div className="min-w-0">
-          <div className={cn('text-xl font-bold tracking-tight truncate', activeTone.text)}>
+          <div className={cn('break-words text-xl font-bold tracking-tight tabular-nums', activeTone.text)}>
             {value}
           </div>
           

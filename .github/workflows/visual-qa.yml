@@ -3,9 +3,14 @@ name: Visual QA
 # Runs tests/e2e/shared/visual-qa.spec.ts (@visual) against the production-mode
 # Docker stack: no horizontal overflow at 360/768/1280/1920 on representative
 # routes per role, with full-page screenshots uploaded for review. Also runs
-# tests/e2e/shared/route-transition.spec.ts (staff client-navigation entrance)
-# and tests/e2e/shared/command-palette.spec.ts (Ctrl/⌘K palette per role).
+# tests/e2e/shared/route-transition.spec.ts (staff client-navigation entrance),
+# tests/e2e/shared/command-palette.spec.ts (Ctrl/⌘K palette per role) and
+# tests/e2e/shared/learner-layout-crawl.spec.ts (every learner route: clipped,
+# spilling or off-screen text; report-only except its ENFORCED_ROUTES, findings
+# in the job summary).
 # Separate from QA Smoke so layout checks never slow or redden the smoke gate.
+# One worker: each seeded role allows a single active session, so parallel tests
+# of one role revoke each other's session and land on /sign-in.
 on:
   workflow_dispatch:
   pull_request:
@@ -15,6 +20,7 @@ on:
       - 'tests/e2e/shared/visual-qa.spec.ts'
       - 'tests/e2e/shared/route-transition.spec.ts'
       - 'tests/e2e/shared/command-palette.spec.ts'
+      - 'tests/e2e/shared/learner-layout-crawl.spec.ts'
 
 concurrency:
   group: visual-qa-${{ github.ref }}
@@ -24,7 +30,7 @@ jobs:
   visual-qa:
     name: Visual QA (chromium, 4 roles × 4 widths)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -62,8 +68,10 @@ jobs:
           pnpm exec playwright test tests/e2e/shared/visual-qa.spec.ts
           tests/e2e/shared/route-transition.spec.ts
           tests/e2e/shared/command-palette.spec.ts
+          tests/e2e/shared/learner-layout-crawl.spec.ts
           --project=chromium-unauth --project=chromium-learner
           --project=chromium-expert --project=chromium-admin
+          --workers=1
 
       - name: Upload screenshots and report
         if: always()

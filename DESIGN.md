@@ -63,7 +63,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - `text-xs` (12px) through `text-4xl`: Tailwind defaults
 
   The micro sizes are rem-based, so the "large text" accessibility setting scales them.
-- **Eyebrows:** `text-2xs font-bold uppercase tracking-[0.16em] text-muted`.
+- **Eyebrows:** the `eyebrow` utility (`text-2xs font-bold uppercase tracking-[0.16em]`) plus a colour, usually `text-muted`. Don't hand-roll other uppercase label recipes.
 - **Body:** 14–16px with a calm line height. Headings are semibold or bold with tight tracking.
 - **Numbers:** use `tabular-nums` in tables and metrics, and right-align numeric columns.
 
@@ -118,6 +118,8 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 ## 7. Layout and responsive behaviour
 - Keep the workspace about 1200px wide.
 - Pages flow as: hero → action cards → main grid → supporting rail.
+- **Vertical rhythm:** the learner shell spaces a page's top-level blocks (`.learner-page-flow`: 24px, 32px from `sm`). Pages return their blocks without wrapper `space-y-*` or ad-hoc `mt-*`. Vertical padding belongs to `<main>`; the workspace container only sets width and gutters.
+- **Tiles and stat strips** size to their container, not the viewport: auto-fit grids (`grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]`) or `@container` queries. Labels and values wrap; never clip or ellipsize a metric.
 - **Mobile (<lg):**
   - The sidebar becomes the top-nav drawer and the bottom nav appears.
   - Content is a single column.

@@ -90,6 +90,16 @@ test.describe('Command palette @visual', () => {
       const combobox = dialog.getByRole('combobox', { name: 'Search' });
       await expect(dialog).toBeVisible();
       await expect(combobox).toBeFocused();
+      // toBeVisible passes at opacity 0; axe blends colours through ancestor
+      // opacity, so audit only once the open animation has settled.
+      await expect
+        .poll(() => combobox.evaluate((el) => {
+          for (let node: Element | null = el; node; node = node.parentElement) {
+            if (parseFloat(getComputedStyle(node).opacity) < 1) return false;
+          }
+          return true;
+        }))
+        .toBe(true);
 
       if (width === 360) {
         // Portaled to <body> above the fixed bottom nav, not painted under it.
