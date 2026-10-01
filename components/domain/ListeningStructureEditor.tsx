@@ -273,7 +273,7 @@ function CountsPill({
   return (
     <div className={`rounded-lg border px-3 py-2 text-sm ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
       <div className="text-xs text-muted">{label}</div>
-      <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-emerald-600" /> : <AlertTriangle className="inline w-4 h-4 text-amber-600" />}</div>
+      <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-success-strong" /> : <AlertTriangle className="inline w-4 h-4 text-warning-strong" />}</div>
     </div>
   );
 }

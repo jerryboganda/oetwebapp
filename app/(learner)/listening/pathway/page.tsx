@@ -27,24 +27,24 @@ function statusStyle(status: ListeningPathwayStageView['status']): {
   switch (status) {
     case 'Completed':
       return {
-        badge: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-800/60',
+        badge: 'bg-success/10 text-success-strong ring-1 ring-success/20',
         border: 'border-success/30',
         bg: 'bg-success/5',
-        text: 'text-emerald-900 dark:text-emerald-200',
+        text: 'text-success-strong',
       };
     case 'InProgress':
       return {
-        badge: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800/60',
+        badge: 'bg-warning/10 text-warning-strong ring-1 ring-warning/20',
         border: 'border-warning/30',
         bg: 'bg-warning/5',
-        text: 'text-amber-900 dark:text-amber-200',
+        text: 'text-warning-strong',
       };
     case 'Unlocked':
       return {
-        badge: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-800/60',
+        badge: 'bg-info/10 text-info ring-1 ring-info/20',
         border: 'border-info/30',
         bg: 'bg-info/5',
-        text: 'text-sky-900 dark:text-sky-200',
+        text: 'text-info',
       };
     default:
       return {
@@ -85,7 +85,7 @@ function StageCard({ stage, index }: { stage: ListeningPathwayStageView; index: 
           {stage.scaledScore === null ? 'No score yet' : `${stage.scaledScore}/500`}
         </span>
         {stage.completedAt ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 font-bold text-emerald-800 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 font-bold text-success-strong">
             <Trophy className="h-3 w-3" aria-hidden />
             Complete
           </span>

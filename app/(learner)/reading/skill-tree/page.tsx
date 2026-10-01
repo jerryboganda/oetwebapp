@@ -83,7 +83,7 @@ function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
           <h3 className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{skill.name}</h3>
         </div>
         {isComplete && (
-          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+          <span className="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success-strong">
             Done
           </span>
         )}

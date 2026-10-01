@@ -468,8 +468,8 @@ export default function RecallsWordsPage() {
                       title="Recalls marked Free by the team — fully usable on any plan"
                       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
                         freePreviewOnly
-                          ? 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-600 dark:bg-emerald-600'
-                          : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+                          ? 'border-success bg-success text-white'
+                          : 'border-success/40 text-success-strong hover:border-success hover:text-success-strong'
                       }`}
                     >
                       <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />

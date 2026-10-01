@@ -21,10 +21,10 @@ const AI_PACKAGE_SUBTEST_SECTIONS: Array<{
   title: string;
   headerClass: string;
 }> = [
-  { key: 'listening', title: 'Separate Listening Packages', headerClass: 'bg-blue-700' },
-  { key: 'reading', title: 'Separate Reading Packages', headerClass: 'bg-purple-700' },
-  { key: 'writing', title: 'Separate Writing Packages', headerClass: 'bg-amber-600' },
-  { key: 'speaking', title: 'Separate Speaking Packages', headerClass: 'bg-emerald-700' },
+  { key: 'listening', title: 'Separate Listening Packages', headerClass: 'bg-info' },
+  { key: 'reading', title: 'Separate Reading Packages', headerClass: 'bg-primary-dark' },
+  { key: 'writing', title: 'Separate Writing Packages', headerClass: 'bg-warning-strong' },
+  { key: 'speaking', title: 'Separate Speaking Packages', headerClass: 'bg-success-strong' },
 ];
 
 interface CanonicalAiPackage {
@@ -219,7 +219,7 @@ export function AiPackagesStorefront() {
                 type="button"
                 onClick={() => setView(tab.id)}
                 className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-                  view === tab.id ? 'bg-emerald-700 text-white shadow-sm' : 'text-navy hover:bg-surface'
+                  view === tab.id ? 'bg-success-strong text-white shadow-sm' : 'text-navy hover:bg-surface'
                 }`}
                 aria-pressed={view === tab.id}
               >

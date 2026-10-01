@@ -205,7 +205,7 @@ export default function WritingAppealPage() {
                   <span className="block text-right text-xs text-muted">{500 - reason.length} characters remaining</span>
                 </label>
 
-                <label className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200">
+                <label className="flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning-strong">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -244,7 +244,7 @@ export default function WritingAppealPage() {
               </p>
 
               {ACTIVE_STATUSES.has(appeal.status) ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200">
+                <div className="flex items-center gap-3 rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning-strong">
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
                   <span>The second examiner is regrading your letter. This usually takes 30–60 seconds.</span>
                 </div>

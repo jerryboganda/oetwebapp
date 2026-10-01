@@ -87,7 +87,7 @@ export default function WritingReviseSubmissionPage() {
       <div className="space-y-4 pb-32" aria-busy={!original}>
         <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
           <div className="flex items-center gap-3">
-            <RefreshCw className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            <RefreshCw className="h-5 w-5 text-warning-strong" aria-hidden="true" />
             <div>
               <p className="eyebrow text-muted">{t('writing.submissions.revise.eyebrow')}</p>
               <h1 className="text-base font-bold text-navy">{original ? t('writing.submissions.revise.heroTitle', { mode: original.mode }) : t('writing.submissions.revise.heroTitleLoading')}</h1>

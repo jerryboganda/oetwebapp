@@ -26,23 +26,23 @@ function normalizeRag(rag: string): ReadingRag {
 
 const RAG_STYLES: Record<ReadingRag, { dot: string; chip: string; label: string }> = {
   green: {
-    dot: 'bg-emerald-500',
-    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+    dot: 'bg-success',
+    chip: 'bg-success/10 text-success-strong border-success/20',
     label: 'Green',
   },
   amber: {
-    dot: 'bg-amber-500',
-    chip: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+    dot: 'bg-warning',
+    chip: 'bg-warning/10 text-warning-strong border-warning/20',
     label: 'Amber',
   },
   red: {
-    dot: 'bg-red-500',
-    chip: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800',
+    dot: 'bg-danger',
+    chip: 'bg-danger/10 text-danger-strong border-danger/20',
     label: 'Red',
   },
   unknown: {
     dot: 'bg-slate-400',
-    chip: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700',
+    chip: 'bg-background-light text-muted border-border',
     label: 'No attempt',
   },
 };

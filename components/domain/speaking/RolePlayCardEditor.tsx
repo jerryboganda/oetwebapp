@@ -466,7 +466,7 @@ export function RolePlayCardEditor({
 
       {/* Validation hint bar */}
       {validationHints.length > 0 ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-xs text-warning-strong">
           <p className="font-bold uppercase tracking-wider">Before publish</p>
           <ul className="mt-1 list-disc pl-4 space-y-0.5">
             {validationHints.map((hint, i) => <li key={i}>{hint}</li>)}

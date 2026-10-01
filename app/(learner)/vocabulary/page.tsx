@@ -99,7 +99,7 @@ export default function VocabularyPage() {
 
   const quickLinks = [
     { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: displayStats.dueToday > 0 ? `${displayStats.dueToday} due` : null, iconTile: 'bg-primary/10 text-primary' },
-    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, iconTile: 'bg-emerald-50 text-emerald-700' },
+    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, iconTile: 'bg-success/10 text-success-strong' },
     { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, iconTile: 'bg-info/10 text-info' },
     { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, iconTile: 'bg-primary-50 text-primary-700 dark:bg-primary/10 dark:text-primary' },
   ];
@@ -159,8 +159,8 @@ export default function VocabularyPage() {
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             { label: 'Total Words', value: displayStats.total, color: 'text-navy' },
-            { label: 'Mastered', value: displayStats.mastered, color: 'text-green-600 dark:text-green-400' },
-            { label: 'Learning', value: displayStats.learning, color: 'text-blue-600 dark:text-blue-400' },
+            { label: 'Mastered', value: displayStats.mastered, color: 'text-success-strong' },
+            { label: 'Learning', value: displayStats.learning, color: 'text-info' },
             { label: 'New', value: displayStats.new, color: 'text-muted' },
           ].map(s => (
             <Card key={s.label} className="rounded-surface p-4 text-center shadow-sm">

@@ -299,7 +299,7 @@ function NavSection({
                 </span>
                 <span className="relative z-10">{item.sidebarLabel ?? item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
-                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-3xs font-bold tabular-nums text-white shadow-sm">
+                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-warning px-1.5 py-0.5 text-3xs font-bold tabular-nums text-white shadow-sm">
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}

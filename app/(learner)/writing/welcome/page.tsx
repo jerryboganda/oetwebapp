@@ -82,7 +82,7 @@ export default function WritingWelcomePage() {
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                       {index + 1}
                     </span>
-                    <Icon className="h-5 w-5 text-amber-600" aria-hidden="true" />
+                    <Icon className="h-5 w-5 text-warning-strong" aria-hidden="true" />
                     <Badge variant="muted" size="sm">{label}</Badge>
                   </div>
                   <p className="text-sm text-navy font-semibold">{label}</p>

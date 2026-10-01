@@ -25,7 +25,7 @@ export function LearnerDashboardLoadingCard() {
           <h3 className="mt-2.5 text-base font-bold text-navy sm:mt-4 sm:text-xl">
             Preparing your next study step
           </h3>
-          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted sm:mt-2 sm:text-sm">
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted sm:mt-2 sm:text-sm">
             We&apos;re loading your live study plan so you can start the right practice without losing your place.
           </p>
         </div>

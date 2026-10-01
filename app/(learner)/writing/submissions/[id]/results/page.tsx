@@ -332,7 +332,7 @@ export default function WritingSubmissionResultsPage() {
                         target={CRITERION_TARGET[code]}
                         feedback={isMock ? tutorReview?.perCriterionComments?.[code] ?? null : ai?.quote ? (
                           <>
-                            <mark className="rounded bg-amber-100 px-0.5 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">“{ai.quote}”</mark>{' '}
+                            <mark className="rounded bg-warning/10 px-0.5 text-warning-strong">“{ai.quote}”</mark>{' '}
                             {ai.feedback}
                           </>
                         ) : ai?.feedback}
@@ -411,7 +411,7 @@ export default function WritingSubmissionResultsPage() {
         {caseNotes?.stimulusPdfDownloadPath ? (
           <section aria-labelledby="case-notes-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <h2 id="case-notes-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
-              <FileText className="h-5 w-5 text-amber-600" aria-hidden="true" /> Your highlighted case notes
+              <FileText className="h-5 w-5 text-warning-strong" aria-hidden="true" /> Your highlighted case notes
             </h2>
             <p className="mt-1 text-sm text-muted">The portions you highlighted during the exam.</p>
             <div className="mt-3 h-[75vh] overflow-hidden rounded-xl border border-border">
@@ -524,9 +524,9 @@ export default function WritingSubmissionResultsPage() {
             ) : null}
           </div>
           {offerRevision && grade?.revisionInvite?.reason ? (
-            <Card padding="md" className="mt-4 border-amber-300/70 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/20">
+            <Card padding="md" className="mt-4 border-warning/30 bg-warning/10">
               <CardContent>
-                <p className="text-sm text-amber-900">
+                <p className="text-sm text-warning-strong">
                   <span className="font-bold">{t('writing.submissions.results.next.whyRevise')}</span>{' '}
                   <span dir="ltr">{grade.revisionInvite.reason}</span>
                 </p>

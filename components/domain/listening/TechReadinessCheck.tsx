@@ -120,7 +120,7 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
               <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Audio confirmed.
             </span>
             {verificationWarning ? (
-              <p role="note" className="flex items-start gap-2 text-xs text-amber-800">
+              <p role="note" className="flex items-start gap-2 text-xs text-warning-strong">
                 <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {verificationWarning} — you can still start; the exam will verify audio during playback.
               </p>
             ) : null}

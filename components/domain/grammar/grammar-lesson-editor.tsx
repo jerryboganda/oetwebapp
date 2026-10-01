@@ -266,7 +266,7 @@ export function GrammarLessonEditor({
 
       {/* ── Publish gate ─────────────────────────────────────────── */}
       {publishErrors && publishErrors.length > 0 ? (
-        <Card className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+        <Card className="border-danger/20 bg-danger/10 p-4 text-sm text-danger-strong">
           <p className="font-semibold">Publish gate failures</p>
           <ul className="mt-1 list-disc pl-5">
             {publishErrors.map((e, i) => <li key={i}>{e}</li>)}

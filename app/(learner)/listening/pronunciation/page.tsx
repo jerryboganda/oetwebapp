@@ -43,10 +43,10 @@ const STAT_ACCENTS: Record<string, string> = {
   violet:
     'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
   emerald:
-    'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/50 dark:text-emerald-300',
+    'bg-success/10 border-success/20 text-success-strong',
   amber:
-    'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-300',
-  rose: 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300',
+    'bg-warning/10 border-warning/20 text-warning-strong',
+  rose: 'bg-danger/10 border-danger/20 text-danger-strong',
 };
 
 function formatNextReview(iso: string | null): string {
@@ -298,7 +298,7 @@ export default function PronunciationHubPage() {
                         <button
                           type="button"
                           onClick={() => void handleRemove(card)}
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-surface text-muted transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 dark:hover:border-rose-800/60 dark:hover:bg-rose-950/30"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-surface text-muted transition-colors hover:border-danger/30 hover:bg-danger/10 hover:text-danger-strong focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                           aria-label={`Remove ${card.word} from deck`}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden />

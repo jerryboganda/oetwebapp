@@ -54,7 +54,7 @@ import { buildMockRemediationPlan, getMockReadinessDecision } from '@/lib/mocks/
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   listening: { icon: Headphones, color: 'text-primary', bg: 'bg-primary/10' },
   reading:   { icon: FileText,   color: 'text-info',   bg: 'bg-info/10' },
-  writing:   { icon: PenTool,    color: 'text-rose-600',   bg: 'bg-rose-50' },
+  writing:   { icon: PenTool,    color: 'text-danger-strong',   bg: 'bg-danger/10' },
   speaking:  { icon: Mic,        color: 'text-primary', bg: 'bg-primary/10' },
 };
 

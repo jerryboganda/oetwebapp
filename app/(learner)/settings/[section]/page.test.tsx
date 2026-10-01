@@ -93,7 +93,7 @@ describe('Settings section page', () => {
     /* All 3 fields have values → all show 'Set' */
     expect(screen.getAllByText('Set').length).toBeGreaterThan(0);
     /* Blue-themed accent for profile section */
-    expect(container.querySelector('.bg-blue-50.text-blue-700')).toBeTruthy();
+    expect(container.querySelector('.bg-info\\/10.text-info')).toBeTruthy();
   });
 
   it('renders the privacy section pointing to the real recordings/data controls, not disconnected toggles', async () => {
@@ -116,7 +116,7 @@ describe('Settings section page', () => {
     /* No remote fetch for the informational privacy section */
     expect(mockFetchSettingsSection).not.toHaveBeenCalled();
     /* Rose-themed accent for privacy section */
-    expect(container.querySelector('.bg-rose-50.text-rose-700')).toBeTruthy();
+    expect(container.querySelector('.bg-danger\\/10.text-danger-strong')).toBeTruthy();
   });
 
   it('renders goals subtest tags and mixed configured states with purple accents', async () => {
@@ -154,6 +154,6 @@ describe('Settings section page', () => {
     expect(screen.getByLabelText('Speaking target score')).toHaveValue(360);
     expect(screen.getByLabelText('Listening target score')).toHaveValue(380);
     /* Purple-themed accent for goals section */
-    expect(container.querySelector('.bg-purple-50.text-purple-700')).toBeTruthy();
+    expect(container.querySelector('.bg-lavender.text-primary-dark')).toBeTruthy();
   });
 });

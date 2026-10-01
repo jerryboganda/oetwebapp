@@ -82,15 +82,15 @@ function OverrideBanner({ review }: { review: ReadingPrivilegedAttemptReview }) 
   return (
     <div
       role="note"
-      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/40"
+      className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm"
     >
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="font-semibold text-amber-900 dark:text-amber-200">
+          <p className="font-semibold text-warning-strong">
             Manual score override is active
           </p>
-          <p className="text-amber-800 dark:text-amber-300">
+          <p className="text-warning-strong">
             Effective score:{' '}
             <span className="font-semibold">
               {formatScore(review.effectiveRawScore, review.effectiveScaledScore, review.effectiveGradeLetter)}
@@ -99,12 +99,12 @@ function OverrideBanner({ review }: { review: ReadingPrivilegedAttemptReview }) 
             {formatScore(review.gradedRawScore, review.gradedScaledScore, review.gradedGradeLetter)}
           </p>
           {review.overrideReason ? (
-            <p className="text-amber-800 dark:text-amber-300">
+            <p className="text-warning-strong">
               <span className="font-medium">Reason:</span> {review.overrideReason}
             </p>
           ) : null}
           {review.overriddenAt ? (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p className="text-xs text-warning-strong">
               Set {new Date(review.overriddenAt).toLocaleString()}
               {review.overriddenByUserId ? ` by ${review.overriddenByUserId}` : ''}
             </p>
@@ -121,19 +121,19 @@ function AdminReviewBanner({ review }: { review: ReadingPrivilegedAttemptReview 
     <div
       role="alert"
       data-testid="reading-privileged-admin-review-warning"
-      className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/40"
+      className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm"
     >
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="font-semibold text-amber-900 dark:text-amber-200">
+          <p className="font-semibold text-warning-strong">
             Administrator review required ({review.invalidCount} invalid answer{review.invalidCount === 1 ? '' : 's'})
           </p>
-          <p className="text-amber-800 dark:text-amber-300">
+          <p className="text-warning-strong">
             Invalid answers are excluded from ordinary accuracy and conversion evidence until a controlled review is completed.
           </p>
           {review.adminReviewReason ? (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p className="text-xs text-warning-strong">
               <span className="font-medium">Reason:</span> {review.adminReviewReason}
             </p>
           ) : null}
@@ -148,11 +148,11 @@ function AdminReviewBanner({ review }: { review: ReadingPrivilegedAttemptReview 
 function ScoreSummary({ review }: { review: ReadingPrivilegedAttemptReview }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-        <p className="eyebrow text-slate-500 dark:text-slate-400">
+      <div className="rounded-xl border border-border bg-white p-4 dark:bg-slate-900">
+        <p className="eyebrow text-muted">
           System-graded score
         </p>
-        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+        <p className="mt-1 text-lg font-bold text-navy">
           {formatScore(review.gradedRawScore, review.gradedScaledScore, review.gradedGradeLetter)}
         </p>
       </div>
@@ -160,14 +160,14 @@ function ScoreSummary({ review }: { review: ReadingPrivilegedAttemptReview }) {
         className={cn(
           'rounded-xl border p-4',
           review.hasOverride
-            ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'
-            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
+            ? 'border-warning/30 bg-warning/10'
+            : 'border-border bg-white dark:bg-slate-900',
         )}
       >
-        <p className="eyebrow text-slate-500 dark:text-slate-400">
+        <p className="eyebrow text-muted">
           Effective score
         </p>
-        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+        <p className="mt-1 text-lg font-bold text-navy">
           {formatScore(review.effectiveRawScore, review.effectiveScaledScore, review.effectiveGradeLetter)}
         </p>
       </div>
@@ -180,11 +180,11 @@ function ScoreSummary({ review }: { review: ReadingPrivilegedAttemptReview }) {
 function SectionTable({ sections }: { sections: ReadingPrivilegedSection[] }) {
   if (sections.length === 0) return null;
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">Per-section raw scores and accuracy</caption>
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left eyebrow text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+          <tr className="border-b border-border bg-background-light text-left eyebrow text-muted">
             <th scope="col" className="px-4 py-2.5">Section</th>
             <th scope="col" className="px-4 py-2.5 text-right">Raw</th>
             <th scope="col" className="px-4 py-2.5 text-right">Accuracy</th>
@@ -198,27 +198,27 @@ function SectionTable({ sections }: { sections: ReadingPrivilegedSection[] }) {
           {sections.map((section) => (
             <tr
               key={section.partCode}
-              className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
+              className="border-b border-border last:border-b-0"
             >
-              <th scope="row" className="px-4 py-2.5 text-left font-medium text-slate-900 dark:text-slate-100">
+              <th scope="row" className="px-4 py-2.5 text-left font-medium text-navy">
                 {partLabel(section.partCode)}
               </th>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+              <td className="px-4 py-2.5 text-right tabular-nums text-navy">
                 {section.rawScore}/{section.maxRawScore}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
+              <td className="px-4 py-2.5 text-right tabular-nums text-navy">
                 {section.accuracyPercent === null ? '-' : `${section.accuracyPercent}%`}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
+              <td className="px-4 py-2.5 text-right tabular-nums text-success-strong">
                 {section.correctCount}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-red-700 dark:text-red-400">
+              <td className="px-4 py-2.5 text-right tabular-nums text-danger-strong">
                 {section.incorrectCount}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-amber-700 dark:text-amber-400">
+              <td className="px-4 py-2.5 text-right tabular-nums text-warning-strong">
                 {section.invalidCount}
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+              <td className="px-4 py-2.5 text-right tabular-nums text-muted">
                 {section.unansweredCount}
               </td>
             </tr>
@@ -236,19 +236,19 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
 
   const statusIcon = useMemo(() => {
     if (question.isInvalid) {
-      return <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />;
+      return <AlertTriangle className="h-4 w-4 text-warning-strong" aria-hidden="true" />;
     }
     if (question.isCorrect === true) {
-      return <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />;
+      return <CheckCircle2 className="h-4 w-4 text-success-strong" aria-hidden="true" />;
     }
     if (question.isCorrect === false) {
-      return <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />;
+      return <XCircle className="h-4 w-4 text-danger-strong" aria-hidden="true" />;
     }
-    return <MinusCircle className="h-4 w-4 text-slate-400" aria-hidden="true" />;
+    return <MinusCircle className="h-4 w-4 text-muted" aria-hidden="true" />;
   }, [question.isCorrect]);
 
   return (
-    <li className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <li className="rounded-xl border border-border bg-white dark:bg-slate-900">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -258,90 +258,90 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
         <span className="mt-0.5 shrink-0">{statusIcon}</span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="eyebrow text-slate-400 dark:text-slate-500">
+            <span className="eyebrow text-muted">
               {question.partCode} · Q{question.displayOrder}
             </span>
             {question.flaggedForReview ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-3xs font-medium text-warning-strong">
                 <Flag className="h-3 w-3" aria-hidden="true" /> Flagged
               </span>
             ) : null}
             {question.isInvalid ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-3xs font-medium text-warning-strong">
                 <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Invalid — admin review
               </span>
             ) : null}
             {question.answerRevisionCount > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-background-light px-2 py-0.5 text-3xs font-medium text-muted">
                 <Pencil className="h-3 w-3" aria-hidden="true" /> {question.answerRevisionCount} revision
                 {question.answerRevisionCount === 1 ? '' : 's'}
               </span>
             ) : null}
           </span>
-          <span className="mt-1 block text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2">
+          <span className="mt-1 block text-sm font-medium text-navy line-clamp-2">
             {question.stem}
           </span>
         </span>
-        <span className="ml-1 shrink-0 text-slate-400">
+        <span className="ml-1 shrink-0 text-muted">
           {open ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
         </span>
       </button>
 
       {open ? (
-        <div className="space-y-3 border-t border-slate-100 px-4 py-3 text-sm dark:border-slate-800">
+        <div className="space-y-3 border-t border-border px-4 py-3 text-sm">
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
-              <dt className="eyebrow text-slate-500 dark:text-slate-400">Learner answer</dt>
-              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{formatValue(question.userAnswer)}</dd>
+              <dt className="eyebrow text-muted">Learner answer</dt>
+              <dd className="mt-0.5 text-navy">{formatValue(question.userAnswer)}</dd>
             </div>
             <div>
-              <dt className="eyebrow text-slate-500 dark:text-slate-400">Correct answer</dt>
-              <dd className="mt-0.5 font-medium text-emerald-700 dark:text-emerald-400">{formatValue(question.correctAnswer)}</dd>
+              <dt className="eyebrow text-muted">Correct answer</dt>
+              <dd className="mt-0.5 font-medium text-success-strong">{formatValue(question.correctAnswer)}</dd>
             </div>
             <div>
-              <dt className="eyebrow text-slate-500 dark:text-slate-400">Points</dt>
-              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+              <dt className="eyebrow text-muted">Points</dt>
+              <dd className="mt-0.5 text-navy">
                 {question.pointsEarned}/{question.maxPoints}
               </dd>
             </div>
             <div>
-              <dt className="eyebrow text-slate-500 dark:text-slate-400">Skill tag</dt>
-              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{question.skillTag ?? '-'}</dd>
+              <dt className="eyebrow text-muted">Skill tag</dt>
+              <dd className="mt-0.5 text-navy">{question.skillTag ?? '-'}</dd>
             </div>
             <div className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              <Clock className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
               <div>
-                <dt className="eyebrow text-slate-500 dark:text-slate-400">Time on question</dt>
-                <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{formatMs(question.elapsedMs)}</dd>
+                <dt className="eyebrow text-muted">Time on question</dt>
+                <dd className="mt-0.5 text-navy">{formatMs(question.elapsedMs)}</dd>
               </div>
             </div>
             <div>
-              <dt className="eyebrow text-slate-500 dark:text-slate-400">Cumulative time</dt>
-              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{formatMs(question.totalElapsedMs)}</dd>
+              <dt className="eyebrow text-muted">Cumulative time</dt>
+              <dd className="mt-0.5 text-navy">{formatMs(question.totalElapsedMs)}</dd>
             </div>
           </dl>
 
           {question.isInvalid ? (
-            <div className="rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
-              <p className="eyebrow text-amber-700 dark:text-amber-400">Invalid answer</p>
-              <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+            <div className="rounded-lg bg-warning/10 px-3 py-2">
+              <p className="eyebrow text-warning-strong">Invalid answer</p>
+              <p className="mt-0.5 text-warning-strong">
                 The persisted answer is indeterminate and requires controlled administrator review; it is not an ordinary incorrect response.
               </p>
             </div>
           ) : question.missReason ? (
-            <div className="rounded-lg bg-red-50 px-3 py-2 dark:bg-red-950/30">
-              <p className="eyebrow text-red-700 dark:text-red-400">Miss reason</p>
-              <p className="mt-0.5 text-red-800 dark:text-red-300">{question.missReason}</p>
+            <div className="rounded-lg bg-danger/10 px-3 py-2">
+              <p className="eyebrow text-danger-strong">Miss reason</p>
+              <p className="mt-0.5 text-danger-strong">{question.missReason}</p>
             </div>
           ) : null}
 
           {question.selectedDistractorCategory ? (
-            <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
-              <p className="eyebrow text-slate-500 dark:text-slate-400">
+            <div className="rounded-lg bg-background-light px-3 py-2">
+              <p className="eyebrow text-muted">
                 Distractor: {question.selectedDistractorCategory}
               </p>
               {formatValue(question.distractorRationale) !== '-' ? (
-                <p className="mt-0.5 text-slate-700 dark:text-slate-300">
+                <p className="mt-0.5 text-navy">
                   {formatValue(question.distractorRationale)}
                 </p>
               ) : null}
@@ -349,14 +349,14 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
           ) : null}
 
           {question.explanationMarkdown ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/60">
-              <p className="eyebrow text-slate-500 dark:text-slate-400">Explanation</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-slate-700 dark:text-slate-300">{question.explanationMarkdown}</p>
+            <div className="rounded-lg border border-border bg-background-light px-3 py-2">
+              <p className="eyebrow text-muted">Explanation</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-navy">{question.explanationMarkdown}</p>
             </div>
           ) : null}
 
           {question.acceptedSynonyms.length > 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-muted">
               <span className="font-medium">Accepted synonyms:</span> {question.acceptedSynonyms.join(', ')}
             </p>
           ) : null}
@@ -379,8 +379,8 @@ export function PrivilegedAttemptReview({ review, className }: PrivilegedAttempt
       <OverrideBanner review={review} />
 
       <header className="space-y-1">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{review.paperTitle}</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+        <h2 className="text-lg font-semibold text-navy">{review.paperTitle}</h2>
+        <p className="text-sm text-muted">
           Learner {review.userId} · {review.mode} · {review.status}
           {review.submittedAt ? ` · submitted ${new Date(review.submittedAt).toLocaleString()}` : ''}
         </p>
@@ -391,16 +391,16 @@ export function PrivilegedAttemptReview({ review, className }: PrivilegedAttempt
       <ScoreSummary review={review} />
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Sections</h3>
+        <h3 className="text-sm font-semibold text-navy">Sections</h3>
         <SectionTable sections={review.sections} />
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <h3 className="text-sm font-semibold text-navy">
           Questions ({review.questions.length})
         </h3>
         {review.questions.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <p className="rounded-xl border border-dashed border-border-hover px-4 py-6 text-center text-sm text-muted">
             No questions recorded for this attempt.
           </p>
         ) : (

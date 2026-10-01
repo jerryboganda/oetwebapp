@@ -324,7 +324,7 @@ export function StepReading() {
               <div key={t.id} className="space-y-2 rounded-xl bg-surface p-3">
                 <div className="flex items-center justify-between gap-2">
                   <Badge variant="info">Text #{t.displayOrder}</Badge>
-                  <button onClick={() => removeText(t.id)} aria-label="Remove text" className="text-muted hover:text-red-600">
+                  <button onClick={() => removeText(t.id)} aria-label="Remove text" className="text-muted hover:text-danger-strong">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -366,7 +366,7 @@ export function StepReading() {
               <div key={q.id} className="space-y-2 rounded-xl bg-surface p-3">
                 <div className="flex items-center justify-between gap-2">
                   <Badge variant="info">Q{q.displayOrder}</Badge>
-                  <button onClick={() => removeQuestion(q.id)} aria-label="Remove question" className="text-muted hover:text-red-600">
+                  <button onClick={() => removeQuestion(q.id)} aria-label="Remove question" className="text-muted hover:text-danger-strong">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>

@@ -26,7 +26,7 @@ export function AiAssistantWidget({ role, hasNotification = false }: AiAssistant
         <MessageSquare className="h-6 w-6" />
         {hasNotification && (
           <span
-            className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500"
+            className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-danger"
             data-testid="notification-indicator"
           />
         )}

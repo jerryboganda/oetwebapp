@@ -130,12 +130,12 @@ export default function VocabStatsPage() {
               <StatCard
                 label="Average Retention"
                 value={stats ? `${Math.round(stats.averageRetention)}%` : '–'}
-                colorClass="text-blue-700 dark:text-blue-300"
+                colorClass="text-info"
               />
               <StatCard
                 label="Due Today"
                 value={stats?.dueToday ?? 0}
-                colorClass="text-amber-700 dark:text-amber-300"
+                colorClass="text-warning-strong"
               />
             </section>
 

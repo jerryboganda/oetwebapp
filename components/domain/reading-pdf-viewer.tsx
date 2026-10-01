@@ -449,7 +449,7 @@ function ToolbarButton({ label, icon: Icon, onClick, active, disabled }: {
       type="button"
       variant="ghost"
       size="sm"
-      className={cn('h-8 px-2', active && 'bg-warning/20 text-amber-800')}
+      className={cn('h-8 px-2', active && 'bg-warning/20 text-warning-strong')}
       onClick={onClick}
       disabled={disabled}
       title={label}
@@ -481,8 +481,8 @@ function AnnotationOverlay({ annotation, selected, onSelect }: {
     <button
       type="button"
       className={cn(
-        'absolute border border-amber-500/40 bg-yellow-300/35',
-        annotation.kind === 'Text' && 'bg-yellow-300/55 mix-blend-multiply',
+        'absolute border border-warning/40 bg-warning/30',
+        annotation.kind === 'Text' && 'bg-warning/30 mix-blend-multiply',
         selected && 'ring-2 ring-primary',
       )}
       style={{
@@ -508,7 +508,7 @@ function DraftOverlay({ kind, geometry }: { kind: Tool; geometry: RectGeometry |
   }
   return (
     <div
-      className={cn('absolute border border-dashed border-amber-600 bg-yellow-300/30', kind === 'Text' && 'bg-yellow-300/50')}
+      className={cn('absolute border border-dashed border-warning bg-warning/30', kind === 'Text' && 'bg-warning/30')}
       style={{
         left: `${geometry.x * 100}%`,
         top: `${geometry.y * 100}%`,

@@ -147,7 +147,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
               <ul className="mt-1 space-y-1 text-sm text-navy">
                 {feedback.strengths!.map((s, i) => (
                   <li key={i} className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden />
                     <span>{s}</span>
                   </li>
                 ))}
@@ -236,17 +236,17 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint: 
 // `pronunciationScoreTier` in `lib/scoring.ts` so the 70 anchor lives in one place.
 function tintForScore(score: number) {
   switch (pronunciationScoreTier(score)) {
-    case 'excellent': return 'text-emerald-600 dark:text-emerald-400';
-    case 'passing':   return 'text-amber-600 dark:text-amber-400';
-    default:          return 'text-rose-600 dark:text-rose-400';
+    case 'excellent': return 'text-success-strong';
+    case 'passing':   return 'text-warning-strong';
+    default:          return 'text-danger-strong';
   }
 }
 
 function barClass(score: number) {
   switch (pronunciationScoreTier(score)) {
-    case 'excellent': return 'bg-emerald-500';
-    case 'passing':   return 'bg-amber-500';
-    default:          return 'bg-rose-500';
+    case 'excellent': return 'bg-success';
+    case 'passing':   return 'bg-warning';
+    default:          return 'bg-danger';
   }
 }
 

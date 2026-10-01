@@ -142,7 +142,7 @@ function SelectShell({
 }
 
 const SELECT_CLASS =
-  'w-full appearance-none rounded-xl border border-border bg-surface py-2.5 pr-9 text-[13px] font-medium text-navy shadow-sm transition-colors hover:border-border-hover focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+  'w-full appearance-none rounded-xl border border-border bg-surface py-2.5 pr-9 text-sm font-medium text-navy shadow-sm transition-colors hover:border-border-hover focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
 
 export function NotificationsSettingsView() {
   const {
@@ -329,14 +329,14 @@ export function NotificationsSettingsView() {
     },
     {
       icon: CheckCircle2,
-      tone: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400',
+      tone: 'bg-success/10 text-success-strong',
       label: 'Configured',
       value: `${configuredCount} set`,
       onClick: () => overridesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     },
     {
       icon: SquarePen,
-      tone: 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400',
+      tone: 'bg-warning/10 text-warning-strong',
       label: 'Save state',
       value: saveStateLabel,
       onClick: null,
@@ -401,8 +401,8 @@ export function NotificationsSettingsView() {
                 <StatIcon className="h-5 w-5" aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-navy">{stat.label}</span>
-                <span className="block truncate text-[13px] text-muted">{stat.value}</span>
+                <span className="block truncate text-sm font-semibold text-navy">{stat.label}</span>
+                <span className="block truncate text-sm text-muted">{stat.value}</span>
               </span>
               {interactive ? <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
             </Tag>
@@ -414,8 +414,8 @@ export function NotificationsSettingsView() {
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)_minmax(0,1.5fr)]">
         {/* Column 1 — delivery channels */}
         <section ref={preferencesRef} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h2 className="text-[17px] font-semibold text-navy">Notification Preferences</h2>
-          <p className="mt-1 text-[13px] text-muted">Choose your preferred delivery channels for platform updates.</p>
+          <h2 className="text-lg font-semibold text-navy">Notification Preferences</h2>
+          <p className="mt-1 text-sm text-muted">Choose your preferred delivery channels for platform updates.</p>
 
           <div role="tablist" aria-label="Filter by channel" className="-mx-1 mt-4 flex flex-wrap gap-1.5 px-1">
             {CHANNEL_TABS.map((tab) => {
@@ -428,7 +428,7 @@ export function NotificationsSettingsView() {
                   aria-selected={active}
                   onClick={() => setFilter(tab.key)}
                   className={cn(
-                    'rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors',
+                    'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
                     active
                       ? 'bg-primary text-white shadow-sm shadow-primary/20 dark:bg-violet-700'
                       : 'bg-background-light text-muted hover:text-navy',
@@ -462,7 +462,7 @@ export function NotificationsSettingsView() {
               })}
             </div>
           ) : (
-            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-[12.5px] text-muted">
+            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
               Web push is managed from the browser push card.
             </p>
           )}
@@ -473,10 +473,10 @@ export function NotificationsSettingsView() {
           <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <Clock className="h-[18px] w-[18px] text-primary" aria-hidden="true" />
-              <h2 className="text-[17px] font-semibold text-navy">Timezone &amp; Quiet Hours</h2>
+              <h2 className="text-lg font-semibold text-navy">Timezone &amp; Quiet Hours</h2>
             </div>
 
-            <label className="mt-4 block text-[12.5px] font-semibold text-navy" htmlFor="notification-timezone">
+            <label className="mt-4 block text-xs font-semibold text-navy" htmlFor="notification-timezone">
               Timezone
             </label>
             <SelectShell icon={Globe} className="mt-1.5">
@@ -498,7 +498,7 @@ export function NotificationsSettingsView() {
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-[12.5px] font-semibold text-navy" htmlFor="quiet-start">
+                <label className="block text-xs font-semibold text-navy" htmlFor="quiet-start">
                   Quiet hours start
                 </label>
                 <SelectShell icon={MoonStar} className="mt-1.5">
@@ -515,7 +515,7 @@ export function NotificationsSettingsView() {
                 </SelectShell>
               </div>
               <div>
-                <label className="block text-[12.5px] font-semibold text-navy" htmlFor="quiet-end">
+                <label className="block text-xs font-semibold text-navy" htmlFor="quiet-end">
                   Quiet hours end
                 </label>
                 <SelectShell icon={Sun} className="mt-1.5">
@@ -544,17 +544,17 @@ export function NotificationsSettingsView() {
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               <span
                 className={cn(
-                  'inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold',
+                  'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold',
                   pushEnabled
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
-                    : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400',
+                    ? 'bg-success/10 text-success-strong'
+                    : 'bg-danger/10 text-danger-strong',
                 )}
               >
                 {pushEnabled ? 'Browser push enabled' : 'Browser push disabled'}
               </span>
             </div>
-            <p className="mt-1.5 text-[12.5px] text-muted">Permission: {pushPermission}</p>
-            <p className="mt-2.5 text-[12.5px] leading-relaxed text-muted">
+            <p className="mt-1.5 text-xs text-muted">Permission: {pushPermission}</p>
+            <p className="mt-2.5 text-xs leading-relaxed text-muted">
               You can enable browser push notifications by allowing permissions when prompted from the preferences
               panel or notification center.
             </p>
@@ -571,10 +571,10 @@ export function NotificationsSettingsView() {
               {pushEnabled ? 'Disable push' : 'Enable Push'}
             </Button>
             {!pushSupported ? (
-              <p className="mt-2 text-[11.5px] text-muted">This browser does not support the Push API.</p>
+              <p className="mt-2 text-xs text-muted">This browser does not support the Push API.</p>
             ) : null}
             {pushSupported && !pushPublicKeyConfigured ? (
-              <p className="mt-2 text-[11.5px] text-muted">Push is unavailable: no VAPID key configured.</p>
+              <p className="mt-2 text-xs text-muted">Push is unavailable: no VAPID key configured.</p>
             ) : null}
           </section>
         </div>
@@ -583,7 +583,7 @@ export function NotificationsSettingsView() {
         <section ref={overridesRef} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <Bell className="h-[18px] w-[18px] text-primary" aria-hidden="true" />
-            <h2 className="text-[17px] font-semibold text-navy">Per-event Delivery Overrides</h2>
+            <h2 className="text-lg font-semibold text-navy">Per-event Delivery Overrides</h2>
             <span
               className="text-muted"
               title="Stored per account and applied across learner, expert, and admin shells."
@@ -622,7 +622,7 @@ export function NotificationsSettingsView() {
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/[0.07] text-primary">
                             <EventIcon className="h-4 w-4" aria-hidden="true" />
                           </span>
-                          <span className="truncate text-[13px] font-medium text-navy" title={label}>{label}</span>
+                          <span className="truncate text-sm font-medium text-navy" title={label}>{label}</span>
                         </div>
 
                         <span className="flex justify-center">
@@ -677,12 +677,12 @@ export function NotificationsSettingsView() {
                 </div>
 
                 {eventEntries.length === 0 ? (
-                  <p className="py-8 text-center text-[13px] text-muted">No event overrides available yet.</p>
+                  <p className="py-8 text-center text-sm text-muted">No event overrides available yet.</p>
                 ) : null}
               </div>
             </div>
           ) : (
-            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-[12.5px] text-muted">
+            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
               Per-event overrides apply to in-app, email, and push. Pick one of those tabs to edit them.
             </p>
           )}

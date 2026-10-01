@@ -22,20 +22,20 @@ const THEME: Record<
   reading: {
     unit: 'Reading',
     container:
-      'border-blue-200 bg-gradient-to-br from-blue-50 to-surface dark:border-blue-900/40 dark:from-blue-950/40 dark:to-surface',
-    medallion: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200',
-    eyebrow: 'text-blue-600 dark:text-blue-300',
-    step: 'border-blue-200/70 bg-white/70 dark:border-blue-900/40 dark:bg-blue-950/30',
-    stepIcon: 'text-blue-600 dark:text-blue-300',
+      'border-info/20 bg-gradient-to-br from-blue-50 to-surface dark:from-blue-950/40 dark:to-surface',
+    medallion: 'bg-info/10 text-info',
+    eyebrow: 'text-info',
+    step: 'border-info/20 bg-white/70 dark:bg-blue-950/30',
+    stepIcon: 'text-info',
   },
   listening: {
     unit: 'Listening',
     container:
-      'border-violet-200 bg-gradient-to-br from-violet-50 to-surface dark:border-violet-900/40 dark:from-violet-950/40 dark:to-surface',
-    medallion: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-200',
-    eyebrow: 'text-violet-600 dark:text-violet-300',
-    step: 'border-violet-200/70 bg-white/70 dark:border-violet-900/40 dark:bg-violet-950/30',
-    stepIcon: 'text-violet-600 dark:text-violet-300',
+      'border-primary/20 bg-gradient-to-br from-violet-50 to-surface dark:from-violet-950/40 dark:to-surface',
+    medallion: 'bg-lavender text-primary-dark',
+    eyebrow: 'text-primary',
+    step: 'border-primary/20 bg-white/70 dark:bg-violet-950/30',
+    stepIcon: 'text-primary',
   },
 };
 

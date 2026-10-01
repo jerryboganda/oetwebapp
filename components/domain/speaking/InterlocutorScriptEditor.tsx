@@ -150,7 +150,7 @@ export function InterlocutorScriptEditor({
       <div
         role="alert"
         aria-live="polite"
-        className="flex items-start gap-3 rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+        className="flex items-start gap-3 rounded-2xl border-2 border-danger/30 bg-danger/10 px-4 py-3 text-danger-strong shadow-sm"
       >
         <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
         <div className="space-y-0.5 text-sm">
@@ -205,12 +205,12 @@ export function InterlocutorScriptEditor({
       </section>
 
       {/* Section 2b: explicit Card B follow-up controls */}
-      <section className="space-y-4 rounded-2xl border-2 border-sky-200 bg-sky-50/60 p-4 dark:border-sky-900 dark:bg-sky-950/30">
+      <section className="space-y-4 rounded-2xl border-2 border-info/20 bg-info/10 p-4">
         <div>
-          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-sky-900 dark:text-sky-100">
+          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-info">
             Card B second-visit controls
           </h3>
-          <p className="mt-1 text-xs leading-5 text-sky-800 dark:text-sky-200">
+          <p className="mt-1 text-xs leading-5 text-info">
             Card B is independent by default. Enable this only for an explicitly authored follow-up card. The phrase “your patient” alone never activates carry-over, and the Card A transcript is never carried.
           </p>
         </div>
@@ -358,7 +358,7 @@ export function InterlocutorScriptEditor({
 
       {/* Validation hint bar */}
       {validationHints.length > 0 ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-xs text-warning-strong">
           <p className="font-bold uppercase tracking-wider">Before saving</p>
           <ul className="mt-1 list-disc pl-4 space-y-0.5">
             {validationHints.map((hint, i) => <li key={i}>{hint}</li>)}

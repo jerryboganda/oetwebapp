@@ -146,7 +146,7 @@ export function StepMockAssets() {
         </p>
       </header>
 
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600">
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success-strong">
         <CheckCircle2 className="h-3.5 w-3.5" /> This step is optional — you can publish the mock set without changing assets.
       </div>
 

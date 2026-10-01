@@ -13,18 +13,18 @@ import { buildDownloadFilename, formatBytes } from '@/lib/materials-tree';
 import type { LearnerMaterialFileDto } from '@/lib/materials-api';
 
 const KIND_ICON = {
-  audio: { Icon: Music, tone: 'text-blue-500 bg-blue-500/10' },
-  video: { Icon: Video, tone: 'text-fuchsia-500 bg-fuchsia-500/10' },
-  image: { Icon: ImageIcon, tone: 'text-emerald-500 bg-emerald-500/10' },
-  document: { Icon: FileIcon, tone: 'text-amber-500 bg-amber-500/10' },
-  pdf: { Icon: FileText, tone: 'text-red-400 bg-red-400/10' },
+  audio: { Icon: Music, tone: 'text-info bg-info/10' },
+  video: { Icon: Video, tone: 'text-primary bg-primary/10' },
+  image: { Icon: ImageIcon, tone: 'text-success-strong bg-success/10' },
+  document: { Icon: FileIcon, tone: 'text-warning-strong bg-warning/10' },
+  pdf: { Icon: FileText, tone: 'text-danger-strong bg-danger/10' },
 } as const;
 
 const SUBTEST_TONE: Record<string, string> = {
-  listening: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  reading: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  writing: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  speaking: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  listening: 'bg-info/10 text-info',
+  reading: 'bg-success/10 text-success-strong',
+  writing: 'bg-warning/10 text-warning-strong',
+  speaking: 'bg-lavender text-primary-dark',
 };
 
 /**
@@ -133,7 +133,7 @@ export function MaterialFileRow({
             {file.sizeBytes ? (
               <span className="text-3xs text-muted">{formatBytes(file.sizeBytes)}</span>
             ) : null}
-            {error && <span className="text-3xs font-semibold text-red-500">Download failed — try again</span>}
+            {error && <span className="text-3xs font-semibold text-danger-strong">Download failed — try again</span>}
           </div>
         </div>
 
@@ -143,7 +143,7 @@ export function MaterialFileRow({
               type="button"
               onClick={audio.load}
               disabled={audio.loading}
-              className="pressable flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-500/20 disabled:opacity-50 dark:text-blue-300"
+              className="pressable flex items-center gap-1.5 rounded-lg bg-info/10 px-2.5 py-1.5 text-xs font-semibold text-info transition-colors hover:bg-info/20 disabled:opacity-50"
               aria-label={`Play ${file.title}`}
             >
               {audio.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}

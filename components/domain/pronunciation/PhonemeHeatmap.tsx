@@ -36,11 +36,11 @@ export function PhonemeHeatmap({ wordScores }: { wordScores: WordScore[] }) {
 function bucketClass(score: number) {
   switch (pronunciationScoreTier(score)) {
     case 'excellent':
-      return 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800';
+      return 'bg-success/10 text-success-strong border-success/20';
     case 'passing':
-      return 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800';
+      return 'bg-warning/10 text-warning-strong border-warning/20';
     case 'below':
-      return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800';
+      return 'bg-danger/10 text-danger-strong border-danger/20';
     default:
       return 'bg-background-light text-muted border-border dark:text-muted/60';
   }

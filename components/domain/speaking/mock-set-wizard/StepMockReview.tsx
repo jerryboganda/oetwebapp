@@ -67,8 +67,8 @@ export function StepMockReview() {
         <ul className="space-y-1.5">
           {checks.map((c) => (
             <li key={c.label} className="flex items-center gap-2 text-sm">
-              {c.ok ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-red-600" />}
-              <span className={c.ok ? 'text-navy' : 'text-red-700'}>{c.label}</span>
+              {c.ok ? <Check className="h-4 w-4 text-success-strong" /> : <X className="h-4 w-4 text-danger-strong" />}
+              <span className={c.ok ? 'text-navy' : 'text-danger-strong'}>{c.label}</span>
             </li>
           ))}
         </ul>

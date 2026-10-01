@@ -101,21 +101,21 @@ const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; ic
     chip: 'Part A',
   },
   partB: {
-    ring: 'border-sky-200 hover:border-sky-300 dark:border-sky-900/60 dark:hover:border-sky-700',
-    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
-    icon: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+    ring: 'border-info/20 hover:border-info/30',
+    badge: 'bg-info/10 text-info',
+    icon: 'bg-info/10 text-info',
     chip: 'Part B',
   },
   partC: {
-    ring: 'border-emerald-200 hover:border-emerald-300 dark:border-emerald-900/60 dark:hover:border-emerald-700',
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-    icon: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+    ring: 'border-success/20 hover:border-success/30',
+    badge: 'bg-success/10 text-success-strong',
+    icon: 'bg-success/10 text-success-strong',
     chip: 'Part C',
   },
   exam: {
-    ring: 'border-amber-200 hover:border-amber-300 dark:border-amber-900/60 dark:hover:border-amber-700',
-    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300',
-    icon: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+    ring: 'border-warning/20 hover:border-warning/30',
+    badge: 'bg-warning/10 text-warning-strong',
+    icon: 'bg-warning/10 text-warning-strong',
     chip: 'Full exam',
   },
 };
@@ -490,23 +490,23 @@ function PaperCard({
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning-strong">
           <Headphones className="h-5 w-5" aria-hidden />
         </div>
         <div className="flex-1">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
                 <Lock className="h-3 w-3" aria-hidden />
                 Premium
               </span>
             ) : partial ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
                 Partial · Q37–42 unavailable
               </span>
             ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 tile-label text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <span className="rounded-full bg-success/10 px-2 py-0.5 tile-label text-success-strong">
                 Full exam
               </span>
             )}
@@ -578,15 +578,15 @@ function ResumeBanner({ attempts }: { attempts: ListeningHomeAttemptDto[] }) {
   if (!resumable) return null;
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-700 dark:bg-emerald-900/20">
-      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+    <div className="rounded-xl border border-success/20 bg-success/10 px-5 py-4">
+      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-success-strong">
         <Clock className="h-4 w-4" aria-hidden />
         You have an open Listening attempt
       </p>
-      <p className="mb-3 text-xs text-emerald-700/80 dark:text-emerald-300/70">
+      <p className="mb-3 text-xs text-success-strong/80">
         {resumable.paperTitle}: {resumable.answeredCount} answered. Resume before the timer window closes.
       </p>
-      <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+      <Button asChild size="sm" className="bg-success-strong hover:bg-success-strong">
         <Link href={resumable.route}>
           <ListChecks className="h-4 w-4" aria-hidden />
           Resume attempt

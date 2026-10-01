@@ -84,8 +84,8 @@ export function TaskListEditor({
           <span
             className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
               filledCount >= minRecommended
-                ? 'bg-emerald-500/10 text-emerald-600'
-                : 'bg-amber-500/10 text-amber-600'
+                ? 'bg-success/10 text-success-strong'
+                : 'bg-warning/10 text-warning-strong'
             }`}
           >
             {filledCount} {filledCount === 1 ? itemNoun.toLowerCase() : `${itemNoun.toLowerCase()}s`}

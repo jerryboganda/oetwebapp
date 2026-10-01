@@ -49,7 +49,7 @@ function StrategyCard({ strategy }: { strategy: ReadingStrategyDto }) {
           {strategy.estimatedReadMinutes} min
         </span>
         {strategy.isRead && (
-          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Read</span>
+          <span className="text-xs font-medium text-success-strong">Read</span>
         )}
       </div>
     </Link>

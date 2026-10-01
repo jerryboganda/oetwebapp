@@ -140,9 +140,9 @@ const SUBTEST_ICON: Record<SubtestCode, LucideIcon> = {
 };
 
 const SUBTEST_COLOR: Record<SubtestCode, { fg: string; bg: string; label: string }> = {
-  listening: { fg: 'text-indigo-600', bg: 'bg-indigo-100', label: 'Listening' },
-  reading: { fg: 'text-blue-600', bg: 'bg-blue-100', label: 'Reading' },
-  writing: { fg: 'text-rose-600', bg: 'bg-rose-100', label: 'Writing' },
+  listening: { fg: 'text-primary', bg: 'bg-lavender', label: 'Listening' },
+  reading: { fg: 'text-info', bg: 'bg-info/10', label: 'Reading' },
+  writing: { fg: 'text-danger-strong', bg: 'bg-danger/10', label: 'Writing' },
   speaking: { fg: 'text-primary-600', bg: 'bg-primary-100', label: 'Speaking' },
 };
 
@@ -204,9 +204,9 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
         const palette = !active
           ? 'bg-background-light text-muted/40'
           : state === 'completed'
-            ? 'bg-emerald-100 text-emerald-600'
+            ? 'bg-success/10 text-success-strong'
             : state === 'in-progress'
-              ? 'bg-amber-100 text-amber-600'
+              ? 'bg-warning/10 text-warning-strong'
               : state === 'locked'
                 ? 'bg-background-light text-disabled'
                 : 'bg-background-light text-muted/60';
@@ -524,7 +524,7 @@ function MockCenterInner() {
               { href: '/mocks?subtest=listening', label: 'Full Listening Mock', icon: SUBTEST_ICON.listening, palette: SUBTEST_COLOR.listening, testid: 'mocks-cat-listening' },
               { href: '/mocks?subtest=reading', label: 'Full Reading Mock', icon: SUBTEST_ICON.reading, palette: SUBTEST_COLOR.reading, testid: 'mocks-cat-reading' },
               { href: '/mocks?subtest=writing', label: 'Full Writing Mock', icon: SUBTEST_ICON.writing, palette: SUBTEST_COLOR.writing, testid: 'mocks-cat-writing' },
-              { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-amber-700', bg: 'bg-amber-100', label: 'Combined' }, testid: 'mocks-cat-combined' },
+              { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-warning-strong', bg: 'bg-warning/10', label: 'Combined' }, testid: 'mocks-cat-combined' },
             ] as const).map((category) => {
               const Icon = category.icon;
               const isActive =
@@ -854,7 +854,7 @@ function MockCenterInner() {
                                   <div className="flex min-w-0 items-center gap-4">
                                     <div className="shrink-0">
                                       {mock.status === 'completed' ? (
-                                        <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                                        <CheckCircle2 className="h-6 w-6 text-success-strong" />
                                       ) : locked ? (
                                         <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-border">
                                           <div className="h-2 w-2 rounded-full bg-border" />
@@ -869,7 +869,7 @@ function MockCenterInner() {
                                       <h3 className="flex items-center gap-2 text-base font-bold text-navy">
                                         <span className="truncate">{mock.title}</span>
                                         {mock.isRecommended ? (
-                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 tile-label text-amber-700">
+                                           <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
                                             Recommended
                                           </span>
                                         ) : null}

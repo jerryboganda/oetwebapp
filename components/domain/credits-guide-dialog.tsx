@@ -29,29 +29,29 @@ type Accent = 'blue' | 'violet' | 'amber' | 'emerald' | 'rose';
 
 const ACCENT: Record<Accent, { medallion: string; pill: string; ring: string }> = {
   blue: {
-    medallion: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200',
-    pill: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-100',
-    ring: 'border-blue-100 dark:border-blue-900/40',
+    medallion: 'bg-info/10 text-info',
+    pill: 'bg-info/10 text-info',
+    ring: 'border-info/20',
   },
   violet: {
-    medallion: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-200',
-    pill: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-100',
-    ring: 'border-violet-100 dark:border-violet-900/40',
+    medallion: 'bg-lavender text-primary-dark',
+    pill: 'bg-lavender text-primary-dark',
+    ring: 'border-primary/20',
   },
   amber: {
-    medallion: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-200',
-    pill: 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100',
-    ring: 'border-amber-100 dark:border-amber-900/40',
+    medallion: 'bg-warning/10 text-warning-strong',
+    pill: 'bg-warning/10 text-warning-strong',
+    ring: 'border-warning/20',
   },
   emerald: {
-    medallion: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200',
-    pill: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100',
-    ring: 'border-emerald-100 dark:border-emerald-900/40',
+    medallion: 'bg-success/10 text-success-strong',
+    pill: 'bg-success/10 text-success-strong',
+    ring: 'border-success/20',
   },
   rose: {
-    medallion: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200',
-    pill: 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-100',
-    ring: 'border-rose-100 dark:border-rose-900/40',
+    medallion: 'bg-danger/10 text-danger-strong',
+    pill: 'bg-danger/10 text-danger-strong',
+    ring: 'border-danger/20',
   },
 };
 

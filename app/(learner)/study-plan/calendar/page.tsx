@@ -32,10 +32,10 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
 };
 
 const SUBTEST_DOT: Record<SubTest, string> = {
-  Reading: 'bg-blue-500',
-  Listening: 'bg-purple-500',
-  Writing: 'bg-amber-500',
-  Speaking: 'bg-emerald-500',
+  Reading: 'bg-info',
+  Listening: 'bg-primary',
+  Writing: 'bg-warning',
+  Speaking: 'bg-success',
 };
 
 const STATUS_ICON: Record<string, { Icon: React.ElementType; className: string }> = {

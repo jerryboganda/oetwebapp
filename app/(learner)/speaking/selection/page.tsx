@@ -123,7 +123,7 @@ export default function SpeakingTaskSelection() {
         <MotionSection>
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-navy sm:text-xl">Prepare for your OET Speaking</h2>
-            <p className="text-[13px] text-muted sm:text-sm">
+            <p className="text-sm text-muted sm:text-sm">
               Review the assessment criteria and the common introductory questions used across professions.
             </p>
           </div>

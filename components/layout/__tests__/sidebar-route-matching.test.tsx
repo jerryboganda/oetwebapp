@@ -98,7 +98,7 @@ describe('Sidebar route matching', () => {
     const view = renderWithRouter(<Sidebar workspaceRole="admin" groups={groupsWithBadge} />, { pathname: '/dashboard' });
 
     expect(within(view.container).getByText('3')).toBeInTheDocument();
-    expect(within(view.container).getByText('3').className).toContain('bg-amber-500');
+    expect(within(view.container).getByText('3').className).toContain('bg-warning');
   });
 
   it('omits the badge pill when the count is zero or missing', () => {
@@ -119,7 +119,7 @@ describe('Sidebar route matching', () => {
     const zero = renderWithRouter(<Sidebar workspaceRole="admin" groups={makeGroups(0)} />, { pathname: '/dashboard' });
     const absent = renderWithRouter(<Sidebar workspaceRole="admin" groups={makeGroups()} />, { pathname: '/dashboard' });
 
-    expect(zero.container.querySelector('.bg-amber-500')).toBeNull();
-    expect(absent.container.querySelector('.bg-amber-500')).toBeNull();
+    expect(zero.container.querySelector('.bg-warning')).toBeNull();
+    expect(absent.container.querySelector('.bg-warning')).toBeNull();
   });
 });

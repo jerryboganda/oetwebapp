@@ -108,7 +108,7 @@ export default function ProfileSetupGoalsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
               <span className="flex items-center gap-1">
-                <Calendar className="h-4 w-4 text-amber-600" aria-hidden="true" />
+                <Calendar className="h-4 w-4 text-warning-strong" aria-hidden="true" />
                 Exam date (optional)
               </span>
               <input
@@ -137,7 +137,7 @@ export default function ProfileSetupGoalsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
               <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4 text-amber-600" aria-hidden="true" />
+                <Clock className="h-4 w-4 text-warning-strong" aria-hidden="true" />
                 Days per week
               </span>
               <input

@@ -38,7 +38,7 @@ export function DashboardHero({ readinessScore, predictedScore, daysToExam, stre
       label: 'Streak',
       value: streak > 0 ? `${streak} day${streak === 1 ? '' : 's'}` : '0 days',
       sub: streak >= 7 ? 'On fire!' : streak > 0 ? 'Keep it up' : 'Start today',
-      accent: streak >= 7 ? 'text-orange-500 dark:text-orange-400' : 'text-muted',
+      accent: streak >= 7 ? 'text-warning-strong' : 'text-muted',
     },
   ];
 

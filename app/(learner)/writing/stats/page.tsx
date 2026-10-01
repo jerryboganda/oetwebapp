@@ -240,12 +240,12 @@ export default function WritingStatsPage() {
                   const tone = intensity === 0
                     ? 'bg-background-light'
                     : intensity === 1
-                      ? 'bg-emerald-100'
+                      ? 'bg-success/10'
                       : intensity === 2
-                        ? 'bg-emerald-300'
+                        ? 'bg-success/30'
                         : intensity === 3
-                          ? 'bg-emerald-500'
-                          : 'bg-emerald-700';
+                          ? 'bg-success'
+                          : 'bg-success-strong';
                   return (
                     <div
                       key={d.date}

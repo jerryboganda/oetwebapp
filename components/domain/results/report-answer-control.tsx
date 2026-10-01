@@ -134,7 +134,7 @@ export function ReportAnswerControl({
             rows={4}
             hint="Tell the reviewer what you expected the official answer to be."
           />
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="text-sm text-danger-strong">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)} disabled={submitting}>
               Cancel

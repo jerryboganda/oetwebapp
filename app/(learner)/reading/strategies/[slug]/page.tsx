@@ -100,7 +100,7 @@ export default function StrategyDetailPage() {
                   {data.strategy.estimatedReadMinutes} min read
                 </span>
                 {isRead && (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="flex items-center gap-1 text-xs font-semibold text-success-strong">
                     <CheckCircle2 className="h-3 w-3" aria-hidden />
                     Read
                   </span>
@@ -117,7 +117,7 @@ export default function StrategyDetailPage() {
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-3">
               {isRead ? (
-                <span className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+                <span className="flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-4 py-2 text-sm font-semibold text-success-strong">
                   <CheckCircle2 className="h-4 w-4" aria-hidden />
                   Marked as read
                 </span>

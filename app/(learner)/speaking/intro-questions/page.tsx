@@ -19,7 +19,7 @@ function renderWithPlaceholders(text: string) {
     /^\[.+\]$/.test(part) || /^\(.+\)$/.test(part) ? (
       <mark
         key={i}
-        className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200"
+        className="rounded-md bg-warning/10 px-1.5 py-0.5 font-semibold text-warning-strong"
       >
         {part}
       </mark>

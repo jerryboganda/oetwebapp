@@ -139,19 +139,19 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
     <section
       aria-label="Tutor feedback"
       className={cn(
-        'space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900',
+        'space-y-4 rounded-xl border border-border bg-white p-4 dark:bg-slate-900',
         className,
       )}
     >
       <div className="flex items-center gap-2">
-        <MessageSquarePlus className="h-4 w-4 text-slate-500 dark:text-slate-400" aria-hidden="true" />
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tutor feedback</h3>
+        <MessageSquarePlus className="h-4 w-4 text-muted" aria-hidden="true" />
+        <h3 className="text-sm font-semibold text-navy">Tutor feedback</h3>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex flex-wrap gap-3">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={`feedback-scope-${attemptId}`} className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor={`feedback-scope-${attemptId}`} className="text-sm font-medium text-navy">
               Scope
             </label>
             <select
@@ -161,7 +161,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, scope: event.target.value as FeedbackScope }))
               }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="rounded-lg border border-border-hover bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-slate-400 dark:bg-slate-800"
             >
               {SCOPES.map((scope) => (
                 <option key={scope} value={scope}>
@@ -173,7 +173,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
 
           {form.scope !== 'test' ? (
             <div className="flex flex-1 flex-col gap-1.5">
-              <label htmlFor={`feedback-ref-${attemptId}`} className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              <label htmlFor={`feedback-ref-${attemptId}`} className="text-sm font-medium text-navy">
                 Target reference
               </label>
               <input
@@ -183,14 +183,14 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
                 disabled={saving}
                 placeholder={SCOPE_REF_HINT[form.scope]}
                 onChange={(event) => setForm((prev) => ({ ...prev, targetRef: event.target.value }))}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="rounded-lg border border-border-hover bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-slate-400 dark:bg-slate-800"
               />
             </div>
           ) : null}
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`feedback-text-${attemptId}`} className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label htmlFor={`feedback-text-${attemptId}`} className="text-sm font-medium text-navy">
             Feedback
           </label>
           <textarea
@@ -199,12 +199,12 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
             value={form.feedbackText}
             disabled={saving}
             onChange={(event) => setForm((prev) => ({ ...prev, feedbackText: event.target.value }))}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-border-hover bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-slate-400 dark:bg-slate-800"
           />
         </div>
 
         {error ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger-strong">
             {error}
           </p>
         ) : null}
@@ -223,7 +223,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
               type="button"
               onClick={resetForm}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-hover px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-background-light disabled:opacity-50"
             >
               <X className="h-4 w-4" aria-hidden="true" /> Cancel
             </button>
@@ -233,9 +233,9 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
 
       <div className="space-y-2">
         {loading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading feedback…</p>
+          <p className="text-sm text-muted">Loading feedback…</p>
         ) : items.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <p className="rounded-lg border border-dashed border-border-hover px-4 py-6 text-center text-sm text-muted">
             No feedback yet.
           </p>
         ) : (
@@ -243,15 +243,15 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
             {items.map((item) => (
               <li
                 key={item.id}
-                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60"
+                className="rounded-lg border border-border bg-background-light px-3 py-2.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="eyebrow text-slate-500 dark:text-slate-400">
+                    <p className="eyebrow text-muted">
                       {SCOPE_LABELS[(SCOPES as readonly string[]).includes(item.scope) ? (item.scope as FeedbackScope) : 'test']}
                       {item.targetRef ? ` · ${item.targetRef}` : ''}
                     </p>
-                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">
+                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-navy">
                       {item.feedbackText}
                     </p>
                   </div>
@@ -260,7 +260,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
                       type="button"
                       onClick={() => startEdit(item)}
                       aria-label="Edit feedback"
-                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-border hover:text-navy dark:text-slate-400"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -269,7 +269,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
                       onClick={() => handleDelete(item.id)}
                       disabled={deletingId === item.id}
                       aria-label="Delete feedback"
-                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-50 dark:text-muted dark:hover:bg-red-950/50 dark:hover:text-red-400"
+                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-danger/10 hover:text-danger-strong disabled:opacity-50 dark:text-muted"
                     >
                       {deletingId === item.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

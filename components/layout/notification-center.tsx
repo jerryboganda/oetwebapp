@@ -66,10 +66,10 @@ function humanizeCategory(raw: string): string {
 /* ── Severity visuals ── */
 
 const SEVERITY_STYLES: Record<NotificationSeverity, { bg: string; text: string; accent: string; icon: ReactNode }> = {
-  info:     { bg: 'bg-blue-50 dark:bg-blue-950',       text: 'text-blue-600 dark:text-blue-400',       accent: 'bg-blue-500',    icon: <Info className="h-4 w-4" /> },
-  success:  { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-600 dark:text-emerald-400', accent: 'bg-emerald-500', icon: <CheckCircle2 className="h-4 w-4" /> },
-  warning:  { bg: 'bg-amber-50 dark:bg-amber-950',     text: 'text-amber-600 dark:text-amber-400',     accent: 'bg-amber-500',   icon: <AlertTriangle className="h-4 w-4" /> },
-  critical: { bg: 'bg-red-50 dark:bg-red-950',         text: 'text-red-600 dark:text-red-400',         accent: 'bg-red-500',     icon: <Shield className="h-4 w-4" /> },
+  info:     { bg: 'bg-info/10',       text: 'text-info',       accent: 'bg-info',    icon: <Info className="h-4 w-4" /> },
+  success:  { bg: 'bg-success/10', text: 'text-success-strong', accent: 'bg-success', icon: <CheckCircle2 className="h-4 w-4" /> },
+  warning:  { bg: 'bg-warning/10',     text: 'text-warning-strong',     accent: 'bg-warning',   icon: <AlertTriangle className="h-4 w-4" /> },
+  critical: { bg: 'bg-danger/10',         text: 'text-danger-strong',         accent: 'bg-danger',     icon: <Shield className="h-4 w-4" /> },
 };
 
 /* ── Category icons ── */
@@ -242,19 +242,19 @@ function NotificationItem({
       {/* ── Content ── */}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className={cn('text-[13px] leading-snug', item.isRead ? 'font-medium text-navy/75' : 'font-semibold text-navy')}>
+          <p className={cn('text-sm leading-snug', item.isRead ? 'font-medium text-navy/75' : 'font-semibold text-navy')}>
             {item.title}
           </p>
           <span className="mt-0.5 shrink-0 text-2xs tabular-nums text-muted/70">{relativeTime(item.createdAt)}</span>
         </div>
-        <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted">{item.body}</p>
+        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted">{item.body}</p>
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-md bg-background-light px-1.5 py-0.5 text-[10.5px] font-medium text-muted/70">
+          <span className="inline-flex items-center gap-1 rounded-md bg-background-light px-1.5 py-0.5 text-2xs font-medium text-muted/70">
             <GraduationCap className="h-3 w-3" />
             {humanizeCategory(item.category)}
           </span>
           {item.actionUrl && (
-            <span className="inline-flex items-center gap-0.5 text-[10.5px] font-medium text-primary/0 transition-colors group-hover:text-primary/70">
+            <span className="inline-flex items-center gap-0.5 text-2xs font-medium text-primary/0 transition-colors group-hover:text-primary/70">
               View
               <ChevronRight className="h-3 w-3" />
             </span>
@@ -355,7 +355,7 @@ function NotificationCenterContent({
             <Bell className="h-[18px] w-[18px]" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-semibold tracking-tight text-navy">Notifications</h2>
+            <h2 className="truncate text-sm font-semibold tracking-tight text-navy">Notifications</h2>
             <p className="mt-0.5 text-2xs text-muted/70">
               {unreadCount > 0 ? `${unreadCount} unread · ${totalCount} total` : 'All caught up'}
             </p>
@@ -385,7 +385,7 @@ function NotificationCenterContent({
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                'rounded-md px-3 py-1.5 text-[12px] font-semibold transition-[color,background-color,box-shadow] duration-150',
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition-[color,background-color,box-shadow] duration-150',
                 tab === value
                   ? 'bg-surface text-navy shadow-sm'
                   : 'text-muted hover:text-navy',
@@ -399,7 +399,7 @@ function NotificationCenterContent({
           type="button"
           onClick={() => void markAllRead()}
           disabled={unreadCount === 0}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/5 disabled:cursor-default disabled:text-muted/40 disabled:hover:bg-transparent"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:cursor-default disabled:text-muted/40 disabled:hover:bg-transparent"
           aria-label="Mark all read"
         >
           <CheckCheck className="h-3.5 w-3.5" />
@@ -414,7 +414,7 @@ function NotificationCenterContent({
             type="button"
             onClick={() => setCategory(null)}
             className={cn(
-              'shrink-0 rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors',
+              'shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors',
               category === null ? 'bg-primary text-white shadow-sm shadow-primary/20' : 'bg-background-light text-muted hover:text-navy',
             )}
           >
@@ -426,7 +426,7 @@ function NotificationCenterContent({
               type="button"
               onClick={() => setCategory(facet.key)}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
                 category === facet.key ? 'bg-primary text-white shadow-sm shadow-primary/20' : 'bg-background-light text-muted hover:text-navy',
               )}
             >
@@ -448,7 +448,7 @@ function NotificationCenterContent({
 
       {/* ━━ Connection warning ━━ */}
       {(connectionStatus === 'reconnecting' || connectionStatus === 'disconnected') && (
-        <div className="mx-0.5 mt-2 flex shrink-0 items-center gap-2 rounded-lg bg-amber-50/80 px-3 py-2 text-[12px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="mx-0.5 mt-2 flex shrink-0 items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning-strong">
           <WifiOff className="h-3.5 w-3.5 shrink-0" />
           {connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline. Updates may be delayed.'}
         </div>
@@ -456,17 +456,17 @@ function NotificationCenterContent({
 
       {/* ━━ Error ━━ */}
       {error && (
-        <div className="mx-0.5 mt-2 shrink-0 rounded-lg bg-red-50/80 px-3 py-2 text-[12px] text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</div>
+        <div className="mx-0.5 mt-2 shrink-0 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger-strong">{error}</div>
       )}
 
       {/* ━━ Admin ops alerts (above the personal feed, independent of tabs/filters) ━━ */}
       {adminAlerts.length > 0 && (
-        <div className="mx-0.5 mt-2 shrink-0 overflow-hidden rounded-xl border border-amber-200/70 dark:border-amber-900/50">
-          <div className="flex items-center justify-between border-b border-inherit bg-amber-50/80 px-3 py-2 dark:bg-amber-950/40">
-            <p className="tile-label text-amber-700 dark:text-amber-300">
+        <div className="mx-0.5 mt-2 shrink-0 overflow-hidden rounded-xl border border-warning/20">
+          <div className="flex items-center justify-between border-b border-inherit bg-warning/10 px-3 py-2">
+            <p className="tile-label text-warning-strong">
               Admin alerts
             </p>
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-3xs font-bold tabular-nums leading-none text-white">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-3xs font-bold tabular-nums leading-none text-white">
               {adminAlerts.length}
             </span>
           </div>
@@ -499,10 +499,10 @@ function NotificationCenterContent({
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
             <div className={cn(
               'flex h-16 w-16 items-center justify-center rounded-2xl',
-              tab === 'unread' || category ? 'bg-emerald-50 dark:bg-emerald-950/40' : 'bg-primary/5',
+              tab === 'unread' || category ? 'bg-success/10' : 'bg-primary/5',
             )}>
               {tab === 'unread' || category
-                ? <BellOff className="h-8 w-8 text-emerald-500/70" />
+                ? <BellOff className="h-8 w-8 text-success-strong/70" />
                 : <Inbox className="h-8 w-8 text-primary/30" />
               }
             </div>
@@ -512,7 +512,7 @@ function NotificationCenterContent({
                   ? `No ${humanizeCategory(category)} notifications`
                   : tab === 'unread' ? "You're all caught up" : 'No notifications yet'}
               </p>
-              <p className="mx-auto mt-1 max-w-[15rem] text-[12px] leading-relaxed text-muted">
+              <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
                 {category
                   ? 'Try a different category or clear the filter.'
                   : tab === 'unread'
@@ -524,7 +524,7 @@ function NotificationCenterContent({
               <button
                 type="button"
                 onClick={() => setCategory(null)}
-                className="rounded-full bg-background-light px-4 py-1.5 text-[12px] font-medium text-navy transition-colors hover:bg-border/60"
+                className="rounded-full bg-background-light px-4 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-border/60"
               >
                 Clear filter
               </button>
@@ -565,7 +565,7 @@ function NotificationCenterContent({
             onClick={() => void loadMore()}
             loading={isRefreshing}
             aria-label="Load older items"
-            className="mb-1 w-full text-[12px]"
+            className="mb-1 w-full text-xs"
           >
             Load older notifications
           </Button>
@@ -577,8 +577,8 @@ function NotificationCenterContent({
             <span
               className={cn(
                 'h-1.5 w-1.5 rounded-full',
-                connectionStatus === 'connected' ? 'bg-emerald-500'
-                  : connectionStatus === 'reconnecting' ? 'bg-amber-500'
+                connectionStatus === 'connected' ? 'bg-success'
+                  : connectionStatus === 'reconnecting' ? 'bg-warning'
                   : 'bg-muted/50',
               )}
             />
@@ -650,7 +650,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
           <span
             className={cn(
               'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
-              connectionStatus === 'reconnecting' ? 'bg-amber-500' : 'bg-muted/60',
+              connectionStatus === 'reconnecting' ? 'bg-warning' : 'bg-muted/60',
             )}
             aria-hidden="true"
           />

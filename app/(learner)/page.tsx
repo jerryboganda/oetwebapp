@@ -107,7 +107,7 @@ function subscriptionStatusClass(subscription: SubscriptionMe | null, entitlemen
   const status = subscriptionStatusLabel(subscription, entitlement).toLowerCase();
   if (status === 'active' || status === 'trial') return 'bg-success/10 text-success-strong';
   if (status === 'past due') return 'bg-warning/10 text-warning-strong';
-  if (status === 'paused') return 'bg-amber-100 text-amber-800';
+  if (status === 'paused') return 'bg-warning/10 text-warning-strong';
   if (status === 'cancelled' || status === 'expired') return 'bg-danger/10 text-danger-strong';
   return 'bg-background-light text-muted';
 }
@@ -157,7 +157,7 @@ function DashboardSubscriptionStrip({
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <CreditCard className="h-4 w-4" aria-hidden="true" />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy">
+        <span className="min-w-0 flex-1 truncate text-sm font-bold text-navy">
           {isLoading ? 'Loading subscription…' : hasError ? 'Payment & subscription status unavailable' : planName}
         </span>
         {hasError && onReloadPaymentStatus ? (

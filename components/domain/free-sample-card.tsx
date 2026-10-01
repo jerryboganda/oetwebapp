@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 // hub page tests mock the barrel with only the exports they need.
 
 const CARD_CLASS =
-  'group flex w-full items-center gap-3 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-violet-50/60 to-transparent px-4 py-3.5 text-left shadow-sm transition-colors hover:border-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-violet-900/50 dark:from-violet-950/40 dark:via-violet-950/20';
+  'group flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-violet-50 via-violet-50/60 to-transparent px-4 py-3.5 text-left shadow-sm transition-colors hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:from-violet-950/40 dark:via-violet-950/20';
 
 export interface FreeSampleCardProps {
   title: string;
@@ -50,7 +50,7 @@ export function FreeSampleCard({
   const body = (
     <>
       <span
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-200"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lavender text-primary-dark"
         aria-hidden
       >
         <Icon className="h-5 w-5" />

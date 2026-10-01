@@ -150,7 +150,7 @@ export function AnswerComparisonCard({
         </div>
 
         {missReason ? (
-          <div data-testid={missReasonTestId} className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <div data-testid={missReasonTestId} className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-strong">
             <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>
               <span className="font-bold">{missReason.title}</span>

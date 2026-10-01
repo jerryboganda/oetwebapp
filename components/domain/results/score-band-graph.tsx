@@ -41,12 +41,12 @@ export function ScoreBandGraph({
   return (
     <section
       aria-label="Practice score band graph"
-      className={cn('rounded-2xl border border-indigo-200/70 bg-indigo-50/60 p-4 dark:border-indigo-400/20 dark:bg-indigo-950/20', className)}
+      className={cn('rounded-2xl border border-primary/20 bg-lavender p-4', className)}
       data-testid="score-band-graph"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="eyebrow text-indigo-700 dark:text-indigo-300">Practice score band</p>
+          <p className="eyebrow text-primary-dark">Practice score band</p>
           <p className="mt-1 text-sm font-semibold text-navy dark:text-white">
             {hasConversion ? `${scaledScore}/500${grade ? ` · Grade ${grade}` : ''}` : `Scaled score unavailable · ${rawScore}/${maxRawScore} raw`}
           </p>
@@ -77,7 +77,7 @@ export function ScoreBandGraph({
         </div>
       </div>
 
-      <p className="mt-4 border-t border-indigo-200/70 pt-3 text-xs font-semibold text-muted dark:border-indigo-400/20">
+      <p className="mt-4 border-t border-primary/20 pt-3 text-xs font-semibold text-muted">
         {PRACTICE_SCORE_LABEL}
       </p>
     </section>

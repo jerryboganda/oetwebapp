@@ -358,7 +358,7 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
 
       {state.kind === 'ready' ? (
         <div className="mt-3 space-y-1">
-          <p className="text-xs text-emerald-700">
+          <p className="text-xs text-success-strong">
             Video is encoded and ready to stream
             {video.durationSeconds != null ? ` (${formatDuration(video.durationSeconds)})` : ''}.
           </p>
@@ -375,7 +375,7 @@ export function BunnyVideoUploadCard({ videoId, video, canWrite, onChanged }: Bu
       ) : null}
 
       {state.kind === 'session-error' || state.kind === 'upload-error' ? (
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger-strong">
           <span>{state.message}</span>
           <Button type="button" variant="outline" size="sm" onClick={handleRetry}>
             <RefreshCw className="mr-1 h-3 w-3" /> Retry

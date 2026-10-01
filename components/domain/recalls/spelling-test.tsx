@@ -181,7 +181,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         {error && (
-          <p role="alert" className="mt-3 text-xs text-red-600">
+          <p role="alert" className="mt-3 text-xs text-danger-strong">
             {error}
           </p>
         )}
@@ -394,7 +394,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
       </form>
 
       {error && (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="text-xs text-danger-strong">
           {error}
         </p>
       )}
@@ -407,7 +407,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
               Correct
             </p>
           ) : (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-red-600">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger-strong">
               <XCircle size={15} className="h-4 w-4" aria-hidden="true" />
               Incorrect
             </p>

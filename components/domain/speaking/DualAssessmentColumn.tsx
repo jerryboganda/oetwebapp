@@ -49,19 +49,19 @@ export interface DualAssessmentColumnProps {
 
 const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: string; bar: string; chip: string; icon: ReactNode; tooltip: string }> = {
   ai: {
-    header: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200/60 dark:border-indigo-800/40',
-    ring: 'ring-1 ring-indigo-200/60 dark:ring-indigo-800/40',
-    bar: 'bg-indigo-500',
-    chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+    header: 'bg-lavender border-primary/20',
+    ring: 'ring-1 ring-primary/20',
+    bar: 'bg-primary',
+    chip: 'bg-lavender text-primary-dark',
     icon: <Sparkles className="h-4 w-4" aria-hidden />,
     tooltip:
       'AI-generated estimate based on your transcript. Advisory only, not an official OET score.',
   },
   tutor: {
-    header: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/60 dark:border-emerald-800/40',
-    ring: 'ring-1 ring-emerald-200/60 dark:ring-emerald-800/40',
-    bar: 'bg-emerald-500',
-    chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+    header: 'bg-success/10 border-success/20',
+    ring: 'ring-1 ring-success/20',
+    bar: 'bg-success',
+    chip: 'bg-success/10 text-success-strong',
     icon: <UserRound className="h-4 w-4" aria-hidden />,
     tooltip:
       'Human tutor assessment from a calibrated OET expert. Reflects nuance that AI may miss.',
@@ -346,8 +346,8 @@ export function DualAssessmentColumn({
             {isTutorAssessment(assessment) && (assessment.strengths.length > 0 || assessment.improvements.length > 0) && (
               <div className="grid gap-3 md:grid-cols-2">
                 {assessment.strengths.length > 0 && (
-                  <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/40 p-3 dark:border-emerald-800/40 dark:bg-emerald-950/20">
-                    <h5 className="mb-1.5 eyebrow text-emerald-800 dark:text-emerald-300">
+                  <div className="rounded-xl border border-success/20 bg-success/10 p-3">
+                    <h5 className="mb-1.5 eyebrow text-success-strong">
                       Strengths
                     </h5>
                     <ul className="ml-4 list-disc space-y-1 text-sm text-navy">
@@ -358,8 +358,8 @@ export function DualAssessmentColumn({
                   </div>
                 )}
                 {assessment.improvements.length > 0 && (
-                  <div className="rounded-xl border border-amber-200/60 bg-amber-50/40 p-3 dark:border-amber-800/40 dark:bg-amber-950/20">
-                    <h5 className="mb-1.5 eyebrow text-amber-800 dark:text-amber-300">
+                  <div className="rounded-xl border border-warning/20 bg-warning/10 p-3">
+                    <h5 className="mb-1.5 eyebrow text-warning-strong">
                       Areas to improve
                     </h5>
                     <ul className="ml-4 list-disc space-y-1 text-sm text-navy">

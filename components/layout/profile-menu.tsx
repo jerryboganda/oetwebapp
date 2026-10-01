@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
 const MENU_ITEM_CLASS =
-  'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
+  'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
 
 /** Avatar + name + role with a small account menu (top-nav header). */
 export function ProfileMenu({
@@ -90,7 +90,7 @@ export function ProfileMenu({
       >
         <UserAvatar avatarUrl={avatarUrl} displayName={displayName} className="h-7 w-7 lg:h-9 lg:w-9" />
         <span className="hidden min-w-0 text-left leading-tight xl:block">
-          <span className="block max-w-[9rem] truncate text-[13px] font-bold text-navy">{displayName}</span>
+          <span className="block max-w-[9rem] truncate text-sm font-bold text-navy">{displayName}</span>
           <span className="block text-2xs text-muted">{roleLabel}</span>
         </span>
         <ChevronDown
@@ -108,7 +108,7 @@ export function ProfileMenu({
             className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-lg"
           >
             <div className="border-b border-border px-2.5 pb-2 pt-1.5">
-              <p className="truncate text-[13px] font-bold text-navy">{displayName}</p>
+              <p className="truncate text-sm font-bold text-navy">{displayName}</p>
               {email ? <p className="truncate text-2xs text-muted">{email}</p> : null}
             </div>
             <Link

@@ -79,9 +79,9 @@ export default function VocabHubPage() {
 
   const accentMap: Record<string, string> = {
     violet:  'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
-    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/50 dark:text-emerald-300',
-    amber:   'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-300',
-    blue:    'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800/50 dark:text-blue-300',
+    emerald: 'bg-success/10 border-success/20 text-success-strong',
+    amber:   'bg-warning/10 border-warning/20 text-warning-strong',
+    blue:    'bg-info/10 border-info/20 text-info',
   };
 
   return (

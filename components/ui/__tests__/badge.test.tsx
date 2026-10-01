@@ -41,9 +41,9 @@ describe('Badge visual contracts', () => {
     render(<StatusBadge status="completed" />);
 
     expectClasses(screen.getByText('Completed'), [
-      'bg-emerald-50',
-      'text-emerald-700',
-      'border-emerald-200/60',
+      'bg-success/10',
+      'text-success-strong',
+      'border-success/20',
     ]);
   });
 

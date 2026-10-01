@@ -51,7 +51,7 @@ const QUALITY_BUTTONS: Array<{
     quality: 0,
     description: 'Reset interval',
     className:
-      'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40',
+      'border-danger/20 bg-danger/10 text-danger-strong hover:bg-danger/10',
   },
   {
     label: 'Hard',
@@ -59,7 +59,7 @@ const QUALITY_BUTTONS: Array<{
     quality: 3,
     description: 'Short interval',
     className:
-      'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300 dark:hover:bg-orange-900/40',
+      'border-warning/20 bg-warning/10 text-warning-strong hover:bg-warning/10',
   },
   {
     label: 'Got it',
@@ -67,7 +67,7 @@ const QUALITY_BUTTONS: Array<{
     quality: 4,
     description: 'Normal interval',
     className:
-      'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40',
+      'border-info/20 bg-info/10 text-info hover:bg-info/10',
   },
   {
     label: 'Easy',
@@ -75,7 +75,7 @@ const QUALITY_BUTTONS: Array<{
     quality: 5,
     description: 'Long interval',
     className:
-      'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40',
+      'border-success/20 bg-success/10 text-success-strong hover:bg-success/10',
   },
 ];
 
@@ -193,8 +193,8 @@ export default function PronunciationReviewPage() {
               Back
             </Link>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
-            <Sparkles className="mx-auto h-10 w-10 text-emerald-500" aria-hidden />
+          <div className="rounded-2xl border border-success/20 bg-success/10 px-8 py-12 text-center">
+            <Sparkles className="mx-auto h-10 w-10 text-success-strong" aria-hidden />
             <p className="mt-3 text-lg font-semibold text-navy">
               Nothing to review today!
             </p>
@@ -215,8 +215,8 @@ export default function PronunciationReviewPage() {
     return (
       <>
         <div className="mx-auto max-w-xl space-y-6">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
-            <Trophy className="mx-auto h-12 w-12 text-emerald-500" aria-hidden />
+          <div className="rounded-2xl border border-success/20 bg-success/10 px-8 py-12 text-center">
+            <Trophy className="mx-auto h-12 w-12 text-success-strong" aria-hidden />
             <p className="mt-3 text-2xl font-bold text-navy">All done!</p>
             <p className="mt-1 text-sm text-muted">
               You reviewed {completed} {completed === 1 ? 'card' : 'cards'}. SM-2 has scheduled the next

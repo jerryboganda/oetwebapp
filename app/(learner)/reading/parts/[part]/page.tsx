@@ -173,7 +173,7 @@ export default function ReadingPartPracticePage() {
                 const partMinutes =
                   part === 'A' ? paper.partATimerMinutes : paper.partBCTimerMinutes;
                 return (
-                  <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-surface p-5 shadow-sm dark:border-blue-900/40">
+                  <article className="flex h-full flex-col rounded-2xl border border-info/20 bg-surface p-5 shadow-sm">
                     <h3 className="text-base font-bold text-navy">
                       {paper.title} · Part {part}
                     </h3>

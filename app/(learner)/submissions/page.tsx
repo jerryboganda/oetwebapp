@@ -30,10 +30,10 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }> = {
-  Reading:   { icon: FileText,   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-  Listening: { icon: Headphones, badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
-  Writing:   { icon: PenTool,    badge: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
-  Speaking:  { icon: Mic,        badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' },
+  Reading:   { icon: FileText,   badge: 'bg-info/10 text-info' },
+  Listening: { icon: Headphones, badge: 'bg-lavender text-primary-dark' },
+  Writing:   { icon: PenTool,    badge: 'bg-danger/10 text-danger-strong' },
+  Speaking:  { icon: Mic,        badge: 'bg-lavender text-primary-dark' },
 };
 
 // The server sends a ready-to-show label: a score ("192/500") reads as a result, anything else

@@ -64,7 +64,7 @@ function PreferenceToggle({
       )}
     >
       <div className="min-w-0 space-y-0.5">
-        <p className="text-[13px] font-semibold leading-tight">{label}</p>
+        <p className="text-sm font-semibold leading-tight">{label}</p>
         {hint ? <p className="text-2xs leading-snug text-muted">{hint}</p> : null}
       </div>
       <span
@@ -194,7 +194,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
               aria-selected={active}
               onClick={() => setFilter(tab.key)}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors',
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
                 active
                   ? 'bg-primary text-white shadow-sm shadow-primary/20 dark:bg-violet-700'
                   : 'bg-background-light text-muted hover:text-navy',
@@ -333,7 +333,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
             <div key={eventKey} className="rounded-lg border border-border bg-surface p-2.5">
               <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0 space-y-1.5">
-                  <p className="text-[13px] font-semibold text-navy">{formatEventLabel(eventKey)}</p>
+                  <p className="text-sm font-semibold text-navy">{formatEventLabel(eventKey)}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {showInApp ? (
                     <PreferenceToggle

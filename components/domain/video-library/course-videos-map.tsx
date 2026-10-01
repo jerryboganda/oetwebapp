@@ -60,7 +60,7 @@ export function CourseVideosMap({ onAdvanced }: { onAdvanced: () => void }) {
       {!data && !error ? <div className="flex items-center gap-2 text-sm text-admin-fg-muted"><Loader2 className="h-4 w-4 animate-spin" />Loading course map…</div> : null}
       {error ? <EmptyState icon={<BookOpen className="h-6 w-6" />} title="Course map unavailable" description={error} /> : null}
       {data ? <div className="space-y-5">
-        {data.unmapped.length > 0 ? <div role="alert" className="rounded-admin border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">{data.unmapped.length} canonical video{data.unmapped.length === 1 ? '' : 's'} need language/subtest alignment before they can appear in the course map.</div> : null}
+        {data.unmapped.length > 0 ? <div role="alert" className="rounded-admin border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-strong">{data.unmapped.length} canonical video{data.unmapped.length === 1 ? '' : 's'} need language/subtest alignment before they can appear in the course map.</div> : null}
         <div role="list" aria-label="Course video professions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           {data.professions.map((profession) => (
             <div key={profession.id} role="listitem">

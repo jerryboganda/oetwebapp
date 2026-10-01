@@ -81,27 +81,27 @@ const HUB_CARDS: HubCard[] = [
 
 const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
   partA: {
-    ring: 'border-blue-200 hover:border-blue-300 dark:border-blue-900/60 dark:hover:border-blue-700',
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
-    icon: 'text-blue-600 dark:text-blue-400',
+    ring: 'border-info/20 hover:border-info/30',
+    badge: 'bg-info/10 text-info',
+    icon: 'text-info',
     chip: 'Part A',
   },
   partB: {
-    ring: 'border-sky-200 hover:border-sky-300 dark:border-sky-900/60 dark:hover:border-sky-700',
-    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
-    icon: 'text-sky-600 dark:text-sky-400',
+    ring: 'border-info/20 hover:border-info/30',
+    badge: 'bg-info/10 text-info',
+    icon: 'text-info',
     chip: 'Part B',
   },
   partC: {
-    ring: 'border-emerald-200 hover:border-emerald-300 dark:border-emerald-900/60 dark:hover:border-emerald-700',
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-    icon: 'text-emerald-600 dark:text-emerald-400',
+    ring: 'border-success/20 hover:border-success/30',
+    badge: 'bg-success/10 text-success-strong',
+    icon: 'text-success-strong',
     chip: 'Part C',
   },
   exam: {
-    ring: 'border-amber-200 hover:border-amber-300 dark:border-amber-900/60 dark:hover:border-amber-700',
-    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300',
-    icon: 'text-amber-600 dark:text-amber-400',
+    ring: 'border-warning/20 hover:border-warning/30',
+    badge: 'bg-warning/10 text-warning-strong',
+    icon: 'text-warning-strong',
     chip: 'Full exam',
   },
 };
@@ -382,7 +382,7 @@ function ReadingSecondaryDashboard({
             {recentResults.map((result) => (
               <li key={result.attemptId}>
                 <article className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
-                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 tile-label text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                  <span className="inline-flex rounded-full bg-info/10 px-2 py-0.5 tile-label text-info">
                     {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
                   </span>
                   <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>
@@ -465,16 +465,16 @@ function ResumeBanner({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {
   if (!resumable) return null;
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-700 dark:bg-emerald-900/20">
-      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+    <div className="rounded-xl border border-success/20 bg-success/10 px-5 py-4">
+      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-success-strong">
         <Clock className="h-4 w-4" aria-hidden />
         You have an open Reading attempt
       </p>
-      <p className="mb-3 text-xs text-emerald-700/80 dark:text-emerald-300/70">
+      <p className="mb-3 text-xs text-success-strong/80">
         {resumable.paperTitle}: {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
         before the timer window closes.
       </p>
-      <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+      <Button asChild size="sm" className="bg-success-strong hover:bg-success-strong">
         <Link href={resumable.route}>
           <ListChecks className="h-4 w-4" aria-hidden />
           Resume attempt

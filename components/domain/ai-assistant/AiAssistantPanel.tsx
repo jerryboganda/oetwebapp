@@ -190,7 +190,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
                               void archiveThread(thread.id);
                             }}
                             aria-label={`Confirm delete ${thread.title ?? 'Untitled conversation'}`}
-                            className="rounded bg-red-500 px-1.5 py-0.5 text-2xs font-medium text-white hover:bg-red-600"
+                            className="rounded bg-danger px-1.5 py-0.5 text-2xs font-medium text-white hover:bg-danger-strong"
                           >
                             Delete
                           </button>
@@ -223,7 +223,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
                           <button
                             onClick={() => setConfirmDeleteId(thread.id)}
                             aria-label={`Delete ${thread.title ?? 'Untitled conversation'}`}
-                            className="rounded p-1 text-muted hover:bg-background hover:text-red-600"
+                            className="rounded p-1 text-muted hover:bg-background hover:text-danger-strong"
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -282,7 +282,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         <div
           role="alert"
           data-testid="assistant-error"
-          className="flex items-start gap-2 border-b border-border bg-red-50 px-4 py-2 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200"
+          className="flex items-start gap-2 border-b border-border bg-danger/10 px-4 py-2 text-xs text-danger-strong"
         >
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="flex-1">{error}</span>

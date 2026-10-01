@@ -19,14 +19,14 @@ type LearnerSurfaceSectionHeaderProps = ComponentProps<typeof LearnerSurfaceSect
 type AdminRouteIcon = ElementType | ReactNode;
 
 const accentClassMap: Record<LearnerSurfaceAccent, { icon: string; chip: string }> = {
-  primary: { icon: 'bg-violet-500/20 text-violet-400', chip: 'bg-violet-500/10 text-violet-300 border-violet-500/20' },
-  navy: { icon: 'bg-violet-500/20 text-violet-400', chip: 'bg-admin-border/80 text-admin-text-muted border-admin-border' },
-  amber: { icon: 'bg-amber-500/15 text-amber-400', chip: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
-  blue: { icon: 'bg-blue-500/15 text-blue-400', chip: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
-  indigo: { icon: 'bg-indigo-500/15 text-indigo-400', chip: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' },
-  purple: { icon: 'bg-purple-500/15 text-purple-400', chip: 'bg-purple-500/10 text-purple-300 border-purple-500/20' },
-  rose: { icon: 'bg-rose-500/15 text-rose-400', chip: 'bg-rose-500/10 text-rose-300 border-rose-500/20' },
-  emerald: { icon: 'bg-emerald-500/15 text-emerald-400', chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+  primary: { icon: 'bg-primary/20 text-primary', chip: 'bg-primary/10 text-violet-300 border-primary/20' },
+  navy: { icon: 'bg-primary/20 text-primary', chip: 'bg-admin-border/80 text-admin-text-muted border-admin-border' },
+  amber: { icon: 'bg-warning/15 text-warning-strong', chip: 'bg-warning/10 text-amber-300 border-warning/20' },
+  blue: { icon: 'bg-info/15 text-info', chip: 'bg-info/10 text-blue-300 border-info/20' },
+  indigo: { icon: 'bg-primary/15 text-primary', chip: 'bg-primary/10 text-indigo-300 border-primary/20' },
+  purple: { icon: 'bg-primary/15 text-primary', chip: 'bg-primary/10 text-purple-300 border-primary/20' },
+  rose: { icon: 'bg-danger/15 text-danger-strong', chip: 'bg-danger/10 text-rose-300 border-danger/20' },
+  emerald: { icon: 'bg-success/15 text-success-strong', chip: 'bg-success/10 text-emerald-300 border-success/20' },
   slate: { icon: 'bg-slate-500/15 text-slate-300', chip: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
 };
 
@@ -58,7 +58,7 @@ function renderAdminAction(action: LearnerSurfaceAction | undefined) {
       <Link
         href={action.href}
         className={cn(
-          'inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
+          'inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           action.variant === 'outline' || action.variant === 'secondary'
             ? 'border border-admin-border text-admin-text hover:bg-admin-surface-raised'
             : action.variant === 'ghost'
@@ -215,15 +215,15 @@ export function AdminRouteSummaryCard({
 }) {
   const bg: Record<string, string> = {
     default: 'bg-admin-surface border-admin-border',
-    success: 'bg-emerald-500/10 border-emerald-500/20',
-    warning: 'bg-amber-500/10 border-amber-500/20',
-    danger: 'bg-rose-500/10 border-rose-500/20',
+    success: 'bg-success/10 border-success/20',
+    warning: 'bg-warning/10 border-warning/20',
+    danger: 'bg-danger/10 border-danger/20',
   };
   const valMap: Record<string, string> = {
-    default: 'text-admin-text', success: 'text-emerald-400', warning: 'text-amber-400', danger: 'text-rose-400',
+    default: 'text-admin-text', success: 'text-success-strong', warning: 'text-warning-strong', danger: 'text-danger-strong',
   };
   const icoMap: Record<string, string> = {
-    default: 'text-admin-text-muted', success: 'text-emerald-500', warning: 'text-amber-500', danger: 'text-rose-500',
+    default: 'text-admin-text-muted', success: 'text-success-strong', warning: 'text-warning-strong', danger: 'text-danger-strong',
   };
 
   return (

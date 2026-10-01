@@ -44,17 +44,17 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
 };
 
 const SUBTEST_COLORS: Record<SubTest, string> = {
-  Writing: 'text-rose-500 bg-rose-50 dark:bg-rose-950 dark:text-rose-300',
-  Speaking: 'text-purple-600 bg-purple-50 dark:bg-purple-950 dark:text-purple-300',
-  Reading: 'text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-300',
-  Listening: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950 dark:text-indigo-300',
+  Writing: 'text-danger-strong bg-danger/10',
+  Speaking: 'text-primary bg-lavender',
+  Reading: 'text-info bg-info/10',
+  Listening: 'text-primary bg-lavender',
 };
 
 const SUBTEST_SPINE: Record<SubTest, string> = {
-  Writing: 'bg-rose-400',
-  Speaking: 'bg-purple-400',
-  Reading: 'bg-blue-400',
-  Listening: 'bg-indigo-400',
+  Writing: 'bg-danger',
+  Speaking: 'bg-primary',
+  Reading: 'bg-info',
+  Listening: 'bg-primary',
 };
 
 function routeForTask(task: { route?: string; subTest: SubTest }) {
@@ -252,7 +252,7 @@ export function LearnerDashboardDetails({
             </CardHeader>
             <CardContent className="flex flex-col items-center space-y-3 text-center">
               <ReadinessMeter value={readinessAverage} size={120} />
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-success-strong">
                 <TrendingUp className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {readinessRecentTrend}
               </p>
@@ -349,14 +349,14 @@ export function LearnerDashboardDetails({
           <Card>
             <CardHeader>
               <CardTitle>
-                <Flame className="mr-1.5 inline-block h-4.5 w-4.5 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+                <Flame className="mr-1.5 inline-block h-4.5 w-4.5 text-warning-strong" aria-hidden="true" />
                 Practice Streak
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="relative text-center">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">
+                  <div className="text-3xl font-bold text-warning-strong">
                     <CountUp value={engagement.currentStreak} />
                   </div>
                   <div className="text-xs text-muted">Day Streak</div>
@@ -364,7 +364,7 @@ export function LearnerDashboardDetails({
                   <CelebrationBurst active={streakUp} onceKey={`streak:${engagement.currentStreak}`} />
                 </div>
                 <div className="text-center">
-                  <div className="flex items-center gap-1 text-lg font-bold text-amber-800 dark:text-amber-300">
+                  <div className="flex items-center gap-1 text-lg font-bold text-warning-strong">
                     <Trophy className="h-4 w-4" aria-hidden="true" />
                     {engagement.longestStreak}
                   </div>
@@ -383,7 +383,7 @@ export function LearnerDashboardDetails({
                         title={day.day}
                         className={`flex h-9 items-center justify-center rounded-lg text-2xs font-bold uppercase transition-colors duration-200 ${
                           day.active
-                            ? 'bg-amber-600 text-white shadow-sm shadow-amber-200/70 dark:shadow-none'
+                            ? 'bg-warning-strong text-white shadow-sm shadow-amber-200/70 dark:shadow-none'
                             : `bg-background-light text-muted/70 ${isToday ? 'ring-2 ring-inset ring-amber-400/60' : 'border border-border'}`
                         }`}
                       >
@@ -397,7 +397,7 @@ export function LearnerDashboardDetails({
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
                   <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
-                    <Timer className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+                    <Timer className="h-3.5 w-3.5 text-warning-strong" aria-hidden="true" />
                     {Math.round(engagement.totalPracticeMinutes / 60)}h
                   </div>
                   <div className="text-2xs text-muted">Total Practice</div>

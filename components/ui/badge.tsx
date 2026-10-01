@@ -10,18 +10,20 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 const badgeVariants: Record<string, string> = {
   default: 'bg-primary/10 text-primary border border-primary/20',
-  success: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/60',
-  warning: 'bg-amber-50 text-amber-800 border border-amber-200/60 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800/60',
-  danger: 'bg-red-50 text-red-700 border border-red-200/60 dark:bg-red-950 dark:text-red-300 dark:border-red-800/60',
-  info: 'bg-blue-50 text-blue-700 border border-blue-200/60 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/60',
-  muted: 'bg-surface text-muted border border-border dark:bg-surface dark:text-muted dark:border-border',
+  // Status tints on DESIGN.md §2 tokens: they flip with the theme and keep AA text.
+  success: 'bg-success/10 text-success-strong border border-success/20',
+  warning: 'bg-warning/10 text-warning-strong border border-warning/20',
+  danger: 'bg-danger/10 text-danger-strong border border-danger/20',
+  info: 'bg-info/10 text-info border border-info/20',
+  muted: 'bg-surface text-muted border border-border',
   outline: 'bg-transparent text-navy border border-border',
-  violet:  'bg-violet-50 text-violet-700 border border-violet-200/60 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800/60',
-  sky:     'bg-sky-50    text-sky-700    border border-sky-200/60    dark:bg-sky-950    dark:text-sky-300    dark:border-sky-800/60',
-  rose:    'bg-rose-50   text-rose-700   border border-rose-200/60   dark:bg-rose-950   dark:text-rose-300   dark:border-rose-800/60',
-  emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/60',
-  slate:   'bg-background-light text-muted border border-border',
-  indigo: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800/60',
+  violet: 'bg-lavender text-primary-dark border border-primary/20',
+  // Hue aliases kept for callers; they resolve to the matching semantic tint.
+  sky: 'bg-info/10 text-info border border-info/20',
+  rose: 'bg-danger/10 text-danger-strong border border-danger/20',
+  emerald: 'bg-success/10 text-success-strong border border-success/20',
+  slate: 'bg-background-light text-muted border border-border',
+  indigo: 'bg-lavender text-primary-dark border border-primary/20',
 };
 
 export function Badge({ variant = 'default', size = 'sm', className, children, ...props }: BadgeProps) {

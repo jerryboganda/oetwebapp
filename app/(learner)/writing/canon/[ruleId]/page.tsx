@@ -108,31 +108,31 @@ export default function WritingCanonRuleDetailPage() {
         {rule ? (
           <section aria-labelledby="examples-heading" className="grid gap-4 md:grid-cols-2">
             <h2 id="examples-heading" className="sr-only">{t('writing.canon.detail.examples.title')}</h2>
-            <Card padding="md" className="border-emerald-200/70 bg-emerald-50/40 dark:border-emerald-800/50 dark:bg-emerald-950/20">
+            <Card padding="md" className="border-success/20 bg-success/10">
               <CardContent>
-                <h3 className="flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                <h3 className="flex items-center gap-2 text-sm font-bold text-success-strong">
                   <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.correct')}
                 </h3>
                 <ul className="mt-2 space-y-2">
                   {rule.correctExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
                   {/* Examples are authored English canon content (spec §32). */}
                   {rule.correctExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-emerald-200/60 bg-surface p-2 text-xs text-emerald-900 dark:border-emerald-800/50 dark:text-emerald-200" dir="ltr">
+                    <li key={idx} className="rounded border border-success/20 bg-surface p-2 text-xs text-success-strong" dir="ltr">
                       {ex}
                     </li>
                   ))}
                 </ul>
               </CardContent>
             </Card>
-            <Card padding="md" className="border-red-200/70 bg-red-50/40 dark:border-red-800/50 dark:bg-red-950/20">
+            <Card padding="md" className="border-danger/20 bg-danger/10">
               <CardContent>
-                <h3 className="flex items-center gap-2 text-sm font-bold text-red-800 dark:text-red-300">
+                <h3 className="flex items-center gap-2 text-sm font-bold text-danger-strong">
                   <XCircle className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.incorrect')}
                 </h3>
                 <ul className="mt-2 space-y-2">
                   {rule.incorrectExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
                   {rule.incorrectExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-red-200/60 bg-surface p-2 text-xs text-red-900" dir="ltr">
+                    <li key={idx} className="rounded border border-danger/20 bg-surface p-2 text-xs text-danger-strong" dir="ltr">
                       {ex}
                     </li>
                   ))}

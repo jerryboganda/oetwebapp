@@ -442,7 +442,7 @@ export function SubscriptionsCatalog() {
                     <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
                       {SEPARATE_AI_PACKAGES_GROUP.title}
                     </h2>
-                    <p className="mt-1 text-[13px] text-muted sm:text-sm">
+                    <p className="mt-1 text-sm text-muted sm:text-sm">
                       {SEPARATE_AI_PACKAGES_GROUP.description}
                     </p>
                   </div>

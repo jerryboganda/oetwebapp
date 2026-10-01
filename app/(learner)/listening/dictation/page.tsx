@@ -281,12 +281,12 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
 
   const accentMap: Record<string, string> = {
     emerald:
-      'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800/50 dark:text-emerald-300',
+      'bg-success/10 border-success/20 text-success-strong',
     amber:
-      'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-300',
+      'bg-warning/10 border-warning/20 text-warning-strong',
     violet:
       'bg-primary-50 border-primary-200 text-primary-700 dark:bg-primary-950/40 dark:border-primary-800/50 dark:text-primary-300',
-    blue: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800/50 dark:text-blue-300',
+    blue: 'bg-info/10 border-info/20 text-info',
   };
 
   if (loading) {
@@ -455,7 +455,7 @@ function DrillPanel({
           className="w-full rounded-xl border border-border bg-background-light px-4 py-3 text-base text-navy placeholder:text-muted focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-70"
         />
         {phase === 'attempting' && secondsOnDrill >= HINT_AFTER_SECONDS && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
+          <p className="text-xs text-warning-strong">
             Stuck? Replay the clip a few times. Listening twice through often helps more than thinking harder.
           </p>
         )}
@@ -487,14 +487,14 @@ function DrillPanel({
 function ReviewBlock({ result }: { result: DictationResult }) {
   if (result.isCorrect) {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-800/50 dark:bg-emerald-950/30">
+      <div className="rounded-xl border border-success/20 bg-success/10 px-5 py-4">
         <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-success-strong" />
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+            <p className="text-sm font-semibold text-success-strong">
               Correct!
             </p>
-            <p className="text-sm text-emerald-800 dark:text-emerald-200/80">
+            <p className="text-sm text-success-strong">
               {result.correctAnswer}
             </p>
           </div>
@@ -505,14 +505,14 @@ function ReviewBlock({ result }: { result: DictationResult }) {
 
   if (result.offByOneTypo) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-800/50 dark:bg-amber-950/30">
+      <div className="rounded-xl border border-warning/20 bg-warning/10 px-5 py-4">
         <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning-strong" />
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            <p className="text-sm font-semibold text-warning-strong">
               Incorrect — expected &ldquo;{result.correctAnswer}&rdquo;
             </p>
-            <p className="text-sm text-amber-800 dark:text-amber-200/80">
+            <p className="text-sm text-warning-strong">
               This answer receives zero credit. The one-letter difference is shown only as a
               study hint, and we&apos;ll resurface it soon so you can nail the spelling.
             </p>
@@ -524,18 +524,18 @@ function ReviewBlock({ result }: { result: DictationResult }) {
   }
 
   return (
-    <div className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-4 dark:border-rose-800/50 dark:bg-rose-950/30">
+    <div className="rounded-xl border border-danger/20 bg-danger/10 px-5 py-4">
       <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-600 dark:text-rose-400" />
+        <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-danger-strong" />
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">
+          <p className="text-sm font-semibold text-danger-strong">
             Correct answer:
           </p>
-          <p className="text-sm text-rose-800 dark:text-rose-200/80">
+          <p className="text-sm text-danger-strong">
             {result.correctAnswer}
           </p>
           {result.learnerAnswer && (
-            <p className="text-xs italic text-rose-700/80 dark:text-rose-300/70">
+            <p className="text-xs italic text-danger-strong/80">
               You typed: {result.learnerAnswer}
             </p>
           )}
@@ -561,7 +561,7 @@ function SpellingDiffLine({ canonical, typed }: { canonical: string; typed: stri
           className={
             cell.kind === 'equal'
               ? 'text-navy'
-              : 'text-rose-700 underline decoration-rose-400 dark:text-rose-300'
+              : 'text-danger-strong underline decoration-rose-400'
           }
         >
           {cell.char === ' ' ? ' ' : cell.char}
@@ -605,10 +605,10 @@ function CompletePanel({
   const score = total > 0 ? Math.round((correct / total) * 100) : 0;
   const tone =
     score >= 80
-      ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/50'
+      ? 'bg-success/10 border-success/20'
       : score >= 50
-      ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/50'
-      : 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800/50';
+      ? 'bg-warning/10 border-warning/20'
+      : 'bg-danger/10 border-danger/20';
 
   return (
     <section

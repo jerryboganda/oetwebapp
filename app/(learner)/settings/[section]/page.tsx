@@ -120,58 +120,58 @@ const accentStyles: Record<LearnerSurfaceAccent, {
     toggleOn: 'bg-navy',
   },
   amber: {
-    icon: 'bg-amber-50 text-amber-700',
-    badge: 'border-amber-200 bg-amber-50 text-amber-700',
-    softBadge: 'border-amber-100 bg-amber-50 text-amber-700',
-    helperSurface: 'border-amber-200/70 bg-surface',
+    icon: 'bg-warning/10 text-warning-strong',
+    badge: 'border-warning/20 bg-warning/10 text-warning-strong',
+    softBadge: 'border-warning/20 bg-warning/10 text-warning-strong',
+    helperSurface: 'border-warning/20 bg-surface',
     helperGlow: 'from-amber-50 via-white to-white',
-    inputFocus: 'focus:border-amber-400 focus:ring-2 focus:ring-amber-100',
-    toggleOn: 'bg-amber-500',
+    inputFocus: 'focus:border-warning focus:ring-2 focus:ring-warning/20',
+    toggleOn: 'bg-warning',
   },
   blue: {
-    icon: 'bg-blue-50 text-blue-700',
-    badge: 'border-blue-200 bg-blue-50 text-blue-700',
-    softBadge: 'border-blue-100 bg-blue-50 text-blue-700',
-    helperSurface: 'border-blue-200/70 bg-surface',
+    icon: 'bg-info/10 text-info',
+    badge: 'border-info/20 bg-info/10 text-info',
+    softBadge: 'border-info/20 bg-info/10 text-info',
+    helperSurface: 'border-info/20 bg-surface',
     helperGlow: 'from-blue-50 via-white to-white',
-    inputFocus: 'focus:border-blue-400 focus:ring-2 focus:ring-blue-100',
-    toggleOn: 'bg-blue-600',
+    inputFocus: 'focus:border-info focus:ring-2 focus:ring-info/20',
+    toggleOn: 'bg-info',
   },
   indigo: {
-    icon: 'bg-indigo-50 text-indigo-700',
-    badge: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-    softBadge: 'border-indigo-100 bg-indigo-50 text-indigo-700',
-    helperSurface: 'border-indigo-200/70 bg-surface',
+    icon: 'bg-lavender text-primary-dark',
+    badge: 'border-primary/20 bg-lavender text-primary-dark',
+    softBadge: 'border-primary/20 bg-lavender text-primary-dark',
+    helperSurface: 'border-primary/20 bg-surface',
     helperGlow: 'from-indigo-50 via-white to-white',
-    inputFocus: 'focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100',
-    toggleOn: 'bg-indigo-600',
+    inputFocus: 'focus:border-primary focus:ring-2 focus:ring-primary/20',
+    toggleOn: 'bg-primary',
   },
   purple: {
-    icon: 'bg-purple-50 text-purple-700',
-    badge: 'border-purple-200 bg-purple-50 text-purple-700',
-    softBadge: 'border-purple-100 bg-purple-50 text-purple-700',
-    helperSurface: 'border-purple-200/70 bg-surface',
+    icon: 'bg-lavender text-primary-dark',
+    badge: 'border-primary/20 bg-lavender text-primary-dark',
+    softBadge: 'border-primary/20 bg-lavender text-primary-dark',
+    helperSurface: 'border-primary/20 bg-surface',
     helperGlow: 'from-purple-50 via-white to-white',
-    inputFocus: 'focus:border-purple-400 focus:ring-2 focus:ring-purple-100',
-    toggleOn: 'bg-purple-600',
+    inputFocus: 'focus:border-primary focus:ring-2 focus:ring-primary/20',
+    toggleOn: 'bg-primary',
   },
   rose: {
-    icon: 'bg-rose-50 text-rose-700',
-    badge: 'border-rose-200 bg-rose-50 text-rose-700',
-    softBadge: 'border-rose-100 bg-rose-50 text-rose-700',
-    helperSurface: 'border-rose-200/70 bg-surface',
+    icon: 'bg-danger/10 text-danger-strong',
+    badge: 'border-danger/20 bg-danger/10 text-danger-strong',
+    softBadge: 'border-danger/20 bg-danger/10 text-danger-strong',
+    helperSurface: 'border-danger/20 bg-surface',
     helperGlow: 'from-rose-50 via-white to-white',
-    inputFocus: 'focus:border-rose-400 focus:ring-2 focus:ring-rose-100',
-    toggleOn: 'bg-rose-600',
+    inputFocus: 'focus:border-danger focus:ring-2 focus:ring-danger/20',
+    toggleOn: 'bg-danger-strong',
   },
   emerald: {
-    icon: 'bg-emerald-50 text-emerald-700',
-    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    softBadge: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    helperSurface: 'border-emerald-200/70 bg-surface',
+    icon: 'bg-success/10 text-success-strong',
+    badge: 'border-success/20 bg-success/10 text-success-strong',
+    softBadge: 'border-success/20 bg-success/10 text-success-strong',
+    helperSurface: 'border-success/20 bg-surface',
     helperGlow: 'from-emerald-50 via-white to-white',
-    inputFocus: 'focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100',
-    toggleOn: 'bg-emerald-600',
+    inputFocus: 'focus:border-success focus:ring-2 focus:ring-success/20',
+    toggleOn: 'bg-success-strong',
   },
   slate: {
     icon: 'bg-background-light text-navy',
@@ -179,18 +179,18 @@ const accentStyles: Record<LearnerSurfaceAccent, {
     softBadge: 'border-border bg-background-light text-navy',
     helperSurface: 'border-border bg-surface',
     helperGlow: 'from-slate-100 via-white to-white',
-    inputFocus: 'focus:border-slate-400 focus:ring-2 focus:ring-slate-100',
+    inputFocus: 'focus:border-border-hover focus:ring-2 focus:ring-slate-100',
     toggleOn: 'bg-slate-700',
   },
 };
 
 const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
   muted: 'border-border bg-background-light text-muted',
-  writing: 'border-rose-200 bg-rose-50 text-rose-700',
-  speaking: 'border-purple-200 bg-purple-50 text-purple-700',
-  reading: 'border-blue-200 bg-blue-50 text-blue-700',
-  listening: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  study: 'border-amber-200 bg-amber-50 text-amber-700',
+  writing: 'border-danger/20 bg-danger/10 text-danger-strong',
+  speaking: 'border-primary/20 bg-lavender text-primary-dark',
+  reading: 'border-info/20 bg-info/10 text-info',
+  listening: 'border-success/20 bg-success/10 text-success-strong',
+  study: 'border-warning/20 bg-warning/10 text-warning-strong',
 };
 
 const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
@@ -1119,8 +1119,8 @@ function PrivacyControlsCard() {
   return (
     <div className="rounded-surface border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
       <div className="flex items-start gap-5 relative z-10">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50">
-          <ShieldCheck className="h-6 w-6 text-rose-700" />
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-danger/20 bg-danger/10">
+          <ShieldCheck className="h-6 w-6 text-danger-strong" />
         </div>
         <div className="min-w-0 flex-1 space-y-4">
           <div>

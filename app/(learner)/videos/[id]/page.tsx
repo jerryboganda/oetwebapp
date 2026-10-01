@@ -172,7 +172,7 @@ export default function VideoDetailPage() {
             <Link
               href="/videos"
               aria-label="Back to video library"
-              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-sm font-semibold text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Library
@@ -211,7 +211,7 @@ export default function VideoDetailPage() {
                   aria-hidden="true"
                 />
                 <div
-                  className="pointer-events-none absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-violet-500/15 blur-3xl"
+                  className="pointer-events-none absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-primary/15 blur-3xl"
                   aria-hidden="true"
                 />
                 <div className="relative flex flex-col items-center gap-4 px-6 py-10 text-center sm:py-12">

@@ -28,7 +28,7 @@ export function PublishGateChecklist({ title, rows }: PublishGateChecklistProps)
               aria-hidden
               className={cn(
                 'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
-                row.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
+                row.ok ? 'bg-success/10 text-success-strong' : 'bg-danger/10 text-danger-strong',
               )}
             >
               {row.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}

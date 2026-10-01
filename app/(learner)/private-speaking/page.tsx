@@ -899,7 +899,7 @@ export default function PrivateSpeakingPage() {
                   </Button>
                   {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
                     <button onClick={handleBookWithPaypal} disabled={bookingInProgress}
-                      className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-emerald-300 disabled:opacity-50 transition-colors">
+                      className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-success/30 disabled:opacity-50 transition-colors">
                       Pay {formatSlotPrice(selectedSlot)} with PayPal
                     </button>
                   ) : null}

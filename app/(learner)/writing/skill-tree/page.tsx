@@ -109,9 +109,9 @@ export default function WritingSkillTreePage() {
             const completedForSkill = lessonsForSkill.filter((l) => completionMap.has(l.id)).length;
             const allComplete = lessonsForSkill.length > 0 && completedForSkill === lessonsForSkill.length;
             const tone = allComplete
-              ? 'border-emerald-300/70 bg-emerald-50/60 dark:border-emerald-800/50 dark:bg-emerald-950/20'
+              ? 'border-success/30 bg-success/10'
               : masteryValue >= 70
-                ? 'border-amber-300/70 bg-amber-50/60 dark:border-amber-800/50 dark:bg-amber-950/20'
+                ? 'border-warning/30 bg-warning/10'
                 : 'border-border bg-background';
             return (
               <li key={skill}>
@@ -123,7 +123,7 @@ export default function WritingSkillTreePage() {
                         {/* SKILL_LABELS are OET-authored English content; force LTR inside RTL chrome. */}
                         <h2 className="mt-1 text-sm font-bold text-navy" dir="ltr">{SKILL_LABELS[skill]}</h2>
                       </div>
-                      <Target className="h-5 w-5 text-amber-600" aria-hidden="true" />
+                      <Target className="h-5 w-5 text-warning-strong" aria-hidden="true" />
                     </header>
                     <div className="mt-3 space-y-1">
                       <div className="flex justify-between text-xs font-bold text-muted">

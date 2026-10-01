@@ -74,23 +74,23 @@ export interface SectionSkin {
 export const SECTION_SKINS: Record<Subtest, SectionSkin> = {
   listening: {
     Icon: Headphones,
-    tile: 'from-blue-500/20 to-blue-500/5 text-blue-600 dark:text-blue-300',
-    bar: 'bg-blue-500', ring: 'hover:border-blue-400/60', glow: 'hover:bg-blue-500/[0.04]',
+    tile: 'from-blue-500/20 to-blue-500/5 text-info',
+    bar: 'bg-info', ring: 'hover:border-info/60', glow: 'hover:bg-blue-500/[0.04]',
   },
   reading: {
     Icon: BookOpen,
-    tile: 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-300',
-    bar: 'bg-emerald-500', ring: 'hover:border-emerald-400/60', glow: 'hover:bg-emerald-500/[0.04]',
+    tile: 'from-emerald-500/20 to-emerald-500/5 text-success-strong',
+    bar: 'bg-success', ring: 'hover:border-success/60', glow: 'hover:bg-emerald-500/[0.04]',
   },
   writing: {
     Icon: PenLine,
-    tile: 'from-amber-500/20 to-amber-500/5 text-amber-600 dark:text-amber-300',
-    bar: 'bg-amber-500', ring: 'hover:border-amber-400/60', glow: 'hover:bg-amber-500/[0.04]',
+    tile: 'from-amber-500/20 to-amber-500/5 text-warning-strong',
+    bar: 'bg-warning', ring: 'hover:border-warning/60', glow: 'hover:bg-amber-500/[0.04]',
   },
   speaking: {
     Icon: Mic,
-    tile: 'from-purple-500/20 to-purple-500/5 text-purple-600 dark:text-purple-300',
-    bar: 'bg-purple-500', ring: 'hover:border-purple-400/60', glow: 'hover:bg-purple-500/[0.04]',
+    tile: 'from-purple-500/20 to-purple-500/5 text-primary',
+    bar: 'bg-primary', ring: 'hover:border-primary/60', glow: 'hover:bg-purple-500/[0.04]',
   },
 };
 
@@ -101,10 +101,10 @@ export const DEFAULT_SKIN: SectionSkin = {
 };
 
 const PILL_ACTIVE: Record<Subtest, string> = {
-  listening: 'bg-blue-500 text-white shadow-sm shadow-blue-500/25',
-  reading: 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25',
-  writing: 'bg-amber-500 text-white shadow-sm shadow-amber-500/25',
-  speaking: 'bg-purple-500 text-white shadow-sm shadow-purple-500/25',
+  listening: 'bg-info text-white shadow-sm shadow-blue-500/25',
+  reading: 'bg-success text-white shadow-sm shadow-emerald-500/25',
+  writing: 'bg-warning text-white shadow-sm shadow-amber-500/25',
+  speaking: 'bg-primary text-white shadow-sm shadow-purple-500/25',
 };
 
 function matchSubtest(name: string): Subtest | null {
@@ -189,7 +189,7 @@ function FolderCard({
           <Icon className="h-[22px] w-[22px]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-bold text-navy" title={folder.name}>
+          <span className="block truncate text-sm font-bold text-navy" title={folder.name}>
             {folder.name}
           </span>
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -198,7 +198,7 @@ function FolderCard({
             )}
             <MetaChip icon={FileText}>{stats.files} file{stats.files === 1 ? '' : 's'}</MetaChip>
             {stats.bytes > 0 && <MetaChip icon={HardDrive}>{formatBytes(stats.bytes)}</MetaChip>}
-            {error && <span className="text-2xs font-semibold text-red-500">· download failed</span>}
+            {error && <span className="text-2xs font-semibold text-danger-strong">· download failed</span>}
           </span>
         </span>
       </button>
@@ -280,7 +280,7 @@ export function MaterialsBrowser({ folders }: { folders: LearnerMaterialFolderDt
             onChange={(e) => handleSearch(e.target.value)}
             placeholder={`Search ${index.length} files…`}
             aria-label="Search materials"
-            className="w-full rounded-xl border border-border bg-background-light py-3 pl-11 pr-10 text-[15px] text-navy shadow-inner placeholder:text-muted focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-xl border border-border bg-background-light py-3 pl-11 pr-10 text-sm text-navy shadow-inner placeholder:text-muted focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {query && (
             <button

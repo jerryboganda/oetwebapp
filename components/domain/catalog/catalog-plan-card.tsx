@@ -21,13 +21,13 @@ import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 export const CATALOG_ACCENT_TILE: Record<string, string> = {
   primary: 'bg-primary/10 text-primary',
   navy: 'bg-navy/10 text-navy',
-  amber: 'bg-amber-50 text-amber-700',
-  blue: 'bg-blue-50 text-blue-700',
-  indigo: 'bg-indigo-50 text-indigo-700',
-  purple: 'bg-purple-50 text-purple-700',
-  rose: 'bg-rose-50 text-rose-700',
-  emerald: 'bg-emerald-50 text-emerald-700',
-  slate: 'bg-slate-100 text-slate-700',
+  amber: 'bg-warning/10 text-warning-strong',
+  blue: 'bg-info/10 text-info',
+  indigo: 'bg-lavender text-primary-dark',
+  purple: 'bg-lavender text-primary-dark',
+  rose: 'bg-danger/10 text-danger-strong',
+  emerald: 'bg-success/10 text-success-strong',
+  slate: 'bg-background-light text-navy',
 };
 
 export interface CatalogPlanCardProps {

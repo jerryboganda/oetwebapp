@@ -91,9 +91,9 @@ export default function WritingMocksCataloguePage() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <Card padding="md" className="border-amber-300/70 bg-amber-50/40 dark:border-amber-800/50 dark:bg-amber-950/20">
+        <Card padding="md" className="border-warning/30 bg-warning/10">
           <CardContent>
-            <p className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-200">
+            <p className="flex items-start gap-2 text-sm text-warning-strong">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>
                 <span className="font-bold">{t('writing.mocks.catalogue.before.title')}</span>{' '}

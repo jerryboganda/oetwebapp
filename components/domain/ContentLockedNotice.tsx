@@ -49,13 +49,13 @@ export function ContentLockedNotice({
     <div
       role="alert"
       className={
-        'mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center text-sm text-amber-900 ' +
+        'mx-auto flex max-w-md flex-col items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-5 text-center text-sm text-warning-strong ' +
         (className ?? '')
       }
     >
-      <Lock className="h-8 w-8 text-amber-600" aria-hidden />
+      <Lock className="h-8 w-8 text-warning-strong" aria-hidden />
       <h3 className="text-base font-semibold">Subscription required</h3>
-      <p className="text-amber-900/90">{message}</p>
+      <p className="text-warning-strong/90">{message}</p>
       <Link
         href="/subscriptions"
         prefetch={false}
@@ -64,7 +64,7 @@ export function ContentLockedNotice({
         View plans
       </Link>
       {previewHint ? (
-        <p className="mt-3 text-xs text-amber-800/80">{previewHint}</p>
+        <p className="mt-3 text-xs text-warning-strong/80">{previewHint}</p>
       ) : null}
     </div>
   );
