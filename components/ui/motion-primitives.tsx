@@ -1,6 +1,6 @@
 'use client';
 
-import { AnimatePresence, motion, useReducedMotionConfig, type HTMLMotionProps } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion, useReducedMotionConfig, type HTMLMotionProps } from 'motion/react';
 import {
   getCollapseTransition,
   getFadeSwitchTransition,
@@ -13,7 +13,7 @@ import {
   type MotionSurface,
 } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
 
 type MotionRevealProps = HTMLMotionProps<'div'> & {
   surface?: Exclude<MotionSurface, 'skeleton'>;
@@ -24,6 +24,27 @@ type MotionRevealProps = HTMLMotionProps<'div'> & {
 const subscribeToHydrationSnapshot = () => () => undefined;
 const getHydratedSnapshot = () => true;
 const getServerHydrationSnapshot = () => false;
+
+const MotionStillContext = createContext(false);
+
+/**
+ * When `still`, holds everything inside completely still (DESIGN.md §5: exam
+ * and live routes). Reduced motion still fades; this does not. Covers
+ * motion/react (MotionConfig + no reveals) and CSS (the `[data-motion="still"]`
+ * rules that mirror the in-app Reduce motion setting). The same elements render
+ * either way, so toggling `still` never remounts what is inside, and
+ * `display: contents` keeps layout.
+ */
+export function MotionStill({ still, children }: { still: boolean; children: ReactNode }) {
+  return (
+    <MotionStillContext.Provider value={still}>
+      {/* MotionConfig merges over its parent: without the prop, the in-app setting is inherited. */}
+      <MotionConfig {...(still ? { reducedMotion: 'always' as const } : {})}>
+        <div data-motion={still ? 'still' : undefined} className="contents">{children}</div>
+      </MotionConfig>
+    </MotionStillContext.Provider>
+  );
+}
 
 /** False on the server and the hydrating render, true after: for client-only visuals. */
 export function useHasHydrated(): boolean {
@@ -52,6 +73,7 @@ function MotionReveal({
   ...props
 }: MotionRevealProps) {
   const hasHydrated = useHasHydrated();
+  const still = useContext(MotionStillContext);
   const reducedMotionPreference = prefersReducedMotion(useReducedMotionConfig());
   // The server cannot read the client's prefers-reduced-motion, so SSR always
   // emits the full (non-reduced) variant — including its transform. If the
@@ -74,7 +96,7 @@ function MotionReveal({
     <motion.div
       layout={layout}
       className={cn(className)}
-      initial={initial}
+      initial={still ? false : initial}
       exit={exit}
       variants={variants}
       whileInView="visible"

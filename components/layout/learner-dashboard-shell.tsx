@@ -2,10 +2,10 @@
 
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { MotionConfig } from 'motion/react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LearnerBreadcrumbs } from '@/components/domain/learner-breadcrumbs';
+import { MotionStill } from '@/components/ui/motion-primitives';
 import { AppShell, type AppShellProps } from './app-shell';
 import { resolveLearnerChrome } from './learner-dashboard-route-policy';
 import { LearnerWorkspaceContainer } from './learner-workspace-container';
@@ -72,20 +72,6 @@ export function LearnerDashboardShell({
 }
 
 /**
- * Exam and live routes never animate (DESIGN.md §5). One switch covers both
- * motion/react (MotionConfig) and CSS (the `[data-motion="still"]` rules that
- * mirror the in-app Reduce motion setting). `display: contents` keeps layout.
- */
-function ExamStillness({ still, children }: { still: boolean; children: ReactNode }) {
-  if (!still) return children;
-  return (
-    <MotionConfig reducedMotion="always">
-      <div data-motion="still" className="contents">{children}</div>
-    </MotionConfig>
-  );
-}
-
-/**
  * The learner shell for every page in app/(learner), mounted once by its
  * layout so TopNav, Sidebar, BottomNav and AuthGuard persist across learner
  * navigations. The chrome comes from the URL (resolveLearnerChrome):
@@ -96,18 +82,19 @@ export function LearnerShellLayout({ children }: { children: ReactNode }) {
   const t = useTranslations();
   const chrome = resolveLearnerChrome(usePathname());
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  const page = <ExamStillness still={chrome.examOrLive}>{children}</ExamStillness>;
 
-  if (chrome.mode === 'none') return page;
-
-  return (
+  const shell = chrome.mode === 'none' ? children : (
     <LearnerDashboardShell
       distractionFree={chrome.mode === 'focus'}
       requireAuth={chrome.requireAuth}
       pageTitle={chrome.titleKey ? t(chrome.titleKey) : chrome.title}
       navActions={<span ref={setSlot} className="contents" />}
     >
-      <LearnerShellSlot.Provider value={slot}>{page}</LearnerShellSlot.Provider>
+      <LearnerShellSlot.Provider value={slot}>{children}</LearnerShellSlot.Provider>
     </LearnerDashboardShell>
   );
+
+  // Exam and live routes never animate (DESIGN.md §5): the whole shell, header
+  // flourishes included, holds still. Always rendered, so the shell never remounts.
+  return <MotionStill still={chrome.examOrLive}>{shell}</MotionStill>;
 }

@@ -242,7 +242,7 @@ function SubmissionHistoryInner() {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-surface" />
+              <Skeleton key={i} className="h-36 rounded-2xl" />
             ))}
           </div>
         ) : null}
@@ -280,7 +280,7 @@ function SubmissionHistoryInner() {
                   <MotionItem
                     key={sub.id}
                     delayIndex={idx}
-                    className="bg-surface rounded-surface border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
+                    className="bg-surface rounded-2xl border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
                   >
                     <div className="flex-1 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">

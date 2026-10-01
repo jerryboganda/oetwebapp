@@ -6,7 +6,7 @@ import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, Mi
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
@@ -457,16 +457,21 @@ export default function ListeningReviewPage() {
               );
             })()}
 
-            <LearnerPageHero
-                eyebrow="Transcript-backed Review"
+            {/* A section intro, not a second page hero: the score panel above is the h1. */}
+            <LearnerSurfaceSectionHeader
+              eyebrow="Transcript-backed Review"
               icon={Quote}
-              accent="indigo"
               title="Answers, full transcript, and unlimited replay"
               description={transcriptStateCopy(review)}
-              highlights={[
-                { icon: Quote, label: 'Transcript', value: `${review.transcriptSegments.length} segments` },
-                { icon: Target, label: 'Questions', value: `${review.itemReview.length} reviewed` },
-              ]}
+              action={(
+                <LearnerSurfaceMetaRow
+                  size="compact"
+                  items={[
+                    { icon: Quote, label: `${review.transcriptSegments.length} segments` },
+                    { icon: Target, label: `${review.itemReview.length} reviewed` },
+                  ]}
+                />
+              )}
             />
 
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">

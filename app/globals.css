@@ -134,6 +134,8 @@
   --duration-normal: 220ms;
   --duration-slow: 280ms;
   --duration-hero: 360ms;
+  --duration-flourish: 640ms;
+  --duration-count: 800ms;
   --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
@@ -284,13 +286,22 @@
   --color-admin-success-tint-strong: var(--admin-success-tint-strong);
 }
 
-/* DESIGN.md §3 eyebrow: the small uppercase label above a heading or value.
-   Sets type only; pair it with a colour (usually text-muted). */
+/* DESIGN.md §3 label recipes. Type only; pair each with a colour (usually
+   text-muted). eyebrow: above a heading or section. tile-label: inside stat
+   tiles and chips, tighter so long words ("CONFIDENCE") fit narrow tiles. */
 @utility eyebrow {
   font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
+}
+
+@utility tile-label {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  overflow-wrap: break-word;
 }
 
 @layer components {
@@ -317,7 +328,39 @@
     height: calc(var(--size) * 1.6);
     margin: calc(var(--size) * -0.8) 0 0 calc(var(--size) * -0.5);
     background: var(--color);
-    animation: celebration-particle 900ms var(--ease-enter) var(--delay) both;
+    animation: celebration-particle var(--duration-count) var(--ease-enter) var(--delay) both;
+  }
+
+  /* One-shot flourishes. Each plays once on mount; remount (React key) replays it. */
+  .bell-nudge {
+    transform-origin: 50% 10%;
+    animation: bell-nudge var(--duration-flourish) var(--ease-standard);
+  }
+
+  .pop-in {
+    animation: pop-in var(--duration-flourish) var(--ease-enter) both;
+  }
+
+  .flame-pop {
+    animation: flame-pop var(--duration-flourish) var(--ease-standard) 300ms both;
+  }
+
+  @keyframes bell-nudge {
+    20% { transform: rotate(-16deg); }
+    40% { transform: rotate(12deg); }
+    60% { transform: rotate(-8deg); }
+    80% { transform: rotate(5deg); }
+  }
+
+  @keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes flame-pop {
+    35% { transform: scale(1.3) rotate(-10deg); }
+    65% { transform: scale(0.94) rotate(6deg); }
   }
 
   @keyframes celebration-particle {
@@ -904,15 +947,22 @@ html[data-keyboard-hints='true'] [data-kbd-hint] {
   }
 }
 
-/* ── Platform hover: solid-purple interactive state ───────────────────────
-   Applied to buttons, links, and filter chips that turn solid purple on
-   hover. Placed OUTSIDE @layer so it beats every Tailwind utility class.
-   !important on bg and color ensures it wins over any competing base class
-   regardless of specificity (bg-surface, bg-muted, bg-background-light…).
-   Use class "hover-primary" on any interactive element. ─────────────────── */
-.hover-primary:hover {
-  background-color: var(--color-primary) !important;
-  color: rgb(255 255 255) !important;
+/* ── Platform hover: the shared state layer ───────────────────────────────
+   Use class "hover-primary" on interactive rows, tabs, pills and chips. A
+   tinted state layer (DESIGN.md §5), not a solid fill: 8% primary (15% in
+   dark mode) with primary text. Placed OUTSIDE @layer, with !important, so it
+   beats any base surface class (bg-surface, bg-background-light…). Gated to
+   hover-capable pointers so a tap never leaves a sticky highlight. ──────── */
+@media (hover: hover) {
+  .hover-primary:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 8%, transparent) !important;
+    color: var(--color-primary-dark) !important;
+  }
+
+  :root.dark .hover-primary:hover {
+    background-color: color-mix(in srgb, var(--color-primary) 15%, transparent) !important;
+    color: var(--color-primary) !important;
+  }
 }
 
 /* ------------------------------------------------------------------------- *

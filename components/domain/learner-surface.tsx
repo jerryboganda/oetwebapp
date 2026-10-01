@@ -184,7 +184,7 @@ export function LearnerPageHero({
           </div>
         ) : null}
         <div className="min-w-0">
-          <p className="text-3xs font-bold uppercase tracking-[0.12em] text-muted sm:text-2xs sm:tracking-[0.16em]">{item.label}</p>
+          <p className="tile-label text-muted sm:eyebrow">{item.label}</p>
           <p className="text-xs font-semibold text-navy break-words sm:text-sm">{item.value}</p>
         </div>
       </div>

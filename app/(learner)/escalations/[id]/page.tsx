@@ -77,7 +77,7 @@ export default function EscalationDetailPage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-surface" />)}
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
           </div>
         ) : null}
 
@@ -100,25 +100,25 @@ export default function EscalationDetailPage() {
 
             <div className="space-y-6">
               {/* Status */}
-              <div className="rounded-surface border border-border bg-surface p-6 space-y-3">
+              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Status</h3>
                 <StatusBadge status={escalation.status} />
               </div>
 
               {/* Reason */}
-              <div className="rounded-surface border border-border bg-surface p-6 space-y-3">
+              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Reason</h3>
                 <p className="text-navy">{escalation.reason}</p>
               </div>
 
               {/* Details */}
-              <div className="rounded-surface border border-border bg-surface p-6 space-y-3">
+              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Details</h3>
                 <p className="text-navy whitespace-pre-wrap">{escalation.details}</p>
               </div>
 
               {/* Dates */}
-              <div className="rounded-surface border border-border bg-surface p-6 space-y-3">
+              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Timeline</h3>
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
@@ -136,7 +136,7 @@ export default function EscalationDetailPage() {
 
               {/* Resolution Note */}
               {escalation.resolutionNote ? (
-                <div className="rounded-surface border border-border bg-surface p-6 space-y-3">
+                <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Resolution Note</h3>
                   <p className="text-navy whitespace-pre-wrap">{escalation.resolutionNote}</p>
                 </div>

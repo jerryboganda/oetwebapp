@@ -29,7 +29,8 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, useReducedMotionConfig } from 'motion/react';
-import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, motionTokens, prefersReducedMotion } from '@/lib/motion';
+import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
+import { useRiseNudge } from '@/hooks/use-rise-nudge';
 import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
 import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
 import { Button } from '@/components/ui/button';
@@ -610,20 +611,15 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
     // Only `unreadCount`/`connectionStatus` are needed here — subscribe to
     // state-only context so the bell button skips re-renders caused by action
     // reference changes.
-    const { unreadCount, connectionStatus } = useNotificationState();
+    const { unreadCount, connectionStatus, isLoading } = useNotificationState();
     // Admin fulfilment alerts ride the EXISTING unread pill (added, not a
     // separate dot) so ops load is visible at a glance alongside inbox mail.
     const { totalAlertCount: adminAlertCount } = useAdminAlerts();
     const displayUnreadCount = unreadCount + adminAlertCount;
     const isDegraded = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
-    // A one-shot bell wiggle + badge pop whenever the unread count rises
-    // (adjust-state-during-render; transforms collapse under reduced motion).
-    const [seenCount, setSeenCount] = useState(displayUnreadCount);
-    const [nudge, setNudge] = useState(0);
-    if (displayUnreadCount !== seenCount) {
-      setSeenCount(displayUnreadCount);
-      if (displayUnreadCount > seenCount) setNudge((n) => n + 1);
-    }
+    // A one-shot bell nudge + badge pop when new items arrive, never for the
+    // first load (CSS keyframes, so reduced motion and exam stillness apply).
+    const nudge = useRiseNudge(displayUnreadCount, !isLoading);
     return (
       <button
         ref={ref}
@@ -636,25 +632,19 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >
-        <motion.span
-          key={nudge}
-          className="inline-flex"
-          initial={false}
-          animate={nudge ? { rotate: [0, -16, 12, -8, 5, 0] } : undefined}
-          transition={{ duration: 0.6 }}
-        >
+        <span key={nudge} className={cn('inline-flex', nudge > 0 && 'bell-nudge')}>
           <Bell className="h-5 w-5" aria-hidden="true" />
-        </motion.span>
+        </span>
         {displayUnreadCount > 0 && (
-          <motion.span
+          <span
             key={`badge-${nudge}`}
-            className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-3xs"
-            initial={nudge ? { scale: 0.5 } : false}
-            animate={{ scale: 1 }}
-            transition={motionTokens.spring.pop}
+            className={cn(
+              'absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-3xs font-bold leading-none text-white shadow-sm dark:bg-violet-700 lg:min-w-[18px]',
+              nudge > 0 && 'pop-in',
+            )}
           >
             {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
-          </motion.span>
+          </span>
         )}
         {isDegraded && (
           <span

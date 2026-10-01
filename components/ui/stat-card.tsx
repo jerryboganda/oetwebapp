@@ -141,7 +141,7 @@ export function StatCard({
     >
       {/* Top Header: Label & Icon */}
       <div className="flex items-start justify-between gap-2">
-        <h3 className={cn('min-w-0 text-2xs font-bold uppercase tracking-[0.10em]', activeTone.label)}>
+        <h3 className={cn('eyebrow min-w-0 break-words', activeTone.label)}>
           {label}
         </h3>
         {icon && (

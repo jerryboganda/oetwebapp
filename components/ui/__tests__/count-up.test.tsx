@@ -1,6 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { CountUp } from '../count-up';
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('CountUp', () => {
   it('renders the real value as one text node with its width reserved', () => {
     render(<p>Raw <CountUp value={33} suffix="/38" /></p>);
@@ -11,9 +15,9 @@ describe('CountUp', () => {
     expect(value.style.minWidth).toBe('5ch');
   });
 
-  it('formats decimals with a prefix and suffix', () => {
-    render(<CountUp value={72.46} decimals={1} prefix="~" suffix="%" />);
-    expect(screen.getByText('~72.5%')).toBeInTheDocument();
+  it('rounds to a whole number', () => {
+    render(<CountUp value={72.6} suffix="%" />);
+    expect(screen.getByText('73%')).toBeInTheDocument();
   });
 
   it('counts from zero when it enters the viewport, then restores the committed value', () => {
@@ -31,6 +35,5 @@ describe('CountUp', () => {
 
     unmount();
     expect(value.textContent).toBe('420/500');
-    vi.unstubAllGlobals();
   });
 });

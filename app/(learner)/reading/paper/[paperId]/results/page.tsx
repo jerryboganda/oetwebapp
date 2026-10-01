@@ -3,8 +3,8 @@
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { AlertTriangle, BookOpen, CheckCircle2, FileText, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { AlertTriangle, BookOpen, CheckCircle2, MessageSquare, MinusCircle, RefreshCw, Target, XCircle } from 'lucide-react';
+import { LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
@@ -288,43 +288,13 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 {review.attempt.adminReviewReason ? ` Reason: ${review.attempt.adminReviewReason}.` : ''}
               </InlineAlert>
             ) : null}
-            <LearnerPageHero
-              eyebrow="Reading Review"
-              icon={BookOpen}
-              accent={hasApprovedConversion ? 'emerald' : 'blue'}
-              title={review.paper.title}
-              description={!hasApprovedConversion
-                ? `${raw}/${review.attempt.maxRawScore} practice marks`
-                : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
-              highlights={[
-                { icon: Target, label: 'Raw score', value: `${raw}/${review.attempt.maxRawScore}` },
-                { icon: FileText, label: 'Scaled score', value: !hasApprovedConversion ? 'Unavailable' : `${scaled}/500` },
-                { icon: hasApprovedConversion ? CheckCircle2 : BookOpen, label: 'Grade', value: !hasApprovedConversion ? 'Unavailable' : `Grade ${review.attempt.gradeLetter}` },
-              ]}
-              aside={(
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <Badge variant={hasApprovedConversion ? 'success' : 'info'}>
-                    {hasApprovedConversion ? 'Owner-table conversion' : 'Scaled score unavailable'}
-                  </Badge>
-                  <p className="mt-3 text-sm leading-6 text-muted">
-                    {hasApprovedConversion
-                      ? `This result uses owner-approved conversion table ${review.attempt.scoreConversionTableVersionKey}.`
-                      : 'This result reports raw practice marks because an owner-approved conversion table is not configured.'}
-                  </p>
-                  <p className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted">
-                    AI Practice Score — not an official OET result.
-                  </p>
-                </div>
-              )}
-            />
-
             <ResultsScorePanel
               eyebrow="Reading review"
               icon={BookOpen}
               title={review.paper.title}
               subtitle={!hasApprovedConversion
-                ? `${raw}/${review.attempt.maxRawScore} raw practice score`
-                : `${scaled}/500 scaled · Grade ${review.attempt.gradeLetter}`}
+                ? `${raw}/${review.attempt.maxRawScore} practice marks`
+                : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
               gaugeValue={accuracyPct}
               gaugeLabel="Accuracy"
               gaugeColor={hasApprovedConversion ? 'var(--color-success)' : 'var(--color-primary)'}
@@ -344,12 +314,29 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 },
               ]}
               aside={(
+                // One headline per page: the conversion note that used to sit in a
+                // second hero above this panel now lives beside the score.
+                <div className="space-y-3">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
+                  <Badge variant={hasApprovedConversion ? 'success' : 'info'}>
+                    {hasApprovedConversion ? 'Owner-table conversion' : 'Scaled score unavailable'}
+                  </Badge>
+                  <p className="mt-3 text-sm leading-6 text-muted">
+                    {hasApprovedConversion
+                      ? `This result uses owner-approved conversion table ${review.attempt.scoreConversionTableVersionKey}.`
+                      : 'This result reports raw practice marks because an owner-approved conversion table is not configured.'}
+                  </p>
+                  <p className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted">
+                    AI Practice Score — not an official OET result.
+                  </p>
+                </div>
                 <div className="rounded-2xl border border-border bg-background-light p-4">
                   <p className="text-sm font-semibold text-navy dark:text-white">{nextAction.title}</p>
                   <p className="mt-1 text-xs leading-5 text-muted">{nextAction.desc}</p>
                   <Button asChild variant="primary" size="sm" className="mt-3">
                     <Link href={nextAction.href}>{nextAction.label}</Link>
                   </Button>
+                </div>
                 </div>
               )}
               chartSlot={(

@@ -63,7 +63,7 @@ describe('motion helpers', () => {
 
   it('keeps stagger timing restrained and capped', () => {
     expect(getMotionDelay(0, false)).toBe(0);
-    expect(getMotionDelay(4, false)).toBeCloseTo(0.16, 2);
+    expect(getMotionDelay(4, false)).toBeCloseTo(0.12, 2);
     expect(getMotionDelay(20, false)).toBeLessThanOrEqual(0.18);
     expect(getMotionDelay(4, true, 0.05)).toBe(0.05);
   });
@@ -74,7 +74,7 @@ describe('motion helpers', () => {
     const desktopRouteMotion = getSurfaceMotion('route', false);
     const desktopHidden = desktopRouteMotion.variants.hidden as { y?: number; scale?: number };
 
-    expect(getMotionDelay(4, false)).toBeCloseTo(0.144, 3);
+    expect(getMotionDelay(4, false)).toBeCloseTo(0.108, 3);
     expect(desktopHidden.y).toBeCloseTo(motionTokens.distance.route * 0.9, 1);
     expect(desktopHidden.scale).toBeCloseTo(1 - (1 - motionTokens.scale.route) * 0.75, 3);
     expect(getSurfaceTransition('state', true).duration).toBeCloseTo(0.114, 3);
@@ -84,7 +84,7 @@ describe('motion helpers', () => {
     const mobileRouteMotion = getSurfaceMotion('route', false);
     const mobileHidden = mobileRouteMotion.variants.hidden as { y?: number; scale?: number };
 
-    expect(getMotionDelay(4, false)).toBeCloseTo(0.128, 3);
+    expect(getMotionDelay(4, false)).toBeCloseTo(0.096, 3);
     expect(mobileHidden.y).toBeCloseTo(motionTokens.distance.route * 0.8, 1);
     expect(mobileHidden.scale).toBeCloseTo(1 - (1 - motionTokens.scale.route) * 0.6, 3);
     expect(getSurfaceTransition('state', true).duration).toBeCloseTo(0.108, 3);

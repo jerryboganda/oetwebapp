@@ -6,10 +6,9 @@ import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
 export interface CountUpProps {
-  /** The real metric. Rendered as-is before JS, in tests and under reduced motion. */
+  /** The real metric (an integer). Rendered as-is before JS, in tests and under reduced motion. */
   value: number;
-  decimals?: number;
-  prefix?: string;
+  /** Rendered after the number in the same text node, e.g. "/500" or "%". */
   suffix?: string;
   className?: string;
 }
@@ -22,11 +21,11 @@ export interface CountUpProps {
  * remains findable as a whole). Width is reserved in `ch` with tabular digits,
  * so counting never shifts layout.
  */
-export function CountUp({ value, decimals = 0, prefix = '', suffix = '', className }: CountUpProps) {
+export function CountUp({ value, suffix = '', className }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const counted = useRef(false);
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
-  const text = `${prefix}${value.toFixed(decimals)}${suffix}`;
+  const text = `${Math.round(value)}${suffix}`;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -35,7 +34,7 @@ export function CountUp({ value, decimals = 0, prefix = '', suffix = '', classNa
     if (typeof IntersectionObserver === 'undefined') return;
 
     const show = (n: number) => {
-      node.nodeValue = `${prefix}${n.toFixed(decimals)}${suffix}`;
+      node.nodeValue = `${Math.round(n)}${suffix}`;
     };
     // Already on screen: start from zero before the first paint, so no flash.
     const rect = el.getBoundingClientRect();
@@ -47,7 +46,7 @@ export function CountUp({ value, decimals = 0, prefix = '', suffix = '', classNa
       observer.disconnect();
       counted.current = true;
       show(0);
-      controls = animate(0, value, { duration: 0.8, ease: motionTokens.ease.entrance, onUpdate: show });
+      controls = animate(0, value, { duration: motionTokens.duration.count, ease: motionTokens.ease.entrance, onUpdate: show });
     });
     observer.observe(el);
 
@@ -58,7 +57,7 @@ export function CountUp({ value, decimals = 0, prefix = '', suffix = '', classNa
       // in case the count stopped part-way.
       if (el.dataset.final) node.nodeValue = el.dataset.final;
     };
-  }, [value, decimals, prefix, suffix, reducedMotion]);
+  }, [value, suffix, reducedMotion]);
 
   return (
     <span

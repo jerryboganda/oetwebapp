@@ -17,6 +17,10 @@ export const motionTokens = {
     base: 0.22,
     slow: 0.28,
     hero: 0.36,
+    // One-shot flourishes (a bell nudge, a badge or flame pop).
+    flourish: 0.64,
+    // Count-ups and ring/bar draw-ins: long enough to read as counting.
+    count: 0.8,
   },
   ease: {
     standard: [0.22, 1, 0.36, 1] as MotionPoint,
@@ -65,21 +69,21 @@ const motionRuntimeProfiles: Record<AppRuntimeKind, MotionRuntimeProfile> = {
     distanceScale: 1,
     scaleScale: 1,
     durationScale: 1,
-    staggerStep: 0.04,
+    staggerStep: 0.03,
     staggerCap: 0.18,
   },
   desktop: {
     distanceScale: 0.9,
     scaleScale: 0.75,
     durationScale: 0.95,
-    staggerStep: 0.036,
+    staggerStep: 0.027,
     staggerCap: 0.16,
   },
   'capacitor-native': {
     distanceScale: 0.8,
     scaleScale: 0.6,
     durationScale: 0.9,
-    staggerStep: 0.032,
+    staggerStep: 0.024,
     staggerCap: 0.14,
   },
 };

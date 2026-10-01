@@ -81,7 +81,7 @@ export function CircularProgress({ value, size = 120, strokeWidth = 8, label, su
             cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
             style={{ ['--ring-empty' as string]: `${circumference}px` }}
-            className="transition-[stroke-dashoffset] duration-700 ease-out starting:[stroke-dashoffset:var(--ring-empty)] motion-reduce:transition-none"
+            className="transition-[stroke-dashoffset] duration-(--duration-count) ease-out starting:[stroke-dashoffset:var(--ring-empty)] motion-reduce:transition-none"
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center flex-col">

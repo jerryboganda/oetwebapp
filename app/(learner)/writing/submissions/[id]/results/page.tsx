@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { CelebrationBurst } from '@/components/ui/celebration-burst';
 import { CountUp } from '@/components/ui/count-up';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
+import { WritingPassCelebration } from '@/components/domain/writing/writing-pass-celebration';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import {
   appealWritingSubmission,
@@ -238,8 +239,7 @@ export default function WritingSubmissionResultsPage() {
             gaugeCenter={
               <>
                 <CountUp value={practiceScore} className="text-2xl font-black text-navy dark:text-white" />
-                {/* A real pass (Grade B, 350/500) gets one burst per submission. */}
-                <CelebrationBurst active={practiceScore >= OET_SCALED_PASS_B} onceKey={`writing-result:${submissionId}`} />
+                <WritingPassCelebration score={practiceScore} onceKey={`writing-result:${submissionId}`} />
               </>
             }
             gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
@@ -248,7 +248,7 @@ export default function WritingSubmissionResultsPage() {
               { label: 'Score', value: <span data-testid="ai-estimated-score"><CountUp value={practiceScore} suffix={`/${OET_SCALED_MAX}`} /></span>, tone: 'info', icon: <Award /> },
               ...(assessment.gradeBand ? [{ label: 'Grade band', value: <span data-testid="ai-grade-band">{assessment.gradeBand}</span>, tone: 'info' as const, icon: <Award /> }] : []),
               { label: t('writing.submissions.results.highlights.raw'), value: <CountUp value={practiceRawTotal} suffix={`/${WRITING_RAW_MAX}`} />, tone: 'default', icon: <FileText /> },
-              { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
+              ...(assessment.confidenceLabel ? [{ label: 'Confidence', value: assessment.confidenceLabel, tone: 'default' as const, icon: <Sparkles /> }] : []),
             ]}
           />
         ) : grade ? (
@@ -320,10 +320,11 @@ export default function WritingSubmissionResultsPage() {
                     with its persisted grade score (a tutor override included),
                     regardless of the AI feedback map. Mock: the tutor's human
                     written comments only (zero AI). Normal: the AI feedback. */}
-                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => {
+                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code, index) => {
                   const ai: PerCriterionFeedbackWithQuote | undefined = isMock ? undefined : grade?.perCriterion?.[code];
                   return (
                     <li key={code}>
+                      <MotionItem delayIndex={index}>
                       <CriterionScoreRow
                         label={CRITERION_NAMES[code]}
                         score={scores![code]}
@@ -342,6 +343,7 @@ export default function WritingSubmissionResultsPage() {
                           </>
                         ) : null}
                       />
+                      </MotionItem>
                     </li>
                   );
                 })}
@@ -358,8 +360,9 @@ export default function WritingSubmissionResultsPage() {
             </div>
             <CriteriaRadar scores={assessmentScores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
             <div className="grid gap-3 md:grid-cols-2" data-testid="assessment-criteria-list">
-              {assessment.criteria.map((criterion) => (
-                <article key={criterion.criterionCode} className="rounded-xl border border-border bg-background p-4">
+              {assessment.criteria.map((criterion, index) => (
+                <MotionItem key={criterion.criterionCode} delayIndex={index} className="h-full">
+                <article className="h-full rounded-xl border border-border bg-background p-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold text-navy">{CRITERION_NAMES[V11_CRITERION_KEY[criterion.criterionCode]] ?? criterion.criterionCode}</h3>
                     <Badge variant="info" size="sm">{criterion.score}/{criterion.maximumScore}</Badge>
@@ -368,6 +371,7 @@ export default function WritingSubmissionResultsPage() {
                   <p className="mt-1 text-sm text-muted">{criterion.limitationObservation}</p>
                   <p className="mt-2 text-sm text-primary">{criterion.improvementAction}</p>
                 </article>
+                </MotionItem>
               ))}
             </div>
             {assessment.errors.length ? (

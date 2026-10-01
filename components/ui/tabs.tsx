@@ -82,7 +82,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
             'relative flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-bold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-            activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary',
+            activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover-primary',
           )}
         >
           {activeTab === tab.id && (

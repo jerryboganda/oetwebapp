@@ -334,7 +334,8 @@ export default function SpeakingExamResultsPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1>
+      {/* One h1 per page: once scored, the score panel's title is the heading. */}
+      {pending ? <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1> : null}
       <div className="mt-4">{gradingNotices}</div>
 
       {pending ? (
@@ -351,8 +352,8 @@ export default function SpeakingExamResultsPage() {
           <ResultsScorePanel
             eyebrow="Speaking exam"
             icon={Mic}
-            title="Combined result"
-            subtitle={band ? `Readiness band: ${bandLabel(band)}` : undefined}
+            title="Speaking exam results"
+            subtitle={band ? `Combined result · Readiness band: ${bandLabel(band)}` : 'Combined result'}
             gaugeValue={typeof results.combinedScaledScore === 'number' ? (results.combinedScaledScore / 500) * 100 : 0}
             gaugeCenter={
               typeof results.combinedScaledScore === 'number'

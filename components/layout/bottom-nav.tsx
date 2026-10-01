@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMemo } from 'react';
 import { motion, useReducedMotionConfig } from 'motion/react';
-import { getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
+import { getSurfaceMotion, motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { useEnabledModules } from '@/hooks/use-enabled-modules';
 import { isActive, mobileNavItems, type NavItem } from './sidebar';
@@ -53,7 +53,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                 className={cn(
                   'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-3xs font-semibold leading-none',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary',
+                  active ? 'text-white shadow-md' : 'text-muted hover-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
@@ -66,7 +66,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                     aria-hidden="true"
                     className="absolute inset-0 rounded-[1rem] bg-primary"
                     layoutId={reducedMotion ? undefined : 'bottom-nav-active-pill'}
-                    transition={getSurfaceTransition('item', reducedMotion)}
+                    transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.layout}
                   />
                 )}
                 <div className={cn('relative z-10 rounded-full p-1 transition-colors [&_svg]:h-[18px] [&_svg]:w-[18px]', active ? 'bg-white/15' : 'bg-transparent')}>

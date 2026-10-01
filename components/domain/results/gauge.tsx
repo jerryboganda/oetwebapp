@@ -56,7 +56,7 @@ export function ResultGauge({
           // Draws in from empty on first paint (@starting-style). The final offset
           // stays a presentation attribute so the starting style can override it.
           style={{ ['--ring-empty' as string]: `${circumference}px` }}
-          className="transition-[stroke-dashoffset] duration-1000 ease-out starting:[stroke-dashoffset:var(--ring-empty)] motion-reduce:transition-none"
+          className="transition-[stroke-dashoffset] duration-(--duration-count) ease-out starting:[stroke-dashoffset:var(--ring-empty)] motion-reduce:transition-none"
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center leading-none">

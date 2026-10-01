@@ -29,7 +29,7 @@ import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { MotionList } from '@/components/ui/motion-primitives';
 import { CelebrationBurst } from '@/components/ui/celebration-burst';
 import { CountUp } from '@/components/ui/count-up';
-import { useStreakIncrease } from '@/hooks/use-streak-increase';
+import { useIncreaseSinceLastVisit } from '@/hooks/use-increase-since-last-visit';
 import { fetchPublicCatalog, type learnerGetScoringPolicy, type MyEntitlementSnapshot } from '@/lib/api';
 import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 import type { EngagementData } from '@/lib/hooks/use-dashboard-home';
@@ -99,7 +99,7 @@ export function LearnerDashboardDetails({
 }: LearnerDashboardDetailsProps) {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotionConfig();
-  const streakUp = useStreakIncrease(engagement?.currentStreak);
+  const streakUp = useIncreaseSinceLastVisit('oet_last_seen_streak', engagement?.currentStreak);
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const [catalogAddOns, setCatalogAddOns] = useState<PublicCatalogAddOnRow[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);

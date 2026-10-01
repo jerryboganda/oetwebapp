@@ -1,10 +1,6 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { motion, useReducedMotionConfig } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { getCelebrateMotion, prefersReducedMotion } from '@/lib/motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CountUp } from '@/components/ui/count-up';
@@ -71,7 +67,6 @@ export function ResultsScorePanel({
   chartSlot,
   className,
 }: ResultsScorePanelProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   return (
     <Card padding="lg" className={cn('@container overflow-hidden', className)}>
       <div className={cn('grid gap-5', aside && '@3xl:grid-cols-[minmax(0,1fr)_16rem] @3xl:gap-x-8')}>
@@ -97,9 +92,9 @@ export function ResultsScorePanel({
             <h1 className="mt-1 text-balance text-xl font-black leading-tight text-navy dark:text-white sm:text-2xl">{title}</h1>
             {subtitle ? <p className="mt-1 max-w-prose text-sm text-muted">{subtitle}</p> : null}
             {grade ? (
-              <motion.span className="mt-2 inline-flex" {...getCelebrateMotion(reducedMotion)}>
+              <span className="pop-in mt-2 inline-flex">
                 <Badge variant={grade.tone}>{grade.label}</Badge>
-              </motion.span>
+              </span>
             ) : null}
           </div>
         </div>
@@ -110,7 +105,7 @@ export function ResultsScorePanel({
               <div key={index} className={cn('min-w-0 rounded-xl border p-3', statToneClass[stat.tone ?? 'default'])}>
                 <div className="flex items-center gap-1.5">
                   {stat.icon ? <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{stat.icon}</span> : null}
-                  <p className="min-w-0 text-3xs font-black uppercase tracking-wider opacity-80">{stat.label}</p>
+                  <p className="tile-label min-w-0 opacity-80">{stat.label}</p>
                 </div>
                 <p className="mt-1 break-words text-lg font-black leading-tight tabular-nums">{stat.value}</p>
               </div>

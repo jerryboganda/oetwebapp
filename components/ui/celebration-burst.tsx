@@ -38,7 +38,6 @@ export interface CelebrationBurstProps {
   active: boolean;
   /** Celebrate this event once per session, e.g. `writing-result:${submissionId}`. */
   onceKey?: string;
-  className?: string;
 }
 
 /**
@@ -48,7 +47,7 @@ export interface CelebrationBurstProps {
  * (their MotionConfig reports reduced motion), and a native success haptic
  * accompanies it in the mobile app.
  */
-export function CelebrationBurst({ active, onceKey, className }: CelebrationBurstProps) {
+export function CelebrationBurst({ active, onceKey }: CelebrationBurstProps) {
   const hasHydrated = useHasHydrated();
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   // Read once per mount: a burst seen this session never repeats on revisit.
@@ -70,7 +69,7 @@ export function CelebrationBurst({ active, onceKey, className }: CelebrationBurs
   if (!fire) return null;
 
   return (
-    <span aria-hidden="true" className={cn('pointer-events-none absolute inset-0 z-10', className)}>
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-10">
       {PARTICLES.map((p, i) => (
         <span
           key={i}
