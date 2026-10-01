@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquareText, Plus, Filter, MessageCircle, Eye, ThumbsUp, Pin, Lock, Clock } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Pagination } from '@/components/ui/pagination';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
@@ -106,22 +106,16 @@ export default function CommunityPage() {
     loadThreads(1, selectedCategory);
   }, [selectedCategory, loadThreads]);
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-    loadThreads(newPage, selectedCategory);
-  };
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
   const displayedThreads = showMyThreads && user
     ? threads.filter(t => t.authorDisplayName === user.displayName)
     : threads;
 
+  // Pagination below already shows the page position, so the hero keeps to real totals.
   const heroHighlights = [
     { icon: MessageSquareText, label: 'Total threads', value: String(total) },
     { icon: Filter, label: 'Categories', value: String(categories.length) },
-    { icon: MessageCircle, label: 'Page', value: `${page} / ${totalPages || 1}` },
   ];
 
   return (
@@ -133,11 +127,11 @@ export default function CommunityPage() {
         highlights={heroHighlights}
       />
 
-      <MotionSection className="space-y-4 mt-6">
-        {/* Controls bar */}
+      <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <Select
+              aria-label="Category"
               options={[
                 { value: '', label: 'All categories' },
                 ...categories.map(c => ({ value: c.id, label: c.name })),
@@ -155,15 +149,14 @@ export default function CommunityPage() {
             </Button>
           </div>
           <Button onClick={() => router.push('/community/threads/new')}>
-            <Plus className="mr-1.5 h-4 w-4" /> New Thread
+            <Plus className="h-4 w-4" aria-hidden="true" /> New Thread
           </Button>
         </div>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {/* Thread list */}
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-24 w-full rounded-2xl" />
             ))}
@@ -176,68 +169,59 @@ export default function CommunityPage() {
             action={{ label: 'Create Thread', onClick: () => router.push('/community/threads/new') }}
           />
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {displayedThreads.map((thread, idx) => (
-              <MotionItem key={thread.id} delayIndex={idx}>
-                <Card
-                  className="cursor-pointer p-4 shadow-sm transition-shadow hover:shadow-md"
-                  onClick={() => router.push(`/community/threads/${thread.id}`)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        {thread.isPinned && (
-                          <Badge variant="outline" className="text-warning-strong border-warning/30 bg-warning/10">
-                            <Pin className="mr-1 h-3 w-3" /> Pinned
-                          </Badge>
-                        )}
-                        {thread.isLocked && (
-                          <Badge variant="outline" className="text-muted border-border-hover">
-                            <Lock className="mr-1 h-3 w-3" /> Locked
-                          </Badge>
-                        )}
-                        {categoryMap.get(thread.categoryId) && (
-                          <Badge variant="outline">{categoryMap.get(thread.categoryId)}</Badge>
-                        )}
-                      </div>
-                      <h3 className="font-bold text-navy truncate">{thread.title}</h3>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted">
-                        <span className="font-medium">{thread.authorDisplayName}</span>
-                        <span className="flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3" /> {thread.replyCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" /> {thread.viewCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <ThumbsUp className="h-3 w-3" /> {thread.likeCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {formatRelativeDate(thread.lastActivityAt)}
-                        </span>
-                      </div>
-                    </div>
+              <MotionItem key={thread.id} delayIndex={Math.min(idx, 5)}>
+                <CardLink href={`/community/threads/${thread.id}`} prefetch={false}>
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2 empty:hidden">
+                    {thread.isPinned && (
+                      <Badge variant="warning" className="gap-1">
+                        <Pin className="h-3 w-3" aria-hidden="true" /> Pinned
+                      </Badge>
+                    )}
+                    {thread.isLocked && (
+                      <Badge variant="muted" className="gap-1">
+                        <Lock className="h-3 w-3" aria-hidden="true" /> Locked
+                      </Badge>
+                    )}
+                    {categoryMap.get(thread.categoryId) && (
+                      <Badge variant="outline">{categoryMap.get(thread.categoryId)}</Badge>
+                    )}
                   </div>
-                </Card>
+                  <h2 className="truncate text-base font-bold text-navy">{thread.title}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
+                    <span className="font-medium">{thread.authorDisplayName}</span>
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3" aria-hidden="true" /> {thread.replyCount}<span className="sr-only"> replies</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" aria-hidden="true" /> {thread.viewCount}<span className="sr-only"> views</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <ThumbsUp className="h-3 w-3" aria-hidden="true" /> {thread.likeCount}<span className="sr-only"> likes</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" aria-hidden="true" /> {formatRelativeDate(thread.lastActivityAt)}
+                    </span>
+                  </div>
+                </CardLink>
               </MotionItem>
             ))}
           </div>
         )}
 
         {!loading && (
-          <div className="pt-2">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={(next) => { setPage(next); loadThreads(next, selectedCategory); }}
-              onPageSizeChange={(next) => { setPageSize(next); }}
-              itemLabel="thread"
-              itemLabelPlural="threads"
-            />
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={(next) => { setPage(next); loadThreads(next, selectedCategory); }}
+            onPageSizeChange={(next) => { setPageSize(next); }}
+            itemLabel="thread"
+            itemLabelPlural="threads"
+          />
         )}
-      </MotionSection>
+      </section>
     </>
   );
 }

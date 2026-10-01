@@ -1,19 +1,41 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Users, Send, Star, CheckCircle2, Clock, MessageSquare } from 'lucide-react';
+import { Users, Send, Star, CheckCircle2, Clock, MessageSquare, ClipboardList } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { CountUp } from '@/components/ui/count-up';
+import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface PeerItem { id: string; subtestCode: string; attemptId?: string; status?: string; createdAt?: string; claimedAt?: string; completedAt?: string; feedback?: { rating: number; comments: string; strengths?: string; improvements?: string }[] }
 interface PoolData { availableToReview: PeerItem[]; mySubmissions: PeerItem[]; myReviews: PeerItem[]; stats: { reviewsGiven: number; reviewsReceived: number; averageHelpfulness: number } }
+
+type PeerTab = 'available' | 'mine' | 'given';
+
+const TABS: { id: PeerTab; label: string }[] = [
+  { id: 'available', label: 'Available' },
+  { id: 'mine', label: 'My Submissions' },
+  { id: 'given', label: 'My Reviews' },
+];
+
+// Sub-test identity, not status (DESIGN.md §2).
+const SKILL_CHIP: Record<string, string> = {
+  writing: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing',
+  speaking: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking',
+};
+
+function SubtestBadge({ code }: { code: string }) {
+  return <Badge variant="outline" className={cn('capitalize', SKILL_CHIP[code.toLowerCase()])}>{code}</Badge>;
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return apiClient.request<T>(path, init);
@@ -23,7 +45,7 @@ export default function PeerReviewPage() {
   const [data, setData] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'available' | 'mine' | 'given'>('available');
+  const [tab, setTab] = useState<PeerTab>('available');
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -38,63 +60,76 @@ export default function PeerReviewPage() {
 
   return (
     <>
-      <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." />
+      <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." icon={Users} />
 
-      <MotionSection className="max-w-4xl mx-auto space-y-6">
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {data && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsGiven}</div><div className="text-xs text-muted">Reviews Given</div></Card>
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsReceived}</div><div className="text-xs text-muted">Reviews Received</div></Card>
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.averageHelpfulness > 0 ? data.stats.averageHelpfulness.toFixed(1) : 'N/A'}</div><div className="text-xs text-muted">Avg Helpfulness</div></Card>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          {(['available', 'mine', 'given'] as const).map(t => (
-            <Button key={t} variant={tab === t ? 'secondary' : 'outline'} size="sm" onClick={() => setTab(t)}>
-              {t === 'available' ? 'Available' : t === 'mine' ? 'My Submissions' : 'My Reviews'}
-            </Button>
-          ))}
+      {data && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-3">
+          <Card padding="md" className="text-center">
+            <div className="text-2xl font-bold text-navy"><CountUp value={data.stats.reviewsGiven} /></div>
+            <div className="mt-1 text-xs text-muted">Reviews Given</div>
+          </Card>
+          <Card padding="md" className="text-center">
+            <div className="text-2xl font-bold text-navy"><CountUp value={data.stats.reviewsReceived} /></div>
+            <div className="mt-1 text-xs text-muted">Reviews Received</div>
+          </Card>
+          <Card padding="md" className="text-center">
+            <div className="text-2xl font-bold tabular-nums text-navy">{data.stats.averageHelpfulness > 0 ? data.stats.averageHelpfulness.toFixed(1) : 'N/A'}</div>
+            <div className="mt-1 text-xs text-muted">Avg Helpfulness</div>
+          </Card>
         </div>
+      )}
 
-        {loading && <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>}
+      <Tabs tabs={TABS} activeTab={tab} onChange={(id) => setTab(id as PeerTab)} />
 
-        {data && tab === 'available' && (
-          <div className="space-y-3">
+      {loading && (
+        <div className="space-y-3" aria-hidden="true">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+        </div>
+      )}
+
+      {data && (
+        <>
+          <TabPanel id="available" activeTab={tab} className="space-y-3">
             <LearnerSurfaceSectionHeader title={`${data.availableToReview.length} Submissions Awaiting Review`} />
-            {data.availableToReview.map(item => (
-              <MotionItem key={item.id}>
-                <Card className="p-4 flex items-center justify-between">
-                  <div>
-                    <Badge variant="outline" className="mr-2">{item.subtestCode}</Badge>
-                    <span className="text-sm text-muted">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</span>
+            {data.availableToReview.length === 0 ? (
+              <EmptyState icon={<ClipboardList className="h-8 w-8" />} title="No submissions available right now." />
+            ) : data.availableToReview.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <Card padding="md" className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SubtestBadge code={item.subtestCode} />
+                    <span className="text-sm text-muted tabular-nums">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</span>
                   </div>
-                  <Button size="sm" onClick={() => claim(item.id)}><MessageSquare className="w-4 h-4 mr-1" /> Claim & Review</Button>
+                  <Button size="sm" onClick={() => claim(item.id)}><MessageSquare className="h-4 w-4" aria-hidden="true" /> Claim & Review</Button>
                 </Card>
               </MotionItem>
             ))}
-            {data.availableToReview.length === 0 && <Card className="p-6 text-center text-muted"><Users className="w-10 h-10 mx-auto mb-2 opacity-30" />No submissions available right now.</Card>}
-          </div>
-        )}
+          </TabPanel>
 
-        {data && tab === 'mine' && (
-          <div className="space-y-3">
+          <TabPanel id="mine" activeTab={tab} className="space-y-3">
             <LearnerSurfaceSectionHeader title="My Peer Review Submissions" />
-            {data.mySubmissions.map(item => (
-              <MotionItem key={item.id}>
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="outline">{item.subtestCode}</Badge>
-                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'}>
-                      {item.status === 'completed' ? <><CheckCircle2 className="w-3 h-3 mr-1" /> Reviewed</> : <><Clock className="w-3 h-3 mr-1" /> {item.status}</>}
+            {data.mySubmissions.length === 0 ? (
+              <EmptyState icon={<Send className="h-8 w-8" />} title="Submit your writing or speaking attempts for peer feedback." />
+            ) : data.mySubmissions.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <Card padding="md">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SubtestBadge code={item.subtestCode} />
+                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'} className="gap-1">
+                      {item.status === 'completed'
+                        ? <><CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Reviewed</>
+                        : <><Clock className="h-3 w-3" aria-hidden="true" /> <span className="capitalize">{item.status}</span></>}
                     </Badge>
                   </div>
                   {item.feedback && item.feedback.length > 0 && item.feedback.map((fb, i) => (
-                    <div key={i} className="mt-2 bg-success/10 rounded-lg p-3 text-sm">
-                      <div className="flex items-center gap-1 mb-1">{Array.from({length: fb.rating}).map((_,j) => <Star key={j} className="w-3 h-3 fill-warning text-warning-strong" />)}</div>
-                      <p>{fb.comments}</p>
+                    <div key={i} className="mt-3 rounded-xl border border-success/20 bg-success/5 p-3 text-sm text-navy">
+                      <div className="mb-1 flex items-center gap-1">
+                        {Array.from({ length: fb.rating }).map((_, j) => <Star key={j} className="h-3 w-3 fill-warning text-warning-strong" aria-hidden="true" />)}
+                        <span className="ms-1 text-xs font-medium tabular-nums text-muted">{fb.rating}/5</span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words">{fb.comments}</p>
                       {fb.strengths && <p className="mt-1 text-success-strong"><strong>Strengths:</strong> {fb.strengths}</p>}
                       {fb.improvements && <p className="mt-1 text-warning-strong"><strong>To improve:</strong> {fb.improvements}</p>}
                     </div>
@@ -102,28 +137,26 @@ export default function PeerReviewPage() {
                 </Card>
               </MotionItem>
             ))}
-            {data.mySubmissions.length === 0 && <Card className="p-6 text-center text-muted"><Send className="w-10 h-10 mx-auto mb-2 opacity-30" />Submit your writing or speaking attempts for peer feedback.</Card>}
-          </div>
-        )}
+          </TabPanel>
 
-        {data && tab === 'given' && (
-          <div className="space-y-3">
-            <LearnerSurfaceSectionHeader title="Reviews I&apos;ve Given" />
-            {data.myReviews.map(item => (
-              <MotionItem key={item.id}>
-                <Card className="p-4 flex items-center justify-between">
-                  <div>
-                    <Badge variant="outline" className="mr-2">{item.subtestCode}</Badge>
-                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'}>{item.status}</Badge>
+          <TabPanel id="given" activeTab={tab} className="space-y-3">
+            <LearnerSurfaceSectionHeader title={"Reviews I've Given"} />
+            {data.myReviews.length === 0 ? (
+              <EmptyState icon={<Star className="h-8 w-8" />} title={"You haven't reviewed any peers yet."} />
+            ) : data.myReviews.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <Card padding="md" className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SubtestBadge code={item.subtestCode} />
+                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'} className="capitalize">{item.status}</Badge>
                   </div>
-                  <span className="text-xs text-muted">{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.claimedAt ? 'In Progress' : ''}</span>
+                  <span className="text-xs text-muted tabular-nums">{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.claimedAt ? 'In Progress' : ''}</span>
                 </Card>
               </MotionItem>
             ))}
-            {data.myReviews.length === 0 && <Card className="p-6 text-center text-muted">You haven&apos;t reviewed any peers yet.</Card>}
-          </div>
-        )}
-      </MotionSection>
+          </TabPanel>
+        </>
+      )}
     </>
   );
 }

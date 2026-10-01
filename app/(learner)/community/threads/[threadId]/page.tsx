@@ -17,6 +17,7 @@ import {
   User,
   Trash2,
 } from 'lucide-react';
+import { LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -78,11 +79,11 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString();
 }
 
-function roleColor(role: string) {
+function roleVariant(role: string): 'default' | 'danger' | 'info' {
   switch (role) {
-    case 'expert': return 'text-primary bg-primary/10 border-primary/30';
-    case 'admin': return 'text-danger-strong bg-danger/10 border-danger/30';
-    default: return 'text-info bg-info/10 border-info/30';
+    case 'expert': return 'default';
+    case 'admin': return 'danger';
+    default: return 'info';
   }
 }
 
@@ -234,150 +235,141 @@ export default function ThreadPage() {
 
   return (
     <>
-      <MotionSection className="space-y-4">
+      <div>
         <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
-          <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Threads
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to Threads
         </Button>
+      </div>
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {/* Thread header */}
-        {loadingThread ? (
-          <div className="space-y-3">
-            <Skeleton className="h-8 w-3/4 rounded-xl" />
-            <Skeleton className="h-4 w-1/2 rounded-lg" />
-            <Skeleton className="h-40 w-full rounded-2xl" />
+      {/* Thread header: the page's one h1 block */}
+      {loadingThread ? (
+        <div className="space-y-3" aria-hidden="true">
+          <Skeleton className="h-8 w-3/4 rounded-xl" />
+          <Skeleton className="h-4 w-1/2 rounded-lg" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        </div>
+      ) : thread ? (
+        <Card padding="lg" className="space-y-4">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2 empty:hidden">
+              {thread.isPinned && (
+                <Badge variant="warning" className="gap-1">
+                  <Pin className="h-3 w-3" aria-hidden="true" /> Pinned
+                </Badge>
+              )}
+              {thread.isLocked && (
+                <Badge variant="muted" className="gap-1">
+                  <Lock className="h-3 w-3" aria-hidden="true" /> Locked
+                </Badge>
+              )}
+              {isAuthor && <Badge variant="success">Your thread</Badge>}
+            </div>
+            <h1 className="text-balance break-words text-xl font-bold leading-tight tracking-tight text-navy sm:text-2xl">{thread.title}</h1>
+            {isAdmin && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-danger/20 bg-danger/5 p-2">
+                <Badge variant="danger">Admin</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAdminPin}
+                  disabled={moderating}
+                >
+                  <Pin className={`h-3.5 w-3.5 ${thread.isPinned ? 'text-warning-strong' : ''}`} aria-hidden="true" />
+                  {thread.isPinned ? 'Unpin' : 'Pin'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAdminLock}
+                  disabled={moderating}
+                >
+                  <Lock className={`h-3.5 w-3.5 ${thread.isLocked ? 'text-danger-strong' : ''}`} aria-hidden="true" />
+                  {thread.isLocked ? 'Unlock' : 'Lock'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteThreadConfirm(true)}
+                  disabled={moderating}
+                  className="text-danger-strong hover:bg-danger/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
+                </Button>
+              </div>
+            )}
           </div>
-        ) : thread ? (
-          <Card className="p-6 shadow-sm">
-            <div className="space-y-4">
-              {/* Title + badges */}
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  {thread.isPinned && (
-                    <Badge variant="outline" className="text-warning-strong border-warning/30 bg-warning/10">
-                      <Pin className="mr-1 h-3 w-3" /> Pinned
-                    </Badge>
-                  )}
-                  {thread.isLocked && (
-                    <Badge variant="outline" className="text-muted border-border-hover">
-                      <Lock className="mr-1 h-3 w-3" /> Locked
-                    </Badge>
-                  )}
-                  {isAuthor && (
-                    <Badge variant="outline" className="text-success-strong border-success/30 bg-success/10">
-                      Your thread
-                    </Badge>
-                  )}
-                </div>
-                <h1 className="text-2xl font-bold text-navy">{thread.title}</h1>
-                {isAdmin && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2">
-                    <Badge variant="outline" className="text-danger-strong border-danger/30 bg-danger/10 text-xs mr-1">Admin</Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAdminPin}
-                      disabled={moderating}
-                    >
-                      <Pin className={`mr-1 h-3.5 w-3.5 ${thread.isPinned ? 'text-warning-strong' : ''}`} />
-                      {thread.isPinned ? 'Unpin' : 'Pin'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAdminLock}
-                      disabled={moderating}
-                    >
-                      <Lock className={`mr-1 h-3.5 w-3.5 ${thread.isLocked ? 'text-danger-strong' : ''}`} />
-                      {thread.isLocked ? 'Unlock' : 'Lock'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDeleteThreadConfirm(true)}
-                      disabled={moderating}
-                      className="text-danger-strong hover:bg-danger/10"
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
-                    </Button>
-                  </div>
-                )}
-              </div>
 
-              {/* Author + meta */}
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-                <span className="flex items-center gap-1.5">
-                  <User className="h-4 w-4" />
-                  <span className="font-medium">{thread.authorDisplayName}</span>
-                  <Badge variant="outline" className={roleColor(thread.authorRole)}>
-                    {thread.authorRole}
-                  </Badge>
-                </span>
-                <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {formatDate(thread.createdAt)}</span>
-                <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> {thread.replyCount} replies</span>
-                <span className="flex items-center gap-1"><Eye className="h-3.5 w-3.5" /> {thread.viewCount} views</span>
-                <span className="flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5" /> {thread.likeCount}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted tabular-nums">
+            <span className="flex items-center gap-1.5">
+              <User className="h-4 w-4" aria-hidden="true" />
+              <span className="font-medium">{thread.authorDisplayName}</span>
+              <Badge variant={roleVariant(thread.authorRole)} className="capitalize">
+                {thread.authorRole}
+              </Badge>
+            </span>
+            <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" aria-hidden="true" /> {formatDate(thread.createdAt)}</span>
+            <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> {thread.replyCount} replies</span>
+            <span className="flex items-center gap-1"><Eye className="h-3.5 w-3.5" aria-hidden="true" /> {thread.viewCount} views</span>
+            <span className="flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5" aria-hidden="true" /> {thread.likeCount}<span className="sr-only"> likes</span></span>
+          </div>
 
-              {/* Body */}
-              <div className="prose prose-sm max-w-none rounded-xl bg-background-light p-4 text-navy whitespace-pre-wrap">
-                {thread.body}
-              </div>
-            </div>
-          </Card>
-        ) : null}
+          <p className="max-w-3xl whitespace-pre-wrap break-words border-t border-border pt-4 text-sm leading-7 text-navy">
+            {thread.body}
+          </p>
+        </Card>
+      ) : null}
 
-        {/* Replies section */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-bold text-navy">
-            Replies {repliesTotal > 0 && <span className="text-muted font-normal">({repliesTotal})</span>}
-          </h2>
+      {/* Replies: each reply reveals on its own, never the whole thread at once */}
+      <section className="space-y-3">
+        <LearnerSurfaceSectionHeader title={repliesTotal > 0 ? `Replies (${repliesTotal})` : 'Replies'} />
 
-          {loadingReplies ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-2xl" />
-              ))}
-            </div>
-          ) : replies.length === 0 ? (
-            <EmptyState
-              icon={<MessageCircle className="h-7 w-7" />}
-              title="No replies yet"
-              description="Be the first to reply to this thread."
-            />
-          ) : (
-            <div className="space-y-2">
-              {replies.map((reply, idx) => (
-                <MotionItem key={reply.id} delayIndex={idx}>
-                  <Card className="p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
-                        {reply.isExpertVerified ? (
-                          <ShieldCheck className="h-4 w-4 text-primary" />
-                        ) : (
-                          <User className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="text-sm font-semibold text-navy">{reply.authorDisplayName}</span>
-                          <Badge variant="outline" className={roleColor(reply.authorRole)}>
-                            {reply.authorRole}
+        {loadingReplies ? (
+          <div className="space-y-3" aria-hidden="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+            ))}
+          </div>
+        ) : replies.length === 0 ? (
+          <EmptyState
+            icon={<MessageCircle className="h-7 w-7" />}
+            title="No replies yet"
+            description="Be the first to reply to this thread."
+          />
+        ) : (
+          <div className="space-y-3">
+            {replies.map((reply, idx) => (
+              <MotionItem key={reply.id} delayIndex={Math.min(idx, 5)}>
+                <Card padding="md">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background-light text-muted" aria-hidden="true">
+                      {reply.isExpertVerified ? (
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                      ) : (
+                        <User className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-navy">{reply.authorDisplayName}</span>
+                        <Badge variant={roleVariant(reply.authorRole)} className="capitalize">
+                          {reply.authorRole}
+                        </Badge>
+                        {reply.isExpertVerified && (
+                          <Badge variant="default" className="gap-1">
+                            <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Verified
                           </Badge>
-                          {reply.isExpertVerified && (
-                            <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10">
-                              <ShieldCheck className="mr-1 h-3 w-3" /> Verified
-                            </Badge>
-                          )}
-                          <span className="text-xs text-muted">{formatDate(reply.createdAt)}</span>
-                          {reply.editedAt && <span className="text-xs text-muted italic">(edited)</span>}
-                        </div>
-                        <p className="text-sm text-navy whitespace-pre-wrap">{reply.body}</p>
+                        )}
+                        <span className="text-xs text-muted">{formatDate(reply.createdAt)}</span>
+                        {reply.editedAt && <span className="text-xs italic text-muted">(edited)</span>}
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-navy">{reply.body}</p>
+                      {(reply.likeCount > 0 || isAdmin) && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-2">
                           {reply.likeCount > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-muted">
-                              <ThumbsUp className="h-3 w-3" /> {reply.likeCount}
+                            <span className="flex items-center gap-1 text-xs text-muted tabular-nums">
+                              <ThumbsUp className="h-3 w-3" aria-hidden="true" /> {reply.likeCount}<span className="sr-only"> likes</span>
                             </span>
                           )}
                           {isAdmin && (
@@ -386,41 +378,42 @@ export default function ThreadPage() {
                               size="sm"
                               onClick={() => setDeleteReplyTarget(reply)}
                               disabled={moderating}
-                              className="text-danger-strong hover:bg-danger/10 ml-auto text-xs h-6 px-2"
+                              className="ms-auto text-danger-strong hover:bg-danger/10"
                             >
-                              <Trash2 className="mr-1 h-3 w-3" /> Delete
+                              <Trash2 className="h-3 w-3" aria-hidden="true" /> Delete
                             </Button>
                           )}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </Card>
-                </MotionItem>
-              ))}
-            </div>
-          )}
+                  </div>
+                </Card>
+              </MotionItem>
+            ))}
+          </div>
+        )}
 
-          {/* Replies pagination */}
-          {repliesTotalPages > 1 && !loadingReplies && (
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <Button variant="outline" size="sm" disabled={repliesPage <= 1} onClick={() => handleRepliesPageChange(repliesPage - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted">Page {repliesPage} of {repliesTotalPages}</span>
-              <Button variant="outline" size="sm" disabled={repliesPage >= repliesTotalPages} onClick={() => handleRepliesPageChange(repliesPage + 1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
+        {repliesTotalPages > 1 && !loadingReplies && (
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <Button variant="outline" size="sm" aria-label="Previous page" disabled={repliesPage <= 1} onClick={() => handleRepliesPageChange(repliesPage - 1)}>
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            </Button>
+            <span className="text-sm text-muted tabular-nums">Page {repliesPage} of {repliesTotalPages}</span>
+            <Button variant="outline" size="sm" aria-label="Next page" disabled={repliesPage >= repliesTotalPages} onClick={() => handleRepliesPageChange(repliesPage + 1)}>
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            </Button>
+          </div>
+        )}
+      </section>
 
-        {/* Reply form */}
-        {thread && !thread.isLocked ? (
-          <Card className="p-5 shadow-sm">
-            <h3 className="mb-3 text-sm font-bold text-navy">Post a Reply</h3>
+      {thread && !thread.isLocked ? (
+        <MotionSection>
+          <Card padding="lg">
+            <h2 className="mb-3 text-base font-bold text-navy">Post a Reply</h2>
             {replyError && <InlineAlert variant="error" className="mb-3">{replyError}</InlineAlert>}
             <form onSubmit={handleSubmitReply} className="space-y-3">
               <Textarea
+                aria-label="Post a Reply"
                 placeholder="Write your reply..."
                 value={replyBody}
                 onChange={e => setReplyBody(e.target.value)}
@@ -428,19 +421,18 @@ export default function ThreadPage() {
               />
               <div className="flex justify-end">
                 <Button type="submit" disabled={submittingReply || !replyBody.trim()}>
-                  <Send className="mr-1.5 h-4 w-4" />
+                  <Send className="h-4 w-4" aria-hidden="true" />
                   {submittingReply ? 'Posting…' : 'Post Reply'}
                 </Button>
               </div>
             </form>
           </Card>
-        ) : thread?.isLocked ? (
-          <InlineAlert variant="info">
-            <Lock className="mr-1.5 h-4 w-4 inline" />
-            This thread is locked and no longer accepts replies.
-          </InlineAlert>
-        ) : null}
-      </MotionSection>
+        </MotionSection>
+      ) : thread?.isLocked ? (
+        <InlineAlert variant="info" live="polite">
+          This thread is locked and no longer accepts replies.
+        </InlineAlert>
+      ) : null}
 
       {/* Admin delete thread confirmation */}
       <Modal open={deleteThreadConfirm} onClose={() => setDeleteThreadConfirm(false)} title="Delete Thread" size="sm">
