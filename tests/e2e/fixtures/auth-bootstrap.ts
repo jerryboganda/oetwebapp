@@ -33,9 +33,10 @@ const authIndicatorCookieName = 'oet_auth';
 // §Bootstrap), and every later call presents the SAME id, so it always
 // resolves as already-trusted instead of tripping the OTP-approval or
 // device-change-cooldown paths meant for a genuinely different client.
-// Mirrors the identical pattern already used by tests/performance/auth.setup.ts
-// (PERF_DEVICE_ID) and tests/load/lib/auth-helper.js (OET_TEST_DEVICE_ID).
-const e2eDeviceId = process.env.E2E_DEVICE_ID ?? 'e2e-playwright-harness';
+// The performance harness (playwright.performance.config.ts) presents this
+// same id from its browsers; tests/load/lib/auth-helper.js takes it as
+// OET_TEST_DEVICE_ID.
+export const e2eDeviceId = process.env.E2E_DEVICE_ID ?? 'e2e-playwright-harness';
 const deviceIdHeaderName = 'X-OET-Device-Id';
 // The localStorage key `lib/device-id.ts` reads/writes on web
 // (WEB_STORAGE_KEY). Seeding it into the persisted storage state and into any

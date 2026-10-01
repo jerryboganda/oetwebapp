@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test as setup } from '@playwright/test';
 import {
   bootstrapSessionForRole,
+  e2eDeviceId,
   persistSessionToStorageState,
 } from '../e2e/fixtures/auth-bootstrap';
 import type { SeededRole } from '../e2e/fixtures/auth';
@@ -72,7 +73,7 @@ for (const target of authTargets) {
       cookies: Array<{ name?: string }>;
       origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
     };
-    const deviceId = process.env.PERF_DEVICE_ID ?? 'perf-playwright-local';
+    const deviceId = e2eDeviceId;
     const originState = rawState.origins.find((origin) => origin.origin.startsWith('http'));
     if (originState && !originState.localStorage.some((entry) => entry.name === 'oet_device_id')) {
       originState.localStorage.push({ name: 'oet_device_id', value: deviceId });

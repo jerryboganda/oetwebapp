@@ -134,7 +134,6 @@ jobs:
         run: |
           PLAYWRIGHT_BASE_URL="$PERF_TARGET_URL" \
           NEXT_PUBLIC_API_BASE_URL="$PERF_API_URL" \
-          PERF_DEVICE_ID="perf-playwright-${GITHUB_RUN_ID}" \
           PERF_ENFORCE_BUDGETS=1 \
           pnpm exec playwright test -c playwright.performance.config.ts
 
