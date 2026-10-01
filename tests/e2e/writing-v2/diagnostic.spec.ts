@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
  * Writing V2 — diagnostic session smoke (start → session shell → type → submit).
@@ -31,13 +32,14 @@ Dr A Jones`;
 test.describe('Writing V2 diagnostic @writing-v2 @smoke', () => {
   test('begin diagnostic → session page → case notes visible → editor renders', async ({
     page,
+    request,
   }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
 
     // Land on the diagnostic briefing.
-    await page.goto('/writing/diagnostic', { waitUntil: 'domcontentloaded' });
+    await recoverBrowserSession(page, request, 'learner', '/writing/diagnostic');
     await expect(
       page.getByRole('heading', {
         name: /a 50-minute baseline of your six writing criteria/i,

@@ -13,6 +13,11 @@ name: Visual QA
 # of one role revoke each other's session and land on /sign-in.
 on:
   workflow_dispatch:
+    inputs:
+      writing_journeys:
+        description: Run the six Writing V2 learner journeys instead of the visual sweep
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'app/**'
@@ -23,7 +28,7 @@ on:
       - 'tests/e2e/shared/learner-layout-crawl.spec.ts'
 
 concurrency:
-  group: visual-qa-${{ github.ref }}
+  group: visual-qa-${{ github.ref }}${{ inputs.writing_journeys && '-writing' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -62,6 +67,7 @@ jobs:
         run: node ./scripts/qa/assert-local-stack.mjs
 
       - name: Run visual sweep
+        if: ${{ !inputs.writing_journeys }}
         env:
           PLAYWRIGHT_HTML_OPEN: never
         run: >
@@ -72,6 +78,20 @@ jobs:
           --project=chromium-unauth --project=chromium-learner
           --project=chromium-expert --project=chromium-admin
           --workers=1
+
+      - name: Run Writing V2 journeys
+        if: ${{ inputs.writing_journeys }}
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: >
+          pnpm exec playwright test
+          tests/e2e/writing-v2/onboarding.spec.ts
+          tests/e2e/writing-v2/diagnostic.spec.ts
+          tests/e2e/writing-v2/canon-library.spec.ts
+          tests/e2e/writing-v2/drills.spec.ts
+          tests/e2e/writing-v2/stats.spec.ts
+          tests/e2e/writing-v2/mocks.spec.ts
+          --project=chromium-learner --workers=1 --retries=0
 
       - name: Upload screenshots and report
         if: always()
