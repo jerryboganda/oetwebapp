@@ -345,7 +345,10 @@ public sealed class WritingSubmissionService(
             IsRevision: true,
             OriginalSubmissionId: originalSubmissionId), ct);
         var newId = reviseSubmit.SubmissionId;
-        await RunOrDetachGradingAsync(newId, ct);
+        if (reviseSubmit.IsNew)
+        {
+            await RunOrDetachGradingAsync(newId, ct);
+        }
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == newId, ct)
             ?? throw new InvalidOperationException("Revision submission missing after create.");
         return WritingV2ResponseMapper.ToSubmissionResponse(entity);

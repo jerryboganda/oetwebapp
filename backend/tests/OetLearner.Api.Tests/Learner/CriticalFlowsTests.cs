@@ -445,13 +445,8 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task WritingRevision_RapidDuplicate_IsRejectedWithoutDuplicateWorkflow()
+    public async Task WritingRevision_RapidDuplicate_ReusesSingleGradingWorkflow()
     {
-        // Double-tap protection is layered: the AiScoring edge limiter (2/min)
-        // rejects an immediate duplicate revise with 429 before any grading
-        // workflow starts, so no duplicate paid workflow and no duplicate row
-        // can result. Same-content idempotency below the edge is covered at
-        // the pipeline level (derived idempotency key + content dedup).
         await EnsureV11GradingPrerequisitesAsync();
         var userId = $"writing-revision-idem-{Guid.NewGuid():N}";
         using var client = await CreateGradedClientAsync(userId);
@@ -470,13 +465,17 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         var revisionId = firstJson.RootElement.GetProperty("id").GetGuid();
 
         var secondResponse = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", body);
-        Assert.Equal(HttpStatusCode.TooManyRequests, secondResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        Assert.Equal(revisionId, secondJson.RootElement.GetProperty("id").GetGuid());
         await WaitForSubmissionStatusAsync(client, revisionId, "graded");
 
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         Assert.Equal(1, await db.WritingSubmissions.CountAsync(x => x.OriginalSubmissionId == submissionId));
-        Assert.True(await db.WritingGrades.AnyAsync(x => x.SubmissionId == revisionId));
+        Assert.Equal(1, await db.WritingGrades.CountAsync(x => x.SubmissionId == revisionId));
+        Assert.Equal(2, await db.AiCreditReservations.CountAsync(x => x.UserId == userId));
+        Assert.Equal(2, await db.AiUsageRecords.CountAsync(x => x.UserId == userId));
     }
 
     [Fact]
