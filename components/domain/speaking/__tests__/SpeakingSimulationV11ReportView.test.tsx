@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type {
   SpeakingSimulationV11AssessmentReport,
   SpeakingSimulationV11AssessmentResponse,
@@ -84,5 +85,54 @@ describe('SpeakingSimulationV11ReportView scope label', () => {
     // The rest of the header is unchanged.
     expect(screen.getByText(/Confidence:/)).toBeInTheDocument();
     expect(screen.getByText(/Range:/)).toBeInTheDocument();
+  });
+});
+
+describe('SpeakingSimulationV11ReportView wording by input kind', () => {
+  const openTranscriptTab = () => userEvent.setup().click(screen.getByRole('button', { name: 'transcript' }));
+
+  it('keeps the audio wording on the transcript tab when no input kind is given', async () => {
+    render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} />);
+    await openTranscriptTab();
+
+    expect(screen.getByRole('heading', { name: 'Transcript and source audio' })).toBeInTheDocument();
+    expect(screen.getByText(/Audio playback is available only for source-linked evidence/)).toBeInTheDocument();
+  });
+
+  it('keeps the audio wording for a recording', async () => {
+    render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} inputKind="recording" />);
+    await openTranscriptTab();
+
+    expect(screen.getByRole('heading', { name: 'Transcript and source audio' })).toBeInTheDocument();
+  });
+
+  it('says no audio recording is stored for a live conversation, and never promises source audio', async () => {
+    render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} inputKind="live_voice" />);
+    await openTranscriptTab();
+
+    expect(screen.getByRole('heading', { name: 'Transcript of your live conversation' })).toBeInTheDocument();
+    expect(screen.getByText(/No audio recording is stored for live conversations, so there is nothing to play back\./)).toBeInTheDocument();
+    expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Audio playback is available/)).not.toBeInTheDocument();
+  });
+
+  it('stays neutral when the input kind is not known yet', async () => {
+    render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} inputKind={null} />);
+    await openTranscriptTab();
+
+    expect(screen.getByRole('heading', { name: 'Transcript' })).toBeInTheDocument();
+    expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/only for evidence linked to a recording\. No audio recording is stored for live conversations\./)).toBeInTheDocument();
+  });
+
+  it('does not blame audio in the technical-review notice of a live conversation', () => {
+    const review = { ...response('a'), status: 'TechnicalReview', report: null, technicalReviewCode: 'transcript_missing' };
+    const { rerender } = render(<SpeakingSimulationV11ReportView sessionId="s1" response={review} inputKind="live_voice" />);
+
+    expect(screen.getByText(/because the transcript or the assessment could not be verified/)).toBeInTheDocument();
+    expect(screen.queryByText(/authoritative audio/)).not.toBeInTheDocument();
+
+    rerender(<SpeakingSimulationV11ReportView sessionId="s1" response={review} />);
+    expect(screen.getByText(/the authoritative audio, transcript, or assessment pipeline could not be verified/)).toBeInTheDocument();
   });
 });

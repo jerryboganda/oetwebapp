@@ -23,6 +23,7 @@ import type {
   RolePlayCardLearnerDetail,
   ResistanceLevelCode,
 } from '@/lib/api/speaking-role-play-cards';
+import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums
@@ -351,6 +352,11 @@ export interface SpeakingSessionResultsStatus {
   failureReason: string | null;
   /** True when the session is scored by the v1.1 simulation assessor (its report endpoints exist). */
   usesV11?: boolean;
+  /**
+   * What the learner handed in: a live-conversation transcript or an audio recording.
+   * null (or absent, on an older server) = nothing received yet; the pages then use neutral wording.
+   */
+  inputKind?: SpeakingInputKind | null;
 }
 
 /** Grading state for the results page. Resolves null on 404 (nothing submitted yet). */

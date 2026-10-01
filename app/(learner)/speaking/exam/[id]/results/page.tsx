@@ -6,12 +6,18 @@
  * Results page for the two-card Speaking exam. v1.1 AI-mode exams show the
  * calibrated practice report; live-tutor exams remain pending until a tutor
  * submits. Legacy sessions retain their existing result fallback.
+ *
+ * 1 Oct 2026: each card's wording follows what it handed in (a live-conversation
+ * transcript or a recording, see lib/speaking/input-kind.ts), the band shows its
+ * label rather than the raw code, and an exam that expired or was cancelled says
+ * so instead of polling forever.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { InlineAlert } from '@/components/ui/alert';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { cn } from '@/lib/utils';
@@ -20,6 +26,7 @@ import {
   type SpeakingExamResults,
 } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
+import { readinessBandLabel } from '@/lib/api/speaking-assessments';
 import {
   getSpeakingSessionResults,
   getSpeakingSessionTranscript,
@@ -36,10 +43,35 @@ import {
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
+import {
+  commonInputKind,
+  gradeFailedSavedCopy,
+  gradingSlowSavedCopy,
+  speakingInputKind,
+} from '@/lib/speaking/input-kind';
 
 const POLL_INTERVAL_MS = 4_000;
 /** ~10 minutes of polling, then "Check again" (the result persists server-side). */
 const MAX_POLLS = 150;
+
+const bandLabel = (code: string) => readinessBandLabel(code);
+
+/** Same tones as the per-attempt result page: green from the pass line up, amber just under it, red below. */
+const bandTone = (code: string): 'success' | 'warning' | 'danger' =>
+  code === 'strong' || code === 'exam_ready' ? 'success' : code === 'borderline' ? 'warning' : 'danger';
+
+function ExamResultsLinks() {
+  return (
+    <div className="mt-6 flex flex-wrap justify-center gap-3">
+      <Button asChild variant="outline">
+        <Link href="/speaking">Back to Speaking</Link>
+      </Button>
+      <Button asChild variant="outline">
+        <Link href="/submissions">View history</Link>
+      </Button>
+    </div>
+  );
+}
 
 export default function SpeakingExamResultsPage() {
   const params = useParams<{ id: string }>();
@@ -54,6 +86,7 @@ export default function SpeakingExamResultsPage() {
   const [cardStatus, setCardStatus] = useState<Record<string, SpeakingSessionResultsStatus | null>>({});
   const [pollCount, setPollCount] = useState(0);
   const [retryingSessionId, setRetryingSessionId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<{ sessionId: string; message: string } | null>(null);
   const requestedCardAssessmentsRef = useRef(new Set<string>());
   const requestedCombinedRef = useRef(false);
 
@@ -133,31 +166,49 @@ export default function SpeakingExamResultsPage() {
   }, [refresh]);
 
   const done = Boolean(v11Combined) || results?.overallStatus === 'scored';
+  // An exam that expired or was cancelled never gets a score, so there is nothing to wait for.
+  const notCompleted = results?.state === 'expired' || results?.state === 'cancelled';
   const pollCapped = pollCount >= MAX_POLLS;
 
   // Poll until the combined result is in, then stop; capped so a stuck grade
   // becomes "Check again" rather than an endless spinner.
   useEffect(() => {
-    if (done || pollCapped) return;
+    if (done || notCompleted || pollCapped) return;
     const timer = window.setTimeout(() => {
       setPollCount((count) => count + 1);
       void refresh();
     }, POLL_INTERVAL_MS);
     return () => window.clearTimeout(timer);
-  }, [done, pollCapped, pollCount, refresh]);
+  }, [done, notCompleted, pollCapped, pollCount, refresh]);
 
   const retryCard = async (sessionId: string) => {
     setRetryingSessionId(sessionId);
+    setRetryError(null);
     try {
       await runAiAssessment(sessionId);
-      setCardStatus((current) => ({ ...current, [sessionId]: { assessmentState: 'processing', retryable: false, failureReason: null } }));
-      setPollCount(0);
     } catch (err) {
-      setError(err instanceof ApiError ? err.userMessage : 'Could not restart grading. Please try again.');
-    } finally {
-      setRetryingSessionId(null);
+      // The browser giving up waiting (code request_timeout) is not a failure: grading keeps running on
+      // the server and the next poll shows it. Any other error is shown.
+      if (!(err instanceof ApiError && err.code === 'request_timeout')) {
+        setRetryError({
+          sessionId,
+          message: err instanceof ApiError ? err.userMessage : 'Could not restart grading. Please try again.',
+        });
+        setRetryingSessionId(null);
+        return;
+      }
     }
+    // Keep what the card handed in, or its wording flips to the neutral variant until the next poll.
+    setCardStatus((current) => ({
+      ...current,
+      [sessionId]: { inputKind: current[sessionId]?.inputKind, assessmentState: 'processing', retryable: false, failureReason: null },
+    }));
+    setPollCount(0);
+    setRetryingSessionId(null);
   };
+
+  // What a card handed in decides its wording; a tutor room is always recorded.
+  const kindOf = (sessionId: string) => speakingInputKind(results?.mode === 'live_tutor', cardStatus[sessionId]?.inputKind);
 
   const failedCards = (results?.cards ?? []).filter((card) => {
     const status = card.sessionId ? cardStatus[card.sessionId] : null;
@@ -170,19 +221,22 @@ export default function SpeakingExamResultsPage() {
         return (
           <div key={card.sessionId} className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-navy" role="alert">
             <p className="font-semibold">Card {card.cardNumber === 1 ? 'A' : 'B'}: grading could not be completed</p>
-            <p className="mt-1">{status?.failureReason ?? 'Your recording is saved. No credits were used for this failed grade.'}</p>
+            <p className="mt-1">{status?.failureReason ?? gradeFailedSavedCopy(kindOf(card.sessionId))}</p>
             {status?.retryable ? (
               <Button className="mt-3" size="sm" onClick={() => void retryCard(card.sessionId)} disabled={retryingSessionId === card.sessionId}>
                 {retryingSessionId === card.sessionId ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
                 Try grading again
               </Button>
             ) : null}
+            {retryError && retryError.sessionId === card.sessionId ? (
+              <p className="mt-2 font-medium text-danger">{retryError.message}</p>
+            ) : null}
           </div>
         );
       })}
       {pollCapped && !done ? (
         <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
-          <p>Grading is taking longer than usual. Your recordings are saved and the result will appear here.</p>
+          <p>{gradingSlowSavedCopy((results?.cards ?? []).map((card) => kindOf(card.sessionId)))}</p>
           <Button className="mt-3" size="sm" variant="outline" onClick={() => { setPollCount(0); void refresh(); }}>
             Check again
           </Button>
@@ -212,6 +266,28 @@ export default function SpeakingExamResultsPage() {
 
   if (!results) return null;
 
+  if (notCompleted) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1>
+        <InlineAlert
+          variant="info"
+          live="polite"
+          title="This exam was not completed."
+          className="mt-4"
+          action={(
+            <Button asChild size="sm">
+              <Link href="/speaking/exam">Start a new exam</Link>
+            </Button>
+          )}
+        >
+          There is no combined result for it. You can start a new exam whenever you are ready.
+        </InlineAlert>
+        <ExamResultsLinks />
+      </div>
+    );
+  }
+
   const firstCardSessionId = results.cards.find((card) => card.sessionId)?.sessionId ?? examId;
   if (v11Combined) {
     return (
@@ -222,12 +298,9 @@ export default function SpeakingExamResultsPage() {
           transcriptsBySessionId={v11Transcripts}
           tutorOverridesBySessionId={v11TutorOverrides}
           title="Full Speaking mock report"
+          inputKind={commonInputKind(results.cards.filter((card) => card.sessionId).map((card) => kindOf(card.sessionId)))}
         />
-        <div className="mt-6 flex justify-center">
-          <Button asChild variant="outline">
-            <Link href="/speaking">Back to Speaking</Link>
-          </Button>
-        </div>
+        <ExamResultsLinks />
       </div>
     );
   }
@@ -246,18 +319,17 @@ export default function SpeakingExamResultsPage() {
           transcript={v11Transcripts[firstV11SessionId]}
           tutorOverride={v11TutorOverrides[firstV11SessionId]}
           title="Speaking card report"
+          inputKind={kindOf(firstV11SessionId)}
         />
-        <div className="mt-6 flex justify-center">
-          <Button asChild variant="outline">
-            <Link href="/speaking">Back to Speaking</Link>
-          </Button>
-        </div>
+        <ExamResultsLinks />
       </div>
     );
   }
 
   const pending = results.overallStatus !== 'scored';
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';
+  const band = results.readinessBand || null;
+  const bandColour = band ? bandTone(band) : 'success';
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -270,7 +342,7 @@ export default function SpeakingExamResultsPage() {
             <Loader2 className="h-4 w-4 animate-spin" />
             {awaitingTutor
               ? 'Your tutor is marking this exam. Your result will appear here once marking is complete.'
-              : 'Scoring your exam… this usually takes a moment. This page refreshes automatically.'}
+              : 'Scoring your exam… this can take a few minutes. This page refreshes automatically.'}
           </div>
         </div>
       ) : (
@@ -279,18 +351,30 @@ export default function SpeakingExamResultsPage() {
             eyebrow="Speaking exam"
             icon={Mic}
             title="Combined result"
-            subtitle={results.readinessBand ? `Readiness band ${results.readinessBand}` : undefined}
+            subtitle={band ? `Readiness band: ${bandLabel(band)}` : undefined}
             gaugeValue={typeof results.combinedScaledScore === 'number' ? (results.combinedScaledScore / 500) * 100 : 0}
             gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{results.combinedScaledScore ?? '—'}</span>}
             gaugeLabel="/ 500"
-            gaugeColor="var(--color-success)"
-            grade={results.readinessBand ? { label: `Band ${results.readinessBand}`, tone: 'success' } : null}
+            gaugeColor={`var(--color-${bandColour})`}
+            grade={band ? { label: bandLabel(band), tone: bandColour } : null}
             stats={results.cards.map((card) => ({
               label: `Card ${card.cardNumber === 1 ? 'A' : 'B'}`,
               value: card.assessment ? `${card.assessment.estimatedScaledScore}/500` : '—',
               tone: 'info' as const,
             }))}
           />
+          <div
+            className="mt-4 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-navy"
+            role="note"
+            aria-label="Speaking assessment advisory"
+          >
+            <p className="font-semibold">
+              {results.mode === 'ai' ? 'AI practice estimate, not an official OET result.' : 'Practice estimate, not an official OET result.'}
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              Use it to see how ready you are. Official OET results can only be obtained from an OET test session.
+            </p>
+          </div>
         </div>
       )}
 
@@ -325,7 +409,7 @@ export default function SpeakingExamResultsPage() {
                   </span>
                   <span className="text-sm text-muted">/ 500</span>
                   <span className="ml-auto text-xs uppercase tracking-wide text-muted">
-                    Band {card.assessment.readinessBand}
+                    Band: {bandLabel(card.assessment.readinessBand)}
                   </span>
                 </div>
                 {card.assessment.overallSummary ? (
@@ -347,15 +431,19 @@ export default function SpeakingExamResultsPage() {
             ) : (
               <p className="mt-3 text-sm text-muted">Not yet available.</p>
             )}
+
+            {card.sessionId ? (
+              <div className="mt-4">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/speaking/sessions/${encodeURIComponent(card.sessionId)}/results`}>View details and transcript</Link>
+                </Button>
+              </div>
+            ) : null}
           </section>
         ))}
       </div>
 
-      <div className="mt-6 flex justify-center">
-        <Button asChild variant="outline">
-          <Link href="/speaking">Back to Speaking</Link>
-        </Button>
-      </div>
+      <ExamResultsLinks />
     </div>
   );
 }

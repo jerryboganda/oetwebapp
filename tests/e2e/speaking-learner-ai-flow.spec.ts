@@ -179,6 +179,20 @@ test.describe('Speaking consent-first flow on the recorder fallback @learner @sp
     const diagnostics = observePage(page);
 
     await page.route(new RegExp(`/v1/speaking/role-play-cards/${cardId}$`), (route) => route.fulfill(json(card)));
+    // Pin the visibility defaults so the "Submission received" banner asserted below does not depend on the stack's config.
+    await page.route(/\/v1\/speaking\/result-visibility/i, (route) => route.fulfill(json({
+      rolePlayCardId: null,
+      showSubmissionReceived: true,
+      showAiEstimate: true,
+      showReadinessBand: true,
+      showTutorScore: true,
+      showFullCriteria: true,
+      showTranscript: true,
+      showTutorComments: true,
+      showRecommendedDrills: true,
+      allowReattempt: true,
+      updatedAt: '2026-10-01T00:00:00Z',
+    })));
     await page.route(/\/v1\/speaking\/sessions(\/[^?]*)?(\?.*)?$/, async (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname.replace(/^.*\/v1\/speaking\/sessions/, '');
@@ -201,7 +215,8 @@ test.describe('Speaking consent-first flow on the recorder fallback @learner @sp
         }));
       }
       if (method === 'GET' && action === 'results') {
-        return route.fulfill(json({ assessmentState: 'completed', retryable: false, failureReason: null }));
+        // inputKind 'recording': the recorder fallback uploaded audio, so the results keep the recording wording.
+        return route.fulfill(json({ assessmentState: 'completed', retryable: false, failureReason: null, inputKind: 'recording' }));
       }
       if (method === 'GET' && (action === 'assessments' || action === 'ai-assessment')) {
         return route.fulfill(json({ ...MOCK_AI_ASSESSMENT, sessionId, tutorHistory: [], divergence: null }));
@@ -247,6 +262,8 @@ test.describe('Speaking consent-first flow on the recorder fallback @learner @sp
       const order = ['recording', 'end', 'submit', 'ai-assess'].map((step) => calls.indexOf(step));
       expect(order.every((index) => index >= 0), JSON.stringify(calls)).toBe(true);
       expect(order).toEqual([...order].sort((a, b) => a - b));
+      // A live conversation says "transcript" here instead; the recorder fallback keeps the recording wording.
+      await expect(page.getByText(/We received your recording/)).toBeVisible({ timeout: 30_000 });
       await expect(
         page.getByRole('region', { name: /ai assessment/i }).or(page.getByText(/ai assessment/i).first()),
       ).toBeVisible({ timeout: 30_000 });

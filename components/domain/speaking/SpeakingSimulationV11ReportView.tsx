@@ -15,6 +15,7 @@ import {
   type SpeakingSimulationV11Evidence,
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
+import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
 
 interface SpeakingSimulationV11ReportViewProps {
   sessionId: string;
@@ -24,6 +25,11 @@ interface SpeakingSimulationV11ReportViewProps {
   tutorOverride?: SpeakingSimulationV11LearnerTutorOverride | null;
   tutorOverridesBySessionId?: Record<string, SpeakingSimulationV11LearnerTutorOverride | null>;
   title?: string;
+  /**
+   * What the learner handed in. Omitted or 'recording' keeps the audio wording; 'live_voice' says
+   * there is no audio; null (nothing known yet) stays neutral.
+   */
+  inputKind?: SpeakingInputKind | null;
 }
 
 const scoreColour = (score: number) =>
@@ -324,6 +330,7 @@ export function SpeakingSimulationV11ReportView({
   tutorOverride,
   tutorOverridesBySessionId,
   title = 'Speaking simulation report',
+  inputKind,
 }: SpeakingSimulationV11ReportViewProps) {
   const report = response.report;
   const score = report?.estimatedPracticeScore ?? response.estimatedPracticeScore;
@@ -353,8 +360,9 @@ export function SpeakingSimulationV11ReportView({
           <div>
             <h2 className="font-semibold text-navy">Technical review required</h2>
             <p className="mt-1 text-sm leading-relaxed text-navy">
-              This attempt has no estimated score because the authoritative audio, transcript, or assessment pipeline
-              could not be verified. The issue must be reviewed or the controlled retake path used.
+              {inputKind === 'live_voice'
+                ? 'This attempt has no estimated score because the transcript or the assessment could not be verified. The issue must be reviewed or the controlled retake path used.'
+                : 'This attempt has no estimated score because the authoritative audio, transcript, or assessment pipeline could not be verified. The issue must be reviewed or the controlled retake path used.'}
             </p>
             {response.technicalReviewCode ? (
               <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-warning">
@@ -367,6 +375,21 @@ export function SpeakingSimulationV11ReportView({
     );
   }
 
+  // A live conversation keeps only its transcript, so it must not promise audio; the audio wording stays for recordings.
+  const transcriptCopy = inputKind === 'live_voice'
+    ? {
+      heading: 'Transcript of your live conversation',
+      note: 'No audio recording is stored for live conversations, so there is nothing to play back. This is the transcript that was marked.',
+    }
+    : inputKind === null
+      ? {
+        heading: 'Transcript',
+        note: 'Audio playback is available only for evidence linked to a recording. No audio recording is stored for live conversations.',
+      }
+      : {
+        heading: 'Transcript and source audio',
+        note: 'Audio playback is available only for source-linked evidence and remains protected by learner authorization.',
+      };
   const scorePercent = score == null ? 0 : Math.max(0, Math.min(100, score / 5));
   // A card slot exists only inside a two-card mock; a standalone practice report has no card letter to print.
   const scopeLabel = report.cardSlot === 'combined' ? 'Full mock' : /^[ab]$/i.test(report.cardSlot) ? `Card ${report.cardSlot.toUpperCase()}` : null;
@@ -479,8 +502,8 @@ export function SpeakingSimulationV11ReportView({
 
       {activeTab === 'transcript' ? (
         <Card className="p-5">
-          <div className="flex items-center gap-2"><Headphones className="h-5 w-5 text-primary" aria-hidden /><h2 className="text-base font-semibold text-navy">Transcript and source audio</h2></div>
-          <p className="mt-2 text-sm text-muted">Audio playback is available only for source-linked evidence and remains protected by learner authorization.</p>
+          <div className="flex items-center gap-2"><Headphones className="h-5 w-5 text-primary" aria-hidden /><h2 className="text-base font-semibold text-navy">{transcriptCopy.heading}</h2></div>
+          <p className="mt-2 text-sm text-muted">{transcriptCopy.note}</p>
           <p className="mt-2 text-xs text-muted">Warm-up is unscored. Speaker labels, timestamps, word counts, and ASR confidence are shown from the authoritative transcript; ASR uncertainty is not treated as candidate error.</p>
           <div className="mt-4 space-y-3">{transcriptSegments.length ? transcriptSegments.map((segment, index) => {
             const speakerCode = segment.speaker.trim().toLowerCase();
