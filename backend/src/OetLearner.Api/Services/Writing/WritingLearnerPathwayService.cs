@@ -244,7 +244,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             [profession.ToString().ToLowerInvariant()],
             correctExamples,
             incorrectExamples,
-            $"/writing/rulebook/{Uri.EscapeDataString(rule.Id)}");
+                $"/writing/canon/{Uri.EscapeDataString(rule.Id)}");
     }
 
     private static IReadOnlyList<string> AppliesToList(JsonElement? appliesTo)
