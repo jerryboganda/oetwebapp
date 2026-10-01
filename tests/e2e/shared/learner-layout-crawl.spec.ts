@@ -192,8 +192,12 @@ async function crawlRoute(page: Page, request: APIRequestContext, route: string,
   await page.setViewportSize({ width: widths[0], height: 800 });
   await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await waitForSessionGuardToClear(page, { recover: () => recoverBrowserSession(page, request, 'learner', route) });
-  // Another learner test may have taken the single active session.
-  if (new URL(page.url()).pathname.startsWith('/sign-in')) await recoverBrowserSession(page, request, 'learner', route);
+  // Another learner test may have taken the single active session. Never
+  // measure the sign-in page in place of the route: retry, then report it.
+  for (let attempt = 0; new URL(page.url()).pathname.startsWith('/sign-in'); attempt += 1) {
+    if (attempt === 2) throw new Error(`${route} kept redirecting to /sign-in`);
+    await recoverBrowserSession(page, request, 'learner', route);
+  }
   await settle(page);
 
   const landed = new URL(page.url()).pathname;
