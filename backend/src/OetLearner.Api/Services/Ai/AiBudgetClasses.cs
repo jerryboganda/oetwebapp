@@ -12,6 +12,15 @@ namespace OetLearner.Api.Services.Ai;
 /// class is exhausted. Lower classes must NEVER reserve the scoring scope —
 /// that would let a coach reply starve a grading call.
 /// </para>
+///
+/// <para>
+/// Owner directive 2026-09-23: <see cref="AiOperationClass.AdminBatch"/> is
+/// <b>budget-exempt</b> — admin-side AI (content authoring, extraction,
+/// indexing, class-recording pipeline, the admin and expert assistants) that
+/// does not directly serve a student carries NO day or month ceilings of any
+/// kind. See <see cref="IsBudgetExempt"/>. The global month reserve, the kill
+/// switch and the per-feature kill list still govern admin calls.
+/// </para>
 /// </summary>
 public static class AiBudgetClasses
 {
@@ -24,10 +33,18 @@ public static class AiBudgetClasses
     public const decimal ScoringMonthlyLimitUsd = 35.00m;
     public const decimal InteractiveDailyLimitUsd = 1.00m;
     public const decimal InteractiveMonthlyLimitUsd = 10.00m;
-    public const decimal AdminDailyLimitUsd = 0.50m;
-    public const decimal AdminMonthlyLimitUsd = 5.00m;
     public const decimal PlatformDailyCapUsd = 5.00m;
     public const decimal PlatformMonthlyCapUsd = 50.00m;
+
+    /// <summary>
+    /// AdminBatch calls are exempt from the global day reserve and every
+    /// class day/month reserve (owner directive 2026-09-23 — no budget caps
+    /// on admin-side AI that does not directly serve students). They remain
+    /// metered only by the global month reserve, kill switch and feature
+    /// kill list, and every call is still fully recorded in AiUsageRecord.
+    /// </summary>
+    public static bool IsBudgetExempt(AiOperationClass operationClass)
+        => operationClass == AiOperationClass.AdminBatch;
 
     /// <summary>
     /// Legacy <c>AiGlobalPolicy.MonthlyBudgetUsd = 0</c> meant "unlimited".
@@ -62,7 +79,9 @@ public static class AiBudgetClasses
     {
         AiOperationClass.ScoringCritical => ScoringMonthlyLimitUsd,
         AiOperationClass.InteractiveLearning => InteractiveMonthlyLimitUsd,
-        AiOperationClass.AdminBatch => AdminMonthlyLimitUsd,
+        // AdminBatch is budget-exempt (IsBudgetExempt) and never reaches the
+        // period reservers; no monthly limit exists for it any more.
+        AiOperationClass.AdminBatch => decimal.MaxValue,
         _ => InteractiveMonthlyLimitUsd,
     };
 
@@ -70,7 +89,9 @@ public static class AiBudgetClasses
     {
         AiOperationClass.ScoringCritical => ScoringDailyLimitUsd,
         AiOperationClass.InteractiveLearning => InteractiveDailyLimitUsd,
-        AiOperationClass.AdminBatch => AdminDailyLimitUsd,
+        // AdminBatch is budget-exempt (IsBudgetExempt) and never reaches the
+        // period reservers; no daily limit exists for it any more.
+        AiOperationClass.AdminBatch => decimal.MaxValue,
         _ => InteractiveDailyLimitUsd,
     };
 
@@ -134,13 +155,21 @@ public static class AiBudgetClasses
             || string.Equals(code, AiFeatureCodes.AdminWritingDraft, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.AdminListeningSkillTag, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.AdminListeningTranscriptSegment, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(code, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(code, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase)
+            // Owner directive 2026-09-23: the expert assistant serves staff
+            // experts/tutors, not students — admin-side, budget-exempt.
+            || string.Equals(code, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         return code.StartsWith("admin.", StringComparison.OrdinalIgnoreCase)
             || code.StartsWith("class.", StringComparison.OrdinalIgnoreCase)
-            || code.StartsWith("tutor.", StringComparison.OrdinalIgnoreCase);
+            || code.StartsWith("tutor.", StringComparison.OrdinalIgnoreCase)
+            // OCR serves admin content authoring (content-PDF fallback,
+            // listening extraction) — only handwriting OCR runs on a
+            // learner's own submission path.
+            || (code.StartsWith("ocr.", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(code, AiFeatureCodes.OcrWritingHandwriting, StringComparison.OrdinalIgnoreCase));
     }
 }

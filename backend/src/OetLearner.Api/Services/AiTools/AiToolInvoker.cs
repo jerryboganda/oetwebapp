@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.AiTools;
@@ -113,8 +114,15 @@ public sealed class AiToolInvoker : IAiToolInvoker
         if (def.Category == AiToolCategory.ExternalNetwork)
         {
             // DB-over-env tooling knobs (admin-configurable, 30s cache).
+            // Owner directive 2026-09-23: admin-side features (admin/expert
+            // assistant, admin.* drafts, class.* pipeline) are exempt from
+            // the per-user daily external-network budget.
+            var adminBatchFeature = AiBudgetClasses.ClassForFeature(ctx.FeatureCode)
+                == AiOperationClass.AdminBatch;
             var gateway = (await _settingsProvider.GetAsync(ct)).AiGateway;
-            if (gateway.ExternalNetworkPerUserDailyCalls > 0 && !string.IsNullOrEmpty(ctx.UserId))
+            if (gateway.ExternalNetworkPerUserDailyCalls > 0
+                && !adminBatchFeature
+                && !string.IsNullOrEmpty(ctx.UserId))
             {
                 var since = DateTimeOffset.UtcNow.Date;
                 var used = await _db.AiToolInvocations

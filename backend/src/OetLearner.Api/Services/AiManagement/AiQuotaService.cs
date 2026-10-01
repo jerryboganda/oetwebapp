@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.AiManagement;
@@ -207,6 +208,24 @@ public sealed class AiQuotaService(
                 Allowed: true,
                 ErrorCode: null, ErrorMessage: null,
                 PolicyTrace: "anonymous.unmetered",
+                GlobalPolicy: global, Plan: null, Override: null,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
+        }
+
+        // ── Admin-side features bypass the per-user plan ────────────────────
+        // Owner directive 2026-09-23: AdminBatch-class features (admin content
+        // authoring/drafts, the admin and expert assistants, class-recording
+        // pipeline, tutor tooling) carry no usage restriction of any kind —
+        // no plan resolution, no feature allow-list, no monthly or daily
+        // token cap. The per-feature kill list, the global kill switch and
+        // the global budget hard-kill above still govern these calls, and
+        // every call is still fully recorded.
+        if (AiBudgetClasses.ClassForFeature(featureCode) == AiOperationClass.AdminBatch)
+        {
+            return new AiQuotaDecision(
+                Allowed: true,
+                ErrorCode: null, ErrorMessage: null,
+                PolicyTrace: "admin_batch.unrestricted",
                 GlobalPolicy: global, Plan: null, Override: null,
                 TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
         }

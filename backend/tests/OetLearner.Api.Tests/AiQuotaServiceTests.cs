@@ -381,6 +381,74 @@ public class AiQuotaServiceTests
     }
 
     [Fact]
+    public async Task AdminBatchFeature_BypassesPlanCapsAndAllowList()
+    {
+        // Tiny caps + an allow-list that excludes the admin code entirely —
+        // owner directive 2026-09-23: admin-side AI carries no usage
+        // restriction of any kind.
+        var (db, quota) = Build(monthlyCap: 10, dailyCap: 2, allowedFeatures: "writing.grade");
+        var now = DateTimeOffset.UtcNow;
+        foreach (var periodKey in new[] { $"day:{now:yyyy-MM-dd}", $"month:{now:yyyy-MM}" })
+        {
+            db.AiQuotaCounters.Add(new AiQuotaCounter
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = "user-001",
+                PeriodKey = periodKey,
+                TokensUsed = 9_999,
+                RequestsCount = 1,
+                CostAccumulatedUsd = 0m,
+                LastUpdatedAt = now,
+                RowVersion = 1,
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var decision = await quota.TryReserveAsync(
+            "user-001", AiFeatureCodes.AdminContentGeneration, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("admin_batch.unrestricted", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ExpertAssistant_BypassesPlanCaps()
+    {
+        var (db, quota) = Build(monthlyCap: 10, dailyCap: 2, allowedFeatures: "writing.grade");
+        var decision = await quota.TryReserveAsync(
+            "user-001", AiFeatureCodes.AiAssistantExpert, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("admin_batch.unrestricted", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AdminBatchFeature_StillBlockedByKillSwitch()
+    {
+        var (db, quota) = Build(killSwitch: true, scope: AiKillSwitchScope.AllCalls);
+        var decision = await quota.TryReserveAsync(
+            "user-001", AiFeatureCodes.AdminContentGeneration, AiKeySource.Platform, default);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("kill_switch", decision.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AdminBatchFeature_StillBlockedByFeatureKillList()
+    {
+        var (db, quota) = Build(disabledFeaturesCsv: "admin.content_generation");
+        var decision = await quota.TryReserveAsync(
+            "user-001", AiFeatureCodes.AdminContentGeneration, AiKeySource.Platform, default);
+
+        Assert.False(decision.Allowed);
+        Assert.Equal("feature_disabled", decision.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task BillingPlanAiEntitlement_ResolvesMappedQuotaPlan()
     {
         var (db, quota) = BuildAiMappingScenario(

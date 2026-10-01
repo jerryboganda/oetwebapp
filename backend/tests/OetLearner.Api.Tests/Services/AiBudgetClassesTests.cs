@@ -20,10 +20,18 @@ public sealed class AiBudgetClassesTests
         Assert.Equal(35.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.ScoringCritical));
         Assert.Equal(1.00m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.InteractiveLearning));
         Assert.Equal(10.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.InteractiveLearning));
-        Assert.Equal(0.50m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.AdminBatch));
-        Assert.Equal(5.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.AdminBatch));
         Assert.Equal(5.00m, AiBudgetClasses.PlatformDailyCapUsd);
         Assert.Equal(50.00m, AiBudgetClasses.PlatformMonthlyCapUsd);
+    }
+
+    [Fact]
+    public void AdminBatch_IsBudgetExempt_OtherClassesAreNot()
+    {
+        // Owner directive 2026-09-23: admin-side AI carries no day or
+        // class-month ceilings.
+        Assert.True(AiBudgetClasses.IsBudgetExempt(AiOperationClass.AdminBatch));
+        Assert.False(AiBudgetClasses.IsBudgetExempt(AiOperationClass.ScoringCritical));
+        Assert.False(AiBudgetClasses.IsBudgetExempt(AiOperationClass.InteractiveLearning));
     }
 
     [Theory]
@@ -70,6 +78,11 @@ public sealed class AiBudgetClassesTests
     [InlineData(AiFeatureCodes.PronunciationScore, AiOperationClass.ScoringCritical)]
     [InlineData(AiFeatureCodes.AdminContentGeneration, AiOperationClass.AdminBatch)]
     [InlineData(AiFeatureCodes.AdminWritingDraft, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.AiAssistantExpert, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.AiAssistantLearner, AiOperationClass.InteractiveLearning)]
+    [InlineData(AiFeatureCodes.OcrContentPdfFallback, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.OcrListeningPartA, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.OcrWritingHandwriting, AiOperationClass.InteractiveLearning)]
     [InlineData(AiFeatureCodes.WritingCoachSuggest, AiOperationClass.InteractiveLearning)]
     [InlineData(AiFeatureCodes.ReadingExplanation, AiOperationClass.InteractiveLearning)]
     public void ClassForFeature_MapsKnownCodes(string featureCode, AiOperationClass expected)

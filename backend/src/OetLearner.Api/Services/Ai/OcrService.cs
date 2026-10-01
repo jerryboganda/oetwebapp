@@ -47,7 +47,10 @@ public sealed class OcrService(
             ResourceId = $"{featureCode}:{requestHash}",
             ResourceType = "ocr_document",
             RequestHash = requestHash,
-            OperationClass = AiOperationClass.InteractiveLearning,
+            // Admin content-authoring OCR (content-PDF fallback) is
+            // budget-exempt AdminBatch; learner-facing OCR (handwriting
+            // submissions) stays InteractiveLearning.
+            OperationClass = AiBudgetClasses.ClassForFeature(featureCode),
             AllowRetryAfterFailure = true,
         }, ct);
 
