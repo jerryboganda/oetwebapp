@@ -61,7 +61,8 @@ export interface LearnerSurfaceCardModel {
 
 export interface LearnerPageHeroModel {
   title: string;
-  description: string;
+  /** Optional: pages with no supporting sentence leave it out (no empty paragraph). */
+  description?: string;
   eyebrow?: string;
   icon?: ElementType | ReactNode;
   accent?: LearnerSurfaceAccent;

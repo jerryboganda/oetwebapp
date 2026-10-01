@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Library } from 'lucide-react';
 import { toast } from 'sonner';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
@@ -16,66 +17,30 @@ import {
   type VocabularyListDto,
 } from '@/lib/reading-pathway-api';
 
-const CURATED_SLUGS = [
-  'top-200-oet-medical-terms',
-  'medicine-and-surgery',
-  'nursing-and-allied-health',
-  'pharmacy-and-pharmacology',
-];
-
-const CURATED_META: Record<string, { name: string; description: string }> = {
-  'top-200-oet-medical-terms': {
-    name: 'Top 200 OET Medical Terms',
-    description: 'The highest-frequency medical vocabulary that appears across all OET reading subtests.',
-  },
-  'medicine-and-surgery': {
-    name: 'Medicine & Surgery',
-    description: 'Core clinical terminology covering diagnosis, procedures, and treatment in medicine and surgery.',
-  },
-  'nursing-and-allied-health': {
-    name: 'Nursing & Allied Health',
-    description: 'Vocabulary essential for nursing, physiotherapy, occupational therapy, and related professions.',
-  },
-  'pharmacy-and-pharmacology': {
-    name: 'Pharmacy & Pharmacology',
-    description: 'Drug classes, mechanisms of action, routes of administration, and clinical pharmacology terms.',
-  },
-};
-
 export default function VocabListsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [lists, setLists] = useState<VocabularyListDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setLists(await getVocabLists());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load vocabulary lists.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) { setLoading(false); return; }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const fetched = await getVocabLists();
-        if (!cancelled) setLists(fetched);
-      } catch {
-        // show curated stubs even if API fails
-        if (!cancelled) setLists(
-          CURATED_SLUGS.map((slug) => ({
-            id: slug,
-            slug,
-            name: CURATED_META[slug].name,
-            description: CURATED_META[slug].description,
-            wordCount: 0,
-            isSubscribed: false,
-            previewWords: [],
-          })),
-        );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [authLoading, isAuthenticated]);
+    void load();
+  }, [authLoading, isAuthenticated, load]);
 
   async function handleSubscribe(slug: string) {
     if (subscribing[slug]) return;
@@ -93,21 +58,6 @@ export default function VocabListsPage() {
     }
   }
 
-  // Merge API data with curated stubs for display order
-  const displayLists: VocabularyListDto[] = CURATED_SLUGS.map((slug) => {
-    const fromApi = lists.find((l) => l.slug === slug);
-    const meta = CURATED_META[slug];
-    return fromApi ?? {
-      id: slug,
-      slug,
-      name: meta.name,
-      description: meta.description,
-      wordCount: 0,
-      isSubscribed: false,
-      previewWords: [],
-    };
-  });
-
   // The breadcrumb's "Vocab" crumb is the way back, so no back link in the header.
   return (
     <>
@@ -124,9 +74,17 @@ export default function VocabListsPage() {
             <Skeleton key={i} className="h-48 rounded-2xl" />
           ))}
         </div>
+      ) : error ? (
+        <ErrorState title="Could not load vocabulary lists" message={error} onRetry={() => void load()} />
+      ) : lists.length === 0 ? (
+        <EmptyState
+          icon={<Library className="h-8 w-8" />}
+          title="No vocabulary lists yet"
+          description="Curated lists appear here as soon as they are published."
+        />
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {displayLists.map((list, index) => (
+          {lists.map((list, index) => (
             <MotionItem key={list.slug} delayIndex={Math.min(index, 5)} className="h-full">
               <Card className="flex h-full flex-col">
                 {/* Header */}
