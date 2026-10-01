@@ -21,20 +21,25 @@ import {
 import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Button, buttonClassName } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cardClassName } from '@/components/ui/card';
 import { fetchSubmissions, fetchMyAttemptHistory, type LearnerAttemptHistoryItem } from '@/lib/api';
 import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { cn } from '@/lib/utils';
 
+// Sub-test identity (DESIGN.md §2 skill tokens), never a status colour.
 const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }> = {
-  Reading:   { icon: FileText,   badge: 'bg-info/10 text-info' },
-  Listening: { icon: Headphones, badge: 'bg-lavender text-primary-dark' },
-  Writing:   { icon: PenTool,    badge: 'bg-danger/10 text-danger-strong' },
-  Speaking:  { icon: Mic,        badge: 'bg-lavender text-primary-dark' },
+  Reading:   { icon: FileText,   badge: 'bg-skill-reading/10 text-skill-reading border-skill-reading/20' },
+  Listening: { icon: Headphones, badge: 'bg-skill-listening/10 text-skill-listening border-skill-listening/20' },
+  Writing:   { icon: PenTool,    badge: 'bg-skill-writing/10 text-skill-writing border-skill-writing/20' },
+  Speaking:  { icon: Mic,        badge: 'bg-skill-speaking/10 text-skill-speaking border-skill-speaking/20' },
 };
+// Full mocks span every sub-test, so they get the neutral accent rather than borrowing one skill.
+const MOCK_BADGE = 'bg-lavender text-primary border-primary/20';
 
 // The server sends a ready-to-show label: a score ("192/500") reads as a result, anything else
 // ("Marking in progress") is a state and gets the attention tone.
@@ -140,59 +145,60 @@ function SubmissionHistoryInner() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow={writingOnly ? 'Writing Evidence' : 'Evidence History'}
-          icon={History}
-          accent="slate"
-          title={writingOnly ? 'Reopen Writing letters that need review or comparison' : 'Reopen the attempts that need review or comparison'}
-          description={writingOnly
-            ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
-            : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
-          highlights={[
-            { icon: History, label: 'Attempts', value: `${Math.max(visibleSubmissions.length, visibleAttempts?.length ?? 0)} recorded` },
-            { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
-            { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={writingOnly ? 'Writing Evidence' : 'Evidence History'}
+        icon={History}
+        accent="slate"
+        title={writingOnly ? 'Reopen Writing letters that need review or comparison' : 'Reopen the attempts that need review or comparison'}
+        description={writingOnly
+          ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
+          : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
+        highlights={[
+          { icon: History, label: 'Attempts', value: `${Math.max(visibleSubmissions.length, visibleAttempts?.length ?? 0)} recorded` },
+          { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
+          { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
+        ]}
+      />
 
-        {/* Unified attempt activity — Reading / Listening / Writing / Speaking
-            plus full mocks: exact item title/ID, subtest, start time, status,
-            balance source and credits used; reopening never deducts again.
-            Filtered to Writing only when opened from inside Writing. */}
-        {visibleAttempts && visibleAttempts.length > 0 ? (
-          <section aria-label="Attempt activity" className="space-y-3">
-            <LearnerSurfaceSectionHeader
-              eyebrow={writingOnly ? 'Writing' : 'All Subtests'}
-              title="Attempt activity"
-              description={writingOnly
-                ? 'Every opened Writing letter, its balance source, credits used and where to resume.'
-                : 'Every opened exam or card, its balance source, credits used and where to resume.'}
-            />
-            <ul className="space-y-2">
-              {visibleAttempts.map((attempt) => {
-                const styleKeyMap: Record<string, SubTest> = {
-                  reading: 'Reading',
-                  listening: 'Listening',
-                  writing: 'Writing',
-                  speaking: 'Speaking',
-                };
-                const styleKey = styleKeyMap[attempt.subtest] ?? 'Reading';
-                const style = SUBTEST_STYLE[styleKey];
-                const Icon = attempt.subtest === 'mock' ? GitCompare : style.icon;
-                return (
-                  <li
-                    key={`${attempt.subtest}-${attempt.attemptId}`}
-                    className="flex flex-col gap-2 rounded-2xl border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      {/* Unified attempt activity — Reading / Listening / Writing / Speaking
+          plus full mocks: exact item title/ID, subtest, start time, status,
+          balance source and credits used; reopening never deducts again.
+          Filtered to Writing only when opened from inside Writing. */}
+      {visibleAttempts && visibleAttempts.length > 0 ? (
+        <section aria-label="Attempt activity">
+          <LearnerSurfaceSectionHeader
+            eyebrow={writingOnly ? 'Writing' : 'All Subtests'}
+            title="Attempt activity"
+            description={writingOnly
+              ? 'Every opened Writing letter, its balance source, credits used and where to resume.'
+              : 'Every opened exam or card, its balance source, credits used and where to resume.'}
+            className="mb-4"
+          />
+          <ul className="space-y-2">
+            {visibleAttempts.map((attempt, index) => {
+              const styleKeyMap: Record<string, SubTest> = {
+                reading: 'Reading',
+                listening: 'Listening',
+                writing: 'Writing',
+                speaking: 'Speaking',
+              };
+              const styleKey = styleKeyMap[attempt.subtest];
+              const style = styleKey ? SUBTEST_STYLE[styleKey] : null;
+              const Icon = attempt.subtest === 'mock' ? GitCompare : style?.icon ?? FileText;
+              return (
+                <li key={`${attempt.subtest}-${attempt.attemptId}`}>
+                  <MotionItem
+                    delayIndex={Math.min(index, 5)}
+                    className={cn(cardClassName({ padding: 'sm' }), 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}
                   >
                     <div className="flex min-w-0 items-start gap-3">
-                      <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.badge}`}>
+                      <span className={cn('mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border', style?.badge ?? MOCK_BADGE)}>
                         <Icon className="h-4 w-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-navy">
                           {attempt.title}
-                          <span className="ml-2 font-mono text-2xs font-medium text-muted">{attempt.attemptId}</span>
+                          <span className="ms-2 font-mono text-2xs font-medium text-muted">{attempt.attemptId}</span>
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
                           <span className="capitalize">{attempt.subtest}</span>
@@ -225,124 +231,123 @@ function SubmissionHistoryInner() {
                         </p>
                       </div>
                     </div>
-                    <Link
-                      href={attempt.route}
-                      className={buttonClassName({ variant: 'outline', size: 'sm', className: 'shrink-0 self-start rounded-full bg-background-light font-bold sm:self-center' })}
-                    >
-                      <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                      {attempt.status === 'in_progress' ? 'Resume' : 'Review'}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
-
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
-            ))}
-          </div>
-        ) : null}
-
-        {!loading && error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
-        ) : null}
-
-        {/* A Speaking-only learner has a Full Speaking Mock under "Attempt activity" but no Past Evidence
-            card (those rows have no Evaluation), so wait for the attempt list before saying history is empty. */}
-        {!loading && !error && visibleSubmissions.length === 0 && (writingOnly || (attempts !== null && visibleAttempts?.length === 0)) ? (
-          <EmptyState
-            title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
-            description={writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
-            action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }}
-            className="py-24"
-          />
-        ) : null}
-
-        {!loading && !error && visibleSubmissions.length > 0 ? (
-          <section>
-            <LearnerSurfaceSectionHeader
-              eyebrow={writingOnly ? 'Writing Evidence' : 'Past Evidence'}
-              title="Keep review state and score direction visible"
-              description="Each card should answer what was submitted, when, how it performed, and whether follow-up is still available."
-              className="mb-4"
-            />
-
-            <div className="space-y-4">
-              {visibleSubmissions.map((sub, idx) => {
-                const meta = SUBTEST_STYLE[sub.subTest] ?? SUBTEST_STYLE.Writing;
-                const Icon = meta.icon;
-                const canRequest = sub.canRequestReview;
-                return (
-                  <MotionItem
-                    key={sub.id}
-                    delayIndex={idx}
-                    className="bg-surface rounded-2xl border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-widest ${meta.badge}`}>
-                              <Icon className="w-4 h-4" aria-hidden="true" />
-                              {sub.subTest}
-                            </span>
-                            <span className="text-sm text-muted font-medium">{formatSubmissionAttemptDate(sub.attemptDate)}</span>
-                          </div>
-                          <h2 className="text-lg font-bold text-navy leading-tight">{sub.taskName}</h2>
-                        </div>
-                        <div className="sm:text-right bg-background-light sm:bg-transparent p-3 sm:p-0 rounded-xl border border-border sm:border-none">
-                          <div className="eyebrow text-muted mb-1">Score Estimate</div>
-                          <div className={`text-xl font-black ${sub.scoreEstimate === 'Pending' ? 'text-muted' : 'text-navy'}`}>
-                            {sub.scoreEstimate}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 pt-2 border-t border-border">
-                        <span className="text-sm font-medium text-muted">Review Status:</span>
-                        <ReviewBadge status={sub.reviewStatus} />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-border pt-5 md:pt-0 md:pl-6 justify-center">
-                      <Button
-                        variant="outline"
-                        fullWidth
-                        onClick={() => sub.actions.reopenFeedbackRoute && router.push(sub.actions.reopenFeedbackRoute)}
-                        disabled={!sub.actions.reopenFeedbackRoute}
-                      >
-                        <MessageSquare className="w-4 h-4" aria-hidden="true" />
-                        Reopen Feedback
-                      </Button>
-                      <Button
-                        variant="outline"
-                        fullWidth
-                        onClick={() => sub.actions.compareRoute && router.push(sub.actions.compareRoute)}
-                        disabled={!sub.actions.compareRoute}
-                      >
-                        <GitCompare className="w-4 h-4" aria-hidden="true" />
-                        Compare Attempts
-                      </Button>
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
-                        disabled={!canRequest || !sub.actions.requestReviewRoute}
-                      >
-                        <Send className="w-4 h-4" aria-hidden="true" />
-                        Request Tutor Review
-                      </Button>
-                    </div>
+                    <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-center">
+                      <Link href={attempt.route}>
+                        <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                        {attempt.status === 'in_progress' ? 'Resume' : 'Review'}
+                      </Link>
+                    </Button>
                   </MotionItem>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-      </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {loading ? (
+        <div className="space-y-4" aria-hidden="true">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-36 rounded-2xl" />
+          ))}
+        </div>
+      ) : null}
+
+      {!loading && error ? (
+        <InlineAlert variant="error">{error}</InlineAlert>
+      ) : null}
+
+      {/* A Speaking-only learner has a Full Speaking Mock under "Attempt activity" but no Past Evidence
+          card (those rows have no Evaluation), so wait for the attempt list before saying history is empty. */}
+      {!loading && !error && visibleSubmissions.length === 0 && (writingOnly || (attempts !== null && visibleAttempts?.length === 0)) ? (
+        <EmptyState
+          icon={<History className="h-8 w-8" />}
+          title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
+          description={writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
+          action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }}
+          className="py-16"
+        />
+      ) : null}
+
+      {!loading && !error && visibleSubmissions.length > 0 ? (
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow={writingOnly ? 'Writing Evidence' : 'Past Evidence'}
+            title="Keep review state and score direction visible"
+            className="mb-4"
+          />
+
+          <div className="space-y-4">
+            {visibleSubmissions.map((sub, idx) => {
+              const meta = SUBTEST_STYLE[sub.subTest] ?? SUBTEST_STYLE.Writing;
+              const Icon = meta.icon;
+              const canRequest = sub.canRequestReview;
+              return (
+                <MotionItem
+                  key={sub.id}
+                  delayIndex={Math.min(idx, 5)}
+                  className={cn(cardClassName({ padding: 'lg' }), 'flex flex-col justify-between gap-5 transition-colors hover:border-border-hover md:flex-row md:gap-6')}
+                >
+                  <div className="min-w-0 flex-1 space-y-4">
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div className="min-w-0">
+                        <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                          <span className={cn('tile-label inline-flex items-center gap-1.5 rounded-control border px-2.5 py-1', meta.badge)}>
+                            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                            {sub.subTest}
+                          </span>
+                          <span className="text-sm font-medium text-muted">{formatSubmissionAttemptDate(sub.attemptDate)}</span>
+                        </div>
+                        <h3 className="text-lg font-bold leading-tight text-navy">{sub.taskName}</h3>
+                      </div>
+                      <div className="shrink-0 rounded-xl border border-border bg-background-light p-3 sm:border-none sm:bg-transparent sm:p-0 sm:text-end">
+                        <div className="eyebrow mb-1 text-muted">Score Estimate</div>
+                        <div className={`text-xl font-bold tabular-nums ${sub.scoreEstimate === 'Pending' ? 'text-muted' : 'text-navy'}`}>
+                          {sub.scoreEstimate}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 border-t border-border pt-2">
+                      <span className="text-sm font-medium text-muted">Review Status:</span>
+                      <ReviewBadge status={sub.reviewStatus} />
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 flex-col justify-center gap-2 border-t border-border pt-5 md:w-48 md:border-s md:border-t-0 md:ps-6 md:pt-0">
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => sub.actions.reopenFeedbackRoute && router.push(sub.actions.reopenFeedbackRoute)}
+                      disabled={!sub.actions.reopenFeedbackRoute}
+                    >
+                      <MessageSquare className="w-4 h-4" aria-hidden="true" />
+                      Reopen Feedback
+                    </Button>
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => sub.actions.compareRoute && router.push(sub.actions.compareRoute)}
+                      disabled={!sub.actions.compareRoute}
+                    >
+                      <GitCompare className="w-4 h-4" aria-hidden="true" />
+                      Compare Attempts
+                    </Button>
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
+                      disabled={!canRequest || !sub.actions.requestReviewRoute}
+                    >
+                      <Send className="w-4 h-4" aria-hidden="true" />
+                      Request Tutor Review
+                    </Button>
+                  </div>
+                </MotionItem>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

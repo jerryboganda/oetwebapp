@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,12 +9,9 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  BookOpen,
-  Headphones,
-  FilePenLine,
-  Mic,
 } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { Button, Card, TabPanel, Tabs } from '@/components/ui';
+import { EmptyState } from '@/components/ui/empty-error';
 import { LearnerPageHero } from '@/components/domain';
 import { AsyncStateWrapper } from '@/components/state';
 import { fetchStudyPlan } from '@/lib/api';
@@ -24,18 +20,12 @@ import type { StudyPlanTask, SubTest } from '@/lib/mock-data';
 // ─── Constants ──────────────────────────────────────────────────────
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
-const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
-  Reading: BookOpen,
-  Listening: Headphones,
-  Writing: FilePenLine,
-  Speaking: Mic,
-};
-
+// Sub-test identity (DESIGN.md §2 skill tokens), never a status colour.
 const SUBTEST_DOT: Record<SubTest, string> = {
-  Reading: 'bg-info',
-  Listening: 'bg-primary',
-  Writing: 'bg-warning',
-  Speaking: 'bg-success',
+  Reading: 'bg-skill-reading',
+  Listening: 'bg-skill-listening',
+  Writing: 'bg-skill-writing',
+  Speaking: 'bg-skill-speaking',
 };
 
 const STATUS_ICON: Record<string, { Icon: React.ElementType; className: string }> = {
@@ -46,6 +36,11 @@ const STATUS_ICON: Record<string, { Icon: React.ElementType; className: string }
 };
 
 type ViewMode = 'week' | 'month';
+
+const VIEW_TABS: { id: ViewMode; label: string }[] = [
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
+];
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function startOfWeek(date: Date): Date {
@@ -145,6 +140,8 @@ export default function StudyPlanCalendarPage() {
   }, [tasks]);
 
   const today = new Date();
+  const asyncStatus = loading ? 'loading' : error ? 'error' : tasks.length === 0 ? 'empty' : 'success' as const;
+  const visibleTaskLimit = view === 'month' ? 3 : 5;
 
   return (
     <>
@@ -155,134 +152,133 @@ export default function StudyPlanCalendarPage() {
         accent="amber"
       />
 
-      <div className="mt-6 space-y-4">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 py-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-            <Button variant="ghost" size="sm" onClick={navigatePrev} aria-label="Previous">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="min-w-0 text-center text-sm font-medium text-navy sm:min-w-[180px]">
-              {view === 'week' ? formatWeekRange(cursor) : formatMonthYear(cursor)}
-            </span>
-            <Button variant="ghost" size="sm" onClick={navigateNext} aria-label="Next">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={goToday} className="text-xs sm:ml-2">
-              Today
-            </Button>
-          </div>
-
-          <div className="flex rounded-lg border border-border">
-            <button
-              type="button"
-              aria-pressed={view === 'week'}
-              onClick={() => setView('week')}
-              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'week' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              aria-pressed={view === 'month'}
-              onClick={() => setView('month')}
-              className={`min-h-11 px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === 'month' ? 'bg-primary text-primary-foreground dark:bg-violet-700' : 'text-muted hover:text-navy'}`}
-            >
-              Month
-            </button>
-          </div>
+      {/* Toolbar */}
+      <Card padding="sm" className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+          <Button variant="ghost" size="sm" onClick={navigatePrev} aria-label="Previous">
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+          <span className="min-w-0 text-center text-sm font-medium tabular-nums text-navy sm:min-w-44">
+            {view === 'week' ? formatWeekRange(cursor) : formatMonthYear(cursor)}
+          </span>
+          <Button variant="ghost" size="sm" onClick={navigateNext} aria-label="Next">
+            <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={goToday} className="sm:ms-2">
+            Today
+          </Button>
         </div>
 
-        {/* Calendar grid */}
-        <AsyncStateWrapper status={loading ? 'loading' : error ? 'error' : 'success'} errorMessage={error ?? undefined} onRetry={loadData}>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="rounded-xl border border-border bg-surface"
-          >
-            {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-border">
-              {DAYS_OF_WEEK.map((day) => (
-                <div key={day} className="px-2 py-2 text-center text-xs font-medium text-muted">
-                  {day}
-                </div>
-              ))}
-            </div>
+        <Tabs
+          tabs={VIEW_TABS}
+          activeTab={view}
+          onChange={(id) => setView(id as ViewMode)}
+          scrollable={false}
+          className="w-auto"
+        />
+      </Card>
 
-            {/* Day cells */}
-            <div className={`grid grid-cols-7 ${view === 'month' ? 'auto-rows-[100px]' : 'auto-rows-[140px]'}`}>
-              {calendarDays.map((day) => {
-                const key = day.toISOString().slice(0, 10);
-                const dayTasks = tasksByDate.get(key) ?? [];
-                const isToday = isSameDay(day, today);
-                const isCurrentMonth = day.getMonth() === cursor.getMonth();
-
-                return (
-                  <div
-                    key={key}
-                    className={`relative border-b border-r border-border p-1.5 ${
-                      !isCurrentMonth && view === 'month' ? 'bg-background-light' : ''
-                    } ${isToday ? 'bg-primary/5' : ''}`}
-                  >
-                    {/* Date number */}
-                    <span
-                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                        isToday
-                          ? 'bg-primary text-primary-foreground dark:bg-violet-700'
-                          : isCurrentMonth || view === 'week'
-                            ? 'text-navy'
-                            : 'text-muted'
-                      }`}
-                    >
-                      {day.getDate()}
-                    </span>
-
-                    {/* Task indicators */}
-                    <div className="mt-1 space-y-0.5 overflow-hidden">
-                      {dayTasks.slice(0, view === 'month' ? 3 : 5).map((task) => {
-                        const StatusMeta = STATUS_ICON[task.status] ?? STATUS_ICON.not_started;
-                        const Icon = SUBTEST_ICONS[task.subTest] ?? BookOpen;
-                        return (
-                          <button
-                            key={task.id}
-                            onClick={() => task.route && router.push(task.route)}
-                            className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-2xs leading-tight transition-colors hover:bg-background-light"
-                          >
-                            <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${SUBTEST_DOT[task.subTest]}`} />
-                            <StatusMeta.Icon className={`h-3 w-3 flex-shrink-0 ${StatusMeta.className}`} />
-                            <span className="truncate text-navy">
-                              {task.title}
-                            </span>
-                          </button>
-                        );
-                      })}
-                      {dayTasks.length > (view === 'month' ? 3 : 5) && (
-                        <span className="block px-1 text-3xs text-muted">
-                          +{dayTasks.length - (view === 'month' ? 3 : 5)} more
-                        </span>
-                      )}
-                    </div>
+      {/* Calendar grid */}
+      <AsyncStateWrapper
+        status={asyncStatus}
+        errorMessage={error ?? undefined}
+        onRetry={loadData}
+        emptyContent={
+          <EmptyState
+            icon={<CalendarIcon className="h-8 w-8" />}
+            title="No study plan yet"
+            description="Set your goals to generate your personalised study plan."
+            action={{ label: 'Set goals', href: '/goals' }}
+          />
+        }
+      >
+        <TabPanel id={view} activeTab={view}>
+          {/* Seven columns need room for task titles: below that width the grid scrolls inside its card. */}
+          <Card padding="none" className="overflow-x-auto">
+            <div className="min-w-176">
+              {/* Day headers */}
+              <div className="grid grid-cols-7 border-b border-border">
+                {DAYS_OF_WEEK.map((day) => (
+                  <div key={day} className="px-2 py-2 text-center text-xs font-medium text-muted">
+                    {day}
                   </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        </AsyncStateWrapper>
+                ))}
+              </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
-          {(Object.entries(SUBTEST_DOT) as [SubTest, string][]).map(([subtest, dotClass]) => (
-            <span key={subtest} className="flex items-center gap-1">
-              <span className={`inline-block h-2 w-2 rounded-full ${dotClass}`} />
-              {subtest}
-            </span>
-          ))}
-          <span className="mx-2 text-border" aria-hidden="true">|</span>
-          <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-success-strong" /> Completed</span>
-          <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-muted" /> Pending</span>
-          <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-danger-strong" /> Missed</span>
-        </div>
+              {/* Day cells: rows start at a fixed height and grow with their tasks instead of clipping them. */}
+              <div className={`grid grid-cols-7 ${view === 'month' ? 'auto-rows-[minmax(6.25rem,auto)]' : 'auto-rows-[minmax(8.75rem,auto)]'}`}>
+                {calendarDays.map((day) => {
+                  const key = day.toISOString().slice(0, 10);
+                  const dayTasks = tasksByDate.get(key) ?? [];
+                  const isToday = isSameDay(day, today);
+                  const isCurrentMonth = day.getMonth() === cursor.getMonth();
+
+                  return (
+                    <div
+                      key={key}
+                      className={`relative min-w-0 border-b border-e border-border p-1.5 ${
+                        !isCurrentMonth && view === 'month' ? 'bg-background-light' : ''
+                      } ${isToday ? 'bg-primary/5' : ''}`}
+                    >
+                      {/* Date number */}
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium tabular-nums ${
+                          isToday
+                            ? 'bg-primary text-primary-foreground dark:bg-primary-700'
+                            : isCurrentMonth || view === 'week'
+                              ? 'text-navy'
+                              : 'text-muted'
+                        }`}
+                      >
+                        {day.getDate()}
+                      </span>
+
+                      {/* Task indicators */}
+                      <div className="mt-1 space-y-0.5">
+                        {dayTasks.slice(0, visibleTaskLimit).map((task) => {
+                          const StatusMeta = STATUS_ICON[task.status] ?? STATUS_ICON.not_started;
+                          return (
+                            <button
+                              key={task.id}
+                              type="button"
+                              onClick={() => task.route && router.push(task.route)}
+                              className="flex min-h-6 w-full items-center gap-1 rounded-md px-1 py-0.5 text-start text-2xs leading-tight transition-colors hover-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SUBTEST_DOT[task.subTest]}`} aria-hidden="true" />
+                              <StatusMeta.Icon className={`h-3 w-3 shrink-0 ${StatusMeta.className}`} aria-hidden="true" />
+                              <span className="truncate text-navy">
+                                {task.title}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {dayTasks.length > visibleTaskLimit && (
+                          <span className="block px-1 text-3xs tabular-nums text-muted">
+                            +{dayTasks.length - visibleTaskLimit} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        </TabPanel>
+      </AsyncStateWrapper>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+        {(Object.entries(SUBTEST_DOT) as [SubTest, string][]).map(([subtest, dotClass]) => (
+          <span key={subtest} className="flex items-center gap-1">
+            <span className={`inline-block h-2 w-2 rounded-full ${dotClass}`} aria-hidden="true" />
+            {subtest}
+          </span>
+        ))}
+        <span className="mx-2 text-border" aria-hidden="true">|</span>
+        <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-success-strong" aria-hidden="true" /> Completed</span>
+        <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-muted" aria-hidden="true" /> Pending</span>
+        <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-danger-strong" aria-hidden="true" /> Missed</span>
       </div>
     </>
   );

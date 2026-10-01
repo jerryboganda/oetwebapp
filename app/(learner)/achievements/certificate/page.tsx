@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Award, Download, Calendar, Trophy, Star, FileText } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -38,119 +40,121 @@ const DEFAULT_TYPE = { icon: Award, color: 'text-primary', bg: 'bg-primary/5' };
 export default function CertificatePage() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    analytics.track('certificates_viewed');
+  const load = useCallback(() => {
+    setLoading(true);
+    setFailed(false);
     apiRequest<{ certificates: Certificate[] }>('/v1/learner/certificates')
       .then(data => setCertificates(data.certificates || []))
-      .catch(() => {})
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <>
-        <div className="max-w-3xl mx-auto space-y-4">
-          <Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-80" />
-          {[1,2,3].map(i => <Skeleton key={i} className="h-32" />)}
-        </div>
-      </>
-    );
-  }
+  useEffect(() => {
+    analytics.track('certificates_viewed');
+    load();
+  }, [load]);
 
   return (
     <>
       <LearnerPageHero
+        icon={Award}
         title="My Certificates"
         description="Downloadable certificates for study plan milestones, mock exams, and readiness achievements"
       />
 
-      <div className="max-w-3xl mx-auto">
-
-        {/* summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
-          <Card className="p-4 text-center">
-            <Award className="h-5 w-5 mx-auto mb-1.5 text-primary" />
-            <p className="text-2xl font-bold">{certificates.length}</p>
-            <p className="text-xs text-muted">Total Certificates</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <Download className="h-5 w-5 mx-auto mb-1.5 text-muted" />
-            <p className="text-2xl font-bold">{certificates.filter(c => c.downloadUrl).length}</p>
-            <p className="text-xs text-muted">Downloads Available</p>
-          </Card>
-          <Card className="p-4 text-center col-span-2 sm:col-span-1">
-            <Calendar className="h-5 w-5 mx-auto mb-1.5 text-muted" aria-hidden="true" />
-            <p className="text-sm font-medium">
-              {certificates.length > 0
-                ? new Date(certificates[0].issuedAt).toLocaleDateString()
-                : '–'}
-            </p>
-            <p className="text-xs text-muted">Latest Issued</p>
-          </Card>
+      {loading ? (
+        <div className="space-y-4" aria-hidden="true">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
         </div>
+      ) : failed ? (
+        <ErrorState onRetry={load} />
+      ) : (
+        <>
+          {/* summary */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Card className="text-center">
+              <Award className="mx-auto mb-1.5 h-5 w-5 text-primary" aria-hidden="true" />
+              <p className="text-2xl font-bold tabular-nums text-navy"><CountUp value={certificates.length} /></p>
+              <p className="tile-label text-muted">Total Certificates</p>
+            </Card>
+            <Card className="text-center">
+              <Download className="mx-auto mb-1.5 h-5 w-5 text-muted" aria-hidden="true" />
+              <p className="text-2xl font-bold tabular-nums text-navy"><CountUp value={certificates.filter(c => c.downloadUrl).length} /></p>
+              <p className="tile-label text-muted">Downloads Available</p>
+            </Card>
+            <Card className="col-span-2 text-center sm:col-span-1">
+              <Calendar className="mx-auto mb-1.5 h-5 w-5 text-muted" aria-hidden="true" />
+              <p className="text-sm font-medium tabular-nums text-navy">
+                {certificates.length > 0
+                  ? new Date(certificates[0].issuedAt).toLocaleDateString()
+                  : '–'}
+              </p>
+              <p className="tile-label text-muted">Latest Issued</p>
+            </Card>
+          </div>
 
-        {/* certificate list */}
-        {certificates.length > 0 ? (
-          <MotionSection className="space-y-4">
-            {certificates.map(cert => {
-              const cfg = TYPE_CONFIG[cert.type] || DEFAULT_TYPE;
-              const IconComp = cfg.icon;
-              return (
-                <MotionItem key={cert.id}>
-                  <Card className="overflow-hidden">
-                    <div className="flex">
-                      {/* icon strip */}
-                      <div className={`w-16 sm:w-20 ${cfg.bg} flex items-center justify-center shrink-0`}>
-                        <IconComp className={`h-8 w-8 ${cfg.color}`} />
-                      </div>
+          {/* certificate list */}
+          {certificates.length > 0 ? (
+            <MotionSection className="space-y-4">
+              {certificates.map((cert, index) => {
+                const cfg = TYPE_CONFIG[cert.type] || DEFAULT_TYPE;
+                const IconComp = cfg.icon;
+                return (
+                  <MotionItem key={cert.id} delayIndex={Math.min(index, 5)}>
+                    <Card padding="none" className="overflow-hidden">
+                      <div className="flex">
+                        {/* icon strip */}
+                        <div className={`flex w-16 shrink-0 items-center justify-center sm:w-20 ${cfg.bg}`}>
+                          <IconComp className={`h-8 w-8 ${cfg.color}`} aria-hidden="true" />
+                        </div>
 
-                      {/* content */}
-                      <div className="flex-1 p-4 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-semibold text-sm mb-1">{cert.title}</h3>
-                            <p className="text-xs text-muted mb-2">{cert.description}</p>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-3xs capitalize">
-                                {cert.type.replace(/_/g, ' ')}
-                              </Badge>
-                              <span className="text-3xs text-muted">
-                                Issued {new Date(cert.issuedAt).toLocaleDateString()}
-                              </span>
+                        {/* content */}
+                        <div className="min-w-0 flex-1 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <h2 className="mb-1 text-sm font-semibold text-navy">{cert.title}</h2>
+                              <p className="mb-2 text-xs text-muted">{cert.description}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className="capitalize">
+                                  {cert.type.replace(/_/g, ' ')}
+                                </Badge>
+                                <span className="text-xs text-muted">
+                                  Issued {new Date(cert.issuedAt).toLocaleDateString()}
+                                </span>
+                              </div>
                             </div>
-                          </div>
 
-                          {cert.downloadUrl && (
-                            <a
-                              href={cert.downloadUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => analytics.track('certificate_downloaded', { certId: cert.id })}
-                            >
-                              <Button size="sm" variant="outline" className="shrink-0">
-                                <Download className="h-3.5 w-3.5 mr-1" />Download
+                            {cert.downloadUrl && (
+                              <Button asChild size="sm" variant="outline" className="shrink-0">
+                                <a
+                                  href={cert.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => analytics.track('certificate_downloaded', { certId: cert.id })}
+                                >
+                                  <Download className="h-3.5 w-3.5" aria-hidden="true" />Download
+                                </a>
                               </Button>
-                            </a>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                </MotionItem>
-              );
-            })}
-          </MotionSection>
-        ) : (
-          <div className="text-center py-16 text-muted">
-            <Award className="h-12 w-12 mx-auto mb-4 opacity-20" />
-            <h3 className="font-medium mb-1">No certificates yet</h3>
-            <p className="text-sm max-w-sm mx-auto">
-              Complete study plan milestones, pass mock exams, or reach readiness thresholds to earn certificates.
-            </p>
-          </div>
-        )}
-      </div>
+                    </Card>
+                  </MotionItem>
+                );
+              })}
+            </MotionSection>
+          ) : (
+            <EmptyState
+              icon={<Award className="h-8 w-8" />}
+              title="No certificates yet"
+              description="Complete study plan milestones, pass mock exams, or reach readiness thresholds to earn certificates."
+            />
+          )}
+        </>
+      )}
     </>
   );
 }

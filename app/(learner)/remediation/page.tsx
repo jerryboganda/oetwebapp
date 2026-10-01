@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -69,75 +70,88 @@ export default function RemediationPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <>
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-10 w-60" />
-          <Skeleton className="h-40 rounded-xl" />
-          <Skeleton className="h-60 rounded-xl" />
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
       <LearnerPageHero
         title="Weak-Area Remediation"
         description="Targeted practice to strengthen your weakest areas based on evaluation analysis."
-        icon={<AlertTriangle className="w-7 h-7" />}
+        icon={AlertTriangle}
       />
+
+      {loading ? (
+        <div className="space-y-3" aria-hidden="true">
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-60 rounded-2xl" />
+        </div>
+      ) : null}
 
       {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
 
       {data && data.evaluationsAnalyzed === 0 && (
-        <InlineAlert variant="info" title="Not enough data">
-          Complete some evaluations first so we can identify areas for improvement.
-        </InlineAlert>
+        <LearnerEmptyState
+          icon={BarChart3}
+          title="Not enough data"
+          description="Complete some evaluations first so we can identify areas for improvement."
+          primaryAction={{ label: 'Start Practice', href: '/study-plan' }}
+        />
+      )}
+
+      {data && data.evaluationsAnalyzed > 0 && data.weakAreas.length === 0 && (
+        <LearnerEmptyState
+          icon={BarChart3}
+          title="No weak areas identified"
+          description={`Based on ${data.evaluationsAnalyzed} recent evaluations`}
+        />
       )}
 
       {/* Weak Areas */}
       {data && data.weakAreas.length > 0 && (
-        <MotionSection>
-          <LearnerSurfaceSectionHeader icon={<BarChart3 className="w-5 h-5" />} title="Identified Weak Areas" />
-          <p className="text-sm text-muted mb-4">Based on {data.evaluationsAnalyzed} recent evaluations</p>
+        <section>
+          <LearnerSurfaceSectionHeader
+            icon={BarChart3}
+            title="Identified Weak Areas"
+            description={`Based on ${data.evaluationsAnalyzed} recent evaluations`}
+            className="mb-4"
+          />
           <div className="space-y-3">
             {data.weakAreas.map((wa, i) => (
-              <MotionItem key={`${wa.subtestCode}-${wa.criterionCode}`}>
-                <Card className="p-4 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-danger-strong">#{i + 1}</span>
+              <MotionItem key={`${wa.subtestCode}-${wa.criterionCode}`} delayIndex={Math.min(i, 5)}>
+                <Card padding="sm" className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger/10">
+                    <span className="text-sm font-bold tabular-nums text-danger-strong">#{i + 1}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-navy capitalize">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium capitalize text-navy">
                       {wa.subtestCode} · {wa.criterionCode}
                     </p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm text-muted">Avg: {wa.averageScore}/6</span>
-                      <span className="text-sm text-muted">{wa.evaluationCount} evals</span>
-                      <Badge variant={wa.trend === 'improving' ? 'success' : wa.trend === 'declining' ? 'danger' : 'outline'}>
-                        {wa.trend === 'improving' ? '↑ Improving' : wa.trend === 'declining' ? '↓ Declining' : 'Stable'}
-                      </Badge>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="text-sm tabular-nums text-muted">Avg: {wa.averageScore}/6</span>
+                      <span className="text-sm tabular-nums text-muted">{wa.evaluationCount} evals</span>
+                      {/* "insufficient_data" is not a trend: no badge rather than a false "Stable". */}
+                      {wa.trend !== 'insufficient_data' ? (
+                        <Badge variant={wa.trend === 'improving' ? 'success' : wa.trend === 'declining' ? 'danger' : 'outline'}>
+                          {wa.trend === 'improving' ? '↑ Improving' : wa.trend === 'declining' ? '↓ Declining' : 'Stable'}
+                        </Badge>
+                      ) : null}
                     </div>
                   </div>
                   <Button
                     size="sm"
+                    className="shrink-0"
                     onClick={() => handleStart(wa.subtestCode, wa.criterionCode)}
                     disabled={starting === `${wa.subtestCode}:${wa.criterionCode}`}
                   >
                     {starting === `${wa.subtestCode}:${wa.criterionCode}` ? 'Starting…' : 'Practice'}
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                   </Button>
                 </Card>
               </MotionItem>
             ))}
           </div>
-        </MotionSection>
+        </section>
       )}
 
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
 }

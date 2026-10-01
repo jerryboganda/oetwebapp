@@ -5,7 +5,8 @@ import { Award, Download, Calendar } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { buttonClassName } from '@/components/ui/button';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -13,11 +14,11 @@ import { getCertificatesData } from '@/lib/learner-data';
 import { analytics } from '@/lib/analytics';
 import type { LearnerCertificate } from '@/lib/types/learner';
 
-const TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  study_plan_complete: { label: 'Study Plan', color: 'bg-info/10 text-info' },
-  mock_exam: { label: 'Mock Exam', color: 'bg-primary/10 text-primary' },
-  readiness_threshold: { label: 'Readiness', color: 'bg-success/10 text-success-strong' },
-  streak_milestone: { label: 'Streak', color: 'bg-warning/10 text-warning-strong' },
+const TYPE_LABELS: Record<string, { label: string; variant: BadgeProps['variant'] }> = {
+  study_plan_complete: { label: 'Study Plan', variant: 'info' },
+  mock_exam: { label: 'Mock Exam', variant: 'default' },
+  readiness_threshold: { label: 'Readiness', variant: 'success' },
+  streak_milestone: { label: 'Streak', variant: 'warning' },
 };
 
 export default function CertificatesPage() {
@@ -33,63 +34,56 @@ export default function CertificatesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <>
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-10 w-48" />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Skeleton className="h-40 rounded-xl" />
-            <Skeleton className="h-40 rounded-xl" />
-          </div>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <LearnerPageHero
         title="My Certificates"
         description="Certificates earned through your study achievements and milestones."
-        icon={<Award className="w-7 h-7" />}
+        icon={Award}
       />
 
-      {error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-hidden="true">
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-40 rounded-2xl" />
+        </div>
+      ) : null}
 
-      {certificates.length === 0 && !error && (
+      {!loading && error && <InlineAlert variant="error" title="Error">{error}</InlineAlert>}
+
+      {!loading && certificates.length === 0 && !error && (
         <EmptyState
-          icon={<Award className="w-12 h-12 text-muted/60" />}
+          icon={<Award className="h-8 w-8" />}
           title="No certificates yet"
           description="Complete study plans, mock exams, or reach milestones to earn certificates."
         />
       )}
 
-      {certificates.length > 0 && (
+      {!loading && certificates.length > 0 && (
         <MotionSection>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {certificates.map((cert) => {
-              const typeInfo = TYPE_LABELS[cert.certificateType] ?? { label: cert.certificateType, color: 'bg-background-light text-muted' };
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {certificates.map((cert, index) => {
+              const typeInfo = TYPE_LABELS[cert.certificateType] ?? { label: cert.certificateType, variant: 'slate' as const };
               return (
-                <MotionItem key={cert.id}>
-                  <Card className="p-5 h-full flex flex-col">
-                    <div className="flex items-start justify-between mb-3">
-                      <Award className="w-8 h-8 text-warning-strong" />
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeInfo.color}`}>
-                        {typeInfo.label}
-                      </span>
+                <MotionItem key={cert.id} delayIndex={Math.min(index, 5)} className="h-full">
+                  <Card className="flex h-full flex-col">
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <Award className="h-8 w-8 shrink-0 text-gold-fg" aria-hidden="true" />
+                      <Badge variant={typeInfo.variant}>{typeInfo.label}</Badge>
                     </div>
-                    <h3 className="font-semibold text-navy text-sm mb-1">{cert.title}</h3>
-                    <p className="text-xs text-muted flex-1">{cert.description}</p>
-                    <div className="mt-4 flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-xs text-muted/60">
-                        <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                    <h2 className="mb-1 text-sm font-semibold text-navy">{cert.title}</h2>
+                    <p className="flex-1 text-xs text-muted">{cert.description}</p>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-1 text-xs tabular-nums text-muted">
+                        <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
                         {new Date(cert.issuedAt).toLocaleDateString()}
                       </span>
                       {cert.downloadUrl && (
-                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className={buttonClassName({ variant: 'outline', size: 'sm', className: 'font-semibold' })}>
-                            <Download className="w-3.5 h-3.5" aria-hidden="true" /> Download
-                        </a>
+                        <Button asChild variant="outline" size="sm">
+                          <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer">
+                            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
+                          </a>
+                        </Button>
                       )}
                     </div>
                   </Card>
