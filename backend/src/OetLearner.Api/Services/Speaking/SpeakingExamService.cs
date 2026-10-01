@@ -91,28 +91,10 @@ public sealed class SpeakingExamService(
             && await IsCoveredByMockAttemptAsync(userId, req.MockAttemptId, ct);
 
         // AI exams pre-check the wallet so the candidate is never stranded
-        // after Card A with no credit for Card B. Four AI credits needed
-        // (2 per card) — UNLESS the account has a "Full Mock Speaking Exam Access" unit
-        // (MockExamsRemaining), which alone funds the whole exam (see
-        // DebitCardAsync). This mirrors the fallback order used at debit time.
-        if (mode == SpeakingExamMode.Ai && creditService is not null && !coveredByMockAttempt)
+        // after Card A with no credit for Card B (see EnsureCardsFundableAsync).
+        if (mode == SpeakingExamMode.Ai)
         {
-            var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
-            if (snapshot.MockExamsRemaining < 1)
-            {
-                var available = snapshot.AvailableSpeakingActivities;
-                var hasPackageWallet = snapshot.ExpiresAt is not null
-                    || snapshot.SharedCredits > 0
-                    || snapshot.SpeakingOnlyCredits > 0
-                    || snapshot.FlexibleCredits > 0
-                    || snapshot.WritingOnlyCredits > 0
-                    || snapshot.SpeakingUnlimited;
-                if (hasPackageWallet && available < AiGradingCreditCost.SpeakingExam)
-                {
-                    throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
-                        "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
-                }
-            }
+            await EnsureCardsFundableAsync(userId, coveredByMockAttempt, ct);
         }
 
         if (mode == SpeakingExamMode.LiveTutor && string.IsNullOrWhiteSpace(req.BookingId))
@@ -353,8 +335,9 @@ public sealed class SpeakingExamService(
     // Transitions
     // ─────────────────────────────────────────────────────────────────
 
-    /// <summary>Finish the unscored Intro (Part 1) and reveal Card A. Creates
-    /// child Session A and debits credit A (AI mode).</summary>
+    /// <summary>Finish the unscored Intro (Part 1) and reveal Card A. Holds credit A
+    /// (AI mode) first, then creates child Session A: a refused hold (402) leaves the
+    /// exam in Intro with nothing persisted.</summary>
     public async Task<SpeakingExamDetail> FinishIntroAsync(string userId, string examId, CancellationToken ct)
     {
         var exam = await LoadOwnedAsync(userId, examId, ct, tracking: true);
@@ -363,6 +346,24 @@ public sealed class SpeakingExamService(
             throw ApiException.Conflict("speaking_exam_invalid_state",
                 $"Intro cannot be finished in state '{SpeakingExamStates.ToCode(exam.State)}'.");
         }
+
+        // Hold Card A BEFORE the exam or its child session is touched. The credit calls flush this scoped
+        // DbContext (GetSnapshotAsync and the reservation insert both SaveChanges), so changing the exam
+        // first persisted PrepA even when the hold was then refused (402) and the candidate ran Card A
+        // unpaid. Card B's hold only happens at the A->B reveal, so both cards must be fundable now: a
+        // refusal there would leave Card B running with no hold. A retry that already holds Card A skips
+        // the check (the hold below is adopted; its own 2 credits must not make the exam look unfundable).
+        var cardAReference = CardReference(exam, "a");
+        if (exam.Mode == SpeakingExamMode.Ai
+            && string.IsNullOrWhiteSpace(exam.CreditARefId)
+            && !await db.AiCreditReservations.AsNoTracking()
+                .AnyAsync(r => r.BusinessReference == cardAReference, ct))
+        {
+            var coveredByMockAttempt = !string.IsNullOrWhiteSpace(exam.MockAttemptId)
+                && await IsCoveredByMockAttemptAsync(exam.UserId, exam.MockAttemptId, ct);
+            await EnsureCardsFundableAsync(exam.UserId, coveredByMockAttempt, ct);
+        }
+        await DebitCardAsync(exam, "a", ct);
 
         var now = DateTimeOffset.UtcNow;
         exam.IntroEndedAt = now;
@@ -389,7 +390,6 @@ public sealed class SpeakingExamService(
                 existingCard.UpdatedAt = now;
             }
         }
-        await DebitCardAsync(exam, "a", ct);
         exam.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
 
@@ -1053,6 +1053,36 @@ public sealed class SpeakingExamService(
         }
     }
 
+    /// <summary>The idempotency reference of one card's credit hold: "exam:{examId}:cardA" / "...cardB".</summary>
+    private static string CardReference(SpeakingExamSession exam, string slot)
+        => $"exam:{exam.Id}:card{slot.ToUpperInvariant()}";
+
+    /// <summary>Refuses (402) an AI exam when the account holds a package wallet that cannot fund both
+    /// cards (4 credits), so a candidate is never stranded after Card A with nothing left for Card B.
+    /// Exempt: an exam covered by a mock attempt, an account with a "Full Mock Speaking Exam Access"
+    /// unit (it alone funds the whole exam, see <see cref="DebitCardAsync"/>) and an account with no
+    /// package wallet at all (its Card A hold is refused by <see cref="DebitCardAsync"/> instead).
+    /// Checked at creation and again when Part 2 begins, because the balance can change in between.</summary>
+    private async Task EnsureCardsFundableAsync(string userId, bool coveredByMockAttempt, CancellationToken ct)
+    {
+        if (creditService is null || coveredByMockAttempt) return;
+
+        var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
+        if (snapshot.MockExamsRemaining >= 1) return;
+
+        var hasPackageWallet = snapshot.ExpiresAt is not null
+            || snapshot.SharedCredits > 0
+            || snapshot.SpeakingOnlyCredits > 0
+            || snapshot.FlexibleCredits > 0
+            || snapshot.WritingOnlyCredits > 0
+            || snapshot.SpeakingUnlimited;
+        if (hasPackageWallet && snapshot.AvailableSpeakingActivities < AiGradingCreditCost.SpeakingExam)
+        {
+            throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
+                "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+        }
+    }
+
     /// <summary>Debits credit for a card at reveal, idempotent on the
     /// exam+slot reference. AI mode only. Stores the ref on the exam so a
     /// retried transition never double-charges. FINAL 2026-09-06: 2 AI
@@ -1118,7 +1148,7 @@ public sealed class SpeakingExamService(
             return;
         }
 
-        var refId = $"exam:{exam.Id}:card{slot.ToUpperInvariant()}";
+        var refId = CardReference(exam, slot);
         if (creditReservations is not null)
         {
             var operationId = Guid.NewGuid().ToString("N");

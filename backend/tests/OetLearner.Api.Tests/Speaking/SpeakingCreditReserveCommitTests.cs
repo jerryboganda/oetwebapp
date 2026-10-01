@@ -45,9 +45,75 @@ public sealed class SpeakingCreditReserveCommitTests : IAsyncDisposable
         Assert.Equal(AiCreditReservationState.Committed, row.State);
     }
 
+    [Fact]
+    public async Task ReserveSpeaking_RequestAbortedRightAfterTheDebit_StillRecordsTheReservation()
+    {
+        // The ledger debit commits in its own transaction. If the request is then cancelled (client
+        // timeout, refresh, deploy drain) the reservation row must still be written: a debit with no
+        // row is a permanent over-charge that no commit or sweep can settle.
+        using var aborted = new CancellationTokenSource();
+        var credits = new StubPackageCredits { AfterDebit = aborted.Cancel };
+        var svc = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, credits, TimeProvider.System);
+
+        var ticket = await svc.ReserveSpeakingAsync("user-1", "op-1", "exam:e1:cardA", aborted.Token);
+
+        Assert.True(aborted.IsCancellationRequested);
+        Assert.False(ticket.AlreadyExisted);
+        Assert.Equal(1, credits.DeductCalls);
+        Assert.Equal(1, await _db.AiCreditReservations.CountAsync(r => r.BusinessReference == "exam:e1:cardA"));
+    }
+
+    [Fact]
+    public async Task ReserveSpeaking_InsertRace_ReturnsTheWinnersRow_AndDebitsOnce()
+    {
+        // A second request for the same card inserts its reservation between this request's debit
+        // and its own insert: the unique BusinessReference index rejects the loser, which must adopt
+        // the winner's row instead of failing or debiting again.
+        var now = DateTimeOffset.UtcNow;
+        var credits = new StubPackageCredits();
+        credits.AfterDebit = () =>
+        {
+            using var other = new LearnerDbContext(new DbContextOptionsBuilder<LearnerDbContext>().UseSqlite(_connection).Options);
+            other.AiOperations.Add(new AiOperation
+            {
+                Id = "op-winner",
+                Module = "speaking",
+                FeatureCode = AiFeatureCodes.SpeakingGrade,
+                UserId = "user-1",
+                IdempotencyKey = "winner:exam:e1:cardA",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            other.AiCreditReservations.Add(new AiCreditReservation
+            {
+                Id = "res-winner",
+                OperationId = "op-winner",
+                UserId = "user-1",
+                BucketKind = "speaking",
+                Units = 2,
+                State = AiCreditReservationState.Reserved,
+                BusinessReference = "exam:e1:cardA",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            other.SaveChanges();
+        };
+        var svc = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, credits, TimeProvider.System);
+
+        var ticket = await svc.ReserveSpeakingAsync("user-1", "op-1", "exam:e1:cardA", default);
+
+        Assert.True(ticket.AlreadyExisted);
+        Assert.Equal("res-winner", ticket.ReservationId);
+        Assert.Equal(1, credits.DeductCalls);
+        Assert.Equal(1, await _db.AiCreditReservations.CountAsync(r => r.BusinessReference == "exam:e1:cardA"));
+    }
+
     private sealed class StubPackageCredits : IAiPackageCreditService
     {
         public int DeductCalls { get; private set; }
+
+        /// <summary>Runs once the debit has "committed" and before the reservation row is inserted.</summary>
+        public Action? AfterDebit { get; set; }
 
         public Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct)
             => Task.FromResult(new AiPackageCreditSnapshot(
@@ -60,6 +126,7 @@ public sealed class SpeakingCreditReserveCommitTests : IAsyncDisposable
         public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
         {
             DeductCalls++;
+            AfterDebit?.Invoke();
             return Task.FromResult(new AiPackageDebitResult(true, null, null, "debit-ref-1", Bypassed: false));
         }
 

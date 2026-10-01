@@ -254,6 +254,152 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
         Assert.Equal("writing", items[0].GetProperty("subtest").GetString());
     }
 
+    [Fact]
+    public async Task GetSubmissionsAsync_LeavesOutSessionBoundSpeakingCards_ButKeepsLegacyRecorderSubmissions()
+    {
+        // A live voice, practice or exam Speaking card never gets an Evaluation row, so "Past Evidence"
+        // showed it as "Pending" forever; it is listed (with its result) under "Attempt activity" instead.
+        // A legacy recorder submission stays, with or without the bridge session its grading creates:
+        // its score lives on an Evaluation row.
+        DisableForeignKeys();
+        await using var db = new LearnerDbContext(_options);
+        const string userId = "learner-speaking-exclusion";
+        await SeedSpeakingExclusionAsync(db, userId);
+        var service = CreateLearnerService(db);
+
+        var everything = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId, cursor: null, limit: 10, subtest: null, CancellationToken.None));
+        var speakingOnly = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId, cursor: null, limit: 10, subtest: "speaking", CancellationToken.None));
+
+        Assert.Equal(new[] { "attempt-bridged", "attempt-legacy", "attempt-writing" }, SubmissionIds(everything));
+        Assert.Equal(new[] { "attempt-bridged", "attempt-legacy" }, SubmissionIds(speakingOnly));
+    }
+
+    [Fact]
+    public async Task GetSubmissionsAsync_SessionBoundSpeakingCards_NeverEatThePageOrBreakTheCursor()
+    {
+        DisableForeignKeys();
+        await using var db = new LearnerDbContext(_options);
+        const string userId = "learner-speaking-paging";
+        await SeedSpeakingExclusionAsync(db, userId);
+        var service = CreateLearnerService(db);
+
+        // The two newest attempts are session-bound cards: a page of two must still carry two real rows
+        // (they are filtered out of the page query, not out of a page already taken), and the cursor
+        // must lead to the next real row.
+        var first = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId, cursor: null, limit: 2, subtest: null, CancellationToken.None));
+        Assert.Equal(new[] { "attempt-bridged", "attempt-legacy" }, SubmissionIds(first));
+        Assert.Equal(JsonValueKind.String, first.GetProperty("nextCursor").ValueKind);
+
+        var second = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId, cursor: first.GetProperty("nextCursor").GetString(), limit: 2, subtest: null, CancellationToken.None));
+        Assert.Equal(new[] { "attempt-writing" }, SubmissionIds(second));
+        Assert.NotEqual(JsonValueKind.String, second.GetProperty("nextCursor").ValueKind);
+    }
+
+    private void DisableForeignKeys()
+    {
+        using var pragma = _connection.CreateCommand();
+        pragma.CommandText = "PRAGMA foreign_keys=OFF;";
+        pragma.ExecuteNonQuery();
+    }
+
+    private static string?[] SubmissionIds(JsonElement page)
+        => page.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("submissionId").GetString())
+            .ToArray();
+
+    /// <summary>Newest first: a practice card, an exam card (both session-bound, no Evaluation), a legacy recorder
+    /// submission with a bridge session AND an Evaluation, one with neither, and a writing letter.</summary>
+    private static async Task SeedSpeakingExclusionAsync(LearnerDbContext db, string userId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = "Speaking Exclusion Learner",
+            Email = $"{userId}@example.test",
+            CreatedAt = now,
+            LastActiveAt = now,
+            AccountStatus = "active",
+        });
+        var attempts = new[]
+        {
+            ("attempt-practice", "speaking", 1),
+            ("attempt-exam-card", "speaking", 2),
+            ("attempt-bridged", "speaking", 3),
+            ("attempt-legacy", "speaking", 4),
+            ("attempt-writing", "writing", 5),
+        };
+        foreach (var (id, subtest, minutesAgo) in attempts)
+        {
+            db.Attempts.Add(new Attempt
+            {
+                Id = id,
+                UserId = userId,
+                ContentId = $"content-{id}",
+                SubtestCode = subtest,
+                Context = "practice",
+                Mode = "exam",
+                State = AttemptState.Completed,
+                StartedAt = now.AddMinutes(-minutesAgo - 1),
+                SubmittedAt = now.AddMinutes(-minutesAgo),
+            });
+        }
+        db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "sps-practice",
+            UserId = userId,
+            RolePlayCardId = "card-1",
+            Mode = SpeakingSessionMode.AiSelfPractice,
+            State = SpeakingSessionState.Finished,
+            AttemptId = "attempt-practice",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "sps-exam-card",
+            UserId = userId,
+            RolePlayCardId = "card-1",
+            ExamSessionId = "spx-1",
+            ExamSlot = "a",
+            Mode = SpeakingSessionMode.AiExam,
+            State = SpeakingSessionState.Finished,
+            AttemptId = "attempt-exam-card",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "sps-bridge",
+            UserId = userId,
+            RolePlayCardId = "card-1",
+            Mode = SpeakingSessionMode.AiSelfPractice,
+            State = SpeakingSessionState.Finished,
+            AttemptId = "attempt-bridged",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Evaluations.Add(new Evaluation
+        {
+            Id = "evaluation-bridged",
+            AttemptId = "attempt-bridged",
+            SubtestCode = "speaking",
+            State = AsyncState.Completed,
+            ScoreRange = "350/500",
+            GradeRange = "B",
+            ConfidenceBand = ConfidenceBand.High,
+            ModelExplanationSafe = "ok",
+            LearnerDisclaimer = "practice",
+            GeneratedAt = now,
+            LastTransitionAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
     private void AssertSqlSidePageAndBatchLoad()
     {
         var attemptQueries = _sql.Commands

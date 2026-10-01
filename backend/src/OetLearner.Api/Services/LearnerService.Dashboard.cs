@@ -372,9 +372,16 @@ public partial class LearnerService
                 cancellationToken);
         }
 
+        // A Speaking card that belongs to a session or an exam is listed, with its result, under
+        // "Attempt activity" (GET /v1/me/attempts). It never gets an Evaluation row, so here it showed
+        // "Pending" forever. Left out in the page query (not after it) so cursor and limit stay exact.
+        // A legacy recorder submission stays: it has no session, or a bridge session (see
+        // SpeakingEvaluationPipeline) next to the Evaluation that carries its score.
         var query = db.Attempts
             .AsNoTracking()
-            .Where(x => x.UserId == userId);
+            .Where(x => x.UserId == userId)
+            .Where(x => !db.SpeakingSessions.Any(s => s.UserId == userId && s.AttemptId == x.Id)
+                || db.Evaluations.Any(e => e.AttemptId == x.Id));
 
         if (subtestFilter is not null)
         {
@@ -557,6 +564,8 @@ public partial class LearnerService
                     OR (COALESCE(""SubmittedAt"", ""StartedAt"") = {cursorTicks} AND ""Id"" < {decoded.Id})
                   )
                   AND ({subtestFilter} IS NULL OR LOWER(""SubtestCode"") = {subtestFilter})
+                  AND (NOT EXISTS (SELECT 1 FROM ""SpeakingSessions"" AS ""ss"" WHERE ""ss"".""UserId"" = {userId} AND ""ss"".""AttemptId"" = ""Attempts"".""Id"")
+                    OR EXISTS (SELECT 1 FROM ""Evaluations"" AS ""ev"" WHERE ""ev"".""AttemptId"" = ""Attempts"".""Id""))
                 ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
                 LIMIT {pageSize + 1}");
         }
@@ -567,6 +576,8 @@ public partial class LearnerService
                 FROM ""Attempts""
                 WHERE ""UserId"" = {userId}
                   AND ({subtestFilter} IS NULL OR LOWER(""SubtestCode"") = {subtestFilter})
+                  AND (NOT EXISTS (SELECT 1 FROM ""SpeakingSessions"" AS ""ss"" WHERE ""ss"".""UserId"" = {userId} AND ""ss"".""AttemptId"" = ""Attempts"".""Id"")
+                    OR EXISTS (SELECT 1 FROM ""Evaluations"" AS ""ev"" WHERE ""ev"".""AttemptId"" = ""Attempts"".""Id""))
                 ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
                 LIMIT {pageSize + 1}");
         }

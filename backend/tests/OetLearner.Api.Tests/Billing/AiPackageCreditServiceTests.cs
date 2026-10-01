@@ -824,6 +824,29 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
+    public async Task DeductGradingCredit_SameReferenceTwice_WritesOneLedgerRow_AndChargesOnce()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync("learner-1", AddOn("pkg_speaking_four", 30, 2, """{"package_type":"speaking","speaking_only_credits":4}"""), 1, "cs_speaking_4", null, CancellationToken.None);
+
+        // A retried exam hold (a poll, a double click, a request the client re-sent) arrives with the SAME
+        // reference: the ledger must recognise it and never take the card's 2 credits a second time.
+        var first = await service.DeductGradingCreditAsync("learner-1", "speaking", "exam:1:cardA", AiGradingCreditCost.SpeakingCard, CancellationToken.None);
+        var second = await service.DeductGradingCreditAsync("learner-1", "speaking", "exam:1:cardA", AiGradingCreditCost.SpeakingCard, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(first.Debited);
+        Assert.Equal(2, first.CreditsUsed);
+        Assert.True(second.Debited);
+        Assert.Equal("already_debited", second.ErrorCode);
+        Assert.Equal(0, second.CreditsUsed);
+        Assert.Equal(1, await db.AiPackageCreditTransactions.CountAsync(row =>
+            row.ReferenceId == "exam:1:cardA" && row.Reason == AiPackageCreditReason.GradingDeduct));
+        Assert.Equal(2, snapshot.SpeakingOnlyCredits);
+    }
+
+    [Fact]
     public async Task QuickCheck_TenFlexibleCredits_FundExactlyFiveMixedAttempts()
     {
         await using var db = NewContext();

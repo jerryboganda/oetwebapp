@@ -75,6 +75,13 @@ public sealed class SpeakingSessionService(
 
         var mode = SpeakingSessionModes.Parse(req.Mode);
 
+        // An AI exam card is created by its exam (SpeakingExamService), which also takes its credit hold.
+        // Accepting the mode here opened a billed live-voice card with no exam and no hold.
+        if (mode == SpeakingSessionMode.AiExam)
+        {
+            throw ApiException.Conflict("speaking_session_exam_managed", "AI exam cards are created by their exam.");
+        }
+
         var consentVersion = string.IsNullOrWhiteSpace(req.ConsentVersion)
             ? DefaultConsentVersion
             : req.ConsentVersion!.Trim();
@@ -446,7 +453,7 @@ public sealed class SpeakingSessionService(
         if (!hasRecording && !hasTranscript)
         {
             throw ApiException.Conflict("speaking_session_no_recording",
-                "There is no recorded role-play to submit for marking. Complete the role-play first.");
+                "There is nothing to submit for marking yet. Complete the role-play first.");
         }
 
         var now = DateTimeOffset.UtcNow;
