@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_SAME_SPEAKER_GAP_MS,
   MAX_SEGMENT_CHARS,
   ProviderConnectError,
   appendTranscriptFragment,
@@ -165,6 +166,76 @@ describe('appendTranscriptFragment', () => {
     expect(Math.max(...segments.map((s) => s.text.length))).toBeLessThanOrEqual(MAX_SEGMENT_CHARS);
     expect(segments.map((s) => s.text).join('')).toBe(sentence.repeat(100));
   });
+
+  it('keeps the space GPT-Live sends as a delta of its own, so two words are not fused', () => {
+    // Production 1 Oct 2026: " Doctor." / " " / "Well," was saved as "Doctor.Well,".
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'patient', 'Thanks,', true, at(0, 400), true);
+    appendTranscriptFragment(segments, 'patient', ' Doctor.', true, at(400, 800), true);
+    expect(appendTranscriptFragment(segments, 'patient', ' ', true, at(800, 850), true)).toBe(false);
+    appendTranscriptFragment(segments, 'patient', 'Well,', true, at(850, 1_200), true);
+    expect(segments).toEqual([{ speaker: 'patient', startMs: 0, endMs: 1_200, text: 'Thanks, Doctor. Well,' }]);
+  });
+
+  it('never turns whitespace into a segment of its own, or into a late tail of the other speaker', () => {
+    // The server rejects a blank segment and fails the whole save.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    expect(appendTranscriptFragment(segments, 'candidate', ' ', true, at(0, 50), true)).toBe(false);
+    expect(segments).toEqual([]);
+
+    appendTranscriptFragment(segments, 'candidate', 'How can I help you', true, at(100, 900), true);
+    appendTranscriptFragment(segments, 'patient', 'Thanks,', true, at(1_000, 1_300), true);
+    // Timed before the patient began (the shape of a late tail), but it is a space and the last segment is the patient's.
+    expect(appendTranscriptFragment(segments, 'candidate', ' ', true, at(950, 990), true)).toBe(false);
+    expect(segments.map((s) => [s.speaker, s.text])).toEqual([
+      ['candidate', 'How can I help you'],
+      ['patient', 'Thanks,'],
+    ]);
+  });
+
+  it('does not let a lone space hide a long silence from the gap rule', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Um, let me think', true, at(0, 3_000), true);
+    appendTranscriptFragment(segments, 'candidate', ' ', true, at(40_000, 40_050), true);
+    appendTranscriptFragment(segments, 'candidate', 'Sorry for the long pause', true, at(40_050, 42_000), true);
+    expect(segments.map((s) => [s.startMs, s.endMs])).toEqual([[0, 3_000], [40_050, 42_000]]);
+  });
+
+  it('starts a new segment when the same speaker resumes after more than the gap limit', () => {
+    // Production 1 Oct 2026: "Um, let me think about the best way to explain this" + 45 s of silence + "Sorry for the
+    // long pause..." was one 54 s candidate segment, which also inflated the candidate's talk time about 2x.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Um, let me think about the best way to explain this', true, at(0, 6_000), true);
+    // Exactly at the limit still extends the segment ...
+    appendTranscriptFragment(segments, 'candidate', ' and then', true, at(6_000 + MAX_SAME_SPEAKER_GAP_MS, 17_000), true);
+    expect(segments).toHaveLength(1);
+    // ... one millisecond more starts a new one, so the pause shows between the two.
+    appendTranscriptFragment(segments, 'candidate', 'Sorry for the long pause', true, at(17_000 + MAX_SAME_SPEAKER_GAP_MS + 1, 29_000), true);
+    expect(segments.map((s) => [s.startMs, s.endMs, s.text])).toEqual([
+      [0, 17_000, 'Um, let me think about the best way to explain this and then'],
+      [27_001, 29_000, 'Sorry for the long pause'],
+    ]);
+  });
+
+  it('applies the gap rule to Gemini chunks too', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'patient', 'I have a pain', false, at(1_000, 1_100));
+    appendTranscriptFragment(segments, 'patient', 'in my chest', false, at(1_500, 1_600));
+    appendTranscriptFragment(segments, 'patient', 'It started yesterday', false, at(20_000, 20_100));
+    expect(segments.map((s) => s.text)).toEqual(['I have a pain in my chest', 'It started yesterday']);
+  });
+
+  it('still rejoins a late tail whatever the silence before it: the gap rule is only for a speaker who resumes', () => {
+    // The candidate's last word is timed before the patient's reply began, 16 s after the candidate's previous fragment.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Tell me about it', true, at(0, 3_000), true);
+    appendTranscriptFragment(segments, 'patient', ' Well, it started a while ago', true, at(20_000, 22_000), true);
+    expect(appendTranscriptFragment(segments, 'candidate', ' please', true, at(19_000, 19_500), true)).toBe(true);
+    expect(segments.map((s) => [s.speaker, s.text])).toEqual([
+      ['candidate', 'Tell me about it please'],
+      ['patient', ' Well, it started a while ago'],
+    ]);
+  });
 });
 
 const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePreflight => ({
@@ -194,9 +265,14 @@ describe('planProviders', () => {
     expect(planProviders(preflight({ provider: 'gemini', candidates: [] }))).toEqual(['gemini']);
   });
 
-  it('never fails over a pinned run or a provider forced from the page', () => {
+  it('never fails over a run the server pinned', () => {
     expect(planProviders(preflight({ candidates: ['openai', 'gemini'], pinned: true }))).toEqual(['openai']);
-    expect(planProviders(preflight({ candidates: ['openai', 'gemini'] }), 'openai')).toEqual(['openai']);
+  });
+
+  it('is never shrunk by a provider the page asked for: only the server pins', () => {
+    // ?voiceProvider=gemini from an account without the QA pin flag: the server ignores it and answers the automatic order.
+    expect(planProviders(preflight({ provider: 'openai', candidates: ['openai', 'gemini'], pinned: false }))).toEqual(['openai', 'gemini']);
+    expect(planProviders(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }))).toEqual(['openai', 'gemini']);
   });
 
   it('plans nothing when the preflight names no usable provider', () => {

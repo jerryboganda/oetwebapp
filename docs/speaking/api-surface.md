@@ -8,7 +8,7 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 |--------|------|---------|
 | GET | `/v1/speaking/role-play-cards` | Published cards filtered by `ActiveProfessionId` + universal |
 | GET | `/v1/speaking/role-play-cards/{id}` | Single card (404 on profession mismatch) |
-| POST | `/v1/speaking/sessions` | Create session |
+| POST | `/v1/speaking/sessions` | Create session. Mode `ai_exam` is refused (409 `speaking_session_exam_managed`): exam cards are created by their exam, which is what takes their credit hold ([state-machines.md](state-machines.md#credits-ai-exam-and-practice-card)) |
 | GET | `/v1/speaking/sessions/{id}` | Session detail (owner); carries `liveVoiceAvailable` (at least one live voice provider usable, else the recorder fallback) and `rolePlayEndsAt` (the role-play **deadline**, null until it starts) |
 | POST | `/v1/speaking/sessions/{id}/start-warmup` | WarmUp transition |
 | POST | `/v1/speaking/sessions/{id}/finish-warmup` | WarmUp → Prep |
@@ -18,12 +18,12 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | POST | `/v1/speaking/sessions/{id}/consent` | Stamp consent version |
 | POST | `/v1/speaking/sessions/{id}/ai-assess` | Run AI assessment (202 `processing` while a recorder-fallback transcript is pending) |
 | GET | `/v1/speaking/sessions/{id}/ai-assessment` | Latest assessment |
-| GET | `/v1/speaking/sessions/{id}/results` | Grading state: `assessmentState` (processing / completed / failed), `retryable` |
+| GET | `/v1/speaking/sessions/{id}/results` | Grading state: `assessmentState` (processing / completed / failed), `retryable`, `failureReason`, `isFreeSample`, `cardId`, `usesV11` and `inputKind` (`"recording"` \| `"live_voice"` \| `null`: what the learner handed in, which decides the wording of the results pages, see [live-voice.md](live-voice.md#results-wording-by-input-kind)) |
 | GET | `/v1/speaking/sessions/{id}/clock` | Server clock: stage, `secondsRemaining`, `expired` and, for an Active session only, `hardStopAt` (deadline + grace) |
 | POST | `/v1/speaking/sessions/{id}/recording` | Recorder fallback upload (multipart `audio`, optional `durationSeconds`); 202 `{status:"received"}`; a repeat is 409 `recording_already_received` (the only 409 the client treats as success); after the write window a first upload is 409 `live_voice_transcript_window_closed` |
 | POST | `/v1/speaking/sessions/{id}/technical-issue` | Flag a technical issue |
 | GET | `/v1/speaking/sessions/{id}/transcript` | Latest transcript |
-| GET | `/v1/speaking/realtime/sessions/{id}/preflight[?provider=]` | Live voice: disclosure plus `candidates` (providers to try in order: primary first, health only filters) and `pinned` |
+| GET | `/v1/speaking/realtime/sessions/{id}/preflight[?provider=]` | Live voice: disclosure plus `candidates` (providers to try in order: primary first, health only filters) and `pinned`. `?provider=` is only a request: `pinned` is true only when the server honoured a QA pin, that is when a provider was requested **and** the signed-in learner holds an enabled `speaking_live_voice_pin:<learner user id>` feature flag (one candidate, no failover, circuit bypassed). Any other account gets 200, the normal order and `pinned: false`, never a 403 or 503 ([live-voice.md](live-voice.md#qa-provider-pin)) |
 | POST | `/v1/speaking/realtime/sessions/{id}/openai/offer` | Live voice: WebRTC SDP exchange; returns `hardStopAt`. Any provider failure is a generic 503 |
 | POST | `/v1/speaking/realtime/sessions/{id}/gemini/token` | Live voice: single-use ephemeral token; returns `expiresAt` and `hardStopAt` |
 | POST | `/v1/speaking/realtime/sessions/{id}/turns` | Live voice: advisory per-turn row (a failure never blocks the transcript) |
@@ -44,6 +44,8 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | GET | `/v1/speaking/live-rooms/{id}` | Room detail |
 | GET | `/v1/speaking/live-rooms/{id}/token` | Mint LiveKit JWT |
 | POST | `/v1/learner/account/erasure-preflight` | GDPR pre-flight inventory |
+| GET | `/v1/me/attempts[?limit=&subtest=]` | Candidate activity history across all subtests (the History page's "Attempt activity" list; `limit` defaults to 100, clamped 1-200). A Speaking mock is one row, and Speaking rows carry `resultLabel` ([History notes](#history-notes)) |
+| GET | `/v1/submissions[?cursor=&limit=&subtest=]` | Past Evidence list (the History page's submission cards). Speaking attempts that belong to a session or an exam and have no Evaluation row are no longer listed ([History notes](#history-notes)) |
 
 ## Expert / tutor
 
@@ -86,6 +88,45 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 - Live voice error codes, retryable flags and the failover rules the client applies:
   [live-voice.md](live-voice.md#provider-failover). Numbers (deadline, hard stop, write window, session cap):
   [live-voice.md](live-voice.md#hard-duration-cap); keys: [../env/speaking.md](../env/speaking.md).
+- The pin gate applies to the preflight only. The create routes (`openai/offer`, `gemini/token`) are not gated, so a signed-in
+  candidate can still choose between two healthy providers: [live-voice.md](live-voice.md#qa-provider-pin).
+- Learner-visible texts that changed with `inputKind` (the two live voice consent refusals and the two grading failure
+  reasons) are listed in [live-voice.md](live-voice.md#results-wording-by-input-kind).
+
+## History notes
+
+Added 2026-10-01 (**pending production verification**). `GET /v1/me/attempts?limit=&subtest=` returns
+`items[{attemptId, subtest, title, contentRef, startedAt, submittedAt, status, balanceSource, creditsUsed, route, resultLabel}]`
+and feeds the History page's "Attempt activity" list. The Speaking rows:
+
+- **A full AI mock is one row.** `attemptId` = the exam id (`spx_...`), `subtest` `speaking`, `title` "Full Speaking Mock",
+  `contentRef` = the exam id, `startedAt` = the exam's `IntroStartedAt`, `submittedAt` = its `CompletedAt`, `status` `completed`
+  for Completed, Cancelled and Expired (else `in_progress`), `route` `/speaking/exam/{id}/results` once finished or
+  `/speaking/exam/{id}` while running. `balanceSource` and `creditsUsed` are summed from the ledger rows whose reference starts
+  `exam:{examId}:` (4 for a normal mock; 1 and `mock` for a mock-unit exam). The two card attempts are not listed separately, and
+  an exam appears once a card attempt exists.
+- **`resultLabel`**: `"N/500"` once scored (the persisted combined snapshot, else the rounded average
+  `(int)Math.Round((a + b) / 2.0)` of the two graded cards, classic assessment or complete v1.1 card report), `"Marking in progress"`
+  while the exam is Completed but not both cards are graded, otherwise `null`. A live-tutor (human-marked) exam is always `null`.
+- **A standalone Speaking card** (practice, live voice or recorder, including the legacy recorder's bridge session) is one row as
+  before: `route` `/speaking/sessions/{sessionId}/results` once the session is Finished or submitted, else
+  `/speaking/sessions/{sessionId}`; credits are matched on the hold reference `practice:{sessionId}`; `resultLabel` is `"N/500"`
+  when an assessment exists, `"Marking in progress"` when finished but not graded and not tutor-marked, else `null`. A legacy
+  Speaking attempt with no session is unchanged (route `/speaking`, credit match on the content id, `null` label).
+- `creditsUsed` sums debits as written: a hold refunded later still counts (as for every other subtest in this view), and only the
+  learner's latest 600 debit rows are read, so a very old exam can show 0 credits.
+- The exam's two card attempts are left out of the generic attempt query in SQL ahead of the page's `Take`, and exams are read from
+  `SpeakingExamSessions`, so a mock never shows twice and never eats the page size. The new anti-joins read `SpeakingSessions` by
+  `AttemptId`, which has no index; add one if the History or Past Evidence queries show up slow.
+- **History page.** The page at `/submissions` (also `/history`) prints `resultLabel` right after the status in each row: a score
+  such as "192/500" in bold navy, any other label in bold warning tone, nothing when it is null or missing. The page never builds
+  or invents the label (the server owns the text), and the Review/Resume button links to the server's `route` unchanged. A
+  missing, null or empty `resultLabel` simply shows nothing, so an older server keeps working.
+
+`GET /v1/submissions?cursor=&limit=&subtest=` ("Past Evidence") no longer lists Speaking attempts that belong to a session or an
+exam and have no Evaluation row (they could only ever read "Pending"). Legacy recorder submissions stay, including those with a
+bridge session next to their Evaluation. The exclusion is applied in the page query (the LINQ path and the SQLite raw-SQL path),
+so cursor and limit stay exact. A candidate whose only activity is Speaking therefore sees their mock under Attempt activity only.
 
 ## Webhooks (unauthenticated, HMAC-verified)
 

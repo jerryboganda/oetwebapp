@@ -319,6 +319,65 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         });
     }
 
+    /// <summary>A completed exam whose two card holds are Reserved and aged <paramref name="createdAt"/>;
+    /// the sessions in <paramref name="gradedSessionIds"/> carry a complete v1.1 card report.</summary>
+    private void SeedExamHolds(string examId, DateTimeOffset createdAt, params string[] gradedSessionIds)
+    {
+        _db.SpeakingExamSessions.Add(new SpeakingExamSession
+        {
+            Id = examId,
+            UserId = UserId,
+            CardAId = "rpc-grading",
+            CardBId = "rpc-grading",
+            SessionAId = $"sps_{examId}_a",
+            SessionBId = $"sps_{examId}_b",
+            CreditARefId = $"exam:{examId}:cardA",
+            CreditBRefId = $"exam:{examId}:cardB",
+            State = SpeakingExamState.Completed,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+        });
+        SeedHold($"exam:{examId}:cardA", createdAt);
+        SeedHold($"exam:{examId}:cardB", createdAt);
+        foreach (var sessionId in gradedSessionIds)
+        {
+            _db.SpeakingSimulationV11Assessments.Add(new SpeakingSimulationV11Assessment
+            {
+                Id = $"v11-{sessionId}",
+                SpeakingSessionId = sessionId,
+                AssessmentKind = "card",
+                Status = SpeakingSimulationV11AssessmentStatus.Complete,
+                EstimatedPracticeScore = 350,
+            });
+        }
+    }
+
+    /// <summary>A completed exam: two Finished card sessions with a saved transcript each, holds Reserved.</summary>
+    private void SeedFinishedExam(string examId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var slot in new[] { "a", "b" })
+        {
+            _db.SpeakingSessions.Add(new SpeakingSession
+            {
+                Id = $"sps_{examId}_{slot}",
+                UserId = UserId,
+                RolePlayCardId = "rpc-grading",
+                ExamSessionId = examId,
+                ExamSlot = slot,
+                Mode = SpeakingSessionMode.AiExam,
+                State = SpeakingSessionState.Finished,
+                EndedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+        SeedExamHolds(examId, now);
+        _db.SaveChanges();
+        SeedTranscript($"sps_{examId}_a");
+        SeedTranscript($"sps_{examId}_b");
+    }
+
     private static string ValidAssessmentJson() => JsonSerializer.Serialize(new
     {
         criterionScores = new
@@ -473,6 +532,100 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
 
         await sessions.FinishWarmupAsync(UserId, created.SessionId, default);
         Assert.True(await SpeakingCreditSettlement.IsCreditFundedAsync(_db, session, default));
+    }
+
+    // ── Full AI mock: exam holds are settled once, and exam cards are only created by their exam ──
+
+    [Fact]
+    public async Task CreateSession_AiExamMode_IsRejected_BecauseExamCardsAreCreatedByTheirExam()
+    {
+        // POST /v1/speaking/sessions accepted mode "ai_exam": the card skipped the exam, so it also
+        // skipped the credit hold the exam takes, yet ran a billed live-voice conversation.
+        var sessions = new SpeakingSessionService(_db);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_exam"), default));
+
+        Assert.Equal("speaking_session_exam_managed", ex.ErrorCode);
+        Assert.Equal(409, ex.StatusCode);
+        Assert.False(await _db.SpeakingSessions.AnyAsync());
+        Assert.False(await _db.Attempts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task StaleExamHolds_AreCommittedOnlyWhenBothCardsAreGraded_AndSettlingAgainChangesNothing()
+    {
+        var credits = new StubPackageCredits();
+        var reservations = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, credits, TimeProvider.System);
+        var now = DateTimeOffset.UtcNow;
+        SeedExamHolds("spx_half", now.AddHours(-25), "sps_spx_half_a");
+        SeedExamHolds("spx_both", now.AddHours(-25), "sps_spx_both_a", "sps_spx_both_b");
+        await _db.SaveChangesAsync();
+
+        var settled = await SpeakingCreditSettlement.SettleStaleHoldsAsync(_db, reservations, now, default);
+        var settledAgain = await SpeakingCreditSettlement.SettleStaleHoldsAsync(_db, reservations, now, default);
+
+        Assert.Equal(4, settled);
+        Assert.Equal(0, settledAgain);
+        var byReference = await _db.AiCreditReservations.AsNoTracking().ToDictionaryAsync(r => r.BusinessReference);
+        // Only Card A of the first exam was graded: that exam has no result, so both its holds are refunded.
+        Assert.Equal(AiCreditReservationState.Released, byReference["exam:spx_half:cardA"].State);
+        Assert.Equal(AiCreditReservationState.Released, byReference["exam:spx_half:cardB"].State);
+        Assert.Equal(AiCreditReservationState.Committed, byReference["exam:spx_both:cardA"].State);
+        Assert.Equal(AiCreditReservationState.Committed, byReference["exam:spx_both:cardB"].State);
+        Assert.Equal(2, credits.RefundCalls);
+        Assert.Equal(0, credits.DeductCalls);
+    }
+
+    [Fact]
+    public async Task ExamCards_GradingFailsThenSucceeds_EachCardIsGradedOnce_AndBothHoldsCommitOnlyOnce()
+    {
+        var credits = new StubPackageCredits();
+        var reservations = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, credits, TimeProvider.System);
+        var gateway = new SwitchableAiGateway();
+        var canonical = BuildCanonical(gateway, reservations);
+        var exams = new SpeakingExamService(
+            _db,
+            new SpeakingAiAssessmentService(_db, gateway, NullLogger<SpeakingAiAssessmentService>.Instance),
+            NullLogger<SpeakingExamService>.Instance,
+            creditReservations: reservations,
+            canonical: canonical);
+        const string examId = "spx_retry";
+        var sessionA = $"sps_{examId}_a";
+        var sessionB = $"sps_{examId}_b";
+        SeedFinishedExam(examId);
+
+        // Card B's grade fails first: nothing is committed, and nothing is charged again.
+        gateway.Fail = true;
+        await Assert.ThrowsAsync<ApiException>(() => canonical.AssessNowAsync(sessionB, default));
+        Assert.All(await _db.AiCreditReservations.AsNoTracking().ToListAsync(),
+            r => Assert.Equal(AiCreditReservationState.Reserved, r.State));
+
+        // Card A grades alone: the exam still has no result, so its holds stay held.
+        gateway.Fail = false;
+        await canonical.AssessNowAsync(sessionA, default);
+        Assert.All(await _db.AiCreditReservations.AsNoTracking().ToListAsync(),
+            r => Assert.Equal(AiCreditReservationState.Reserved, r.State));
+
+        // Card B's retry succeeds (twice: the second is a no-op), and the results page polls meanwhile.
+        await canonical.AssessNowAsync(sessionB, default);
+        await canonical.AssessNowAsync(sessionB, default);
+        var cardScore = (await _db.SpeakingAiAssessments.AsNoTracking().FirstAsync(a => a.SpeakingSessionId == sessionA)).EstimatedScaledScore;
+        for (var read = 0; read < 3; read++)
+        {
+            var results = await exams.GetResultsAsync(UserId, examId, default);
+            Assert.Equal("scored", results.OverallStatus);
+            Assert.Equal(cardScore, results.CombinedScaledScore);
+        }
+
+        var holds = await _db.AiCreditReservations.AsNoTracking().ToListAsync();
+        Assert.Equal(2, holds.Count);
+        Assert.All(holds, r => Assert.Equal(AiCreditReservationState.Committed, r.State));
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionA));
+        Assert.Equal(1, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionB));
+        // The holds are the only credit movement: grading and retries never touch the ledger.
+        Assert.Equal(0, credits.DeductCalls);
+        Assert.Equal(0, credits.RefundCalls);
     }
 
     // ── Classic assessor: reply contract, provenance and the grading chain ──

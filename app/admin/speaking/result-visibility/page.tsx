@@ -63,7 +63,7 @@ const SCORE_TOGGLES: ToggleSpec[] = [
   {
     key: 'showSubmissionReceived',
     label: 'Submission received',
-    description: 'Confirm that the learner recording was received and queued for marking.',
+    description: "Confirm that the learner's submission was received and queued for marking.",
   },
   {
     key: 'showAiEstimate',

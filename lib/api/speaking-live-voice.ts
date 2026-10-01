@@ -12,7 +12,10 @@ export interface LiveVoicePreflight {
   rolePlayCardId: string;
   /** Providers to try in order (server-decided: configured primary first, unhealthy ones filtered out). Absent on an older server: one attempt with `provider`. */
   candidates?: LiveVoiceProvider[];
-  /** True when the caller forced a provider (`?provider=`): that run must not fail over. */
+  /**
+   * True when the server honoured a QA pin (`?provider=` from a flagged QA account): one candidate, no failover, no
+   * recovery. Only this decides: the browser never trusts its own request, and for any other account the server ignores it.
+   */
   pinned?: boolean;
 }
 

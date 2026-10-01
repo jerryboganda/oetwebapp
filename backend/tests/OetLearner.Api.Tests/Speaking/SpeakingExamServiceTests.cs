@@ -767,6 +767,149 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(5, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
     }
 
+    // ── Owner rule: a full AI mock costs exactly 4 credits, held once per card, charged once ──
+    // These run on the production wiring (credit reservations over the real ledger).
+
+    [Fact]
+    public async Task AiExam_CleanJourney_ExactlyFourCredits_TwoLedgerRows_TwoCommittedHolds_NoRefund()
+    {
+        await SeedWalletAsync(speakingCredits: 4);
+        await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+        var tracked = await _db.SpeakingExamSessions.FirstAsync(e => e.Id == exam.ExamId);
+        await exams.AdvanceAsync(tracked, DateTimeOffset.UtcNow.AddMinutes(20), default);
+        await _db.SaveChangesAsync();
+        SeedCompleteV11CardScore(tracked.SessionAId!, 360);
+        SeedCompleteV11CardScore(tracked.SessionBId!, 400);
+        await _db.SaveChangesAsync();
+
+        // The results page polls: every read after the first changes nothing.
+        for (var read = 0; read < 3; read++)
+        {
+            var results = await exams.GetResultsAsync(UserId, exam.ExamId, default);
+            Assert.Equal("scored", results.OverallStatus);
+            Assert.Equal(380, results.CombinedScaledScore);
+        }
+
+        var cardA = $"exam:{exam.ExamId}:cardA";
+        var cardB = $"exam:{exam.ExamId}:cardB";
+        var deducts = await _db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(t => t.Reason == AiPackageCreditReason.GradingDeduct)
+            .ToListAsync();
+        Assert.Equal(
+            new[] { cardA, cardB },
+            deducts.Select(t => t.ReferenceId!).OrderBy(r => r, StringComparer.Ordinal).ToArray());
+        Assert.All(deducts, t => Assert.Equal(-2, t.SpeakingOnlyCreditsDelta));
+        Assert.Equal(-4, deducts.Sum(t => t.SpeakingOnlyCreditsDelta));
+        Assert.False(await _db.AiPackageCreditTransactions.AnyAsync(t =>
+            t.Reason == AiPackageCreditReason.RefundOnFailure || t.Reason == AiPackageCreditReason.MockRefundOnFailure));
+        Assert.Equal(0, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+
+        var holds = await _db.AiCreditReservations.AsNoTracking().OrderBy(r => r.BusinessReference).ToListAsync();
+        Assert.Equal(new[] { cardA, cardB }, holds.Select(r => r.BusinessReference).ToArray());
+        Assert.All(holds, r =>
+        {
+            Assert.Equal(AiCreditReservationState.Committed, r.State);
+            Assert.Equal(2, r.Units);
+            Assert.Equal("speaking", r.BucketKind);
+        });
+        var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal(cardA, stored.CreditARefId);
+        Assert.Equal(cardB, stored.CreditBRefId);
+
+        // Nothing is left to start a second exam on.
+        var broke = await Assert.ThrowsAsync<ApiException>(() =>
+            exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default));
+        Assert.Equal("speaking_exam_insufficient_credits", broke.ErrorCode);
+    }
+
+    [Fact]
+    public async Task FinishIntro_CalledTwice_SecondCallConflicts_AndNoSecondHoldIsTaken()
+    {
+        await SeedWalletAsync(speakingCredits: 5);
+        await SeedTwoPublishedCardsAsync();
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        var again = await Assert.ThrowsAsync<ApiException>(() => exams.FinishIntroAsync(UserId, exam.ExamId, default));
+
+        Assert.Equal("speaking_exam_invalid_state", again.ErrorCode);
+        Assert.Equal(1, await _db.AiPackageCreditTransactions.CountAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
+        Assert.Equal(1, await _db.AiCreditReservations.CountAsync());
+        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task FinishIntro_WithNoWallet_Throws402_AndTheExamStaysInIntroWithNothingHeld()
+    {
+        // No wallet at all passes the creation gate (it only guards accounts that hold a package), so the
+        // Card A hold is the first refusal. It used to arrive AFTER the exam had been flushed as PrepA:
+        // the next poll showed Card A and the candidate ran a billed live-voice card with no hold.
+        await SeedTwoPublishedCardsAsync();
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+
+        var refused = await Assert.ThrowsAsync<ApiException>(() => exams.FinishIntroAsync(UserId, exam.ExamId, default));
+
+        Assert.Equal(402, refused.StatusCode);
+        var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal(SpeakingExamState.Intro, stored.State);
+        Assert.Null(stored.PrepAStartedAt);
+        Assert.Null(stored.CreditARefId);
+        Assert.Null(stored.SessionAId);
+        Assert.False(await _db.SpeakingSessions.AnyAsync());
+        Assert.False(await _db.AiCreditReservations.AnyAsync());
+        Assert.False(await _db.AiPackageCreditTransactions.AnyAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
+    }
+
+    [Fact]
+    public async Task FinishIntro_WhenTheWalletNoLongerFundsBothCards_Throws402_AndHoldsNothing()
+    {
+        // Created on exactly 4 credits (the gate passes), then 2 are spent elsewhere before the candidate
+        // begins Part 2. Card A alone could still be held, but Card B could not be held at the reveal.
+        await SeedWalletAsync(speakingCredits: 4);
+        await SeedTwoPublishedCardsAsync();
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        var spentElsewhere = await _credits.DeductGradingCreditAsync(UserId, "speaking", "other:1", default);
+        Assert.True(spentElsewhere.Debited);
+
+        var refused = await Assert.ThrowsAsync<ApiException>(() => exams.FinishIntroAsync(UserId, exam.ExamId, default));
+
+        Assert.Equal("speaking_exam_insufficient_credits", refused.ErrorCode);
+        var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal(SpeakingExamState.Intro, stored.State);
+        Assert.Null(stored.CreditARefId);
+        Assert.False(await _db.AiCreditReservations.AnyAsync());
+        Assert.Equal(2, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task FinishIntro_RetryAfterTheHoldWasTakenButTheExamWasNotSaved_AdoptsTheHold_AndNeverDebitsTwice()
+    {
+        // Exactly 4 credits. A first attempt took the Card A hold (2 credits gone) but its request died
+        // before the exam was saved. The retry must adopt that hold: the fundability check must not count
+        // the retry's own debit against it and answer 402 for a card the candidate already paid for.
+        await SeedWalletAsync(speakingCredits: 4);
+        await SeedTwoPublishedCardsAsync();
+        var exams = BuildExamServiceWithReservations();
+        var exam = await exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai"), default);
+        var reservations = new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, _credits, TimeProvider.System);
+        await reservations.ReserveSpeakingAsync(UserId, Guid.NewGuid().ToString("N"), $"exam:{exam.ExamId}:cardA", default);
+
+        var afterIntro = await exams.FinishIntroAsync(UserId, exam.ExamId, default);
+
+        Assert.Equal("prep_a", afterIntro.State);
+        Assert.Equal(1, await _db.AiPackageCreditTransactions.CountAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
+        Assert.Equal(1, await _db.AiCreditReservations.CountAsync());
+        Assert.Equal(2, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == exam.ExamId);
+        Assert.Equal($"exam:{exam.ExamId}:cardA", stored.CreditARefId);
+    }
+
     // ── Consent at the intro carries into both timed cards ──────────────────
 
     [Fact]

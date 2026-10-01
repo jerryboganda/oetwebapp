@@ -512,10 +512,14 @@ export function readinessBandLabel(band: string): string {
       return 'Not yet ready';
     case 'developing':
       return 'Developing';
+    case 'borderline':
+      return 'Borderline';
     case 'on_track':
       return 'On track';
     case 'exam_ready':
       return 'Exam ready';
+    case 'strong':
+      return 'Strong';
     case 'exceeds':
       return 'Exceeds expectations';
     default:

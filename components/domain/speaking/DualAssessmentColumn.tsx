@@ -55,7 +55,7 @@ const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: stri
     chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
     icon: <Sparkles className="h-4 w-4" aria-hidden />,
     tooltip:
-      'AI-generated estimate based on the recorded transcript. Advisory only, not an official OET score.',
+      'AI-generated estimate based on your transcript. Advisory only, not an official OET score.',
   },
   tutor: {
     header: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/60 dark:border-emerald-800/40',
@@ -232,8 +232,9 @@ export function DualAssessmentColumn({
             <h3 className="text-base font-bold text-navy">{title}</h3>
             {attribution && (
               <p className="text-xs text-muted">
+                {/* The grader's internal route and model id ("writing-claude-sub · claude-opus-5-5") mean nothing to a candidate. */}
                 {kind === 'ai'
-                  ? [attribution.provider, attribution.modelId].filter(Boolean).join(' · ')
+                  ? formatTimestamp(attribution.submittedAt)
                   : [attribution.name, formatTimestamp(attribution.submittedAt)].filter(Boolean).join(' · ')}
               </p>
             )}

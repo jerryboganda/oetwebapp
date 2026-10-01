@@ -114,6 +114,7 @@ export default function SpeakingExamPage() {
     }
   }, []);
 
+  // QA only: this REQUESTS a provider pin. The server honours it for a flagged QA account and ignores it for everyone else.
   useEffect(() => {
     const value = new URLSearchParams(window.location.search).get('voiceProvider');
     if (value === 'openai' || value === 'gemini') setRequestedVoiceProvider(value);

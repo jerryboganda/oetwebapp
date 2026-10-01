@@ -11,7 +11,7 @@ export const speakingTour: TourDefinition = {
   id: 'speaking',
   role: 'learner',
   title: 'Speaking tour',
-  description: 'Two role plays, prep timing, the candidate card, and recording.',
+  description: 'Two role plays, prep timing, the candidate card, and how your answers are marked.',
   completionKey: 'speaking',
   triggerRoute: '/speaking',
   steps: [
@@ -34,8 +34,8 @@ export const speakingTour: TourDefinition = {
       body: 'You receive a candidate card with the setting, the patient, and your tasks, plus 3 minutes to prepare. The interlocutor works from a separate, hidden card.',
     },
     {
-      title: 'Recording & feedback',
-      body: 'Your role plays are recorded. Tutor or assessor feedback — on communication as well as language — is released afterward and appears with your past sessions.',
+      title: 'How your answers are saved',
+      body: 'With the live AI patient, your conversation is saved as a text transcript, and no audio recording is stored. If live voice is unavailable, you record your answer instead and that recording is stored. Tutor or assessor feedback — on communication as well as language — is released afterward and appears with your past sessions.',
     },
   ],
 };

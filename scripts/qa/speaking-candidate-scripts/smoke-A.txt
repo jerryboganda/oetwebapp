@@ -1,0 +1,14 @@
+Good morning. My name is Doctor Smith, one of the doctors here. Please have a seat. How can I help you today?
+[after=4] I'm sorry to hear that. Could you tell me everything that has happened, from the very beginning, in as much detail as you can?
+Sorry to interrupt you there. When exactly did this first start?
+Is there anything that makes it better or worse?
+[after=25] Let me just think about that for a moment.
+Thank you for waiting. Have you had any other health problems recently?
+[after=4] Is there anything in particular that is worrying you? Please tell me all about it.
+Sorry, I didn't mean to cut you off. Please go on.
+[after=45] Hmm, let me think about the best way to explain this.
+Sorry for the long pause. Is it all right if I explain what I think may be going on?
+Based on what you have told me, I would like us to agree on a plan together.
+Just to check I explained clearly, could you tell me in your own words what you understand so far?
+Is there anything else you would like to ask me today?
+[after=60] Thank you for coming in today. Please book a follow-up appointment, and take care. This is the end of the first consultation.

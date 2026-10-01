@@ -19,6 +19,10 @@
  * 3 s with backoff (capped, then "Check again"); a failed + retryable grade
  * offers "Try grading again" (POST /ai-assess, no extra charge). For the free
  * sample card it shows the retry CTA or "Free sample completed".
+ *
+ * 1 Oct 2026: wording follows what the learner handed in (`inputKind` from the
+ * results endpoint, see lib/speaking/input-kind.ts). A live conversation keeps
+ * only a transcript, so it never says "recording" and has no audio player.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -60,6 +64,14 @@ import {
   type SpeakingSimulationV11AssessmentResponse,
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
+import {
+  LIVE_TRANSCRIPT_NOTE,
+  gradeFailedSavedCopy,
+  gradingInProgressCopy,
+  speakingInputKind,
+  submissionReceivedCopy,
+  type SpeakingInputKind,
+} from '@/lib/speaking/input-kind';
 
 function TutorReviewCta() {
   return (
@@ -99,6 +111,7 @@ const POLL_MAX_ATTEMPTS = 40;
 
 function GradingStatus({
   status,
+  inputKind,
   pending,
   pollCapped,
   retrying,
@@ -106,6 +119,7 @@ function GradingStatus({
   onCheckAgain,
 }: {
   status: SpeakingSessionResultsStatus | null;
+  inputKind: SpeakingInputKind | null;
   pending: boolean;
   pollCapped: boolean;
   retrying: boolean;
@@ -128,7 +142,7 @@ function GradingStatus({
           </Button>
         )}
       >
-        {status.failureReason ?? 'Your recording is saved. No credits were used for this failed grade.'}
+        {status.failureReason ?? gradeFailedSavedCopy(inputKind)}
       </InlineAlert>
     );
   }
@@ -147,7 +161,7 @@ function GradingStatus({
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         {pollCapped
           ? 'This is taking longer than usual. Your result is saved and will appear here — you can leave and come back.'
-          : 'Your recording is being transcribed and marked. This page updates automatically.'}
+          : gradingInProgressCopy(inputKind)}
       </span>
     </InlineAlert>
   );
@@ -269,7 +283,8 @@ export default function SpeakingSessionResultsPage() {
     setRetrying(true);
     try {
       await runAiAssessment(sessionId);
-      setStatus({ assessmentState: 'processing', retryable: false, failureReason: null });
+      // Keep what was handed in, or the wording flips to the neutral variant until the next poll.
+      setStatus((current) => ({ inputKind: current?.inputKind, assessmentState: 'processing', retryable: false, failureReason: null }));
       setPollAttempt(0);
     } catch (err) {
       setStatus((current) => current && {
@@ -281,9 +296,13 @@ export default function SpeakingSessionResultsPage() {
     }
   }, [sessionId]);
 
+  // What the learner handed in decides the wording below; a tutor room is always recorded.
+  const inputKind = speakingInputKind(session?.mode === 'live_tutor', status?.inputKind);
+
   const gradingStatus = (
     <GradingStatus
       status={status}
+      inputKind={inputKind}
       pending={gradingPending}
       pollCapped={pollCapped}
       retrying={retrying}
@@ -419,7 +438,7 @@ export default function SpeakingSessionResultsPage() {
                 </Button>
               ) : undefined}
             >
-              We received your recording{submissionAtLabel ? ` on ${submissionAtLabel}` : ''} and queued it for the released v1.1 practice report.
+              {submissionReceivedCopy(inputKind, submissionAtLabel)}
             </InlineAlert>
           ) : null}
           {gradingStatus}
@@ -429,6 +448,7 @@ export default function SpeakingSessionResultsPage() {
             response={v11}
             transcript={showTranscript ? transcript : null}
             tutorOverride={v11TutorOverride}
+            inputKind={inputKind}
           />
         </div>
       </>
@@ -476,7 +496,7 @@ export default function SpeakingSessionResultsPage() {
               </Button>
             ) : undefined}
           >
-            We received your recording{submissionAtLabel ? ` on ${submissionAtLabel}` : ''} and queued it for marking.
+            {submissionReceivedCopy(inputKind, submissionAtLabel)}
           </InlineAlert>
         ) : null}
 
@@ -517,11 +537,17 @@ export default function SpeakingSessionResultsPage() {
                   This result visibility profile hides tutor comments. The transcript remains available for review.
                 </InlineAlert>
               ) : null}
+              {inputKind === 'live_voice' ? (
+                <InlineAlert variant="info" live="polite">
+                  {LIVE_TRANSCRIPT_NOTE}
+                </InlineAlert>
+              ) : null}
               <TranscriptPlayerWithComments
                 recordingUrl={null}
                 transcript={transcriptPayload}
                 comments={[]}
                 readOnly
+                hideAudioPlayer={inputKind !== 'recording'}
               />
             </div>
           </TabPanel>

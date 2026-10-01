@@ -133,9 +133,17 @@ export interface MicrophoneErrorInfo {
 /**
  * One learner-facing message for every way microphone capture can fail to start:
  * browser DOMExceptions (web, and the WebView inside the apps) and the native
- * SpeakingRecorder plugin's own "permission was denied" rejection.
+ * SpeakingRecorder plugin's own "permission was denied" rejection. The recorder
+ * wording is the default; `live` words it for the live AI patient, where the
+ * learner speaks (the control reads "Start speaking") and nothing is recorded.
  */
-export function describeMicrophoneError(error: unknown, native = Capacitor.isNativePlatform()): MicrophoneErrorInfo {
+export function describeMicrophoneError(
+  error: unknown,
+  native = Capacitor.isNativePlatform(),
+  options: { live?: boolean } = {},
+): MicrophoneErrorInfo {
+  const live = options.live === true;
+  const startControl = live ? 'Start speaking' : 'Start recording';
   const name = error instanceof DOMException ? error.name : '';
   const text = error instanceof Error ? error.message : '';
 
@@ -143,8 +151,8 @@ export function describeMicrophoneError(error: unknown, native = Capacitor.isNat
     return {
       permissionDenied: true,
       message: native
-        ? 'Microphone permission was blocked. Allow Microphone for this app in your device Settings (Open app settings), then press Start recording again.'
-        : 'Microphone permission was blocked. Allow microphone access in your browser settings, then press Start recording again.',
+        ? `Microphone permission was blocked. Allow Microphone for this app in your device Settings (Open app settings), then press ${startControl} again.`
+        : `Microphone permission was blocked. Allow microphone access in your browser settings, then press ${startControl} again.`,
     };
   }
 
@@ -158,12 +166,16 @@ export function describeMicrophoneError(error: unknown, native = Capacitor.isNat
         return 'Your microphone is busy or unavailable. Close other apps using it and try again.';
       case 'OverconstrainedError':
       case 'ConstraintNotSatisfiedError':
-        return 'This microphone does not support the requested recording settings. Try another device.';
+        return live
+          ? 'This microphone does not support the requested audio settings. Try another device.'
+          : 'This microphone does not support the requested recording settings. Try another device.';
       case 'NotSupportedError':
-        return 'This browser does not support the recording mode needed for Speaking practice.';
+        return live
+          ? 'This browser does not support the audio mode needed for Speaking practice.'
+          : 'This browser does not support the recording mode needed for Speaking practice.';
       default:
         return text
-          ? `Recording could not start: ${text}`
+          ? `${live ? 'The microphone' : 'Recording'} could not start: ${text}`
           : 'Could not start the microphone. Check your audio settings and try again.';
     }
   })();

@@ -332,6 +332,8 @@ export interface LearnerAttemptHistoryItem {
   balanceSource?: string | null;
   creditsUsed: number;
   route: string;
+  /** Server-built display text for Speaking rows: "192/500" once scored, "Marking in progress" while grading, otherwise null. */
+  resultLabel?: string | null;
 }
 
 /**
@@ -354,6 +356,7 @@ export async function fetchMyAttemptHistory(limit = 100, subtest?: string): Prom
     balanceSource: item.balanceSource == null ? null : String(item.balanceSource),
     creditsUsed: Number(item.creditsUsed ?? 0),
     route: String(item.route ?? '/submissions'),
+    resultLabel: toNullableString(item.resultLabel),
   }));
 }
 

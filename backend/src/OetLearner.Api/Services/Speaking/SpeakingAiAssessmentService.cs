@@ -533,6 +533,13 @@ Scoring rules:
                 closingCue = script.ClosingCue,
             }));
         sb.AppendLine();
+        // A live voice role-play has no audio, so the feedback must not send the candidate to a recording
+        // that does not exist. Added to the input only: the template, rubric and schema are unchanged.
+        if (transcript.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix, StringComparison.Ordinal))
+        {
+            sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
+            sb.AppendLine();
+        }
         sb.AppendLine("---- TRANSCRIPT (latest revision) ----");
         sb.AppendLine(transcript.SegmentsJson);
         sb.AppendLine();

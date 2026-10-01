@@ -25,10 +25,14 @@ vi.mock('@/components/domain/speaking/DualAssessmentLayout', () => ({
   DualAssessmentLayout: () => <div data-testid="dual-assessment" />,
 }));
 vi.mock('@/components/domain/speaking/SpeakingSimulationV11ReportView', () => ({
-  SpeakingSimulationV11ReportView: () => <div data-testid="v11-report" />,
+  SpeakingSimulationV11ReportView: ({ inputKind }: { inputKind?: string | null }) => (
+    <div data-testid="v11-report" data-input-kind={String(inputKind)} />
+  ),
 }));
 vi.mock('@/components/domain/speaking/TranscriptPlayerWithComments', () => ({
-  TranscriptPlayerWithComments: () => <div data-testid="transcript" />,
+  TranscriptPlayerWithComments: ({ hideAudioPlayer }: { hideAudioPlayer?: boolean }) => (
+    <div data-testid="transcript" data-hide-audio-player={String(Boolean(hideAudioPlayer))} />
+  ),
 }));
 vi.mock('@/lib/api', () => ({ ApiError: class ApiError extends Error {} }));
 vi.mock('@/lib/api/speaking-assessments', () => ({ learnerGetDualAssessment: mockDual }));
@@ -119,5 +123,115 @@ describe('Speaking session results: processing → result, never a dead end', ()
 
     expect(await screen.findByText('Free sample completed')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /free retry/i })).not.toBeInTheDocument();
+  });
+
+  describe('wording follows what the learner handed in', () => {
+    const PROCESSING = { assessmentState: 'processing', retryable: false, failureReason: null };
+    const LIVE_NOTE = 'No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked.';
+
+    it.each<[string | undefined, RegExp]>([
+      ['live_voice', /^We saved the transcript of your live conversation on .+ and queued it for marking\.$/],
+      ['recording', /^We received your recording on .+ and queued it for marking\.$/],
+      [undefined, /^We received your role-play on .+ and queued it for marking\.$/],
+    ])('names it on the "Submission received" banner (inputKind %s)', async (inputKind, banner) => {
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind });
+      render(<SpeakingSessionResultsPage />);
+
+      expect(await screen.findByText('Submission received')).toBeInTheDocument();
+      expect(screen.getByText(banner)).toBeInTheDocument();
+    });
+
+    it.each<[string | undefined, string]>([
+      ['live_voice', 'Your live conversation transcript is being marked. This page updates automatically.'],
+      ['recording', 'Your recording is being transcribed and marked. This page updates automatically.'],
+      [undefined, 'Your role-play is being marked. This page updates automatically.'],
+    ])('says what is being marked while grading runs (inputKind %s)', async (inputKind, pending) => {
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind });
+      render(<SpeakingSessionResultsPage />);
+
+      expect(await screen.findByText(pending)).toBeInTheDocument();
+    });
+
+    it('treats a human-tutor room as recorded even when the server says nothing', async () => {
+      mockGetSession.mockResolvedValue({ ...SESSION, mode: 'live_tutor' });
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind: null });
+      render(<SpeakingSessionResultsPage />);
+
+      expect(await screen.findByText(/^We received your recording on .+ and queued it for marking\.$/)).toBeInTheDocument();
+      expect(screen.getByText('Your recording is being transcribed and marked. This page updates automatically.')).toBeInTheDocument();
+    });
+
+    it('keeps the live-conversation wording after "Try grading again"', async () => {
+      const user = userEvent.setup();
+      mockGetResults.mockResolvedValue({
+        assessmentState: 'failed',
+        retryable: true,
+        failureReason: 'The grader was busy.',
+        inputKind: 'live_voice',
+      });
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Try grading again' }));
+
+      expect(await screen.findByText('Your live conversation transcript is being marked. This page updates automatically.')).toBeInTheDocument();
+      expect(screen.queryByText(/role-play is being marked/)).not.toBeInTheDocument();
+    });
+
+    it('says the transcript is saved when a failed live-conversation grade comes with no reason', async () => {
+      mockGetResults.mockResolvedValue({ assessmentState: 'failed', retryable: true, failureReason: null, inputKind: 'live_voice' });
+      render(<SpeakingSessionResultsPage />);
+
+      expect(await screen.findByText('Your transcript is saved. No credits were used for this failed grade.')).toBeInTheDocument();
+    });
+
+    it('never says "recording" outside the transcript tab for a live conversation', async () => {
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind: 'live_voice' });
+      render(<SpeakingSessionResultsPage />);
+      await screen.findByText('Submission received');
+
+      expect(document.body.textContent).not.toMatch(/recording/i);
+    });
+
+    it('uses the same banner in the v1.1 report view and tells it the kind', async () => {
+      mockGetResults.mockResolvedValue({ ...PROCESSING, usesV11: true, inputKind: 'live_voice' });
+      mockV11Assessment.mockResolvedValue({ assessmentId: 'a-1' });
+      render(<SpeakingSessionResultsPage />);
+
+      expect(await screen.findByTestId('v11-report')).toHaveAttribute('data-input-kind', 'live_voice');
+      expect(screen.getByText(/^We saved the transcript of your live conversation on .+ and queued it for marking\.$/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/v1\.1/);
+    });
+
+    it('hides the dead audio player and explains why on the transcript tab of a live conversation', async () => {
+      const user = userEvent.setup();
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind: 'live_voice' });
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: 'Transcript' }));
+
+      expect(screen.getByText(LIVE_NOTE)).toBeInTheDocument();
+      expect(screen.getByTestId('transcript')).toHaveAttribute('data-hide-audio-player', 'true');
+    });
+
+    it('keeps the player strip, and adds no live-conversation note, for a recording', async () => {
+      const user = userEvent.setup();
+      mockGetResults.mockResolvedValue({ ...PROCESSING, inputKind: 'recording' });
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: 'Transcript' }));
+
+      expect(screen.queryByText(LIVE_NOTE)).not.toBeInTheDocument();
+      expect(screen.getByTestId('transcript')).toHaveAttribute('data-hide-audio-player', 'false');
+    });
+
+    it('hides the player without a note when the kind is not known yet', async () => {
+      const user = userEvent.setup();
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: 'Transcript' }));
+
+      expect(screen.queryByText(LIVE_NOTE)).not.toBeInTheDocument();
+      expect(screen.getByTestId('transcript')).toHaveAttribute('data-hide-audio-player', 'true');
+    });
   });
 });

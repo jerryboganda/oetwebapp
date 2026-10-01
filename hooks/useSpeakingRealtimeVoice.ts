@@ -61,6 +61,12 @@ const TARGET_SAMPLE_RATE = 16_000;
 export const CONNECT_TIMEOUT_MS = 15_000;
 // The API's per-user limiter admits one live-voice request at a time; a 429 is our own limiter, not the provider.
 const RATE_LIMIT_RETRY_DELAY_MS = 1_500;
+/**
+ * How long stop() keeps a Gemini link up before it closes it. Gemini transcribes a sentence 1.4-1.7 s after it was
+ * spoken (production 1 Oct 2026) and has no close handshake, so a candidate still talking at the buzzer would otherwise
+ * lose the end of the last sentence. GPT-Live drains through its own session.closed.
+ */
+export const GEMINI_STOP_DRAIN_MS = 2_000;
 /** The one learner-facing start failure: provider names, provider bodies and transport detail never reach the UI. */
 export const LIVE_VOICE_UNAVAILABLE = 'The live AI patient could not start. Please try again.';
 const LIVE_VOICE_INTERRUPTED = 'The live conversation was interrupted.';
@@ -99,15 +105,15 @@ const isLiveVoiceProvider = (value: unknown): value is LiveVoiceProvider => valu
 /**
  * The providers to try, in order. The server names them in the order to try (`candidates`: the
  * configured primary first; health only filters out providers that are known to be down); an older
- * server sends none, so there is a single attempt with `provider`. A forced provider (`?voiceProvider=`
- * on the page, the server's `pinned`) never fails over: comparison and QA runs must measure the
- * provider they asked for.
+ * server sends none, so there is a single attempt with `provider`. Only the server's `pinned` pins:
+ * it is true for a flagged QA account that asked for one provider (`?voiceProvider=` on the page), and
+ * that run never fails over, so comparison and QA runs measure the provider they asked for. A provider
+ * the page merely asked for never shrinks the plan: for everybody else the server ignores the request.
  */
 export function planProviders(
   preflight: Pick<LiveVoicePreflight, 'provider' | 'candidates' | 'pinned'>,
-  forced?: LiveVoiceProvider,
 ): LiveVoiceProvider[] {
-  if (forced || preflight.pinned) return isLiveVoiceProvider(preflight.provider) ? [preflight.provider] : [];
+  if (preflight.pinned) return isLiveVoiceProvider(preflight.provider) ? [preflight.provider] : [];
   const listed = (preflight.candidates ?? []).filter(isLiveVoiceProvider);
   const order = listed.length > 0 ? listed : [preflight.provider].filter(isLiveVoiceProvider);
   return [...new Set(order)];
@@ -156,8 +162,8 @@ const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
  * Mid-session recovery. A live link that dies after it was live, or a patient that stays silent after the
  * candidate stopped speaking, is restored on a NEW provider session for the same role-play (the server
  * replays the saved turns into its instructions). The server allows three provider sessions per role-play:
- * the first plus two restores. A provider forced with ?voiceProvider= never recovers, so comparison and QA
- * runs still measure the raw stability of the provider they asked for.
+ * the first plus two restores. A run the server pinned (a flagged QA account's ?voiceProvider=) never recovers,
+ * so comparison and QA runs still measure the raw stability of the provider they asked for.
  */
 export const MAX_RECOVERIES = 2;
 /** The patient normally answers within ~3 s (slowest healthy replies seen ~19 s); the silent sessions of 30 Sep 2026 never answered. */
@@ -366,6 +372,10 @@ function audioRate(mimeType: unknown): number {
 // ("A transcript segment is too long") and the exam could not move on.
 export const MAX_SEGMENT_CHARS = 1_500;
 const MAX_PENDING_TURN_CHARS = 3_000;
+// A speaker who resumes after more than this much silence starts a new segment, so the pause stays visible to the
+// grader instead of hiding inside one long segment (production 1 Oct 2026: 45 s of silence sat inside one 54 s
+// candidate segment, which also inflated the candidate's talk time about 2x).
+export const MAX_SAME_SPEAKER_GAP_MS = 10_000;
 
 // GPT-Live is full duplex and transcribes the candidate a beat behind real time, so a
 // sentence's last word can arrive after the patient's "Uh." / "Yeah," has begun. Its own
@@ -409,7 +419,8 @@ export function isLateFragment(
 
 /**
  * Appends a transcript fragment to the segment list. Consecutive fragments from
- * one speaker extend one segment. With a provider timeline interval (`spoken`),
+ * one speaker extend one segment, unless the speaker was silent for longer than
+ * MAX_SAME_SPEAKER_GAP_MS. With a provider timeline interval (`spoken`),
  * a late fragment (see `isLateFragment`) joins its own speaker's previous segment
  * instead of splitting it. Returns true for such a late fragment.
  */
@@ -422,10 +433,18 @@ export function appendTranscriptFragment(
   spoken = false,
 ): boolean {
   const last = segments[segments.length - 1];
+  if (!fragment.trim()) {
+    // GPT-Live sends the space between two words as a delta of its own ("Doctor." + " " + "Well,"). It keeps
+    // the words apart on the end of the same speaker's last segment, but it never starts a segment (the server
+    // rejects a blank one and fails the whole save), never takes the late path and never moves the segment's
+    // end (a space after a long silence must not hide the silence from the gap rule).
+    if (exact && last !== undefined && last.speaker === speaker) last.text += fragment;
+    return false;
+  }
   const late = spoken && isLateFragment(segments, speaker, fragment, at);
   const candidate = late
     ? [...segments].reverse().find((segment) => segment.speaker === speaker)
-    : last?.speaker === speaker ? last : undefined;
+    : last !== undefined && last.speaker === speaker && at.startMs - last.endMs <= MAX_SAME_SPEAKER_GAP_MS ? last : undefined;
   const target = candidate && candidate.text.length + fragment.length <= MAX_SEGMENT_CHARS ? candidate : undefined;
   if (target) {
     target.text = exact ? target.text + fragment : `${target.text} ${fragment}`;
@@ -436,6 +455,102 @@ export function appendTranscriptFragment(
   return late && target !== undefined;
 }
 
+// Refresh-safe transcript. The conversation lives in memory until stop() saves it, so a reload or a crashed tab mid-card
+// would lose it (after a reload only what is said afterwards would be saved and graded). A copy per Speaking session is
+// kept in sessionStorage (this tab only, nothing but that session's own conversation, no tokens) and taken back when the
+// hook mounts again for the same session. Storage can be missing, blocked or full: everything below then does nothing
+// and the transcript lives in memory only, as before.
+const CHECKPOINT_KEY_PREFIX = 'oet.speaking.live.';
+/** A stored copy older than this is not restored: the role-play (5 minutes plus the save window) is long over. */
+export const CHECKPOINT_TTL_MS = 15 * 60_000;
+/** At most one write a second while the conversation changes, so a long monologue is still kept as it goes. */
+const CHECKPOINT_WRITE_DELAY_MS = 1_000;
+/** A stored stamp may run this far ahead of this device's clock (a tab's clock is not exact) before it is distrusted. */
+const CHECKPOINT_CLOCK_SKEW_MS = 60_000;
+/** A role-play is about 5 minutes; a clock origin older than the age limit plus this is not from one. */
+const CHECKPOINT_MAX_ROLEPLAY_MS = 60 * 60_000;
+
+export const transcriptCheckpointKey = (sessionId: string) => `${CHECKPOINT_KEY_PREFIX}${sessionId}`;
+
+interface TranscriptCheckpoint {
+  sessionId: string;
+  segments: LiveVoiceTranscriptSegmentInput[];
+  /** The last turn number sent, so a restored hook carries on counting. */
+  turnIndex: number;
+  /** Date.now() when the role-play's clock started (the first provider session went live): a reload rebuilds the clock from it. */
+  originEpochMs: number;
+  /** Date.now() of this write; the copy is only restored while it is younger than CHECKPOINT_TTL_MS. */
+  savedAt: number;
+}
+
+function isStoredSegment(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const segment = value as Record<string, unknown>;
+  return (segment.speaker === 'candidate' || segment.speaker === 'patient')
+    && typeof segment.text === 'string' && segment.text.trim() !== ''
+    && typeof segment.startMs === 'number' && Number.isFinite(segment.startMs)
+    && typeof segment.endMs === 'number' && Number.isFinite(segment.endMs);
+}
+
+/** The stored copy of this session's conversation; null when there is none, it is not this session's, it is too old or malformed, or storage is unavailable. */
+function readTranscriptCheckpoint(sessionId: string): TranscriptCheckpoint | null {
+  try {
+    const key = transcriptCheckpointKey(sessionId);
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const stored: unknown = JSON.parse(raw);
+    const value: Record<string, unknown> = stored !== null && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
+    const { segments, turnIndex, originEpochMs, savedAt } = value;
+    const now = Date.now();
+    if (
+      value.sessionId !== sessionId
+      // Recent, and not from the future: a tampered or skewed stamp must not slip past the age limit.
+      || typeof savedAt !== 'number' || !(savedAt >= now - CHECKPOINT_TTL_MS && savedAt <= now + CHECKPOINT_CLOCK_SKEW_MS)
+      || !Array.isArray(segments) || segments.length === 0 || !segments.every(isStoredSegment)
+      || typeof turnIndex !== 'number' || !Number.isInteger(turnIndex) || turnIndex < 0
+      // The clock origin is rebuilt from this: an absurd value (0, the future) would put every new segment time out of range.
+      || typeof originEpochMs !== 'number' || !Number.isFinite(originEpochMs)
+      || originEpochMs > now + CHECKPOINT_CLOCK_SKEW_MS || now - originEpochMs > CHECKPOINT_TTL_MS + CHECKPOINT_MAX_ROLEPLAY_MS
+    ) {
+      window.sessionStorage.removeItem(key); // a copy that cannot be used must not linger
+      return null;
+    }
+    return {
+      sessionId,
+      // Only the fields the server takes: whatever else sits in storage is never sent.
+      segments: (segments as LiveVoiceTranscriptSegmentInput[]).map(({ speaker, startMs, endMs, text }) => ({ speaker, startMs, endMs, text })),
+      turnIndex,
+      originEpochMs,
+      savedAt,
+    };
+  } catch {
+    // Not valid JSON (or storage threw): drop it, a copy that cannot be read must not linger either.
+    clearTranscriptCheckpoint(sessionId);
+    return null;
+  }
+}
+
+function writeTranscriptCheckpoint(checkpoint: TranscriptCheckpoint): void {
+  try {
+    window.sessionStorage.setItem(transcriptCheckpointKey(checkpoint.sessionId), JSON.stringify(checkpoint));
+  } catch {
+    // Storage is blocked or full: the transcript lives in memory only, exactly as before.
+  }
+}
+
+function clearTranscriptCheckpoint(sessionId: string): void {
+  try {
+    window.sessionStorage.removeItem(transcriptCheckpointKey(sessionId));
+  } catch {
+    // Storage is blocked: nothing was kept that could be removed.
+  }
+}
+
+/**
+ * `requestedProvider` only ASKS the server to pin one provider (comparison and QA runs, `?voiceProvider=` on the page).
+ * The server honours it for a flagged QA account and answers `pinned: true`; for everybody else it is ignored and the
+ * automatic order, failover and recovery apply. Only the server's answer pins, never this argument.
+ */
 export function useSpeakingRealtimeVoice(
   sessionId: string,
   requestedProvider?: LiveVoiceProvider,
@@ -485,7 +600,13 @@ export function useSpeakingRealtimeVoice(
   const pendingPatientRef = useRef('');
   const pendingStartedAtRef = useRef<number | null>(null);
   const turnIndexRef = useRef(0);
+  // Tags the turn ids of one mount: after a reload the same Speaking session gets a new hook instance, and the server
+  // drops a repeated (session, clientTurnId) as a duplicate, so the ids of two instances must never meet.
+  const runTagRef = useRef('');
   const segmentsRef = useRef<LiveVoiceTranscriptSegmentInput[]>([]);
+  // True once THIS mount took in words. A conversation restored after a reload does not count: a first connect that
+  // fails then may still fail over to the other provider (the server replays the saved turns into either one).
+  const heardRef = useRef(false);
   const flushPromiseRef = useRef(Promise.resolve());
   const geminiReadyRef = useRef(false);
   const stoppingRef = useRef(false);
@@ -495,7 +616,8 @@ export function useSpeakingRealtimeVoice(
   const recoveringRef = useRef(false);
   const recoveryCountRef = useRef(0);
   const firstProviderRef = useRef<LiveVoiceProvider | null>(null);
-  // A provider forced by the page or the server never recovers (comparison and QA runs measure it raw).
+  // A run the server pinned (a flagged QA account's ?voiceProvider=) never recovers: comparison and QA runs measure the
+  // provider raw. Set from the server's answer only; the page's own request never pins.
   const pinnedRef = useRef(false);
   const onLinkLostRef = useRef<(reason: LinkLoss) => boolean>(() => false);
   const peerGraceTimerRef = useRef<number | undefined>(undefined);
@@ -506,6 +628,13 @@ export function useSpeakingRealtimeVoice(
   const speechTrackerRef = useRef<SpeechTracker>(createSpeechTracker());
   const candidateSpansRef = useRef<SpeechSpan[]>([]);
   const assignedBurstStartRef = useRef(-1);
+  // One clock for the whole role-play (see markSessionLive): performance.now() when the FIRST provider session went live,
+  // the same instant as Date.now() (a reload rebuilds the clock from it), and how long after the origin the CURRENT
+  // provider session went live.
+  const originRef = useRef<number | null>(null);
+  const originEpochRef = useRef<number | null>(null);
+  const sessionOffsetMsRef = useRef(0);
+  const checkpointTimerRef = useRef<number | undefined>(undefined);
 
   // Per-provider teardown between failover attempts. Handlers are detached BEFORE close(): a WebSocket
   // closes asynchronously, and a stale onclose would flip the next attempt to 'error'. The microphone,
@@ -600,11 +729,12 @@ export function useSpeakingRealtimeVoice(
       const result = await getLiveVoicePreflight(sessionId, requestedProvider);
       // A late answer (the page re-mounts the hook when it learns ?voiceProvider=) must not replace a newer one.
       if (run !== prepareRunRef.current) return;
-      const planned = planProviders(result, requestedProvider);
+      // requestedProvider only asked: the plan and the pin follow the server's answer (`pinned` is true for a flagged QA account only).
+      const planned = planProviders(result);
       if (planned.length === 0) throw new ProviderConnectError('The preflight named no usable provider.');
       setPreflight(result);
       plannedRef.current = planned;
-      pinnedRef.current = Boolean(requestedProvider || result.pinned);
+      pinnedRef.current = Boolean(result.pinned);
       setConnection('ready');
     } catch (caught) {
       if (run !== prepareRunRef.current) return;
@@ -612,6 +742,58 @@ export function useSpeakingRealtimeVoice(
       setConnection('error');
     }
   }, [requestedProvider, sessionId]);
+
+  // GPT-Live's start_ms/end_ms are relative to its own provider session and restart at 0 in every restore, and Gemini
+  // gives the candidate no timing (page time was used). Both are put on ONE clock, "ms since the first provider session
+  // went live", so a restore keeps the segments in order and nothing is merged across it (production 1 Oct 2026: after a
+  // restore the new session's first lines were fused into earlier segments in all three recovery runs). A restore, or a
+  // manual restart, keeps the origin; a reload rebuilds it from the stored one (see the checkpoint); only a different
+  // Speaking session starts a clock of its own.
+  const markSessionLive = useCallback(() => {
+    const now = performance.now();
+    const origin = originRef.current ?? now;
+    if (originRef.current === null) {
+      originRef.current = origin;
+      originEpochRef.current = Date.now();
+    }
+    sessionOffsetMsRef.current = Math.max(0, Math.round(now - origin));
+  }, []);
+  const sinceOrigin = useCallback((at: number) => Math.max(0, Math.round(at - (originRef.current ?? 0))), []);
+
+  // Writes the refresh-safe copy now and cancels a pending timed write. Only while a provider session is live: before it
+  // (a reload that has not reconnected yet) storage already holds exactly what memory holds, and after the save there is
+  // nothing left to protect.
+  const flushCheckpoint = useCallback(() => {
+    window.clearTimeout(checkpointTimerRef.current);
+    checkpointTimerRef.current = undefined;
+    const originEpochMs = originEpochRef.current;
+    if (!sessionId || !providerSessionIdRef.current || originEpochMs === null || segmentsRef.current.length === 0) return;
+    writeTranscriptCheckpoint({
+      sessionId,
+      segments: segmentsRef.current,
+      turnIndex: turnIndexRef.current,
+      originEpochMs,
+      savedAt: Date.now(),
+    });
+  }, [sessionId]);
+  const scheduleCheckpoint = useCallback(() => {
+    if (checkpointTimerRef.current === undefined) checkpointTimerRef.current = window.setTimeout(flushCheckpoint, CHECKPOINT_WRITE_DELAY_MS);
+  }, [flushCheckpoint]);
+
+  // A reload, a closed tab or a backgrounded page can end this document without any cleanup running, so the copy is also
+  // written the moment the page is hidden. Leaving the card writes it one last time: a save that then fails must keep it.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushCheckpoint();
+    };
+    window.addEventListener('pagehide', flushCheckpoint);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flushCheckpoint);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      flushCheckpoint();
+    };
+  }, [flushCheckpoint]);
 
   // One caption and one transcript segment per speaker run keeps a 5-minute
   // conversation far below the server's 600-segment limit. `exact` fragments
@@ -625,22 +807,30 @@ export function useSpeakingRealtimeVoice(
     // Where a provider that gives no timing (Gemini) put this speaker's words; never triggers the late-fragment rule.
     timing?: { startMs: number; endMs: number },
   ) => {
-    if (!text.trim()) return;
+    // GPT-Live sends the space between two words as a delta of its own: it is kept, but only on the end of the same
+    // speaker's last segment (see appendTranscriptFragment); anywhere else a blank fragment has nothing to join.
+    const lastSegment = segmentsRef.current[segmentsRef.current.length - 1];
+    if (!text.trim() && !(exact && lastSegment?.speaker === speaker)) return;
     const fragment = exact ? text : text.trim();
     const join = (existing: string) => (exact ? existing + fragment : `${existing} ${fragment}`);
     const now = Math.max(0, Math.round(performance.now()));
     if (pendingStartedAtRef.current === null) pendingStartedAtRef.current = now;
-    const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? timing ?? { startMs: now, endMs: now }, Boolean(spoken));
+    // Arrival stamp for a fragment with no provider timing, on the role-play clock.
+    const arrived = sinceOrigin(now);
+    const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? timing ?? { startMs: arrived, endMs: arrived }, Boolean(spoken));
+    heardRef.current = true;
     setCaptions((current) => {
       const index = late
         ? current.map((caption) => caption.speaker).lastIndexOf(speaker)
         : current[current.length - 1]?.speaker === speaker ? current.length - 1 : -1;
       if (index >= 0) return current.map((caption, i) => (i === index ? { ...caption, text: join(caption.text) } : caption));
+      if (!fragment.trim()) return current; // a lone space never opens a caption
       const id = `${speaker}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return [...current, { id, speaker, text: fragment }].slice(-80);
     });
     if (speaker === 'candidate') setAwaitingCandidateStart(false);
-  }, []);
+    scheduleCheckpoint();
+  }, [scheduleCheckpoint, sinceOrigin]);
 
   // Takes the pending turn synchronously, so fragments that arrive while a save
   // is in flight start the next turn instead of being cleared with this one.
@@ -657,17 +847,18 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
+    scheduleCheckpoint(); // the turn number moved: the refresh-safe copy carries it
     return {
       provider,
       providerSessionId,
       candidateText: candidateText || null,
       patientText: patientText || null,
-      clientTurnId: `voice-turn:${turnIndexRef.current}`,
+      clientTurnId: `voice-turn:${runTagRef.current}:${turnIndexRef.current}`,
       turnIndex: turnIndexRef.current,
       startedAt: startedAt === null ? undefined : new Date(Date.now() - Math.max(0, endedAt - startedAt)).toISOString(),
       endedAt: new Date().toISOString(),
     };
-  }, []);
+  }, [scheduleCheckpoint]);
 
   const flushPendingTurn = useCallback(async () => {
     const turn = takePendingTurn();
@@ -700,21 +891,22 @@ export function useSpeakingRealtimeVoice(
   // Gemini gives the candidate's transcript no timing (every candidate segment was zero-length on 30 Sep 2026, which
   // the grader reads as a capture error): the span comes from the microphone bursts instead. A fragment that arrives
   // after its burst closed takes the closed bursts; one that arrives mid-burst takes the burst so far and that burst
-  // is then not attributed again to the next sentence.
+  // is then not attributed again to the next sentence. The bursts are kept in page time (that is what the tracker and
+  // assignedBurstStartRef compare); the returned span is on the role-play clock, like every other segment time.
   const candidateTiming = useCallback((): { startMs: number; endMs: number } => {
     const now = Math.max(0, Math.round(performance.now()));
     const closed = candidateSpansRef.current.filter((span) => span.startMs > assignedBurstStartRef.current);
     candidateSpansRef.current = [];
     if (closed.length > 0) {
-      return { startMs: Math.round(closed[0].startMs), endMs: Math.round(closed[closed.length - 1].endMs) };
+      return { startMs: sinceOrigin(closed[0].startMs), endMs: sinceOrigin(closed[closed.length - 1].endMs) };
     }
     const active = speechTrackerRef.current.active();
     if (active) {
       assignedBurstStartRef.current = active.startMs;
-      return { startMs: Math.round(active.startMs), endMs: now };
+      return { startMs: sinceOrigin(active.startMs), endMs: sinceOrigin(now) };
     }
-    return { startMs: now, endMs: now };
-  }, []);
+    return { startMs: sinceOrigin(now), endMs: sinceOrigin(now) };
+  }, [sinceOrigin]);
 
   // Gemini streams incremental chunks: append, never de-duplicate.
   const captureTranscript = useCallback((speaker: RealtimeVoiceSpeaker, text: string) => {
@@ -727,7 +919,7 @@ export function useSpeakingRealtimeVoice(
   }, [addCaption, candidateTiming, flushIfLong]);
 
   const hasTranscriptText = useCallback(
-    () => segmentsRef.current.length > 0 || pendingCandidateRef.current.trim() !== '' || pendingPatientRef.current.trim() !== '',
+    () => heardRef.current || pendingCandidateRef.current.trim() !== '' || pendingPatientRef.current.trim() !== '',
     [],
   );
 
@@ -774,8 +966,11 @@ export function useSpeakingRealtimeVoice(
     const delta = typeof value.delta === 'string' ? value.delta : '';
     if (!speaker || !delta) return;
     if (speaker === 'patient') lastPatientOutputAtRef.current = performance.now();
+    // start_ms/end_ms count from the start of THIS provider session; the offset puts them on the role-play clock (it is 0
+    // for the first session and the time between the two session starts after a restore).
+    const offsetMs = sessionOffsetMsRef.current;
     const spoken = typeof value.start_ms === 'number' && typeof value.end_ms === 'number'
-      ? { startMs: value.start_ms, endMs: value.end_ms }
+      ? { startMs: value.start_ms + offsetMs, endMs: value.end_ms + offsetMs }
       : undefined;
     // A late candidate fragment (the tail of a sentence the patient's backchannel or
     // reply already overtook) still belongs to the current turn; only new candidate
@@ -1147,6 +1342,7 @@ export function useSpeakingRealtimeVoice(
               if (!alive()) return;
               providerRef.current = provider;
               providerSessionIdRef.current = providerSessionId;
+              markSessionLive(); // the new session's own clock starts here; the role-play clock carries on
               lastPatientOutputAtRef.current = performance.now(); // a new link gets a full stall window
               setActiveProvider(provider);
               if (provider !== firstProviderRef.current) setFailedOver(true);
@@ -1178,7 +1374,7 @@ export function useSpeakingRealtimeVoice(
       }
     })();
     return true;
-  }, [connectGemini, connectOpenAi, queueFlush, resetProviderTransport]);
+  }, [connectGemini, connectOpenAi, markSessionLive, queueFlush, resetProviderTransport]);
   useEffect(() => {
     onLinkLostRef.current = startRecovery;
   }, [startRecovery]);
@@ -1229,10 +1425,10 @@ export function useSpeakingRealtimeVoice(
     } catch (caught) {
       if (!alive()) return false;
       closeTransport();
-      const micError = describeMicrophoneError(caught);
+      // The live variant of the shared microphone copy: the learner speaks to the AI patient and the control reads "Start speaking".
+      const micError = describeMicrophoneError(caught, undefined, { live: true });
       setMicPermissionDenied(micError.permissionDenied);
-      // The shared microphone copy names "Start recording"; the control on this panel is "Start speaking".
-      setError(micError.message.replace('Start recording', 'Start speaking'));
+      setError(micError.message);
       setConnection('error');
       return false;
     }
@@ -1255,6 +1451,7 @@ export function useSpeakingRealtimeVoice(
           providerRef.current = provider;
           providerSessionIdRef.current = providerSessionId;
           firstProviderRef.current = provider;
+          markSessionLive(); // the role-play clock starts at the first live link; a later start keeps it
           lastPatientOutputAtRef.current = performance.now();
           setActiveProvider(provider);
           setFailedOver(index > 0);
@@ -1286,7 +1483,7 @@ export function useSpeakingRealtimeVoice(
     setError(learnerMessage(failure));
     setConnection('error');
     return false;
-  }, [acquireMic, closeTransport, connectGemini, connectOpenAi, hasTranscriptText, prepare, resetProviderTransport, sessionId]);
+  }, [acquireMic, closeTransport, connectGemini, connectOpenAi, hasTranscriptText, markSessionLive, prepare, resetProviderTransport, sessionId]);
 
   // Single-flight: the auto-start and a tap on "Start speaking" are one start.
   const start = useCallback((): Promise<boolean> => {
@@ -1352,6 +1549,9 @@ export function useSpeakingRealtimeVoice(
         });
         openAiClosedRef.current = null;
       }
+      // Gemini has no close handshake and transcribes a sentence ~1.5 s after it was spoken: its link (and its handlers)
+      // stays up for a moment, so a candidate still talking at the buzzer keeps the end of the last sentence.
+      if (provider === 'gemini' && socketRef.current?.readyState === WebSocket.OPEN) await delay(GEMINI_STOP_DRAIN_MS);
       // The per-turn rows are advisory: a turn that cannot be saved must not keep the transcript from being saved.
       await flushPromiseRef.current.catch(() => undefined);
       await flushPendingTurn().catch(() => undefined);
@@ -1361,6 +1561,8 @@ export function useSpeakingRealtimeVoice(
       if (segments.length > 0) {
         await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments });
       }
+      // Saved: the refresh-safe copy has done its job (a failed save keeps it, so a reload can still bring it back).
+      clearTranscriptCheckpoint(sessionId);
       releaseSession();
       if (current()) {
         if (segments.length > 0) setEnded(true);
@@ -1370,8 +1572,9 @@ export function useSpeakingRealtimeVoice(
     } catch (caught) {
       if (isClientRejection(caught)) {
         // The server will never take this transcript (window closed, session no longer active, invalid):
-        // a retry cannot help and must not strand the learner.
+        // a retry cannot help and must not strand the learner. The card is over for good, so is its stored copy.
         console.warn('Live voice transcript rejected by the server.', failureCode(caught));
+        clearTranscriptCheckpoint(sessionId);
         releaseSession();
         if (current()) {
           setError(learnerMessage(caught, TRANSCRIPT_NOT_SAVED));
@@ -1427,8 +1630,17 @@ export function useSpeakingRealtimeVoice(
     pendingCandidateRef.current = '';
     pendingPatientRef.current = '';
     pendingStartedAtRef.current = null;
-    segmentsRef.current = [];
-    turnIndexRef.current = 0;
+    // A reload mid-card mounts this hook again for the same Speaking session: what was said before it comes back from
+    // the refresh-safe copy, the turn numbers carry on, and the role-play clock is rebuilt from the stored origin so the
+    // new provider session lands after everything that was saved (see markSessionLive). Any other session starts empty.
+    const restored = sessionId ? readTranscriptCheckpoint(sessionId) : null;
+    segmentsRef.current = restored?.segments ?? [];
+    turnIndexRef.current = restored?.turnIndex ?? 0;
+    originEpochRef.current = restored?.originEpochMs ?? null;
+    originRef.current = restored ? performance.now() - Math.max(0, Date.now() - restored.originEpochMs) : null;
+    sessionOffsetMsRef.current = 0;
+    heardRef.current = false;
+    runTagRef.current = Math.random().toString(36).slice(2, 8);
     flushPromiseRef.current = Promise.resolve();
     startPromiseRef.current = null;
     stopPromiseRef.current = null;

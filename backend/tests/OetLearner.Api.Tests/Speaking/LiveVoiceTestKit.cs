@@ -126,7 +126,8 @@ internal sealed class CapturingLogger<T> : ILogger<T>
 }
 
 /// <summary>
-/// Fails any save that adds an AuditEvent, to prove a database fault never masks the provider 503.
+/// Fails any save that adds an AuditEvent, to prove a database fault never masks the provider 503, and
+/// (when asked) any use of the FeatureFlags set, to prove the QA pin fails closed.
 /// A subclass rather than a SaveChanges interceptor: EF keeps one internal service provider per
 /// distinct interceptor instance, so an instance per test would trip its "many service providers" guard.
 /// </summary>
@@ -135,6 +136,20 @@ internal sealed class FaultingLearnerDbContext(DbContextOptions<LearnerDbContext
     public bool FailAuditWrites { get; set; }
 
     public int AuditWriteFailures { get; private set; }
+
+    /// <summary>Makes any use of the FeatureFlags set throw, to prove the QA pin fails closed. A query
+    /// cannot be failed from a SaveChanges override, so the set itself is: <c>FeatureFlags</c> is
+    /// <c>Set&lt;FeatureFlag&gt;()</c>.</summary>
+    public bool FailFeatureFlagReads { get; set; }
+
+    public override DbSet<TEntity> Set<TEntity>()
+    {
+        if (FailFeatureFlagReads && typeof(TEntity) == typeof(FeatureFlag))
+        {
+            throw new InvalidOperationException("Simulated feature flag read failure.");
+        }
+        return base.Set<TEntity>();
+    }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -421,6 +436,30 @@ internal static class LiveVoiceTestKit
         }
         await db.SaveChangesAsync();
         return new SeededLiveVoiceSession(userId, sessionId, cardId, attemptId, marker);
+    }
+
+    /// <summary>
+    /// The FeatureFlags row that lets one learner pin the live voice provider (what an admin creates in
+    /// Admin > Feature Flags). Without it a requested provider is ignored. <paramref name="enabled"/> false
+    /// seeds the same row switched off.
+    /// </summary>
+    public static async Task AuthoriseQaPinAsync(
+        LearnerDbContext db,
+        string userId,
+        DateTimeOffset now,
+        bool enabled = true)
+    {
+        db.FeatureFlags.Add(new FeatureFlag
+        {
+            Id = $"ff-pin-{Guid.NewGuid():N}",
+            Name = "Live voice QA pin",
+            Key = LiveVoiceService.PinFlagKey(userId),
+            FlagType = FeatureFlagType.Operational,
+            Enabled = enabled,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
     }
 
     /// <summary>A well-formed OpenAI live-session error body.</summary>

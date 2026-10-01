@@ -60,8 +60,9 @@ public sealed class SpeakingCanonicalAssessmentService(
     public const string PromptVersion = "speaking.score.v2";
 
     private const string NoTranscriptErrorCode = "speaking_session_no_transcript";
+    // Mode-neutral on purpose: a live voice role-play has no recording to point at.
     private const string GradingFailedMessage =
-        "We couldn't finish grading this recording. Try grading again. You won't be charged twice.";
+        "We couldn't finish grading your role-play. Try grading again. You won't be charged twice.";
 
     /// <summary>How long an assessment may wait for a recorder-fallback
     /// transcript before it is reported as failed.</summary>
@@ -328,7 +329,7 @@ public sealed class SpeakingCanonicalAssessmentService(
         if (v11Latest is { Status: SpeakingSimulationV11AssessmentStatus.TechnicalReview or SpeakingSimulationV11AssessmentStatus.Invalid })
         {
             return new SpeakingAssessmentState(SpeakingAssessmentState.Failed, true,
-                "Your recording could not be scored automatically. Try grading again.");
+                "Your role-play could not be scored automatically. Try grading again.");
         }
 
         var transcripts = await db.SpeakingTranscripts.AsNoTracking()

@@ -3,7 +3,8 @@
 /**
  * Audio player + speaker-labelled transcript + timestamped tutor comments.
  *
- * - Top: HTML5 audio player (controlled).
+ * - Top: HTML5 audio player (controlled). `hideAudioPlayer` drops it when there is
+ *   no audio to play (a live conversation keeps only its transcript).
  * - Below: transcript segments. Clicking a segment seeks the audio.
  * - Inline comment badges per segment range — click to expand.
  * - Slide-out comment composer (when not readOnly): tutor picks segment range +
@@ -45,6 +46,11 @@ export interface TranscriptPlayerWithCommentsProps {
   comments: TimestampedComment[];
   onAddComment?: (input: TimestampedCommentInput) => Promise<void> | void;
   readOnly?: boolean;
+  /**
+   * No audio exists to play: omit the player strip and show each [mm:ss] chip as
+   * plain text instead of a seek button. Default false, so the expert console is unchanged.
+   */
+  hideAudioPlayer?: boolean;
 }
 
 const CRITERION_CODES: SpeakingCriterionCode[] = [
@@ -64,6 +70,9 @@ const SEVERITY_OPTIONS: Array<{ value: 'note' | 'minor' | 'major'; label: string
   { value: 'minor', label: 'Minor', variant: 'warning' },
   { value: 'major', label: 'Major', variant: 'danger' },
 ];
+
+const SPEAKER_CHIP =
+  'inline-flex shrink-0 items-center gap-1.5 rounded-full bg-background-light px-2.5 py-0.5 text-xs font-bold text-primary';
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -85,6 +94,7 @@ export function TranscriptPlayerWithComments({
   comments,
   onAddComment,
   readOnly,
+  hideAudioPlayer = false,
 }: TranscriptPlayerWithCommentsProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -187,26 +197,28 @@ export function TranscriptPlayerWithComments({
   return (
     <Card padding="md" className="flex flex-col gap-4" data-testid="transcript-player-with-comments">
       {/* Audio controls */}
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-background-light p-3">
-        <button
-          type="button"
-          onClick={togglePlay}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white dark:bg-primary-700 shadow-sm transition-transform active:scale-95"
-          aria-label={isPlaying ? 'Pause recording' : 'Play recording'}
-          disabled={!recordingUrl}
-        >
-          {isPlaying ? <Pause className="h-4 w-4" aria-hidden /> : <Play className="h-4 w-4 translate-x-0.5" aria-hidden />}
-        </button>
-        <div className="flex flex-1 flex-col">
-          <span className="text-xs font-semibold text-muted">Recording</span>
-          <span className="text-sm font-bold tabular-nums text-navy">{formatTime(currentMs)}</span>
+      {!hideAudioPlayer && (
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-background-light p-3">
+          <button
+            type="button"
+            onClick={togglePlay}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white dark:bg-primary-700 shadow-sm transition-transform active:scale-95"
+            aria-label={isPlaying ? 'Pause recording' : 'Play recording'}
+            disabled={!recordingUrl}
+          >
+            {isPlaying ? <Pause className="h-4 w-4" aria-hidden /> : <Play className="h-4 w-4 translate-x-0.5" aria-hidden />}
+          </button>
+          <div className="flex flex-1 flex-col">
+            <span className="text-xs font-semibold text-muted">Recording</span>
+            <span className="text-sm font-bold tabular-nums text-navy">{formatTime(currentMs)}</span>
+          </div>
+          {recordingUrl ? (
+            <audio ref={audioRef} src={recordingUrl} preload="metadata" controls className="hidden" />
+          ) : (
+            <span className="text-xs italic text-muted">Recording unavailable</span>
+          )}
         </div>
-        {recordingUrl ? (
-          <audio ref={audioRef} src={recordingUrl} preload="metadata" controls className="hidden" />
-        ) : (
-          <span className="text-xs italic text-muted">Recording unavailable</span>
-        )}
-      </div>
+      )}
 
       {/* Transcript */}
       <div className="flex flex-col gap-2">
@@ -217,8 +229,15 @@ export function TranscriptPlayerWithComments({
         )}
         {segments.map((seg, i) => {
           const segComments = commentsForSegment(comments, seg);
-          const isActive = i === activeIndex;
+          // Without a player nothing is "now playing", so the first segment (start 0) must not look it.
+          const isActive = !hideAudioPlayer && i === activeIndex;
           const expanded = expandedSegmentIndex === i;
+          const speakerChip = (
+            <>
+              <span className="tabular-nums">[{formatTime(seg.startMs)}]</span>
+              <span className="capitalize">{seg.speaker}</span>
+            </>
+          );
           return (
             <div
               key={seg.segmentId ?? `${seg.startMs}-${i}`}
@@ -228,15 +247,18 @@ export function TranscriptPlayerWithComments({
               )}
             >
               <div className="flex items-baseline gap-2">
-                <button
-                  type="button"
-                  onClick={() => seek(seg.startMs)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-background-light px-2.5 py-0.5 text-xs font-bold text-primary hover:bg-primary/10"
-                  aria-label={`Seek to ${formatTime(seg.startMs)} (${seg.speaker})`}
-                >
-                  <span className="tabular-nums">[{formatTime(seg.startMs)}]</span>
-                  <span className="capitalize">{seg.speaker}</span>
-                </button>
+                {hideAudioPlayer ? (
+                  <span className={SPEAKER_CHIP}>{speakerChip}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => seek(seg.startMs)}
+                    className={cn(SPEAKER_CHIP, 'hover:bg-primary/10')}
+                    aria-label={`Seek to ${formatTime(seg.startMs)} (${seg.speaker})`}
+                  >
+                    {speakerChip}
+                  </button>
+                )}
                 <p className="flex-1 text-sm leading-relaxed text-navy">{seg.text}</p>
                 <div className="flex shrink-0 items-center gap-1">
                   {segComments.length > 0 && (

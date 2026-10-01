@@ -363,7 +363,10 @@ public sealed class AiCreditReservationService(
             _ => subtest, // dedicated, mixed (unreachable at quantity 1), or sourceless
         };
         var units = debitResult.CreditsUsed > 0 ? debitResult.CreditsUsed : 1;
-        return await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, ct);
+        // The debit above is already committed, so the request's cancellation (client timeout, refresh,
+        // deploy drain) must not lose the reservation row: a debit without a row is an orphan that no
+        // commit or sweep can ever settle.
+        return await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, CancellationToken.None);
     }
 
     private async Task EnsureSpeakingOperationAsync(

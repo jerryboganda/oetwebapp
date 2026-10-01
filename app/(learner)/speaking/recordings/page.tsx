@@ -76,8 +76,10 @@ export default function SpeakingRecordingsPage() {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">My speaking recordings</h1>
           <p className="text-muted">
-            Manage the audio captured during your role-plays. You can delete a recording at any
-            time. Recordings are also automatically removed after the retention window expires.
+            Manage the audio captured during your role-plays. No audio recording is stored for live AI
+            patient conversations (only a text transcript is kept), so they are not listed here. You can delete a
+            recording at any time. Recordings are also automatically removed after the retention
+            window expires.
           </p>
         </header>
 
@@ -87,7 +89,8 @@ export default function SpeakingRecordingsPage() {
           <Skeleton className="h-48 w-full rounded-xl" />
         ) : rows.length === 0 ? (
           <Card className="p-8 text-center text-muted">
-            You don&apos;t have any saved recordings yet.
+            You don&apos;t have any saved recordings. No audio recording is stored for live AI patient
+            conversations, so they don&apos;t appear here.
           </Card>
         ) : (
           <div className="space-y-3">

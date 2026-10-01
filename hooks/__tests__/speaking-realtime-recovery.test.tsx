@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { ApiError } from '@/lib/api/client';
 import type { LiveVoicePreflight } from '@/lib/api/speaking-live-voice';
 import { FakeAudioContext, FakeNode, FakePeer, FakeSocket, FakeStream } from './helpers/realtime-fakes';
@@ -21,6 +21,7 @@ vi.mock('@/lib/api/speaking-live-voice', () => ({
 
 import {
   createSpeechTracker,
+  GEMINI_STOP_DRAIN_MS,
   MAX_RECOVERIES,
   STALL_MS,
   useSpeakingRealtimeVoice,
@@ -79,8 +80,9 @@ async function mic(kind: 'speech' | 'quiet', ms: number) {
   }
 }
 
-async function mount(forced?: 'openai' | 'gemini') {
-  const rendered = renderHook(() => useSpeakingRealtimeVoice('s1', forced));
+// `requested` is the provider the page asks the server to pin (?voiceProvider=); only a pinned:true preflight makes it count.
+async function mount(requested?: 'openai' | 'gemini') {
+  const rendered = renderHook(() => useSpeakingRealtimeVoice('s1', requested));
   await advance(0);
   return rendered;
 }
@@ -96,7 +98,10 @@ async function startVoice(voice: Voice) {
 async function stopVoice(voice: Voice) {
   let stopped = false;
   await act(async () => {
-    stopped = await voice.current.stop();
+    const pending = voice.current.stop();
+    // A Gemini link is kept up for a moment so the last transcription lands (GEMINI_STOP_DRAIN_MS); a GPT-Live stop is quicker.
+    await vi.advanceTimersByTimeAsync(GEMINI_STOP_DRAIN_MS);
+    stopped = await pending;
   });
   return stopped;
 }
@@ -122,6 +127,21 @@ async function geminiSays(index: number, serverContent: Record<string, unknown>)
     socket(index).message({ serverContent });
   });
 }
+
+// GPT-Live transcript deltas carry start_ms/end_ms counted from the start of THAT provider session.
+async function openAiSays(index: number, speaker: 'candidate' | 'patient', delta: string, startMs: number, endMs: number) {
+  await act(async () => {
+    channel(index).emit({
+      type: speaker === 'candidate' ? 'session.input_transcript.delta' : 'session.output_transcript.delta',
+      delta,
+      start_ms: startMs,
+      end_ms: endMs,
+    });
+  });
+}
+
+type SavedSegment = { speaker: string; startMs: number; endMs: number; text: string };
+const savedSegments = (call = 0) => mockTranscript.mock.calls[call][1].segments as SavedSegment[];
 
 describe('useSpeakingRealtimeVoice mid-session recovery', () => {
   beforeEach(() => {
@@ -149,13 +169,20 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     }));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    // The hook keeps a refresh-safe copy of the conversation in sessionStorage: no test may inherit another's.
+    window.sessionStorage.clear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Unmount while the fake clock still runs: the stop() on the way out (the GPT-Live close handshake, the Gemini drain)
+    // must finish here, not on a real timer inside the next test.
+    cleanup();
+    await vi.advanceTimersByTimeAsync(10_000);
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
+    window.sessionStorage.clear();
   });
 
   it('restores a Gemini link that closed mid-conversation on a new provider session and keeps the transcript', async () => {
@@ -276,7 +303,9 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(result.current.error).toMatch(/ended/i);
   });
 
-  it('never restores a provider that was forced, so comparison runs measure it raw', async () => {
+  it('never restores a run the server pinned, so comparison runs measure the provider raw', async () => {
+    // A flagged QA account asked for Gemini (?voiceProvider=gemini) and the server answered pinned:true.
+    mockPreflight.mockResolvedValue(preflight({ provider: 'gemini', candidates: ['gemini'], pinned: true }));
     const { result } = await mount('gemini');
     expect(await startVoice(result)).toBe(true);
 
@@ -289,6 +318,23 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(result.current.recoveries).toBe(0);
     expect(result.current.connection).toBe('error');
     expect(result.current.error).not.toBeNull();
+  });
+
+  it('still restores a provider the page asked for when the server did not pin it (only a flagged QA account is pinned)', async () => {
+    // ?voiceProvider=gemini from an ordinary learner: the server ignores it (pinned false) and serves the automatic order.
+    mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'], pinned: false }));
+    const { result } = await mount('gemini');
+    expect(mockPreflight).toHaveBeenCalledWith('s1', 'gemini');
+    expect(await startVoice(result)).toBe(true);
+    expect(result.current.provider).toBe('openai');
+
+    await dropLink(result);
+
+    expect(mockOffer).toHaveBeenCalledTimes(2);
+    expect(result.current.recoveries).toBe(1);
+    expect(result.current.provider).toBe('openai');
+    expect(result.current.connection).toBe('connected');
+    expect(result.current.error).toBeNull();
   });
 
   it(`restores at most ${MAX_RECOVERIES} times per role-play, then shows the error`, async () => {
@@ -463,7 +509,8 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       expect(mockToken).toHaveBeenCalledTimes(1);
     });
 
-    it('never restores a forced provider, however long the patient stays silent', async () => {
+    it('never restores a run the server pinned, however long the patient stays silent', async () => {
+      mockPreflight.mockResolvedValue(preflight({ provider: 'gemini', candidates: ['gemini'], pinned: true }));
       const { result } = await mount('gemini');
       await startVoice(result);
       await candidateSpeaks(2_000);
@@ -471,6 +518,19 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       await advance(STALL_MS * 3);
       expect(result.current.recoveries).toBe(0);
       expect(mockToken).toHaveBeenCalledTimes(1);
+      expect(result.current.connection).toBe('connected');
+    });
+
+    it('still restores a silent patient on a provider the page asked for but the server did not pin', async () => {
+      mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'], pinned: false }));
+      const { result } = await mount('gemini');
+      await startVoice(result);
+      await candidateSpeaks(2_000);
+
+      await advance(STALL_MS + 1_500);
+
+      expect(mockOffer).toHaveBeenCalledTimes(2);
+      expect(result.current.recoveries).toBe(1);
       expect(result.current.connection).toBe('connected');
     });
   });
@@ -516,6 +576,140 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       expect(candidates[0].endMs - candidates[0].startMs).toBeGreaterThanOrEqual(900);
       expect(candidates[1].startMs).toBeGreaterThan(candidates[0].endMs);
       expect(candidates[1].endMs - candidates[1].startMs).toBeGreaterThanOrEqual(1_000);
+    });
+  });
+
+  // GPT-Live's start_ms/end_ms count from the start of its own provider session and restart at 0 in a restored one, and
+  // Gemini stamped page time. Production 1 Oct 2026: after a restore the first lines of the new session were fused into
+  // earlier segments in all three recovery runs (five scripted candidate lines in one 5 s segment, five patient replies in
+  // one 0.4 s segment). Every provider time is now "ms since the first provider session went live".
+  describe('one timeline across a restore', () => {
+    const expectNonDecreasingStarts = (segments: SavedSegment[]) => {
+      segments.slice(1).forEach((segment, index) => expect(segment.startMs).toBeGreaterThanOrEqual(segments[index].startMs));
+    };
+
+    it('keeps one monotonic timeline when an OpenAI link is restored, and merges nothing across the restore', async () => {
+      mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }));
+      const { result } = await mount();
+      await startVoice(result);
+      await advance(61_000); // the first session's own clock reads 50-60 s when its link drops
+      await openAiSays(0, 'candidate', 'How can I help you today', 50_000, 52_000);
+      await openAiSays(0, 'patient', 'My chest hurts', 52_500, 55_000);
+      await openAiSays(0, 'candidate', 'Where is the pain', 55_500, 57_000);
+      await openAiSays(0, 'patient', 'In the middle', 57_500, 60_000);
+
+      await dropLink(result);
+      expect(result.current.recoveries).toBe(1);
+      expect(FakePeer.instances).toHaveLength(2);
+
+      // The restored session counts from 0 again.
+      await openAiSays(1, 'candidate', 'Since yesterday', 2_000, 4_000);
+      await openAiSays(1, 'patient', 'Any other symptoms', 4_500, 7_000);
+      await openAiSays(1, 'candidate', 'A little nausea', 7_500, 9_000);
+      await openAiSays(1, 'patient', 'Thank you', 9_500, 12_000);
+      expect(await stopVoice(result)).toBe(true);
+
+      const segments = savedSegments();
+      expect(segments.map((segment) => [segment.speaker, segment.text])).toEqual([
+        ['candidate', 'How can I help you today'],
+        ['patient', 'My chest hurts'],
+        ['candidate', 'Where is the pain'],
+        ['patient', 'In the middle'],
+        ['candidate', 'Since yesterday'],
+        ['patient', 'Any other symptoms'],
+        ['candidate', 'A little nausea'],
+        ['patient', 'Thank you'],
+      ]);
+      expectNonDecreasingStarts(segments);
+      // The restored conversation comes after the old one, on the same clock (the restore happened at ~61 s).
+      expect(segments[4].startMs).toBeGreaterThan(segments[3].endMs);
+      expect(segments[4].startMs).toBeGreaterThanOrEqual(61_000);
+    });
+
+    it('does not collapse the conversation when the second restore switches from Gemini to OpenAI', async () => {
+      const { result } = await mount(); // the default preflight puts Gemini first
+      await startVoice(result);
+      await advance(30_000);
+      await geminiSays(0, { inputTranscription: { text: 'How can I help you today' } });
+      await geminiSays(0, { outputTranscription: { text: 'My chest hurts' }, turnComplete: true });
+      await dropLink(result); // the first restore tries the same provider again
+      expect(result.current.provider).toBe('gemini');
+
+      await advance(30_000);
+      await geminiSays(1, { inputTranscription: { text: 'Where is the pain' } });
+      await geminiSays(1, { outputTranscription: { text: 'In the middle' }, turnComplete: true });
+      await dropLink(result); // the second restore tries the other provider first
+      expect(result.current.provider).toBe('openai');
+
+      // GPT-Live's clock starts at 0 again, a minute after Gemini stamped its lines.
+      await openAiSays(0, 'candidate', 'Since yesterday', 1_000, 3_000);
+      await openAiSays(0, 'patient', 'Any other symptoms', 3_500, 6_000);
+      expect(await stopVoice(result)).toBe(true);
+
+      const segments = savedSegments();
+      expect(segments.map((segment) => [segment.speaker, segment.text])).toEqual([
+        ['candidate', 'How can I help you today'],
+        ['patient', 'My chest hurts'],
+        ['candidate', 'Where is the pain'],
+        ['patient', 'In the middle'],
+        ['candidate', 'Since yesterday'],
+        ['patient', 'Any other symptoms'],
+      ]);
+      expectNonDecreasingStarts(segments);
+    });
+
+    it('puts a Gemini transcript on the role-play clock: the first segment is near 0, not at the page uptime', async () => {
+      const { result } = await mount();
+      await advance(120_000); // the page has been open for two minutes when the card starts
+      await startVoice(result);
+      await advance(3_000);
+      await geminiSays(0, { inputTranscription: { text: 'Good morning' } });
+      await advance(2_000);
+      await geminiSays(0, { outputTranscription: { text: 'Hello doctor' }, turnComplete: true });
+      expect(await stopVoice(result)).toBe(true);
+
+      const segments = savedSegments();
+      expect(segments).toHaveLength(2);
+      expect(segments[0].startMs).toBeGreaterThanOrEqual(2_900);
+      expect(segments[0].startMs).toBeLessThanOrEqual(3_100);
+      expect(segments[1].startMs).toBeGreaterThanOrEqual(4_900);
+      expect(segments[1].startMs).toBeLessThanOrEqual(5_100);
+    });
+
+    it('keeps the microphone bursts of a Gemini candidate on the same clock', async () => {
+      const { result } = await mount();
+      await advance(60_000);
+      await startVoice(result);
+      await mic('quiet', 1_000);
+      await mic('speech', 1_500);
+      await mic('quiet', 900);
+      await geminiSays(0, { inputTranscription: { text: 'Good morning, how can I help you today' } });
+      expect(await stopVoice(result)).toBe(true);
+
+      const [candidate] = savedSegments();
+      // The burst began about 1 s after the card went live.
+      expect(candidate.startMs).toBeGreaterThanOrEqual(900);
+      expect(candidate.startMs).toBeLessThanOrEqual(1_300);
+      expect(candidate.endMs - candidate.startMs).toBeGreaterThanOrEqual(1_300);
+      expect(candidate.endMs - candidate.startMs).toBeLessThanOrEqual(1_700);
+    });
+  });
+
+  describe('GPT-Live whitespace deltas', () => {
+    it('keeps the space it sends as a delta of its own, and never saves whitespace as a segment', async () => {
+      // Production 1 Oct 2026: " Doctor." / " " / "Well," was saved as "Doctor.Well,".
+      mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }));
+      const { result } = await mount();
+      await startVoice(result);
+
+      await openAiSays(0, 'patient', ' ', 100, 150); // nothing to join yet
+      await openAiSays(0, 'patient', 'Thanks, Doctor.', 200, 900);
+      await openAiSays(0, 'patient', ' ', 900, 950);
+      await openAiSays(0, 'patient', 'Well,', 950, 1_200);
+      expect(await stopVoice(result)).toBe(true);
+
+      expect(mockTranscript).toHaveBeenCalledTimes(1);
+      expect(savedSegments()).toEqual([expect.objectContaining({ speaker: 'patient', text: 'Thanks, Doctor. Well,' })]);
     });
   });
 });
