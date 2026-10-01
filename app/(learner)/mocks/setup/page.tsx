@@ -776,7 +776,7 @@ export default function MockSetup() {
               <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <div>
                   <p className="eyebrow text-muted">Delivery mode</p>
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid grid-cols-1 gap-2">
                     {(options?.deliveryModes?.length ? options.deliveryModes : [
                       { id: 'computer' as const, label: 'On-screen (computer)' },
                       { id: 'oet_home' as const, label: 'OET@Home (remote)' },
@@ -799,7 +799,7 @@ export default function MockSetup() {
                 </div>
                 <div>
                   <p className="eyebrow text-muted">Strictness preset</p>
-                  <div className="mt-3 grid gap-2">
+                  <div className="mt-3 grid grid-cols-1 gap-2">
                     {(options?.strictnessOptions?.length ? options.strictnessOptions : [
                       { id: 'learning' as const, label: 'Learning', description: 'Pause, replay, and hints allowed.' },
                       { id: 'exam' as const, label: 'Exam', description: 'Strict timers, one-play audio, no hints.' },
