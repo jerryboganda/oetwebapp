@@ -54,26 +54,28 @@ export function FeedbackForm({ onSubmit, submitting = false, apiError, apiSucces
               <button
                 key={s}
                 type="button"
+                role="radio"
                 onMouseEnter={() => setHoverRating(s)}
                 onMouseLeave={() => setHoverRating(0)}
                 onFocus={() => setHoverRating(s)}
                 onBlur={() => setHoverRating(0)}
                 onClick={() => setRating(s)}
                 aria-label={`${s} star${s === 1 ? '' : 's'}`}
-                aria-pressed={rating === s}
-                className="rounded-full p-1 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                aria-checked={rating === s}
+                className="rounded-full p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 <Star
+                  aria-hidden="true"
                   className={
                     filled
-                      ? 'h-8 w-8 fill-amber-400 text-amber-400'
-                      : 'h-8 w-8 text-muted/40'
+                      ? 'h-8 w-8 fill-gold text-gold'
+                      : 'h-8 w-8 text-muted'
                   }
                 />
               </button>
             );
           })}
-          <span className="ml-3 text-sm text-muted">
+          <span className="ms-3 text-sm tabular-nums text-muted">
             {rating === 0 ? 'No rating yet' : `${rating} / 5`}
           </span>
         </div>
@@ -87,10 +89,10 @@ export function FeedbackForm({ onSubmit, submitting = false, apiError, apiSucces
         hint="Anything specific you’d like the tutor or our team to know."
       />
 
-      <fieldset className="space-y-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+      <fieldset className="space-y-2">
         <legend className="text-sm font-semibold tracking-tight text-navy">Would you recommend this class to a friend?</legend>
-        <div className="flex gap-3">
-          <label className="flex items-center gap-2 text-sm text-navy">
+        <div className="flex flex-wrap gap-x-5">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-navy">
             <input
               type="radio"
               name="recommend"
@@ -100,7 +102,7 @@ export function FeedbackForm({ onSubmit, submitting = false, apiError, apiSucces
             />
             Yes
           </label>
-          <label className="flex items-center gap-2 text-sm text-navy">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-navy">
             <input
               type="radio"
               name="recommend"
@@ -110,7 +112,7 @@ export function FeedbackForm({ onSubmit, submitting = false, apiError, apiSucces
             />
             No
           </label>
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
             <input
               type="radio"
               name="recommend"
