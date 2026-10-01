@@ -94,16 +94,16 @@ export default function ListeningMockResultsPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+      <div className="mx-auto max-w-3xl space-y-6" aria-busy="true">
         <p className="sr-only">Loading your mock results…</p>
         <PageSkeleton />
-      </main>
+      </div>
     );
   }
 
   if (!result) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold text-navy">Mock results not yet available</h1>
         <p className="text-muted">
           This mock session is being graded. Refresh in a moment, or come back from the dashboard.
@@ -111,12 +111,12 @@ export default function ListeningMockResultsPage() {
         <Button asChild size="sm">
           <Link href="/listening">Back to dashboard</Link>
         </Button>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <p className="rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted">
         AI Practice Score — not an official OET result.
       </p>
@@ -289,6 +289,6 @@ export default function ListeningMockResultsPage() {
           <Link href="/listening/stats">See full analytics</Link>
         </Button>
       </nav>
-    </main>
+    </div>
   );
 }

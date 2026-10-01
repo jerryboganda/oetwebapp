@@ -62,27 +62,27 @@ export default function ListeningLessonPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+      <div className="mx-auto max-w-3xl space-y-6" aria-busy="true">
         <p className="sr-only">Loading lesson…</p>
         <Skeleton className="h-9 w-2/3 rounded-lg" />
         <CardSkeleton />
-      </main>
+      </div>
     );
   }
 
   if (!lesson) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold text-navy">Lesson not found</h1>
         <Button asChild size="sm">
           <Link href="/listening/lessons">Back to lesson list</Link>
         </Button>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <header>
         <span className="text-xs font-semibold uppercase tracking-wide text-primary">
           Sub-skill {lesson.skillCode}
@@ -119,6 +119,6 @@ export default function ListeningLessonPage() {
       <Link href="/listening/lessons" className="text-sm text-primary underline">
         ← All lessons
       </Link>
-    </main>
+    </div>
   );
 }

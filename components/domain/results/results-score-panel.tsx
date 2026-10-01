@@ -1,8 +1,13 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { cn } from '@/lib/utils';
+import { getCelebrateMotion, prefersReducedMotion } from '@/lib/motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CountUp } from '@/components/ui/count-up';
 import { ResultGauge } from './gauge';
 
 export type ScoreStatTone = 'default' | 'success' | 'warning' | 'danger' | 'info';
@@ -66,6 +71,7 @@ export function ResultsScorePanel({
   chartSlot,
   className,
 }: ResultsScorePanelProps) {
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   return (
     <Card padding="lg" className={cn('@container overflow-hidden', className)}>
       <div className={cn('grid gap-5', aside && '@3xl:grid-cols-[minmax(0,1fr)_16rem] @3xl:gap-x-8')}>
@@ -73,7 +79,7 @@ export function ResultsScorePanel({
           <ResultGauge value={gaugeValue} color={gaugeColor}>
             {gaugeCenter ?? (
               <span className="text-2xl font-black text-navy dark:text-white">
-                {Math.round(gaugeValue)}
+                <CountUp value={Math.round(gaugeValue)} />
                 <span className="text-sm">%</span>
               </span>
             )}
@@ -91,7 +97,9 @@ export function ResultsScorePanel({
             <h1 className="mt-1 text-balance text-xl font-black leading-tight text-navy dark:text-white sm:text-2xl">{title}</h1>
             {subtitle ? <p className="mt-1 max-w-prose text-sm text-muted">{subtitle}</p> : null}
             {grade ? (
-              <Badge variant={grade.tone} className="mt-2">{grade.label}</Badge>
+              <motion.span className="mt-2 inline-flex" {...getCelebrateMotion(reducedMotion)}>
+                <Badge variant={grade.tone}>{grade.label}</Badge>
+              </motion.span>
             ) : null}
           </div>
         </div>

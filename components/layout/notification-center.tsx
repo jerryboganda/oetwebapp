@@ -29,7 +29,7 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, useReducedMotionConfig } from 'motion/react';
-import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
+import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
 import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
 import { Button } from '@/components/ui/button';
@@ -616,6 +616,14 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
     const { totalAlertCount: adminAlertCount } = useAdminAlerts();
     const displayUnreadCount = unreadCount + adminAlertCount;
     const isDegraded = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+    // A one-shot bell wiggle + badge pop whenever the unread count rises
+    // (adjust-state-during-render; transforms collapse under reduced motion).
+    const [seenCount, setSeenCount] = useState(displayUnreadCount);
+    const [nudge, setNudge] = useState(0);
+    if (displayUnreadCount !== seenCount) {
+      setSeenCount(displayUnreadCount);
+      if (displayUnreadCount > seenCount) setNudge((n) => n + 1);
+    }
     return (
       <button
         ref={ref}
@@ -628,11 +636,25 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >
-        <Bell className="h-5 w-5" aria-hidden="true" />
+        <motion.span
+          key={nudge}
+          className="inline-flex"
+          initial={false}
+          animate={nudge ? { rotate: [0, -16, 12, -8, 5, 0] } : undefined}
+          transition={{ duration: 0.6 }}
+        >
+          <Bell className="h-5 w-5" aria-hidden="true" />
+        </motion.span>
         {displayUnreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-3xs">
+          <motion.span
+            key={`badge-${nudge}`}
+            className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-3xs"
+            initial={nudge ? { scale: 0.5 } : false}
+            animate={{ scale: 1 }}
+            transition={motionTokens.spring.pop}
+          >
             {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
-          </span>
+          </motion.span>
         )}
         {isDegraded && (
           <span

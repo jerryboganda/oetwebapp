@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
+import { CelebrationBurst } from '@/components/ui/celebration-burst';
+import { CountUp } from '@/components/ui/count-up';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
@@ -233,13 +235,19 @@ export default function WritingSubmissionResultsPage() {
             title={assessment.scoreLabel}
             subtitle="An AI-generated practice estimate, not an official OET result."
             gaugeValue={gaugePercent(practiceScore, OET_SCALED_MAX)}
-            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{practiceScore}</span>}
+            gaugeCenter={
+              <>
+                <CountUp value={practiceScore} className="text-2xl font-black text-navy dark:text-white" />
+                {/* A real pass (Grade B, 350/500) gets one burst per submission. */}
+                <CelebrationBurst active={practiceScore >= OET_SCALED_PASS_B} onceKey={`writing-result:${submissionId}`} />
+              </>
+            }
             gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
             gaugeColor={practiceScore >= OET_SCALED_PASS_B ? 'var(--color-success)' : practiceScore >= OET_SCALED_PASS_C_PLUS ? 'var(--color-warning)' : 'var(--color-danger)'}
             stats={[
-              { label: 'Score', value: <span data-testid="ai-estimated-score">{practiceScore}/{OET_SCALED_MAX}</span>, tone: 'info', icon: <Award /> },
+              { label: 'Score', value: <span data-testid="ai-estimated-score"><CountUp value={practiceScore} suffix={`/${OET_SCALED_MAX}`} /></span>, tone: 'info', icon: <Award /> },
               ...(assessment.gradeBand ? [{ label: 'Grade band', value: <span data-testid="ai-grade-band">{assessment.gradeBand}</span>, tone: 'info' as const, icon: <Award /> }] : []),
-              { label: t('writing.submissions.results.highlights.raw'), value: `${practiceRawTotal}/${WRITING_RAW_MAX}`, tone: 'default', icon: <FileText /> },
+              { label: t('writing.submissions.results.highlights.raw'), value: <CountUp value={practiceRawTotal} suffix={`/${WRITING_RAW_MAX}`} />, tone: 'default', icon: <FileText /> },
               { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
             ]}
           />

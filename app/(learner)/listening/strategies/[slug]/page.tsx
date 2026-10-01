@@ -67,27 +67,27 @@ export default function ListeningStrategyDetailPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-6" aria-busy="true">
+      <div className="mx-auto max-w-3xl space-y-6" aria-busy="true">
         <p className="sr-only">Loading strategy…</p>
         <Skeleton className="h-9 w-2/3 rounded-lg" />
         <CardSkeleton />
-      </main>
+      </div>
     );
   }
 
   if (!strategy) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold text-navy">Strategy not found</h1>
         <Button asChild size="sm">
           <Link href="/listening/strategies">Back to library</Link>
         </Button>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <header>
         <span className="text-xs uppercase tracking-wide text-muted">
           {strategy.category.replace('_', ' ')}
@@ -122,6 +122,6 @@ export default function ListeningStrategyDetailPage() {
       <Link href="/listening/strategies" className="text-sm text-primary underline transition-colors hover:text-primary-dark">
         ← All strategies
       </Link>
-    </main>
+    </div>
   );
 }
