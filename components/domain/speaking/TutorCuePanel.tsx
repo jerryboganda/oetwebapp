@@ -289,7 +289,7 @@ export function TutorCuePanel({
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
                           ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-50',
+                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
                     >
@@ -313,7 +313,7 @@ export function TutorCuePanel({
               type="button"
               onClick={() => setHiddenOpen((v) => !v)}
               aria-expanded={hiddenOpen}
-              className="flex w-full items-center justify-between rounded-md border border-border bg-background-light px-3 py-2 text-left text-sm font-medium text-foreground hover-primary"
+              className="flex w-full items-center justify-between rounded-md border border-border bg-background-light px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary"
             >
               <span className="inline-flex items-center gap-2">
                 <EyeOff className="h-4 w-4 text-muted" aria-hidden />

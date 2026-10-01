@@ -72,7 +72,7 @@ type AsChildProps = Record<string, unknown> & {
 
 export function buttonClassName({ variant = 'primary', size = 'md', fullWidth, className }: ButtonClassNameOptions = {}) {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+    'inline-flex items-center justify-center gap-2 rounded-control font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
     variantStyles[variant],
     sizeStyles[size],
     fullWidth && 'w-full',
@@ -116,7 +116,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
       return cloneElement(typedChild, {
         ...childPropsFromButton,
-        className: cn(classes, typedChild.props.className),
+        // motion.button animates below; the Link path gets the CSS equivalent.
+        className: cn(classes, 'pressable', typedChild.props.className),
         onClick: handleChildClick,
         'aria-disabled': isDisabled || typedChild.props['aria-disabled'],
         tabIndex: isDisabled ? -1 : typedChild.props.tabIndex,

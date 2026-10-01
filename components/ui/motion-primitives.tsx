@@ -25,7 +25,8 @@ const subscribeToHydrationSnapshot = () => () => undefined;
 const getHydratedSnapshot = () => true;
 const getServerHydrationSnapshot = () => false;
 
-function useHasHydrated(): boolean {
+/** False on the server and the hydrating render, true after: for client-only visuals. */
+export function useHasHydrated(): boolean {
   return useSyncExternalStore(
     subscribeToHydrationSnapshot,
     getHydratedSnapshot,

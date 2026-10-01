@@ -53,7 +53,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                 className={cn(
                   'pressable relative flex min-h-12 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[0.85rem] px-1 py-0.5 text-3xs font-semibold leading-none',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
+                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >

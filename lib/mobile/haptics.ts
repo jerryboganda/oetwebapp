@@ -1,11 +1,12 @@
 'use client';
 
 import { Capacitor } from '@capacitor/core';
-import type { ImpactStyle as CapacitorImpactStyle } from '@capacitor/haptics';
+import type { ImpactStyle as CapacitorImpactStyle, NotificationType as CapacitorNotificationType } from '@capacitor/haptics';
 
 type NativeHapticsModule = typeof import('@capacitor/haptics');
 
 export type HapticImpactStyle = 'LIGHT' | 'MEDIUM' | 'HEAVY';
+export type HapticNotificationType = 'SUCCESS' | 'WARNING' | 'ERROR';
 
 let hapticsModulePromise: Promise<NativeHapticsModule> | null = null;
 
@@ -29,4 +30,9 @@ async function runHapticAction(action: (haptics: NativeHapticsModule['Haptics'])
 
 export function triggerImpactHaptic(style: HapticImpactStyle = 'MEDIUM') {
   return runHapticAction((haptics) => haptics.impact({ style: style as CapacitorImpactStyle }));
+}
+
+/** Outcome feedback (a pass, an unlocked achievement), distinct from a tap's impact. */
+export function triggerNotificationHaptic(type: HapticNotificationType = 'SUCCESS') {
+  return runHapticAction((haptics) => haptics.notification({ type: type as CapacitorNotificationType }));
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { getSharedLayoutId, motionTokens } from '@/lib/motion';
+import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotionConfig } from 'motion/react';
 import { type KeyboardEvent, type ReactNode, useId, useRef } from 'react';
@@ -74,18 +75,21 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
           aria-selected={activeTab === tab.id}
           aria-controls={`tabpanel-${tab.id}`}
           tabIndex={activeTab === tab.id ? 0 : -1}
-          onClick={() => onChange(tab.id)}
+          onClick={() => {
+            if (tab.id !== activeTab) void triggerImpactHaptic('LIGHT');
+            onChange(tab.id);
+          }}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
             'relative flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-bold transition-[color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-            activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover:bg-primary hover:text-white',
+            activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover:bg-primary/8 hover:text-primary-dark dark:hover:bg-primary/15 dark:hover:text-primary',
           )}
         >
           {activeTab === tab.id && (
             <motion.span
               layoutId={getSharedLayoutId('tabs-active-pill', pillScope)}
               className="absolute inset-0 rounded-2xl bg-surface shadow-sm"
-              transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.item}
+              transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.layout}
             />
           )}
           <span className="relative z-10 flex items-center gap-2">
