@@ -13,7 +13,10 @@
  */
 
 import { AlertTriangle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ProgressBar } from '@/components/ui/progress';
 import type { AccentProgress } from '@/lib/listening-pathway-api';
+import { cn } from '@/lib/utils';
 
 export interface AccentBarChartProps {
   accents: AccentProgress[];
@@ -61,29 +64,20 @@ export function AccentBarChart({
   if (!accents.length) {
     return (
       <div
-        className={[
-          'flex h-32 items-center justify-center rounded-xl border border-dashed border-border',
-          'text-sm text-muted',
-          className ?? '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        className={cn(
+          'flex h-32 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted',
+          className,
+        )}
       >
         No accent data available yet.
       </div>
     );
   }
 
+  // A plain list on its card: the bars are the shared ProgressBar (transform fill,
+  // reduced-motion aware) instead of a width transition.
   return (
-    <ul
-      className={[
-        'flex flex-col gap-3 rounded-xl border border-border bg-surface p-4',
-        className ?? '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      aria-label="Accent accuracy"
-    >
+    <ul className={cn('flex flex-col gap-4', className)} aria-label="Accent accuracy">
       {accents.map((row) => {
         const pct = clampPercentage(row.accuracyPercentage);
         const needsWork = pct < needsWorkThreshold;
@@ -92,43 +86,25 @@ export function AccentBarChart({
         return (
           <li key={row.accent} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
             <div className="min-w-0">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-navy">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-navy">
                   <span aria-hidden="true">{flag}</span>
                   <span className="truncate">{label}</span>
                 </span>
                 {needsWork ? (
-                  <span
-                    className={[
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-semibold',
-                      'bg-warning/10 text-warning-strong',
-                    ].join(' ')}
-                  >
+                  <Badge variant="warning" className="shrink-0 gap-1">
                     <AlertTriangle aria-hidden="true" className="h-3 w-3" />
                     Needs work
-                  </span>
+                  </Badge>
                 ) : null}
               </div>
-              <div
-                className="h-2.5 w-full overflow-hidden rounded-full bg-border"
-                role="progressbar"
-                aria-valuenow={pct}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`${label} accuracy`}
-              >
-                <div
-                  className={[
-                    'h-full rounded-full transition-[width] duration-500 ease-out',
-                    needsWork
-                      ? 'bg-warning'
-                      : 'bg-success',
-                  ].join(' ')}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+              <ProgressBar
+                value={pct}
+                color={needsWork ? 'warning' : 'success'}
+                ariaLabel={`${label} accuracy`}
+              />
             </div>
-            <span className="text-right text-sm font-semibold tabular-nums text-navy">
+            <span className="text-end text-sm font-semibold tabular-nums text-navy">
               {pct}%
             </span>
           </li>
