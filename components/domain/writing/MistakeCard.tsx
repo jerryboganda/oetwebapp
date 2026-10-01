@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ArrowUpRight, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { WritingCommonMistakeDto, WritingLearnerMistakeStatDto } from '@/lib/writing/types';
 
@@ -38,52 +38,50 @@ function formatRelative(iso: string | null | undefined): string {
  */
 export function MistakeCard({ mistake, personalStat, className }: MistakeCardProps) {
   return (
-    <Card padding="md" className={cn(className)} aria-label={`Common mistake: ${mistake.summary}`}>
-      <CardContent>
-        <header className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <AlertCircle className="w-4 h-4 text-warning-strong shrink-0" aria-hidden="true" />
-            <h3 className="font-extrabold text-sm truncate">{mistake.summary}</h3>
-          </div>
-          <Badge variant="muted" size="sm">{mistake.category}</Badge>
-        </header>
+    <Card padding="md" className={cn('h-full', className)} aria-label={`Common mistake: ${mistake.summary}`}>
+      <header className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden="true" />
+          <h3 className="min-w-0 text-sm font-bold text-navy">{mistake.summary}</h3>
+        </div>
+        <Badge variant="muted" size="sm" className="shrink-0">{mistake.category}</Badge>
+      </header>
 
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-          <div className="rounded border border-danger/30 bg-danger/10 p-2">
-            <dt className="tile-label text-danger-strong mb-0.5">
-              Wrong
-            </dt>
-            <dd className="text-xs leading-snug">{mistake.exampleWrong}</dd>
-          </div>
-          <div className="rounded border border-success/30 bg-success/10 p-2">
-            <dt className="tile-label text-success-strong mb-0.5">
-              Right
-            </dt>
-            <dd className="text-xs leading-snug">{mistake.exampleRight}</dd>
-          </div>
-        </dl>
+      <dl className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div className="min-w-0 rounded-lg border border-danger/30 bg-danger/10 p-2">
+          <dt className="tile-label mb-0.5 text-danger-strong">
+            Wrong
+          </dt>
+          <dd className="text-xs leading-snug text-navy">{mistake.exampleWrong}</dd>
+        </div>
+        <div className="min-w-0 rounded-lg border border-success/30 bg-success/10 p-2">
+          <dt className="tile-label mb-0.5 text-success-strong">
+            Right
+          </dt>
+          <dd className="text-xs leading-snug text-navy">{mistake.exampleRight}</dd>
+        </div>
+      </dl>
 
-        <footer className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-xs text-muted">
-            {mistake.relatedSubSkill ? <Badge variant="violet" size="sm">{mistake.relatedSubSkill}</Badge> : null}
-            {mistake.canonRuleId ? (
-              <Link
-                href={`/writing/canon/${encodeURIComponent(mistake.canonRuleId)}`}
-                className="inline-flex items-center gap-1 font-bold underline text-primary"
-              >
-                {mistake.canonRuleId}
-                <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
-              </Link>
-            ) : null}
-          </div>
-          {personalStat ? (
-            <div className="text-xs text-muted font-bold">
-              {personalStat.occurrenceCount}× in your letters
-              {personalStat.lastOccurredAt ? ` · last ${formatRelative(personalStat.lastOccurredAt)}` : ''}
-            </div>
+      <footer className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs text-muted">
+          {mistake.relatedSubSkill ? <Badge variant="violet" size="sm">{mistake.relatedSubSkill}</Badge> : null}
+          {mistake.canonRuleId ? (
+            <Link
+              href={`/writing/canon/${encodeURIComponent(mistake.canonRuleId)}`}
+              className="inline-flex items-center gap-1 rounded font-bold text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {mistake.canonRuleId}
+              <ArrowUpRight className="h-3 w-3 rtl:-scale-x-100" aria-hidden="true" />
+            </Link>
           ) : null}
-        </footer>
-      </CardContent>
+        </div>
+        {personalStat ? (
+          <div className="text-xs font-bold tabular-nums text-muted">
+            {personalStat.occurrenceCount}× in your letters
+            {personalStat.lastOccurredAt ? ` · last ${formatRelative(personalStat.lastOccurredAt)}` : ''}
+          </div>
+        ) : null}
+      </footer>
     </Card>
   );
 }

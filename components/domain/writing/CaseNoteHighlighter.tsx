@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { WritingCaseNoteRelevance } from '@/lib/writing/types';
 
@@ -57,22 +57,22 @@ function verdictFor(
 
 const VERDICT_STYLES: Record<string, { tone: string; icon?: typeof CheckCircle2; label: string }> = {
   correct: {
-    tone: 'border-success/40 bg-success/10 text-navy dark:text-white',
+    tone: 'border-success/40 bg-success/10 text-navy',
     icon: CheckCircle2,
     label: 'Correctly identified',
   },
   incorrect: {
-    tone: 'border-danger/40 bg-danger/10 text-navy dark:text-white',
+    tone: 'border-danger/40 bg-danger/10 text-navy',
     icon: XCircle,
     label: 'Should not have been marked',
   },
   missed: {
-    tone: 'border-warning/40 bg-warning/10 text-navy dark:text-white',
+    tone: 'border-warning/40 bg-warning/10 text-navy',
     icon: HelpCircle,
     label: 'Should have been marked',
   },
   partial: {
-    tone: 'border-border bg-background-light text-navy dark:text-white',
+    tone: 'border-border bg-background-light text-navy',
     icon: HelpCircle,
     label: 'Either answer acceptable',
   },
@@ -128,74 +128,72 @@ export function CaseNoteHighlighter({
   );
 
   return (
-    <Card padding="lg" className={cn('flex flex-col gap-3', className)}>
-      <CardContent>
-        <header className="mb-3">
-          <h3 className="font-extrabold text-base">Mark relevant sentences</h3>
-          <p className="text-xs text-muted mt-0.5">
-            Click each sentence that belongs in the letter. Click again to unmark.
-            {scored ? ` ${totalRelevantInTruth} sentences were truly relevant.` : ''}
-          </p>
-        </header>
-        <ul className="space-y-2" aria-label="Case-note sentences">
-          {caseNotes.map((s) => {
-            const v = verdictFor(s.index, selected, s.groundTruth);
-            const meta = VERDICT_STYLES[v];
-            const Icon = meta.icon;
-            const learnerMarked = selected.has(s.index);
-            return (
-              <li key={s.index}>
-                <button
-                  type="button"
-                  onClick={() => toggle(s.index)}
-                  disabled={scored}
-                  aria-pressed={learnerMarked}
-                  className={cn(
-                    'w-full text-left flex items-start gap-2 rounded-lg border p-2.5 transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                    meta.tone,
-                    !scored && (learnerMarked ? 'ring-2 ring-primary/40' : ''),
-                    scored && 'cursor-default',
-                  )}
-                >
-                  {Icon ? (
-                    <Icon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <span
-                      className={cn(
-                        'inline-block w-4 h-4 mt-0.5 shrink-0 rounded-sm border',
-                        learnerMarked ? 'bg-primary border-primary' : 'border-current/60',
-                      )}
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="text-sm flex-1 leading-snug">{s.text}</span>
-                  {scored ? (
-                    <span className="tile-label opacity-80">{meta.label}</span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        {!scored ? (
-          <footer className="mt-4 flex items-center justify-between gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={handleReset}>
-              Reset
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              onClick={handleSubmit}
-              disabled={selected.size === 0}
-              aria-disabled={selected.size === 0}
-            >
-              Check answers
-            </Button>
-          </footer>
-        ) : null}
-      </CardContent>
+    <Card padding="lg" className={className}>
+      <header className="mb-3">
+        <h3 className="text-base font-bold text-navy">Mark relevant sentences</h3>
+        <p className="text-xs text-muted mt-0.5">
+          Click each sentence that belongs in the letter. Click again to unmark.
+          {scored ? ` ${totalRelevantInTruth} sentences were truly relevant.` : ''}
+        </p>
+      </header>
+      <ul className="space-y-2" aria-label="Case-note sentences">
+        {caseNotes.map((s) => {
+          const v = verdictFor(s.index, selected, s.groundTruth);
+          const meta = VERDICT_STYLES[v];
+          const Icon = meta.icon;
+          const learnerMarked = selected.has(s.index);
+          return (
+            <li key={s.index}>
+              <button
+                type="button"
+                onClick={() => toggle(s.index)}
+                disabled={scored}
+                aria-pressed={learnerMarked}
+                className={cn(
+                  'flex w-full items-start gap-2 rounded-lg border p-2.5 text-start transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  meta.tone,
+                  !scored && (learnerMarked ? 'ring-2 ring-primary/40' : ''),
+                  scored && 'cursor-default',
+                )}
+              >
+                {Icon ? (
+                  <Icon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                ) : (
+                  <span
+                    className={cn(
+                      'inline-block w-4 h-4 mt-0.5 shrink-0 rounded-sm border',
+                      learnerMarked ? 'bg-primary border-primary' : 'border-current/60',
+                    )}
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="text-sm flex-1 leading-snug">{s.text}</span>
+                {scored ? (
+                  <span className="tile-label opacity-80">{meta.label}</span>
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {!scored ? (
+        <footer className="mt-4 flex items-center justify-between gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={handleReset}>
+            Reset
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={handleSubmit}
+            disabled={selected.size === 0}
+            aria-disabled={selected.size === 0}
+          >
+            Check answers
+          </Button>
+        </footer>
+      ) : null}
     </Card>
   );
 }
