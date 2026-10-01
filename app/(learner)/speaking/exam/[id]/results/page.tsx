@@ -352,8 +352,8 @@ export default function SpeakingExamResultsPage() {
           <ResultsScorePanel
             eyebrow="Speaking exam"
             icon={Mic}
-            title="Speaking exam results"
-            subtitle={band ? `Combined result · Readiness band: ${bandLabel(band)}` : 'Combined result'}
+            title="Combined result"
+            subtitle={band ? `Readiness band: ${bandLabel(band)}` : undefined}
             gaugeValue={typeof results.combinedScaledScore === 'number' ? (results.combinedScaledScore / 500) * 100 : 0}
             gaugeCenter={
               typeof results.combinedScaledScore === 'number'
