@@ -5,26 +5,31 @@ import {
   Award,
   ArrowRight,
   BarChart3,
+  Check,
   CheckCircle2,
   Clock,
   FileText,
   Headphones,
   Layers,
+  Lock,
   Mic,
   PenTool,
   PlayCircle,
   RefreshCw,
   Star,
   Hourglass,
-  Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { cn } from '@/lib/utils';
 import type { MockReport } from '@/lib/mock-data';
 import { fetchMocksHome } from '@/lib/api';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -139,11 +144,12 @@ const SUBTEST_ICON: Record<SubtestCode, LucideIcon> = {
   speaking: Mic,
 };
 
+/** Sub-test identity colours (DESIGN.md §2 skill tokens), never status. */
 const SUBTEST_COLOR: Record<SubtestCode, { fg: string; bg: string; label: string }> = {
-  listening: { fg: 'text-primary', bg: 'bg-lavender', label: 'Listening' },
-  reading: { fg: 'text-info', bg: 'bg-info/10', label: 'Reading' },
-  writing: { fg: 'text-danger-strong', bg: 'bg-danger/10', label: 'Writing' },
-  speaking: { fg: 'text-primary-600', bg: 'bg-primary-100', label: 'Speaking' },
+  listening: { fg: 'text-skill-listening', bg: 'bg-skill-listening/10', label: 'Listening' },
+  reading: { fg: 'text-skill-reading', bg: 'bg-skill-reading/10', label: 'Reading' },
+  writing: { fg: 'text-skill-writing', bg: 'bg-skill-writing/10', label: 'Writing' },
+  speaking: { fg: 'text-skill-speaking', bg: 'bg-skill-speaking/10', label: 'Speaking' },
 };
 
 const FULL_MOCK_ORDER: readonly SubtestCode[] = ['listening', 'reading', 'writing', 'speaking'] as const;
@@ -190,14 +196,15 @@ function humanState(state: string): string {
 
 /**
  * Compact 4-dot strip showing Listening / Reading / Writing / Speaking progress on a Full Mock row.
- * Colour tokens follow DESIGN.md (emerald/amber/slate/gray). Purely visual; no interaction.
+ * State is a status tint plus a shape cue (a check when completed, a ring while in progress), so it
+ * never relies on colour alone. Purely visual; no interaction.
  */
 function SectionProgressDots({ mock }: { mock: FullMockCard }) {
   if (mock.mockType !== 'full') return null;
   const included = mock.includedSubtests ?? FULL_MOCK_ORDER;
   const progress = mock.sectionProgress ?? {};
   return (
-    <div className="flex items-center gap-1.5" aria-label="Per-sub-test progress">
+    <div className="flex items-center gap-1.5" role="group" aria-label="Per-sub-test progress">
       {FULL_MOCK_ORDER.map((subtest) => {
         const active = included.includes(subtest);
         const state = progress[subtest];
@@ -206,7 +213,7 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
           : state === 'completed'
             ? 'bg-success/10 text-success-strong'
             : state === 'in-progress'
-              ? 'bg-warning/10 text-warning-strong'
+              ? 'bg-warning/10 text-warning-strong ring-1 ring-inset ring-warning/60'
               : state === 'locked'
                 ? 'bg-background-light text-disabled'
                 : 'bg-background-light text-muted/60';
@@ -215,11 +222,19 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
         return (
           <span
             key={subtest}
+            role="img"
             title={label}
             aria-label={label}
-            className={`flex h-6 w-6 items-center justify-center rounded-full ${palette}`}
+            className={`relative flex h-6 w-6 items-center justify-center rounded-full ${palette}`}
           >
-            <Icon className="h-3 w-3" />
+            <Icon className="h-3 w-3" aria-hidden="true" />
+            {active && state === 'completed' ? (
+              <Check
+                className="absolute -end-1 -top-1 h-3 w-3 rounded-full bg-surface text-success-strong"
+                strokeWidth={3}
+                aria-hidden="true"
+              />
+            ) : null}
           </span>
         );
       })}
@@ -362,11 +377,12 @@ function MockCenterInner() {
       recommendedReadiness?.message ??
       recommended?.rationale ??
       'Start a full mock when you need evidence that your recent practice work is holding up under full-exam pressure.',
+    // The card shows three meta items: the learner's real trend leads, so it is never the one cut.
     metaItems: [
+      ...(trendLabel ? [{ icon: BarChart3, label: trendLabel }] : []),
       { icon: Clock, label: '~3 hours' },
       { icon: Award, label: 'Full mock flow' },
       { icon: FileText, label: 'Report included' },
-      ...(trendLabel ? [{ icon: BarChart3, label: trendLabel }] : []),
     ],
     primaryAction: {
       label: 'Start Mock',
@@ -458,10 +474,11 @@ function MockCenterInner() {
         eyebrow: 'Cohort position',
         eyebrowIcon: BarChart3,
         title: cohortPercentile.label ?? 'Where you sit in the cohort',
-        description:
+        description: `${
           typeof cohortPercentile.percentile === 'number' && typeof cohortPercentile.cohortSize === 'number'
             ? `Your latest mock is in the ${cohortPercentile.percentile}th percentile of ${cohortPercentile.cohortSize} learners who completed a mock in the last ${cohortPercentile.windowDays ?? 90} days.`
-            : 'Complete a full mock to compare your overall score against the recent cohort.',
+            : 'Complete a full mock to compare your overall score against the recent cohort.'
+        } All comparisons are private.`,
         metaItems: [
           ...(typeof cohortPercentile.percentile === 'number'
             ? [{ icon: BarChart3, label: `${cohortPercentile.percentile}th percentile` }]
@@ -484,104 +501,127 @@ function MockCenterInner() {
         { icon: BarChart3, label: 'Recent reports', value: `${reports.length} available` },
       ];
 
+  const noBundles = fullMocks.length === 0 && subTestMocks.length === 0;
+  // The backend's no-bundles copy addresses admins and links /admin/* (DEF-005: a 403 trap for
+  // learners), so its message only replaces the generic one when it points at a learner route.
+  const learnerEmptyRoute = emptyState?.route && !emptyState.route.startsWith('/admin/') ? emptyState.route : null;
+
+  const categories = [
+    { href: '/mocks?subtest=listening', label: 'Full Listening Mock', icon: SUBTEST_ICON.listening, palette: SUBTEST_COLOR.listening, testid: 'mocks-cat-listening' },
+    { href: '/mocks?subtest=reading', label: 'Full Reading Mock', icon: SUBTEST_ICON.reading, palette: SUBTEST_COLOR.reading, testid: 'mocks-cat-reading' },
+    { href: '/mocks?subtest=writing', label: 'Full Writing Mock', icon: SUBTEST_ICON.writing, palette: SUBTEST_COLOR.writing, testid: 'mocks-cat-writing' },
+    // All four sub-tests: the module's own navy (the hero's Layers mark), not a status colour.
+    { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-navy', bg: 'bg-navy/10', label: 'Combined' }, testid: 'mocks-cat-combined' },
+  ] as const;
+
+  const professionChip = (selected: boolean) =>
+    cn(
+      'pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
+      selected
+        ? 'border-primary bg-primary text-white dark:bg-primary-700'
+        : 'border-border bg-surface text-navy hover:border-border-hover',
+    );
+
   return (
     <>
-      <div className="space-y-6 sm:space-y-10">
-        <LearnerPageHero
-          eyebrow="Module Focus"
-          icon={Layers}
-          accent="navy"
-          title="Choose the mock that proves whether practice is transferring"
-          description="Pick the right mock depth, track your progress, and let your results guide your next move."
-          highlights={heroHighlights}
+      <LearnerPageHero
+        eyebrow="Module Focus"
+        icon={Layers}
+        accent="navy"
+        title="Choose the mock that proves whether practice is transferring"
+        description="Pick the right mock depth, track your progress, and let your results guide your next move."
+        highlights={heroHighlights}
+        footer={(
+          <p
+            className="flex items-start gap-2 text-xs font-semibold leading-5 text-muted"
+            data-testid="mocks-integrity-reminder"
+            role="note"
+          >
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            OET test content is confidential. Do not redistribute or share questions outside this practice context.
+          </p>
+        )}
+      />
+
+      {/* Per the 2026-05-27 OET sample-test alignment, the Mocks tab is the
+          single canonical home for full mocks. We surface the four owner-
+          required categories — Full Listening Mock, Full Reading Mock, Full
+          Writing Mock, Full Combined Mock — as a clear landing matrix so
+          first-time visitors immediately see the four routes without having
+          to scroll past Resume / Recommended / Profession-filter blocks. */}
+      <MotionSection data-testid="mocks-categories">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Choose your mock type"
+          title="The four canonical OET mock categories"
+          className="mb-4"
         />
-
-        <p
-          className="rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
-          data-testid="mocks-integrity-reminder"
-          role="note"
-        >
-          OET test content is confidential. Do not redistribute or share questions outside this practice context.
-        </p>
-
-        {/* Per the 2026-05-27 OET sample-test alignment, the Mocks tab is the
-            single canonical home for full mocks. We surface the four owner-
-            required categories — Full Listening Mock, Full Reading Mock, Full
-            Writing Mock, Full Combined Mock — as a clear landing matrix so
-            first-time visitors immediately see the four routes without having
-            to scroll past Resume / Recommended / Profession-filter blocks. */}
-        <section aria-labelledby="mocks-categories-heading" data-testid="mocks-categories">
-          <div className="mb-3">
-            <p className="eyebrow text-primary">
-              Choose your mock type
-            </p>
-            <h2 id="mocks-categories-heading" className="text-lg font-bold text-navy">
-              The four canonical OET mock categories
-            </h2>
-          </div>
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {([
-              { href: '/mocks?subtest=listening', label: 'Full Listening Mock', icon: SUBTEST_ICON.listening, palette: SUBTEST_COLOR.listening, testid: 'mocks-cat-listening' },
-              { href: '/mocks?subtest=reading', label: 'Full Reading Mock', icon: SUBTEST_ICON.reading, palette: SUBTEST_COLOR.reading, testid: 'mocks-cat-reading' },
-              { href: '/mocks?subtest=writing', label: 'Full Writing Mock', icon: SUBTEST_ICON.writing, palette: SUBTEST_COLOR.writing, testid: 'mocks-cat-writing' },
-              { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-warning-strong', bg: 'bg-warning/10', label: 'Combined' }, testid: 'mocks-cat-combined' },
-            ] as const).map((category) => {
-              const Icon = category.icon;
-              const isActive =
-                (scope?.kind === 'subtest' && category.href === `/mocks?subtest=${scope.subtest}`) ||
-                (scope?.kind === 'full' && category.href === '/mocks?type=full');
-              return (
-                <li key={category.href}>
-                  <Link
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {categories.map((category, index) => {
+            const Icon = category.icon;
+            const isActive =
+              (scope?.kind === 'subtest' && category.href === `/mocks?subtest=${scope.subtest}`) ||
+              (scope?.kind === 'full' && category.href === '/mocks?type=full');
+            return (
+              <li key={category.href}>
+                <MotionItem delayIndex={index} className="h-full">
+                  <CardLink
                     href={category.href}
                     data-testid={category.testid}
                     aria-current={isActive ? 'true' : undefined}
-                    className={`group flex h-full items-start gap-3 rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md ${
-                      isActive ? 'border-primary ring-1 ring-primary/40' : 'border-border'
-                    }`}
+                    className={cn('group flex h-full items-start gap-3', isActive && 'border-primary ring-1 ring-primary/40')}
                   >
                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${category.palette.bg}`}>
-                      <Icon className={`h-5 w-5 ${category.palette.fg}`} />
+                      <Icon className={`h-5 w-5 ${category.palette.fg}`} aria-hidden="true" />
                     </div>
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-bold text-navy">{category.label}</h3>
                       <p className="mt-0.5 text-xs text-muted">
                         Jump straight to {category.palette.label.toLowerCase()} bundles
                       </p>
                     </div>
                     <ArrowRight
-                      className="h-4 w-4 self-center text-muted/40 transition-colors group-hover:text-navy"
-                      aria-hidden
+                      className="h-4 w-4 self-center text-muted/40 transition-colors group-hover:text-navy rtl:rotate-180"
+                      aria-hidden="true"
                     />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+                  </CardLink>
+                </MotionItem>
+              </li>
+            );
+          })}
+        </ul>
+      </MotionSection>
 
-        {scope ? (
-          <div
-            data-testid="mocks-scope-banner"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3"
-          >
-            <p className="text-sm font-semibold text-navy">
-              Showing: <span className="text-primary">{scope.label}</span>
-            </p>
-            <Link
-              href="/mocks"
-              data-testid="mocks-scope-clear"
-              className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:border-primary"
-            >
-              <Layers className="h-3.5 w-3.5" aria-hidden />
+      {scope ? (
+        <div
+          data-testid="mocks-scope-banner"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3"
+        >
+          <p className="text-sm font-semibold text-navy">
+            Showing: <span className="text-primary">{scope.label}</span>
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/mocks" data-testid="mocks-scope-clear">
+              <Layers className="h-3.5 w-3.5" aria-hidden="true" />
               View all mocks
             </Link>
-          </div>
-        ) : null}
+          </Button>
+        </div>
+      ) : null}
 
-        <LearnerSkillSwitcher compact />
+      <LearnerSkillSwitcher compact />
 
-        {!loading && !error && fullMocks.length === 0 && subTestMocks.length === 0 ? (
+      {!loading && !error && noBundles ? (
+        learnerEmptyRoute ? (
+          <LearnerEmptyState
+            icon={Layers}
+            title={emptyState?.title ?? 'No mock bundles are published yet'}
+            description={
+              emptyState?.description ??
+              'Once an admin publishes a bundle it will appear here with its real section order.'
+            }
+            primaryAction={{ label: 'Go to dashboard', href: learnerEmptyRoute }}
+          />
+        ) : (
           <LearnerEmptyState
             icon={Layers}
             title="No mock bundles are published yet"
@@ -589,147 +629,106 @@ function MockCenterInner() {
             primaryAction={{ label: 'Practise Listening', href: '/listening' }}
             secondaryAction={{ label: 'Track Progress', href: '/progress' }}
           />
-        ) : null}
+        )
+      ) : null}
 
-        {loading ? (
-          <LearnerSkeleton variant="dashboard" />
-        ) : error ? (
-          <MotionSection>
-            <div
-              role="alert"
-              className="rounded-surface border border-danger/20 bg-danger/5 p-6 shadow-sm"
-            >
-              <InlineAlert variant="error" title="We couldn't load the Mock Center right now">
-                {error} If this keeps happening, the mock service may be warming up &mdash; try again
-                in a moment.
-              </InlineAlert>
-              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Button
-                  variant="primary"
-                  onClick={() => setReloadKey((k) => k + 1)}
-                  className="gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
+      {loading ? (
+        <LearnerSkeleton variant="list" />
+      ) : error ? (
+        <MotionSection>
+          <InlineAlert
+            variant="error"
+            title="We couldn't load the Mock Center right now"
+            action={(
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   Retry
                 </Button>
-                <a
-                  href="mailto:support@oetwithdrhesham.co.uk"
-                  className="pressable inline-flex items-center justify-center gap-2 rounded-card px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
-                >
-                  Contact support
-                </a>
+                <Button asChild variant="ghost" size="sm">
+                  <a href="mailto:support@oetwithdrhesham.co.uk">Contact support</a>
+                </Button>
               </div>
-            </div>
-          </MotionSection>
-        ) : (
-          <>
-            {resumableAttempts.length > 0 && (
-              <MotionSection>
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Continue where you left off"
-                  title="You have mocks in progress"
-                  description="Jump back in so your progress is preserved exactly where you paused."
-                  className="mb-4"
-                />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {resumableAttempts.map((attempt, idx) => (
-                    <MotionItem key={attempt.mockAttemptId} delayIndex={idx}>
-                      <LearnerSurfaceCard
-                        card={{
-                          kind: 'status',
-                          sourceType: 'backend_summary',
-                          accent: 'primary',
-                          eyebrow: humanMockTypeLabel(attempt.mockType, attempt.subtest),
-                          eyebrowIcon: Hourglass,
-                          title: humanState(attempt.state),
-                          description:
-                            attempt.startedAt
-                              ? `Started ${new Date(attempt.startedAt).toLocaleString()}`
-                              : 'Resume to continue from your last saved section.',
-                          metaItems: [{ icon: Layers, label: attempt.mockType === 'full' ? 'Full mock' : 'Sub-test mock' }],
-                          primaryAction: {
-                            label: 'Resume mock',
-                            href: attempt.resumeRoute,
-                          },
-                          secondaryAction: attempt.reportRoute
-                            ? { label: 'View report so far', href: attempt.reportRoute, variant: 'secondary' as const }
-                            : undefined,
-                        }}
-                      />
-                    </MotionItem>
-                  ))}
-                </div>
-              </MotionSection>
             )}
-
+          >
+            {error} If this keeps happening, the mock service may be warming up &mdash; try again
+            in a moment.
+          </InlineAlert>
+        </MotionSection>
+      ) : (
+        <>
+          {resumableAttempts.length > 0 && (
             <MotionSection>
-              <LearnerSurfaceCard card={recommendedCard} />
+              <LearnerSurfaceSectionHeader
+                eyebrow="Continue where you left off"
+                title="You have mocks in progress"
+                description="Jump back in so your progress is preserved exactly where you paused."
+                className="mb-4"
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {resumableAttempts.map((attempt, idx) => (
+                  <MotionItem key={attempt.mockAttemptId} delayIndex={Math.min(idx, 5)}>
+                    <LearnerSurfaceCard
+                      card={{
+                        kind: 'status',
+                        sourceType: 'backend_summary',
+                        accent: 'primary',
+                        eyebrow: humanMockTypeLabel(attempt.mockType, attempt.subtest),
+                        eyebrowIcon: Hourglass,
+                        title: humanState(attempt.state),
+                        description:
+                          attempt.startedAt
+                            ? `Started ${new Date(attempt.startedAt).toLocaleString()}`
+                            : 'Resume to continue from your last saved section.',
+                        metaItems: [{ icon: Layers, label: attempt.mockType === 'full' ? 'Full mock' : 'Sub-test mock' }],
+                        primaryAction: {
+                          label: 'Resume mock',
+                          href: attempt.resumeRoute,
+                        },
+                        secondaryAction: attempt.reportRoute
+                          ? { label: 'View report so far', href: attempt.reportRoute, variant: 'secondary' as const }
+                          : undefined,
+                      }}
+                    />
+                  </MotionItem>
+                ))}
+              </div>
             </MotionSection>
+          )}
 
-            {emptyState && fullMocks.length === 0 && subTestMocks.length === 0 ? (
-              <MotionSection>
-                <LearnerSurfaceCard
-                  card={{
-                    kind: 'status',
-                    sourceType: 'backend_summary',
-                    accent: 'slate',
-                    eyebrow: 'Mock Library',
-                    eyebrowIcon: Sparkles,
-                    title: emptyState.title ?? 'No mock bundles are published yet',
-                    description:
-                      emptyState.description ??
-                      'Once an admin publishes a bundle it will appear here with its real section order.',
-                    // DEF-005 fix 2026-05: never expose /admin/* routes to
-                    // learners — those produce a 403 trap on click. Fall back
-                    // to the learner study plan when the backend hints at
-                    // an admin destination.
-                    primaryAction: emptyState.route && !emptyState.route.startsWith('/admin/')
-                      ? { label: 'Go to dashboard', href: emptyState.route }
-                      : { label: 'Open Study Plan', href: '/study-plan' },
-                  }}
-                />
-              </MotionSection>
-            ) : (
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-                <div className="space-y-6 sm:space-y-10 lg:col-span-2">
-                  {availableProfessions.length > 0 ? (
-                    <section aria-label="Profession filter">
-                      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Filter mocks by profession">
-                        <span className="eyebrow text-muted">Profession</span>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={professionFilter === null}
-                          onClick={() => setProfessionFilter(null)}
-                          className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
-                            professionFilter === null
-                              ? 'border-primary bg-primary text-white dark:bg-primary-700'
-                              : 'border-border bg-surface text-navy hover:border-border'
-                          }`}
-                        >
-                          All professions
-                        </button>
-                        {availableProfessions.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={professionFilter === p.id}
-                            onClick={() => setProfessionFilter(p.id)}
-                            className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
-                              professionFilter === p.id
-                                ? 'border-primary bg-primary text-white dark:bg-primary-700'
-                                : 'border-border bg-surface text-navy hover:border-border'
-                            }`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
+          <MotionSection delayIndex={1}>
+            <LearnerSurfaceCard card={recommendedCard} />
+          </MotionSection>
 
-                  {scope?.kind === 'full' ? null : (
+          {noBundles ? null : (
+            <MotionSection delayIndex={2} className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+              <div className="space-y-6 sm:space-y-8 lg:col-span-2">
+                {availableProfessions.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter mocks by profession">
+                    <span className="eyebrow text-muted">Profession</span>
+                    <button
+                      type="button"
+                      aria-pressed={professionFilter === null}
+                      onClick={() => setProfessionFilter(null)}
+                      className={professionChip(professionFilter === null)}
+                    >
+                      All professions
+                    </button>
+                    {availableProfessions.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        aria-pressed={professionFilter === p.id}
+                        onClick={() => setProfessionFilter(p.id)}
+                        className={professionChip(professionFilter === p.id)}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {scope?.kind === 'full' ? null : (
                   <section>
                     <LearnerSurfaceSectionHeader
                       eyebrow="Sub-test Mocks"
@@ -746,42 +745,35 @@ function MockCenterInner() {
                       className="mb-4"
                     />
                     {scopedSubTestMocks.length === 0 ? (
-                      scope?.kind === 'subtest' ? (
-                        <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
-                          {!scopedSubtestHasAny ? (
-                            <>
-                              <p className="font-semibold text-navy">
-                                No {scope.label} bundles are published yet.
-                              </p>
-                              <p className="mt-1">
-                                You can still practise {SUBTEST_COLOR[scope.subtest].label.toLowerCase()}{' '}
-                                part-by-part in the meantime.
-                              </p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <Link
-                                  href={SUBTEST_HUB[scope.subtest]}
-                                  className="pressable inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-primary-700"
-                                >
-                                  Practise {SUBTEST_COLOR[scope.subtest].label} part-by-part
-                                </Link>
-                                <Link
-                                  href="/mocks"
-                                  className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:border-primary"
-                                >
-                                  View all mocks
-                                </Link>
-                              </div>
-                            </>
-                          ) : (
-                            `No ${SUBTEST_COLOR[scope.subtest].label} sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.`
-                          )}
-                        </div>
+                      scope?.kind === 'subtest' && !scopedSubtestHasAny ? (
+                        <LearnerEmptyState
+                          compact
+                          icon={SUBTEST_ICON[scope.subtest]}
+                          title={`No ${scope.label} bundles are published yet`}
+                          description={`You can still practise ${SUBTEST_COLOR[scope.subtest].label.toLowerCase()} part-by-part in the meantime.`}
+                          primaryAction={{
+                            label: `Practise ${SUBTEST_COLOR[scope.subtest].label} part-by-part`,
+                            href: SUBTEST_HUB[scope.subtest],
+                          }}
+                          secondaryAction={{ label: 'View all mocks', href: '/mocks' }}
+                        />
                       ) : (
-                        <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
-                          {subTestMocks.length === 0
-                            ? 'No published sub-test mock bundles are available yet.'
-                            : 'No sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
-                        </div>
+                        <LearnerEmptyState
+                          compact
+                          icon={Layers}
+                          title={
+                            scope?.kind === 'subtest'
+                              ? `No ${SUBTEST_COLOR[scope.subtest].label} sub-test mocks match the selected profession`
+                              : subTestMocks.length === 0
+                                ? 'No published sub-test mock bundles are available yet'
+                                : 'No sub-test mocks match the selected profession'
+                          }
+                          description={
+                            scope?.kind !== 'subtest' && subTestMocks.length === 0
+                              ? 'Once an admin publishes a bundle it will appear here with its real section order.'
+                              : 'Try “All professions” to widen your view.'
+                          }
+                        />
                       )
                     ) : (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -792,67 +784,77 @@ function MockCenterInner() {
                           const href = mock.route ?? '/mocks/setup';
                           const count = mock.sectionCount ?? 1;
                           return (
-                            <MotionItem key={mock.id} delayIndex={idx}>
-                              <Link
-                                href={href}
-                                className="group flex items-center gap-4 rounded-surface border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border hover:shadow-md"
-                              >
-                                <div
-                                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg} transition-transform group-hoverable:scale-105`}
-                                >
-                                  <Icon className={`h-6 w-6 ${palette.fg}`} />
+                            <MotionItem key={mock.id} delayIndex={Math.min(idx, 5)} className="h-full">
+                              <CardLink href={href} className="group flex h-full items-center gap-4">
+                                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg}`}>
+                                  <Icon className={`h-6 w-6 ${palette.fg}`} aria-hidden="true" />
                                 </div>
-                                <div className="flex-1">
+                                <div className="min-w-0 flex-1">
                                   <h3 className="text-base font-bold text-navy">{mock.title}</h3>
                                   <p className="text-sm text-muted">
-                                    {count} section{count === 1 ? '' : 's'} available
+                                    <span className="tabular-nums">{count}</span> section{count === 1 ? '' : 's'} available
                                   </p>
                                 </div>
-                                <ArrowRight className="h-5 w-5 text-muted/40 transition-colors group-hover:text-navy" />
-                              </Link>
+                                <ArrowRight
+                                  className="h-5 w-5 shrink-0 text-muted/40 transition-colors group-hover:text-navy rtl:rotate-180"
+                                  aria-hidden="true"
+                                />
+                              </CardLink>
                             </MotionItem>
                           );
                         })}
                       </div>
                     )}
                   </section>
-                  )}
+                )}
 
-                  <section>
-                    <LearnerSurfaceSectionHeader
-                      eyebrow="Full Mocks"
+                <section>
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Full Mocks"
+                    title={
+                      scope?.kind === 'subtest'
+                        ? `Full mocks that include ${SUBTEST_COLOR[scope.subtest].label}`
+                        : 'Keep full-exam progression visible'
+                    }
+                    description="Progress dots show which sub-tests you've completed on the latest attempt for each bundle."
+                    className="mb-4"
+                  />
+                  {scopedFullMocks.length === 0 ? (
+                    <LearnerEmptyState
+                      compact
+                      icon={Layers}
                       title={
-                        scope?.kind === 'subtest'
-                          ? `Full mocks that include ${SUBTEST_COLOR[scope.subtest].label}`
-                          : 'Keep full-exam progression visible'
-                      }
-                      description="Progress dots show which sub-tests you've completed on the latest attempt for each bundle."
-                      className="mb-4"
-                    />
-                    {scopedFullMocks.length === 0 ? (
-                      <div className="rounded-surface border border-border bg-surface p-6 text-sm text-muted">
-                        {fullMocks.length === 0
-                          ? 'No full mock bundles are published yet. Once an admin publishes a bundle, it will appear here with its real section order.'
+                        fullMocks.length === 0
+                          ? 'No full mock bundles are published yet'
                           : scope?.kind === 'subtest'
-                            ? `No full mocks include a ${SUBTEST_COLOR[scope.subtest].label} section yet.`
-                            : 'No full mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
-                      </div>
-                    ) : (
-                      <div className="overflow-hidden rounded-surface border border-border bg-surface shadow-sm">
-                        <div className="divide-y divide-border">
-                          {scopedFullMocks.map((mock, idx) => {
-                            const locked = mock.status === 'locked';
-                            return (
-                              <MotionItem key={mock.id} delayIndex={idx}>
+                            ? `No full mocks include a ${SUBTEST_COLOR[scope.subtest].label} section yet`
+                            : 'No full mocks match the selected profession'
+                      }
+                      description={
+                        fullMocks.length > 0 && scope?.kind !== 'subtest'
+                          ? 'Try “All professions” to widen your view.'
+                          : 'Once an admin publishes a bundle, it will appear here with its real section order.'
+                      }
+                    />
+                  ) : (
+                    <Card padding="none" className="overflow-hidden">
+                      <ul className="divide-y divide-border">
+                        {scopedFullMocks.map((mock, idx) => {
+                          const locked = mock.status === 'locked';
+                          return (
+                            <li key={mock.id}>
+                              <MotionItem delayIndex={Math.min(idx, 5)}>
                                 <Link
                                   href={locked ? '/mocks' : mock.route ?? '/mocks/setup'}
                                   aria-disabled={locked}
-                                  className={`flex items-center justify-between gap-4 p-5 transition-colors ${
-                                    locked ? 'pointer-events-none bg-background-light opacity-75' : 'hover:bg-background-light'
-                                  }`}
+                                  tabIndex={locked ? -1 : undefined}
+                                  className={cn(
+                                    'flex items-center justify-between gap-4 p-4 transition-colors focus-visible:-outline-offset-2 sm:p-5',
+                                    locked ? 'pointer-events-none bg-background-light opacity-75' : 'hover:bg-background-light',
+                                  )}
                                 >
                                   <div className="flex min-w-0 items-center gap-4">
-                                    <div className="shrink-0">
+                                    <div className="shrink-0" aria-hidden="true">
                                       {mock.status === 'completed' ? (
                                         <CheckCircle2 className="h-6 w-6 text-success-strong" />
                                       ) : locked ? (
@@ -869,7 +871,7 @@ function MockCenterInner() {
                                       <h3 className="flex items-center gap-2 text-base font-bold text-navy">
                                         <span className="truncate">{mock.title}</span>
                                         {mock.isRecommended ? (
-                                           <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
+                                          <span className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
                                             Recommended
                                           </span>
                                         ) : null}
@@ -878,15 +880,15 @@ function MockCenterInner() {
                                         {mock.status === 'completed' ? (
                                           <span>
                                             Completed {mock.date} · Score:{' '}
-                                            <span className="font-bold text-navy">{mock.score}</span>
+                                            <span className="font-bold tabular-nums text-navy">{mock.score}</span>
                                           </span>
                                         ) : locked ? (
                                           <span className="flex items-center gap-1">
-                                            <Clock className="h-3.5 w-3.5" /> {mock.reason}
+                                            <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {mock.reason}
                                           </span>
                                         ) : (
                                           <span className="flex items-center gap-1">
-                                            <Clock className="h-3.5 w-3.5" /> {mock.duration}
+                                            <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {mock.duration}
                                           </span>
                                         )}
                                       </div>
@@ -896,98 +898,74 @@ function MockCenterInner() {
                                     </div>
                                   </div>
                                   {!locked ? (
-                                    <ArrowRight className="hidden h-5 w-5 text-muted/40 sm:block" />
+                                    <ArrowRight className="hidden h-5 w-5 shrink-0 text-muted/40 sm:block rtl:rotate-180" aria-hidden="true" />
                                   ) : null}
                                 </Link>
                               </MotionItem>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </Card>
+                  )}
+                </section>
+              </div>
 
-                <div className="space-y-6 sm:space-y-10">
-                  <section>
-                    <LearnerSurfaceSectionHeader
-                      eyebrow="Tutor Reviews"
-                      title="Keep review readiness explicit"
-                      description="Track the status of any tutor reviews attached to your mocks."
-                      className="mb-4"
+              {/* Each rail card carries its own eyebrow, title and description. */}
+              <div className="space-y-6 sm:space-y-8">
+                <LearnerSurfaceCard card={reviewCard} />
+                {scoreGuaranteeCard ? <LearnerSurfaceCard card={scoreGuaranteeCard} /> : null}
+                {cohortCard ? <LearnerSurfaceCard card={cohortCard} /> : null}
+
+                <section>
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Previous Reports"
+                    title="Keep the latest evidence visible"
+                    description="Detailed reports for every completed mock attempt."
+                    className="mb-4"
+                  />
+                  {reports.length === 0 ? (
+                    <EmptyState
+                      icon={<BarChart3 className="h-7 w-7" aria-hidden="true" />}
+                      title="No reports yet"
+                      description="Complete a mock to see your results here."
+                      className="py-8"
                     />
-                    <LearnerSurfaceCard card={reviewCard} />
-                  </section>
-
-                  {scoreGuaranteeCard ? (
-                    <section>
-                      <LearnerSurfaceSectionHeader
-                        eyebrow="Your Guarantee"
-                        title="Score Guarantee progress"
-                        description="Read-only summary of your active pledge. Manage activation and claims from billing."
-                        className="mb-4"
-                      />
-                      <LearnerSurfaceCard card={scoreGuaranteeCard} />
-                    </section>
-                  ) : null}
-
-                  {cohortCard ? (
-                    <section>
-                      <LearnerSurfaceSectionHeader
-                        eyebrow="Benchmark"
-                        title="Recent learner cohort"
-                        description="See where you stand against learners who took a mock in the last 90 days. All comparisons are private."
-                        className="mb-4"
-                      />
-                      <LearnerSurfaceCard card={cohortCard} />
-                    </section>
-                  ) : null}
-
-                  <section>
-                    <LearnerSurfaceSectionHeader
-                      eyebrow="Previous Reports"
-                      title="Keep the latest evidence visible"
-                      description="Detailed reports for every completed mock attempt."
-                      className="mb-4"
-                    />
-                    {reports.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-muted">
-                        No reports yet. Complete a mock to see your results here.
-                      </div>
-                    ) : (
-                      <div className="overflow-hidden rounded-surface border border-border bg-surface shadow-sm">
-                        <div className="divide-y divide-border">
-                          {reports.slice(0, 4).map((report, idx) => (
-                            <MotionItem key={report.id} delayIndex={idx}>
+                  ) : (
+                    <Card padding="none" className="overflow-hidden">
+                      <ul className="divide-y divide-border">
+                        {reports.slice(0, 4).map((report, idx) => (
+                          <li key={report.id}>
+                            <MotionItem delayIndex={Math.min(idx, 5)}>
                               <Link
                                 href={`/mocks/report/${report.id}`}
-                                className="group flex items-center justify-between p-4 transition-colors hover:bg-background-light"
+                                className="group flex items-center justify-between gap-3 p-4 transition-colors hover:bg-background-light focus-visible:-outline-offset-2"
                               >
-                                <div className="flex items-center gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
                                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background-light">
-                                    <BarChart3 className="h-4 w-4 text-muted" />
+                                    <BarChart3 className="h-4 w-4 text-muted" aria-hidden="true" />
                                   </div>
-                                  <div>
+                                  <div className="min-w-0">
                                     <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary">
                                       {report.title}
                                     </h3>
                                     <p className="text-xs text-muted">{report.date}</p>
                                   </div>
                                 </div>
-                                <span className="text-sm font-black text-navy">{report.overallScore}</span>
+                                <span className="shrink-0 text-sm font-bold tabular-nums text-navy">{report.overallScore}</span>
                               </Link>
                             </MotionItem>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </section>
-                </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                </section>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            </MotionSection>
+          )}
+        </>
+      )}
     </>
   );
 }
