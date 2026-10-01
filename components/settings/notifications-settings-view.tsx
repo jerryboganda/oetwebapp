@@ -18,7 +18,6 @@ import {
   Rocket,
   RotateCcw,
   Smartphone,
-  SlidersHorizontal,
   SquarePen,
   Sun,
   Ticket,
@@ -27,8 +26,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cloneNotificationPreferences, useNotificationCenter } from '@/contexts/notification-center-context';
+import { LearnerPageHero } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type {
@@ -134,7 +139,7 @@ function SelectShell({
   return (
     <div className={cn('relative', className)}>
       {Icon ? (
-        <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+        <Icon className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
       ) : null}
       {children}
     </div>
@@ -142,7 +147,7 @@ function SelectShell({
 }
 
 const SELECT_CLASS =
-  'w-full appearance-none rounded-xl border border-border bg-surface py-2.5 pr-9 text-sm font-medium text-navy shadow-sm transition-colors hover:border-border-hover focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+  'w-full appearance-none rounded-xl border border-border bg-surface py-2.5 pe-9 text-sm font-medium text-navy shadow-sm transition-colors hover:border-border-hover focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
 
 export function NotificationsSettingsView() {
   const {
@@ -164,8 +169,6 @@ export function NotificationsSettingsView() {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [localError, setLocalError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const preferencesRef = useRef<HTMLDivElement | null>(null);
-  const overridesRef = useRef<HTMLDivElement | null>(null);
 
   // Seed the draft once. We deliberately do NOT re-sync on every context change:
   // auto-save echoes the server payload back, and re-seeding mid-edit would
@@ -319,160 +322,116 @@ export function NotificationsSettingsView() {
     },
   ];
 
-  const stats = [
-    {
-      icon: SlidersHorizontal,
-      tone: 'bg-primary/10 text-primary',
-      label: 'Controls',
-      value: `${channelRows.length} settings`,
-      onClick: () => preferencesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    },
-    {
-      icon: CheckCircle2,
-      tone: 'bg-success/10 text-success-strong',
-      label: 'Configured',
-      value: `${configuredCount} set`,
-      onClick: () => overridesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    },
-    {
-      icon: SquarePen,
-      tone: 'bg-warning/10 text-warning-strong',
-      label: 'Save state',
-      value: saveStateLabel,
-      onClick: null,
-    },
-  ];
+  const hero = (
+    <LearnerPageHero
+      icon={Bell}
+      title="Notifications"
+      description="Manage how and when you receive updates across the OET platform."
+      highlights={draft ? [
+        { icon: CheckCircle2, label: 'Configured', value: `${configuredCount} set` },
+        { icon: SquarePen, label: 'Save state', value: saveStateLabel },
+      ] : undefined}
+      aside={draft ? (
+        <Button variant="outline" size="sm" onClick={restoreDefaults} className="text-primary">
+          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          Restore defaults
+        </Button>
+      ) : undefined}
+    />
+  );
 
   if (isPreferencesLoading && !draft) {
     return (
-      <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-2xl bg-background-light" />
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-background-light" />)}
+      <>
+        {hero}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)_minmax(0,1.5fr)]">
+          {[0, 1, 2].map((item) => <Skeleton key={item} className="h-96 rounded-2xl" />)}
         </div>
-        <div className="h-96 animate-pulse rounded-2xl bg-background-light" />
-      </div>
+      </>
     );
   }
 
   if (!draft) {
     return (
-      <InlineAlert variant="warning">
-        Notification preferences are not available for this account yet.
-      </InlineAlert>
+      <>
+        {hero}
+        {preferencesError ? <InlineAlert variant="error">{preferencesError}</InlineAlert> : null}
+        <EmptyState
+          icon={<Bell className="h-8 w-8" />}
+          title="Notification preferences are not available for this account yet."
+        />
+      </>
     );
   }
 
   return (
-    <div className="space-y-5">
-      {/* ── Page header ───────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-navy sm:text-4xl">Notifications</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            Manage how and when you receive updates across the OET platform.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={restoreDefaults} className="shrink-0 gap-2 self-start bg-surface text-primary">
-          <RotateCcw className="h-4 w-4" />
-          Restore defaults
-        </Button>
-      </div>
+    <>
+      {hero}
 
       {preferencesError ? <InlineAlert variant="error">{preferencesError}</InlineAlert> : null}
       {localError ? <InlineAlert variant="error">{localError}</InlineAlert> : null}
 
-      {/* ── Summary tiles ─────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stats.map((stat) => {
-          const StatIcon = stat.icon;
-          const interactive = Boolean(stat.onClick);
-          const Tag = interactive ? 'button' : 'div';
-          return (
-            <Tag
-              key={stat.label}
-              {...(interactive ? { type: 'button' as const, onClick: stat.onClick ?? undefined } : {})}
-              className={cn(
-                'flex items-center gap-3.5 rounded-2xl border border-border bg-surface p-4 text-left shadow-sm',
-                interactive && 'transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-              )}
-            >
-              <span className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', stat.tone)}>
-                <StatIcon className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-navy">{stat.label}</span>
-                <span className="block truncate text-sm text-muted">{stat.value}</span>
-              </span>
-              {interactive ? <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
-            </Tag>
-          );
-        })}
-      </div>
-
       {/* ── Main three-column workspace ───────────────────────────────── */}
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)_minmax(0,1.5fr)]">
         {/* Column 1 — delivery channels */}
-        <section ref={preferencesRef} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-navy">Notification Preferences</h2>
-          <p className="mt-1 text-sm text-muted">Choose your preferred delivery channels for platform updates.</p>
+        <MotionSection delayIndex={0}>
+          <Card>
+            <h2 className="text-lg font-semibold text-navy">Notification Preferences</h2>
+            <p className="mt-1 text-sm text-muted">Choose your preferred delivery channels for platform updates.</p>
 
-          <div role="tablist" aria-label="Filter by channel" className="-mx-1 mt-4 flex flex-wrap gap-1.5 px-1">
-            {CHANNEL_TABS.map((tab) => {
-              const active = filter === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setFilter(tab.key)}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
-                    active
-                      ? 'bg-primary text-white shadow-sm shadow-primary/20 dark:bg-violet-700'
-                      : 'bg-background-light text-muted hover:text-navy',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {showChannelRows ? (
-            <div className="mt-4 space-y-3">
-              {channelRows.filter((row) => row.show).map((row) => {
-                const RowIcon = row.icon;
+            <div role="group" aria-label="Filter by channel" className="mt-4 flex flex-wrap gap-1.5">
+              {CHANNEL_TABS.map((tab) => {
+                const active = filter === tab.key;
                 return (
-                  <div
-                    key={row.key}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3.5 transition-colors hover:border-border-hover"
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFilter(tab.key)}
+                    className={cn(
+                      'pressable min-h-11 rounded-control border px-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                      active
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'hover-primary border-border bg-background-light text-muted',
+                    )}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <RowIcon className="h-[18px] w-[18px]" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold leading-tight text-navy">{row.label}</p>
-                      <p className="mt-0.5 text-xs leading-snug text-muted">{row.hint}</p>
-                    </div>
-                    <Switch checked={row.checked} onChange={row.onChange} label={row.label} />
-                  </div>
+                    {tab.label}
+                  </button>
                 );
               })}
             </div>
-          ) : (
-            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
-              Web push is managed from the browser push card.
-            </p>
-          )}
-        </section>
+
+            {showChannelRows ? (
+              <div className="mt-4 divide-y divide-border">
+                {channelRows.filter((row) => row.show).map((row) => {
+                  const RowIcon = row.icon;
+                  return (
+                    <div key={row.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <RowIcon className="h-4.5 w-4.5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold leading-tight text-navy">{row.label}</p>
+                        <p className="mt-0.5 text-xs leading-snug text-muted">{row.hint}</p>
+                      </div>
+                      <Switch checked={row.checked} onChange={row.onChange} label={row.label} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
+                Web push is managed from the browser push card.
+              </p>
+            )}
+          </Card>
+        </MotionSection>
 
         {/* Column 2 — timezone, quiet hours, browser push */}
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <MotionSection delayIndex={1} className="space-y-4">
+          <Card>
             <div className="flex items-center gap-2">
-              <Clock className="h-[18px] w-[18px] text-primary" aria-hidden="true" />
+              <Clock className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
               <h2 className="text-lg font-semibold text-navy">Timezone &amp; Quiet Hours</h2>
             </div>
 
@@ -484,7 +443,7 @@ export function NotificationsSettingsView() {
                 id="notification-timezone"
                 value={draft.timezone}
                 onChange={(event) => mutate((current) => ({ ...current, timezone: event.target.value }))}
-                className={cn(SELECT_CLASS, 'pl-9')}
+                className={cn(SELECT_CLASS, 'ps-9')}
               >
                 {TIMEZONES.some((zone) => zone.value === draft.timezone) ? null : (
                   <option value={draft.timezone}>{draft.timezone}</option>
@@ -493,10 +452,10 @@ export function NotificationsSettingsView() {
                   <option key={zone.value} value={zone.value}>{zone.label}</option>
                 ))}
               </select>
-              <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted" aria-hidden="true" />
+              <ChevronRight className="pointer-events-none absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted" aria-hidden="true" />
             </SelectShell>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-navy" htmlFor="quiet-start">
                   Quiet hours start
@@ -510,7 +469,7 @@ export function NotificationsSettingsView() {
                     onChange={(event) =>
                       mutate((current) => ({ ...current, quietHoursStartLocalTime: event.target.value || null }))
                     }
-                    className={cn(SELECT_CLASS, 'pl-9 pr-3 disabled:cursor-not-allowed disabled:opacity-60')}
+                    className={cn(SELECT_CLASS, 'ps-9 pe-3 tabular-nums disabled:cursor-not-allowed disabled:opacity-60')}
                   />
                 </SelectShell>
               </div>
@@ -527,7 +486,7 @@ export function NotificationsSettingsView() {
                     onChange={(event) =>
                       mutate((current) => ({ ...current, quietHoursEndLocalTime: event.target.value || null }))
                     }
-                    className={cn(SELECT_CLASS, 'pl-9 pr-3 disabled:cursor-not-allowed disabled:opacity-60')}
+                    className={cn(SELECT_CLASS, 'ps-9 pe-3 tabular-nums disabled:cursor-not-allowed disabled:opacity-60')}
                   />
                 </SelectShell>
               </div>
@@ -535,23 +494,16 @@ export function NotificationsSettingsView() {
             {!draft.quietHoursEnabled ? (
               <p className="mt-2.5 text-xs text-muted">Turn on “Quiet hours” to set a window.</p>
             ) : null}
-          </section>
+          </Card>
 
-          <section className="rounded-2xl border border-border bg-surface p-5 text-center shadow-sm">
+          <Card className="text-center">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <BellRing className="h-6 w-6" aria-hidden="true" />
             </span>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold',
-                  pushEnabled
-                    ? 'bg-success/10 text-success-strong'
-                    : 'bg-danger/10 text-danger-strong',
-                )}
-              >
+              <Badge variant={pushEnabled ? 'success' : 'danger'} className="px-2.5 py-1">
                 {pushEnabled ? 'Browser push enabled' : 'Browser push disabled'}
-              </span>
+              </Badge>
             </div>
             <p className="mt-1.5 text-xs text-muted">Permission: {pushPermission}</p>
             <p className="mt-2.5 text-xs leading-relaxed text-muted">
@@ -565,9 +517,9 @@ export function NotificationsSettingsView() {
               loading={isUpdatingPush}
               disabled={!pushSupported || !pushPublicKeyConfigured}
               fullWidth
-              className="mt-4 gap-2"
+              className="mt-4"
             >
-              <Bell className="h-4 w-4" />
+              <Bell className="h-4 w-4" aria-hidden="true" />
               {pushEnabled ? 'Disable push' : 'Enable Push'}
             </Button>
             {!pushSupported ? (
@@ -576,123 +528,127 @@ export function NotificationsSettingsView() {
             {pushSupported && !pushPublicKeyConfigured ? (
               <p className="mt-2 text-xs text-muted">Push is unavailable: no VAPID key configured.</p>
             ) : null}
-          </section>
-        </div>
+          </Card>
+        </MotionSection>
 
         {/* Column 3 — per-event overrides */}
-        <section ref={overridesRef} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Bell className="h-[18px] w-[18px] text-primary" aria-hidden="true" />
-            <h2 className="text-lg font-semibold text-navy">Per-event Delivery Overrides</h2>
-            <span
-              className="text-muted"
-              title="Stored per account and applied across learner, expert, and admin shells."
-            >
-              <Info className="h-4 w-4" aria-hidden="true" />
-            </span>
-          </div>
-
-          {showEventMatrix ? (
-            <div className="mt-4 overflow-x-auto">
-              <div className="min-w-[36rem]">
-                <div className="grid grid-cols-[minmax(0,1fr)_3rem_3rem_3rem_8.5rem] items-center gap-2 border-b border-border pb-2.5">
-                  <span className="text-xs font-semibold text-muted">Event</span>
-                  <span className="flex items-center justify-center" title="In-app">
-                    <Monitor className={cn('h-4 w-4', showInApp ? 'text-muted' : 'text-muted/30')} aria-label="In-app" />
-                  </span>
-                  <span className="flex items-center justify-center" title="Email">
-                    <Mail className={cn('h-4 w-4', showEmail ? 'text-muted' : 'text-muted/30')} aria-label="Email" />
-                  </span>
-                  <span className="flex items-center justify-center" title="Push">
-                    <Volume2 className={cn('h-4 w-4', showPush ? 'text-muted' : 'text-muted/30')} aria-label="Push" />
-                  </span>
-                  <span className="text-xs font-semibold text-muted">Email mode</span>
-                </div>
-
-                <div className="divide-y divide-border">
-                  {eventEntries.map(([eventKey, eventPreference]) => {
-                    const EventIcon = iconForEvent(eventKey);
-                    const label = formatEventLabel(eventKey);
-                    return (
-                      <div
-                        key={eventKey}
-                        className="grid grid-cols-[minmax(0,1fr)_3rem_3rem_3rem_8.5rem] items-center gap-2 py-2.5"
-                      >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/[0.07] text-primary">
-                            <EventIcon className="h-4 w-4" aria-hidden="true" />
-                          </span>
-                          <span className="truncate text-sm font-medium text-navy" title={label}>{label}</span>
-                        </div>
-
-                        <span className="flex justify-center">
-                          {showInApp ? (
-                            <Switch
-                              size="sm"
-                              checked={Boolean(eventPreference.inAppEnabled)}
-                              onChange={() => mutateEvent(eventKey, { inAppEnabled: !eventPreference.inAppEnabled })}
-                              label={`${label} in-app`}
-                            />
-                          ) : <span className="text-muted/30">—</span>}
-                        </span>
-                        <span className="flex justify-center">
-                          {showEmail ? (
-                            <Switch
-                              size="sm"
-                              checked={Boolean(eventPreference.emailEnabled)}
-                              onChange={() => mutateEvent(eventKey, { emailEnabled: !eventPreference.emailEnabled })}
-                              label={`${label} email`}
-                            />
-                          ) : <span className="text-muted/30">—</span>}
-                        </span>
-                        <span className="flex justify-center">
-                          {showPush ? (
-                            <Switch
-                              size="sm"
-                              checked={Boolean(eventPreference.pushEnabled)}
-                              onChange={() => mutateEvent(eventKey, { pushEnabled: !eventPreference.pushEnabled })}
-                              label={`${label} push`}
-                            />
-                          ) : <span className="text-muted/30">—</span>}
-                        </span>
-
-                        <SelectShell>
-                          <select
-                            aria-label={`${label} email mode`}
-                            value={ensureEmailMode(eventPreference.emailMode)}
-                            onChange={(event) =>
-                              mutateEvent(eventKey, { emailMode: event.target.value as NotificationEmailMode })
-                            }
-                            className={cn(SELECT_CLASS, 'py-1.5 pl-3')}
-                          >
-                            {EMAIL_MODES.map((mode) => (
-                              <option key={mode.value} value={mode.value}>{mode.label}</option>
-                            ))}
-                          </select>
-                          <ChevronRight className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted" aria-hidden="true" />
-                        </SelectShell>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {eventEntries.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted">No event overrides available yet.</p>
-                ) : null}
-              </div>
+        <MotionSection delayIndex={2}>
+          <Card>
+            <div className="flex items-center gap-2">
+              <Bell className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              <h2 className="text-lg font-semibold text-navy">Per-event Delivery Overrides</h2>
+              <span
+                className="text-muted"
+                title="Stored per account and applied across learner, expert, and admin shells."
+              >
+                <Info className="h-4 w-4" aria-hidden="true" />
+              </span>
             </div>
-          ) : (
-            <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
-              Per-event overrides apply to in-app, email, and push. Pick one of those tabs to edit them.
-            </p>
-          )}
-        </section>
+
+            {!showEventMatrix ? (
+              <p className="mt-4 rounded-xl bg-background-light px-3.5 py-3 text-xs text-muted">
+                Per-event overrides apply to in-app, email, and push. Pick one of those tabs to edit them.
+              </p>
+            ) : eventEntries.length === 0 ? (
+              <EmptyState
+                className="mt-4"
+                icon={<Bell className="h-8 w-8" />}
+                title="No event overrides available yet."
+              />
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <div className="min-w-[36rem]">
+                  <div className="grid grid-cols-[minmax(0,1fr)_3rem_3rem_3rem_8.5rem] items-center gap-2 border-b border-border pb-2.5">
+                    <span className="text-xs font-semibold text-muted">Event</span>
+                    <span className="flex items-center justify-center" title="In-app">
+                      <Monitor className={cn('h-4 w-4', showInApp ? 'text-muted' : 'text-muted/30')} aria-label="In-app" />
+                    </span>
+                    <span className="flex items-center justify-center" title="Email">
+                      <Mail className={cn('h-4 w-4', showEmail ? 'text-muted' : 'text-muted/30')} aria-label="Email" />
+                    </span>
+                    <span className="flex items-center justify-center" title="Push">
+                      <Volume2 className={cn('h-4 w-4', showPush ? 'text-muted' : 'text-muted/30')} aria-label="Push" />
+                    </span>
+                    <span className="text-xs font-semibold text-muted">Email mode</span>
+                  </div>
+
+                  <div className="divide-y divide-border">
+                    {eventEntries.map(([eventKey, eventPreference]) => {
+                      const EventIcon = iconForEvent(eventKey);
+                      const label = formatEventLabel(eventKey);
+                      return (
+                        <div
+                          key={eventKey}
+                          className="grid grid-cols-[minmax(0,1fr)_3rem_3rem_3rem_8.5rem] items-center gap-2 py-2.5"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <EventIcon className="h-4 w-4" aria-hidden="true" />
+                            </span>
+                            <span className="truncate text-sm font-medium text-navy" title={label}>{label}</span>
+                          </div>
+
+                          <span className="flex justify-center">
+                            {showInApp ? (
+                              <Switch
+                                size="sm"
+                                checked={Boolean(eventPreference.inAppEnabled)}
+                                onChange={() => mutateEvent(eventKey, { inAppEnabled: !eventPreference.inAppEnabled })}
+                                label={`${label} in-app`}
+                              />
+                            ) : <span className="text-muted/30" aria-hidden="true">—</span>}
+                          </span>
+                          <span className="flex justify-center">
+                            {showEmail ? (
+                              <Switch
+                                size="sm"
+                                checked={Boolean(eventPreference.emailEnabled)}
+                                onChange={() => mutateEvent(eventKey, { emailEnabled: !eventPreference.emailEnabled })}
+                                label={`${label} email`}
+                              />
+                            ) : <span className="text-muted/30" aria-hidden="true">—</span>}
+                          </span>
+                          <span className="flex justify-center">
+                            {showPush ? (
+                              <Switch
+                                size="sm"
+                                checked={Boolean(eventPreference.pushEnabled)}
+                                onChange={() => mutateEvent(eventKey, { pushEnabled: !eventPreference.pushEnabled })}
+                                label={`${label} push`}
+                              />
+                            ) : <span className="text-muted/30" aria-hidden="true">—</span>}
+                          </span>
+
+                          <SelectShell>
+                            <select
+                              aria-label={`${label} email mode`}
+                              value={ensureEmailMode(eventPreference.emailMode)}
+                              onChange={(event) =>
+                                mutateEvent(eventKey, { emailMode: event.target.value as NotificationEmailMode })
+                              }
+                              className={cn(SELECT_CLASS, 'py-1.5 ps-3')}
+                            >
+                              {EMAIL_MODES.map((mode) => (
+                                <option key={mode.value} value={mode.value}>{mode.label}</option>
+                              ))}
+                            </select>
+                            <ChevronRight className="pointer-events-none absolute end-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted" aria-hidden="true" />
+                          </SelectShell>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        </MotionSection>
       </div>
 
-      <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-muted">
+      <p className="flex items-center justify-center gap-1.5 text-xs text-muted">
         <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
         Changes save automatically.
       </p>
-    </div>
+    </>
   );
 }
