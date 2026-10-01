@@ -163,7 +163,7 @@ export function LearnerSurfaceSectionHeader({
 }) {
   return (
     <div className={cn('flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4', className)}>
-      <div>
+      <div className="min-w-0">
         {eyebrow ? (
           <p className="eyebrow mb-1 text-muted sm:mb-1.5">{eyebrow}</p>
         ) : null}

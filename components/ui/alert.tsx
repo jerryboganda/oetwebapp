@@ -22,13 +22,15 @@ interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'o
   title?: string;
   children: ReactNode;
   dismissible?: boolean;
+  /** Called after the learner dismisses it, so the page can clear the state that raised it. */
+  onDismiss?: () => void;
   className?: string;
   action?: ReactNode;
   /** `polite` announces as role="status" — use for non-urgent suggestions. Default `assertive` (role="alert"). */
   live?: 'assertive' | 'polite';
 }
 
-export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
+export function InlineAlert({ variant = 'info', title, children, dismissible, onDismiss, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
   const [visible, setVisible] = useState(true);
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('item', reducedMotion);
@@ -57,6 +59,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
               onClick={() => {
                 void triggerImpactHaptic('LIGHT');
                 setVisible(false);
+                onDismiss?.();
               }}
               className={cn('rounded-xl p-2.5 -m-1 transition-colors', config.textClass, 'hover:bg-navy/5 dark:hover:bg-white/10')}
               aria-label="Dismiss"
