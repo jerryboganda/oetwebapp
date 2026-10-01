@@ -27,11 +27,16 @@
 > - **Production E2E:** faults combine with `fail_primary`; new `fault_reload_at_s`, `verify_credits` and `grade_retry` inputs;
 >   saved-transcript, credit, History, pin and wording checks; a run matrix ([Production E2E](#production-e2e)).
 >
-> **Not verified in production: every item above.** None of it has run against the deployed build, so each is pending until the
-> production E2E has been run against it (a pinned run also needs the feature flag to exist first). The 1 Oct production runs
-> did verify the late-fragment rule on clean OpenAI runs ([Behaviour and limits](#behaviour-and-limits)) and that a dropped
-> OpenAI link is restored with a coherent patient ([Mid-session recovery](#mid-session-recovery)); they also exposed the
-> recovery transcript defect that the time base change addresses.
+> **Verified in production on 1 Oct 2026 (build 679e29cdc) by the full run matrix** ([Run matrix](#run-matrix)): credits (exactly
+> 4 for a mock, once; 2 for a practice card; nothing charged twice by a repeated grade), the History row, the honest results
+> wording and `inputKind`, the one transcript clock (no split sentence on any run), the refresh-safe transcript (a refresh in the
+> middle of a card resumed by itself in 5.7 s) and Gemini failover with mid-session recovery (a dropped link restored in
+> 0.0-0.3 s). **Not verified in production:** the QA provider pin (its flag was never created), the teach-back rule against unsaid
+> treatments, the microphone error wording, an OpenAI restore after the time base change, the OpenAI hang-up at the hard stop and a
+> real provider outage. The matrix found three Gemini limits ([Known open items](#known-open-items)); the Gemini start-order one
+> was fixed in code on 2 Oct 2026 and has not been re-run on production. The earlier 1 Oct runs had verified the late-fragment
+> rule on clean OpenAI runs ([Behaviour and limits](#behaviour-and-limits)) and exposed the recovery transcript defect that the
+> time base change addresses.
 
 Record of the September 2026 rollout and testing. Written 2026-09-30 from the code, GitHub Actions logs and the
 run artifacts of the 25-26 Sep production E2E runs; extended the same day with the close-out of the 30 Sep incident
@@ -132,8 +137,9 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   (`claude-sonnet-5`; the gateway forces effort `max`, adaptive thinking and `max_tokens` 128000 for `speaking.grade`
   there; the production route row was not re-read): see
   [ai-providers.md](ai-providers.md#speaking-grading-chain-owner-directive-2026-09-30). A full 5-minute role play took
-  about 8-9 minutes to grade on the API route in the 26 Sep runs (PR #259 quotes 11-12); the sidecar's latency has not
-  been measured. Deploys stop the AI worker with a 90 s grace, so an in-flight grade is requeued and restarts from zero
+  about 8-9 minutes to grade on the API route in the 26 Sep runs (PR #259 quotes 11-12); on the sidecar (1 Oct 2026, from the
+  admin operation rows of RUN 2, 4 and 5, grade request to completed result) a card took 51 to 114 s, mostly 61-81 s, and every
+  card of every run was graded by `writing-claude-sub` / `claude-opus-5-5`. Deploys stop the AI worker with a 90 s grace, so an in-flight grade is requeued and restarts from zero
   (derived from the code; not observed in production).
 
 ## Provider failover
@@ -271,6 +277,12 @@ into the new session's instructions ([Recovery sessions](#provider-failover)).
   transcript keeps one clock across a restore; the remaining offsets are listed under
   [Transcript time base](#transcript-time-base). A page reload is not a link drop: see
   [Refresh behaviour](#refresh-behaviour).
+- **Measured in production** (1 Oct 2026, Gemini, build 679e29cdc): a dropped link was restored 0.0 s (RUN 2, drop at 40 s of a
+  practice card) and 0.3 s (RUN 4, drop at 45 s of Card A) after the drop, a stalled link (RUN 3, frames swallowed from 40 s) 8.0 s
+  after the stall began, and a link that went silent by itself (RUN 1) 26 s after its first unanswered sentence. The sentence being
+  answered when the link dropped got no reply (RUN 2) and what was said while a link was silent was never transcribed (RUN 1,
+  RUN 3): see [Known open items](#known-open-items). The OpenAI figures (a drop restored 0.6 s later, a stall after 35 s) are from
+  the 1 Oct runs before the time base change.
 
 ### Gemini candidate timing
 
@@ -281,15 +293,18 @@ hid the real order of speech. The hook now finds the candidate's speech bursts f
 dropped) and gives a transcript fragment the span of its burst: the closed bursts since the last fragment, or the burst so
 far when the text arrives mid-sentence. Patient segments keep their arrival time. OpenAI keeps its own `start_ms`/`end_ms`,
 shifted by the session offset; every source is then on the role-play clock ([Transcript time base](#transcript-time-base)).
-**Pending: not yet verified in production**: no Gemini run has been made on a build with this burst timing. Every Gemini
-transcript saved so far (G1-G4, E4, P1, U1) predates it and has zero-length candidate segments (for example G4: 10 of 12 on
-Card A, 14 of 14 on Card B).
+**Verified in production on 1 Oct 2026** (RUN 4: no zero-length candidate segment on either card and every aligned candidate
+line within 0.05 s of the played script). Every Gemini transcript saved before it (G1-G4, E4, P1, U1) has zero-length candidate
+segments (for example G4: 10 of 12 on Card A, 14 of 14 on Card B).
 
 ## Saved transcript
 
 The transcript is built in the browser while the conversation runs (`hooks/useSpeakingRealtimeVoice.ts`), saved once when the
 role-play stops and graded verbatim. This section says what its times mean and how it survives a restore, a reload and a stop.
-Everything in it was added on 1 Oct 2026 and is **pending: not yet verified in production**.
+Everything in it was added on 1 Oct 2026. The one clock and the refresh copy were **verified in production the same day**
+(OpenAI RUN 5 and RUN 6; a Gemini drop restored inside one clock on RUN 4 Card A and RUN 2; no split sentence on any run); the
+pause rule, the whitespace rule and the Gemini stop drain are covered by unit tests only, and what Gemini still gets wrong is
+listed under [Known open items](#known-open-items).
 
 ### Transcript time base
 
@@ -355,6 +370,11 @@ that session and the numbers needed to carry on are stored (no provider session 
   per card. A browser that copies `sessionStorage` into a duplicated tab can restore the same copy there (the server still
   accepts one active role-play per session). The copy holds the words of both speakers, in that tab only, and no provider
   session id or token.
+- **Measured in production** (1 Oct 2026, RUN 5, a real OpenAI two-card mock refreshed at 60 s of Card A): the panel came back
+  and started by itself 5.7 s after the reload (no tap, `autoStarted` true, `providerAfter` openai), the restored conversation
+  still held the turns spoken before the reload (`reloadKeepsTranscript`), the saved Card A transcript had 30 segments with no
+  split sentence and passed every [transcript check](#transcript-checks), and the mock cost 4 credits once (a refresh costs no
+  second hold): Speaking pool 36 -> 34 -> 32 -> 32.
 
 ### Stopping a Gemini role-play
 
@@ -367,8 +387,10 @@ has had speech in flight at the close yet, so neither drain has been exercised b
 ## Results wording by input kind
 
 Live voice stores no audio, so a results page that says "We received your recording" is wrong for it. The pages therefore say
-what was actually handed in. **Pending: not yet verified in production** (the production E2E reads it through
-`inputKindLiveVoice` and `resultsWordingHonest`, see [Credits, History and wording checks](#credits-history-and-wording-checks)).
+what was actually handed in. **Verified in production on 1 Oct 2026** by the production E2E (`inputKindLiveVoice`,
+`resultsWordingHonest` and `noProviderNamesInUi` green on RUN 1, RUN 5 and RUN 6, see [Credits, History and wording
+checks](#credits-history-and-wording-checks)); the rehearsal on the old build had failed the same checks (the page said "We
+received your recording").
 
 - **Server: `inputKind`.** `GET /v1/speaking/sessions/{id}/results` returns it besides `assessmentState`, `retryable`,
   `failureReason`, `isFreeSample`, `cardId` and `usesV11` (camelCase; `null` is serialised as JSON `null`):
@@ -414,7 +436,8 @@ Copy by kind:
 
 ### Exam results page
 
-`/speaking/exam/{id}/results` (also **pending: not yet verified in production**):
+`/speaking/exam/{id}/results` (the readable band, the advisory sentence and the absence of "recording" wording were **verified
+in production on 1 Oct 2026** by the RUN 5 and RUN 6 wording check; the other items below are covered by component tests only):
 
 - shows the readiness band by label (Not yet ready, Developing, Borderline, Exam ready, Strong) with a tone by band, never the
   raw code;
@@ -858,18 +881,58 @@ bug rather than a product defect: start with RUN 1 as a rehearsal.
   paid project; the QA learner has no mock exam units, no unlimited Speaking, no unused free sample and at least 8 AI credits;
   the pin flag exists if a pinned run is wanted; the repository is public for the run window if the owner's CI rule requires it;
   nobody else is testing.
-- **RUN 1** (rehearsal, Gemini fallback, practice, about 12 min, -2 credits): `-f mode=practice -f script=short -f voice=piper -f expected_primary=openai -f fail_primary=true -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token]`, `failoverObserved`, the role-play panel on `gemini` with `failedOver`, `creditsDeductedOnce`, `gradeRetryIdempotent`, `historyListsExam`, `transcriptsMatchWire`, `savedProviderMatchesServed` (`realtime-gemini`) and `recoveredAsRequested` null.
+- **RUN 1** (rehearsal, Gemini fallback, practice, about 6 min, -2 credits): `-f mode=practice -f script=short -f voice=piper -f expected_primary=openai -f fail_primary=true -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token]`, `failoverObserved`, the role-play panel on `gemini` with `failedOver`, `creditsDeductedOnce`, `gradeRetryIdempotent`, `historyListsExam`, `transcriptsMatchWire`, `savedProviderMatchesServed` (`realtime-gemini`) and `recoveredAsRequested` null.
 - **RUN 2** (Gemini drop recovery): RUN 1 plus `-f fault_drop_at_s=40 -f speak_seconds=150`. Expect `providerCalls` `[openai/offer, gemini/token, gemini/token]`, 1 recovery, `faultHitFallback`, `recoveredAsRequested` and `failoverAsRequested`.
 - **RUN 3** (Gemini stall recovery): RUN 1 plus `-f fault_stall_at_s=40 -f speak_seconds=200` (no `fault_drop_at_s`). Expect `fault.swallowed` above 0 and a restore about 25-40 s after the stall.
-- **RUN 4** (the main proof: Gemini serves a real two-card exam, recovery on Card A; about 28 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fail_primary=true -f fault_drop_at_s=45 -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token, gemini/token, openai/offer, gemini/token]`, both panels on `gemini` with `failedOver`, credits -2 after the Card A hold, -4 after the Card B hold, -4 after grading and at the end with exactly two ledger rows, and every transcript check green.
-- **RUN 5** (refresh on real OpenAI; about 28 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fault_reload_at_s=60 -f verify_credits=true`. Expect three `openai/offer` calls, `metrics.reload` (`autoStarted` true or false, `resumeMs`), `reloadResumed`, `reloadKeepsTranscript` and credits -4 once (a refresh costs no second hold).
-- **RUN 6** (clean acceptance on the final SHA; about 25 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f verify_credits=true -f grade_retry=true`. Optionally repeat with `-f script=smoke-A` and then `smoke-B`. Pool `conversation.latency.samplesMs` of RUN 5 and 6 for the p95.
+- **RUN 4** (the main proof: Gemini serves a real two-card exam, recovery on Card A; about 17 min plus any wait for a runner, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fail_primary=true -f fault_drop_at_s=45 -f verify_credits=true -f grade_retry=true`. Expect `providerCalls` `[openai/offer, gemini/token, gemini/token, openai/offer, gemini/token]`, both panels on `gemini` with `failedOver`, credits -2 after the Card A hold, -4 after the Card B hold, -4 after grading and at the end with exactly two ledger rows, and every transcript check green.
+- **RUN 5** (refresh on real OpenAI; about 16 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f fault_reload_at_s=60 -f verify_credits=true`. Expect three `openai/offer` calls, `metrics.reload` (`autoStarted` true or false, `resumeMs`), `reloadResumed`, `reloadKeepsTranscript` and credits -4 once (a refresh costs no second hold).
+- **RUN 6** (clean acceptance on the final SHA; about 16 min, -4 credits): `-f mode=exam -f script=generic -f voice=piper -f expected_primary=openai -f verify_credits=true -f grade_retry=true`. Optionally repeat with `-f script=smoke-A` and then `smoke-B`. Pool `conversation.latency.samplesMs` of RUN 5 and 6 for the p95.
 - **Pinned comparison run:** add `-f voice_provider=gemini` (practice) only when the pin flag exists; otherwise the run fails fast
   naming the flag. Two faults in one run are not supported.
 - **After every run** (admin): `GET /v1/admin/ai/live-voice/health` (OpenAI failures and attempts unchanged for RUN 1-4; Gemini
   attempts up by the number of Gemini mints; both circuits closed; reset with `POST /v1/admin/ai/live-voice/<provider>/reset` if a
   run tripped one), `GET /v1/admin/ai/operations?featureCode=speaking.grade` (one Completed operation per graded card) and
   `GET /v1/admin/ai-package-credits/<qaUserId>` (no `GradingDeduct` reference with more than one row).
+
+**Results of the first matrix (1 Oct 2026, production build 679e29cdc, the shared QA learner, Claude Max sidecar grading every
+card).** Each run is the workflow run id; "wall" includes the wait for a GitHub runner (RUN 4 waited 7 min because other CI jobs
+held every hosted runner). After every run the admin health showed both circuits closed and no `GradingDeduct` reference with
+more than one row.
+
+- **RUN 6** (36926334784, exam, OpenAI, wall 16 min): credits 42 -> 40 -> 38 -> 38 (exactly 4, once, also after a repeated
+  grade), History, wording and grade retry green, both transcripts 22 segments, no split, quality green. Latency median 1588 ms,
+  p90 2138, p95 2270 (n 22); billed 298 + 299 s = 597 s. Red only `bargeInPatientStops` (the patient needed 2245 ms to stop; the
+  limit is 2000) and `noPatientTalkOver` (775 ms): behaviour limits of the model, not defects.
+- **RUN 5** (36928848422, exam, OpenAI, refresh at 60 s, wall 15 min): **every check green.** The page came back and restarted by
+  itself in 5.7 s, credits 36 -> 34 -> 32 -> 32, transcripts of 30 and 22 segments, no split. Median 1767 ms, p95 2094 (n 26);
+  billed 237 s (the session after the refresh) + 300 s. The 3 console errors are the `placement/status` 404 probe
+  (`placement_disabled`), which the harness treats as benign.
+- **RUN 1** (36928209448, practice, OpenAI refused by the harness, Gemini serves, wall 5.5 min): credits -2 once, History,
+  wording and grade retry green. Red `failoverAsRequested` (the recovery below was a third provider call) and `transcriptQuality`
+  Q5/Q9/Q10, which are one event: **Gemini went silent by itself** after 74 s, the stall detector restored it 26 s after the first
+  unanswered sentence, but the three sentences spoken meanwhile were never transcribed (the candidate text differs from the
+  played script by 25.9% of its words) and one candidate segment spans 30 s. Median 2616 ms (n 6).
+- **RUN 4** (36930552283, exam, Gemini, drop at 45 s of Card A, wall 23 min): provider calls exactly `[openai/offer,
+  gemini/token, gemini/token, openai/offer, gemini/token]`, the drop restored in 0.3 s, credits 32 -> 30 -> 28 -> 28, both cards
+  graded, History, wording and grade retry green, Card A transcript clean (22 segments, 6.8% of words differ from the script).
+  Red `transcriptQuality` Q2/Q3 and `survivesSilences`, one event on Card B: **Gemini answered the first line of the card 12.6 s
+  late**, so its short reply (25.0 s) was saved ahead of the candidate's second line (20.9 s). Median 2446 ms, p90 3504, p95
+  4030 (n 21); the patient stopped 0.1-0.5 s after a barge-in.
+- **RUN 2** (36933000359, practice, Gemini, drop at 40 s, wall 6 min): restored in 0.0 s (a new session was minted 42 ms
+  after the drop), credits -2 once, History, wording and grade retry green. Red `transcriptQuality` Q5 only: the sentence that was
+  being answered when the link dropped never got its reply (the replayed history leaves it unanswered), so two candidate lines
+  share one segment and the check reads the shared start as a timeline jump of 13 s. Median 2553 ms (n 7).
+- **RUN 3** (36933651577, practice, Gemini, stall injected at 40 s, wall 7 min): 34 provider frames were swallowed and the app
+  restored the patient 8.0 s after the stall began, credits -2 once, History, wording and grade retry green. Red
+  `noPatientTalkOver` (750 ms) and `transcriptQuality` Q2/Q3/Q9: a quick patient reply was saved ahead of the candidate line it
+  answered (Gemini segments are ordered by arrival, see [Known open items](#known-open-items)) and three candidate lines share one
+  33 s segment because the replies in between were swallowed. Median 2537 ms (n 5).
+
+All six runs together: both admin circuits stayed closed, the QA learner's Speaking pool went 42 -> 24 (4 + 2 + 4 + 4 + 2 + 2),
+71 distinct `GradingDeduct` references and none twice, and every card was graded by `writing-claude-sub`.
+
+What the matrix did **not** run: a pinned run (the flag was never created), an OpenAI drop or stall after the time base change
+(the last ones, F1-F3, predate it), a Gemini run after the 2 Oct start-order fix, and a real provider outage.
 
 ## QA provider pin
 
@@ -930,6 +993,27 @@ bug rather than a product defect: start with RUN 1 as a rehearsal.
 
 ## Known open items
 
+- **First full production matrix, 1 Oct 2026** (build 679e29cdc, results in the [Run matrix](#run-matrix)). The OpenAI exams
+  (RUN 5, RUN 6) passed every product check; RUN 6's two red checks are the model's behaviour (the patient needed 2245 ms to stop
+  after a barge-in against a 2000 ms limit, and talked over the candidate once for 775 ms). Gemini, the fallback, failed over,
+  restored a dropped link in 0.0-0.3 s, charged credits exactly once and was graded, but showed three limits that are provider
+  behaviour or by design and are **not fixed**: (1) a Gemini link can go silent by itself (RUN 1, 74 s in): the stall detector
+  restores it about 26 s after the first unanswered sentence, but the sentences spoken meanwhile are never transcribed (words
+  spoken while a link is down are lost); (2) the sentence in flight when any link drops gets no reply and the candidate has to
+  speak again (RUN 2), after which two consecutive candidate lines share one transcript segment; (3) a Gemini patient can be 12 s
+  late with the first reply of a card (RUN 4 Card B), and a quick reply that starts while the candidate is still talking (RUN 3)
+  has the same effect: Gemini transcribes the candidate ~1.5 s late, its segments are ordered by arrival and only OpenAI has the
+  late-fragment rule, so the patient's text was saved ahead of the candidate line it answers (2 of the 4 Gemini runs). **Fixed in
+  code on 2 Oct 2026** (`inOrderOfStart`: the transcript is saved in a stable order of start time; unit-tested, not yet re-run on
+  production). Measured, Gemini's median reply is 0.8 s slower than OpenAI's (2.4-2.6 s
+  against 1.6-1.8 s, p95 4.0 s against 2.1-2.3 s) and it stops talking sooner when interrupted (0.1-0.5 s against 1.2-2.2 s).
+  The harness checks `transcriptQuality` Q5 and `failoverAsRequested` read these Gemini events as failures; excluding a spontaneous
+  stall window and a lost reply is a harness follow-up. The matrix also showed every card's grader note stating that confidence is
+  low because a live conversation has no audio for the linguistic criteria: the AI score of a live role-play is transcript-only.
+- Admin `GET /v1/admin/ai/operations?featureCode=speaking.grade&state=Leased` listed 82 operations without a resource id that stay
+  Leased (their lease is refreshed every 30-60 min; the oldest was created on 30 Sep 19:43). They did not block or double-charge
+  any grade in the matrix (credits exact, one `GradingDeduct` row per card); the cause (a first gateway attempt that never reaches
+  a terminal state) is not investigated.
 - Verified in production on 30 Sep - 1 Oct (OpenAI primary, builds 74ca2607b and 7e9a4a58a): the provider order
   `[openai, gemini]`, the browser failover (a faked OpenAI 503 served by Gemini, run E4), mid-session recovery (a dropped data
   channel and a stalled provider, runs F1-F3), the card labels by slot and `hardStopAt` on the session response. Still
@@ -939,7 +1023,9 @@ bug rather than a product defect: start with RUN 1 as a rehearsal.
   discarded. The provider's error code and, for a 429 or a 5xx from the vendor host, its redacted message are now in the
   failure log line, and the class, status and code are on the admin health endpoint; read it there.
 - The 26 Sep two-card mock ended red; only 1 of 4 exam runs that completed both cards was ever graded (bugs fixed by #259/#264).
-- Gemini vs OpenAI: one matched pair (n=1 each); no complete graded Gemini run. Claude grading cost unmeasured.
+- Gemini vs OpenAI: the 1 Oct matrix gives graded runs of both (above), but voice quality, realism and card adherence are
+  listening judgements that no harness reads (the blind A/B listening set is the owner's input). Claude grading is $0 marginal on
+  the Max subscription sidecar; the Anthropic API route still has no credit and is only the fallback.
 - The Rules and consent screen still reads "Your audio is recorded and graded by AI" before a live conversation, which stores
   no audio: an owner/legal decision. The results copy itself was fixed on 1 Oct 2026 ([Results wording by input
   kind](#results-wording-by-input-kind), pending production verification).

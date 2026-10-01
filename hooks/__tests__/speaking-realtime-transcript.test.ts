@@ -4,6 +4,7 @@ import {
   MAX_SEGMENT_CHARS,
   ProviderConnectError,
   appendTranscriptFragment,
+  inOrderOfStart,
   isClientRejection,
   isProviderFailure,
   planProviders,
@@ -247,6 +248,35 @@ const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePrefli
   sessionId: 's1',
   rolePlayCardId: 'c1',
   ...overrides,
+});
+
+describe('inOrderOfStart', () => {
+  it('puts a Gemini reply that arrived before the line it answers back after that line', () => {
+    // Production 1 Oct 2026 (RUN 4, Card B): the patient's first reply was 12.6 s late, so its text arrived before the
+    // candidate's second line (Gemini transcribes the candidate ~1.5 s after the words) and was appended ahead of it.
+    const segments: LiveVoiceTranscriptSegmentInput[] = [];
+    appendTranscriptFragment(segments, 'candidate', 'Good morning. My name is Dr. Smith.', false, at(5_158, 12_408));
+    appendTranscriptFragment(segments, 'patient', "Good morning, doctor. I'm just here", false, at(25_010, 25_317));
+    appendTranscriptFragment(segments, 'candidate', "I'm sorry to hear that.", false, at(20_924, 25_657));
+    expect(segments.map((s) => s.startMs)).toEqual([5_158, 25_010, 20_924]);
+    expect(inOrderOfStart(segments).map((s) => [s.speaker, s.startMs])).toEqual([
+      ['candidate', 5_158],
+      ['candidate', 20_924],
+      ['patient', 25_010],
+    ]);
+  });
+
+  it('keeps the arrival order of segments that start together and leaves the list it was given alone', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [
+      { speaker: 'candidate', startMs: 1_000, endMs: 1_500, text: 'a' },
+      { speaker: 'patient', startMs: 1_000, endMs: 1_200, text: 'b' },
+      { speaker: 'candidate', startMs: 3_000, endMs: 3_400, text: 'c' },
+    ];
+    const ordered = inOrderOfStart(segments);
+    expect(ordered.map((s) => s.text)).toEqual(['a', 'b', 'c']);
+    expect(ordered).not.toBe(segments);
+    expect(segments.map((s) => s.text)).toEqual(['a', 'b', 'c']);
+  });
 });
 
 describe('planProviders', () => {

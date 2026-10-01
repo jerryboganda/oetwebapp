@@ -95,7 +95,9 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 
 ## History notes
 
-Added 2026-10-01 (**pending production verification**). `GET /v1/me/attempts?limit=&subtest=` returns
+Added 2026-10-01 (**verified in production on 1 Oct 2026**: the E2E runs read the History row of every mock and practice card
+they made (`historyListsExam`: one "Full Speaking Mock" row, 4 credits, a results route and a label), and `/v1/submissions` of the
+shared QA learner lists no session-bound Speaking row). `GET /v1/me/attempts?limit=&subtest=` returns
 `items[{attemptId, subtest, title, contentRef, startedAt, submittedAt, status, balanceSource, creditsUsed, route, resultLabel}]`
 and feeds the History page's "Attempt activity" list. The Speaking rows:
 
@@ -113,8 +115,10 @@ and feeds the History page's "Attempt activity" list. The Speaking rows:
   `/speaking/sessions/{sessionId}`; credits are matched on the hold reference `practice:{sessionId}`; `resultLabel` is `"N/500"`
   when an assessment exists, `"Marking in progress"` when finished but not graded and not tutor-marked, else `null`. A legacy
   Speaking attempt with no session is unchanged (route `/speaking`, credit match on the content id, `null` label).
-- `creditsUsed` sums debits as written: a hold refunded later still counts (as for every other subtest in this view), and only the
-  learner's latest 600 debit rows are read, so a very old exam can show 0 credits.
+- `creditsUsed` sums debits as written, less the refund of a released Speaking hold (a `RefundOnFailure` row whose reference is
+  `{hold reference}:...:release`: a cancelled or never-graded card), so a refunded mock does not read 4; a fully refunded row has
+  no `balanceSource`. Other subtests still count a refunded hold. Only the learner's latest 600 debit rows are read, so a very old
+  exam can show 0 credits.
 - The exam's two card attempts are left out of the generic attempt query in SQL ahead of the page's `Take`, and exams are read from
   `SpeakingExamSessions`, so a mock never shows twice and never eats the page size. The new anti-joins read `SpeakingSessions` by
   `AttemptId`, which has no index; add one if the History or Past Evidence queries show up slow.

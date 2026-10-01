@@ -455,6 +455,15 @@ export function appendTranscriptFragment(
   return late && target !== undefined;
 }
 
+/**
+ * The segments in the order they started, for the saved transcript. Gemini transcribes the candidate ~1.5 s after the words
+ * were spoken but the patient's text arrives at once, so a quick reply (or a late first one, production 1 Oct 2026) is appended
+ * ahead of the line it answers. The sort is stable: segments that start together keep the order they arrived in.
+ */
+export function inOrderOfStart(segments: readonly LiveVoiceTranscriptSegmentInput[]): LiveVoiceTranscriptSegmentInput[] {
+  return [...segments].sort((a, b) => a.startMs - b.startMs);
+}
+
 // Refresh-safe transcript. The conversation lives in memory until stop() saves it, so a reload or a crashed tab mid-card
 // would lose it (after a reload only what is said afterwards would be saved and graded). A copy per Speaking session is
 // kept in sessionStorage (this tab only, nothing but that session's own conversation, no tokens) and taken back when the
@@ -1559,7 +1568,7 @@ export function useSpeakingRealtimeVoice(
       if (current()) closeTransport();
       // The server rejects an empty transcript, and there is nothing to grade in one.
       if (segments.length > 0) {
-        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments });
+        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments: inOrderOfStart(segments) });
       }
       // Saved: the refresh-safe copy has done its job (a failed save keeps it, so a reload can still bring it back).
       clearTranscriptCheckpoint(sessionId);
