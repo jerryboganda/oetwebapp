@@ -135,6 +135,7 @@ _audit/
 
 # Root-level transient scratch exports (audio mp3 dumps, SQL/CSV data exports)
 /tmp-*
+/*.tmp.json
 
 # Build verification scratch dirs
 bin-verify*/
@@ -261,6 +262,12 @@ scripts/videos/state/
 scripts/materials/state/
 # Listening audio-boundary audit/repair scratch (state, transcripts, reports)
 scripts/listening/state/
+
+# Downloaded `listening-state-<runId>` CI artifacts from the listening-content-verify
+# workflow. Derived audio + ASR evidence, ~1.4 GB per run — regenerate via the
+# workflow, never commit. Conclusions live in docs/listening/.
+/listening-artifact/
+/listening-artifact-*/
 
 # CodeGraph index (per-environment artifact — never commit)
 .codegraph/
