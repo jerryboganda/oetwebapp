@@ -309,7 +309,7 @@ public sealed class TypeSafeJudgmentClient(
         {
             case "noul":
             {
-                var noul = RequiredNumber(answer, "noul");
+                var noul = RequiredProbability(answer, "noul");
                 return new JevAnswer(JevQuestionKind.Noul, new JevNoulAnswer(noul), null, null);
             }
             case "choice":
@@ -318,14 +318,14 @@ public sealed class TypeSafeJudgmentClient(
                     ? choiceEl.GetString() ?? throw new TypeSafeHttpException("TypeSafe choice answer missing choice.", 0)
                     : throw new TypeSafeHttpException("TypeSafe choice answer missing choice.", 0);
                 var probabilities = ParseProbabilities(answer);
-                var confidence = RequiredNumber(answer, "confidence");
+                var confidence = RequiredProbability(answer, "confidence");
                 return new JevAnswer(JevQuestionKind.Choice, null, new JevChoiceAnswer(choice, probabilities, confidence), null);
             }
             case "score":
             {
                 var score = RequiredNumber(answer, "score");
                 var probabilities = ParseProbabilities(answer);
-                var confidence = RequiredNumber(answer, "confidence");
+                var confidence = RequiredProbability(answer, "confidence");
                 return new JevAnswer(JevQuestionKind.Score, null, null, new JevScoreAnswer(score, probabilities, confidence));
             }
             default:
@@ -345,6 +345,14 @@ public sealed class TypeSafeJudgmentClient(
         }
 
         return result;
+    }
+
+    private static double RequiredProbability(JsonElement answer, string propertyName)
+    {
+        var probability = RequiredNumber(answer, propertyName);
+        if (!double.IsFinite(probability) || probability is < 0 or > 1)
+            throw new TypeSafeHttpException($"TypeSafe answer has invalid {propertyName} probability.", 0);
+        return probability;
     }
 
     private static double RequiredNumber(JsonElement answer, string propertyName)
