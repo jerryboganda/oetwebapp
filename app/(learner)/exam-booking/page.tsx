@@ -6,7 +6,9 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
 import { fetchExamBookings, createExamBooking, deleteExamBooking } from '@/lib/api';
@@ -26,11 +28,11 @@ const EXAM_TYPE_OPTIONS = [
   { value: 'toefl', label: 'TOEFL' },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  planned: 'bg-info/10 text-info',
-  confirmed: 'bg-success/10 text-success-strong',
-  completed: 'bg-background-light text-muted',
-  cancelled: 'bg-danger/10 text-danger-strong',
+const STATUS_BADGE: Record<string, BadgeProps['variant']> = {
+  planned: 'info',
+  confirmed: 'success',
+  completed: 'slate',
+  cancelled: 'danger',
 };
 
 function daysUntil(dateStr: string) {
@@ -109,45 +111,45 @@ export default function ExamBookingPage() {
 
   return (
     <>
-      <div className="mb-6">
-        <LearnerPageHero
-          title="Exam Bookings"
-          description="Track your upcoming English exam dates"
-          icon={CalendarDays}
-          aside={
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="w-4 h-4" aria-hidden="true" /> Add Booking
-            </Button>
-          }
-        />
-      </div>
+      <LearnerPageHero
+        title="Exam Bookings"
+        description="Track your upcoming English exam dates"
+        icon={CalendarDays}
+        aside={
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> Add Booking
+          </Button>
+        }
+      />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
       {/* Create form */}
       {showCreate && (
-        <MotionSection className="mb-6 rounded-2xl border border-primary/30 bg-surface p-5 shadow-sm">
-          <h2 className="mb-4 font-semibold text-navy">Add Exam Booking</h2>
-          <form onSubmit={handleCreate} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Select id="exam-booking-type" label="Exam" options={EXAM_TYPE_OPTIONS} value={form.examTypeCode} onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))} />
-              <Input id="exam-booking-date" label="Exam date" type="date" value={form.examDate} onChange={e => setForm(p => ({ ...p, examDate: e.target.value }))} required />
-            </div>
-            <Input id="exam-booking-center" label="Test center" type="text" placeholder="Test center (optional)" value={form.testCenter} onChange={e => setForm(p => ({ ...p, testCenter: e.target.value }))} />
-            <Input id="exam-booking-reference" label="Booking reference" type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} />
-            <Input id="exam-booking-url" label="External booking URL" type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} />
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button type="submit" loading={creating}>
-                {creating ? 'Saving...' : 'Save Booking'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            </div>
-          </form>
+        <MotionSection>
+          <Card className="border-primary/30">
+            <h2 className="mb-4 font-semibold text-navy">Add Exam Booking</h2>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Select id="exam-booking-type" label="Exam" options={EXAM_TYPE_OPTIONS} value={form.examTypeCode} onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))} />
+                <Input id="exam-booking-date" label="Exam date" type="date" value={form.examDate} onChange={e => setForm(p => ({ ...p, examDate: e.target.value }))} required />
+              </div>
+              <Input id="exam-booking-center" label="Test center" type="text" placeholder="Test center (optional)" value={form.testCenter} onChange={e => setForm(p => ({ ...p, testCenter: e.target.value }))} />
+              <Input id="exam-booking-reference" label="Booking reference" type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} />
+              <Input id="exam-booking-url" label="External booking URL" type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} />
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button type="submit" loading={creating}>
+                  {creating ? 'Saving...' : 'Save Booking'}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+              </div>
+            </form>
+          </Card>
         </MotionSection>
       )}
 
       {loading ? (
-        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
       ) : loadFailed ? (
         <ErrorState title="Could not load bookings" message="Check your connection and try again." onRetry={loadBookings} />
       ) : bookings.length === 0 ? (
@@ -160,58 +162,59 @@ export default function ExamBookingPage() {
       ) : (
         <>
           {upcoming.length > 0 && (
-            <>
+            <MotionSection className="space-y-4">
               <LearnerSurfaceSectionHeader title="Upcoming" />
-              <div className="space-y-3 mb-8">
+              <div className="space-y-3">
                 {upcoming.map((booking, i) => {
                   const days = daysUntil(booking.examDate);
                   return (
-                    <MotionItem key={booking.id} delayIndex={i}
-                      className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:gap-4"
-                    >
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-danger' : days <= 30 ? 'bg-warning' : 'bg-primary dark:bg-primary-700'}`}>
-                        <div className="text-2xl font-bold leading-none">{days > 0 ? days : 'N/A'}</div>
-                        <div>days</div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-navy">{booking.examTypeCode.toUpperCase()}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>{booking.status}</span>
+                    <MotionItem key={booking.id} delayIndex={Math.min(i, 5)}>
+                      <Card className="flex items-center gap-3 sm:gap-4">
+                        {/* Tinted countdown: urgency reads from the tint and the number, with AA text on every tone. */}
+                        <div className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl text-xs font-bold ${days <= 7 ? 'bg-danger/10 text-danger-strong' : days <= 30 ? 'bg-warning/10 text-warning-strong' : 'bg-primary/10 text-primary'}`}>
+                          <div className="text-2xl font-bold leading-none tabular-nums">{days > 0 ? days : 'N/A'}</div>
+                          <div>days</div>
                         </div>
-                        <div className="text-sm text-muted">{new Date(booking.examDate).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                        {booking.testCenter && <div className="text-xs text-muted/60">{booking.testCenter}</div>}
-                        {booking.bookingReference && <div className="text-xs text-muted/60">Ref: {booking.bookingReference}</div>}
-                      </div>
-                      <div className="flex shrink-0 items-center">
-                        {booking.externalUrl && (
-                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${booking.examTypeCode.toUpperCase()} booking page`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                            <ExternalLink className="w-4 h-4" aria-hidden="true" />
-                          </a>
-                        )}
-                        <button type="button" onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} aria-label={`Remove ${booking.examTypeCode.toUpperCase()} booking`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">
-                          <Trash2 className="w-4 h-4" aria-hidden="true" />
-                        </button>
-                      </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-navy">{booking.examTypeCode.toUpperCase()}</span>
+                            <Badge variant={STATUS_BADGE[booking.status] ?? 'slate'} className="capitalize">{booking.status}</Badge>
+                          </div>
+                          <div className="text-sm tabular-nums text-muted">{new Date(booking.examDate).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                          {booking.testCenter && <div className="text-xs text-muted">{booking.testCenter}</div>}
+                          {booking.bookingReference && <div className="break-all text-xs text-muted">Ref: {booking.bookingReference}</div>}
+                        </div>
+                        <div className="flex shrink-0 items-center">
+                          {booking.externalUrl && (
+                            <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${booking.examTypeCode.toUpperCase()} booking page`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                            </a>
+                          )}
+                          <button type="button" onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} aria-label={`Remove ${booking.examTypeCode.toUpperCase()} booking`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </Card>
                     </MotionItem>
                   );
                 })}
               </div>
-            </>
+            </MotionSection>
           )}
 
           {past.length > 0 && (
-            <>
+            <MotionSection delayIndex={1} className="space-y-4">
               <LearnerSurfaceSectionHeader title="Past" />
-              <div className="space-y-2">
-                {past.map((booking, _i) => (
-                  <div key={booking.id} className="bg-background-light rounded-xl border border-border px-4 py-3 flex items-center gap-3 opacity-70">
-                    <span className="font-medium text-navy text-sm">{booking.examTypeCode.toUpperCase()}</span>
-                    <span className="text-sm text-muted">{booking.examDate}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ml-auto ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>{booking.status}</span>
+              <Card padding="none" className="divide-y divide-border overflow-hidden">
+                {past.map((booking) => (
+                  <div key={booking.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-sm font-medium text-navy">{booking.examTypeCode.toUpperCase()}</span>
+                    <span className="text-sm tabular-nums text-muted">{new Date(booking.examDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <Badge variant={STATUS_BADGE[booking.status] ?? 'slate'} className="ms-auto capitalize">{booking.status}</Badge>
                   </div>
                 ))}
-              </div>
-            </>
+              </Card>
+            </MotionSection>
           )}
         </>
       )}
