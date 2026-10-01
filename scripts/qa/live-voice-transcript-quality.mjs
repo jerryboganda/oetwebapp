@@ -29,6 +29,7 @@ export function scriptLines(text) {
 // mismatch (a script edited after the tape was built) leaves nothing to compare instead of a wrong comparison.
 //   timeline  [{ start, end }] seconds on the tape clock (the workflow's timeline.json)
 //   excludeS  [[fromS, toS]] on the same clock
+/** @param {any} input { script, timeline, playedUntilS, excludeS } */
 export function expectedLines({ script, timeline, playedUntilS = Infinity, excludeS = [] }) {
   if (!script?.length || script.length !== timeline?.length) return [];
   return script
@@ -148,6 +149,10 @@ export function transcriptQuality(input) {
 // One speaker's words on the wire in a time window, as the hook builds a segment: OpenAI deltas join as they are, Gemini
 // fragments are separated by a space. Words inside an exclude window (epoch ms ranges) are skipped.
 //   words  [{ at, who, text, provider }] at = epoch ms, provider 'openai' | 'gemini'
+/**
+ * @param {any} words
+ * @param {any} options { who, from, to, exclude }
+ */
 export function wireText(words, { who, from = -Infinity, to = Infinity, exclude = [] }) {
   let text = '';
   for (const w of words ?? []) {
