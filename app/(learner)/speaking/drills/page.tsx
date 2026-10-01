@@ -23,16 +23,12 @@ import {
   type SpeakingDrillsListResponse,
 } from '@/lib/api';
 
+// The API matches `criterion` against each drill's criteriaFocus codes exactly
+// (case-insensitive), and drills are tagged with the camelCase codes
+// (`patientPerspective`), so the options use those codes: all nine criteria.
 const CRITERION_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All criteria' },
-  { value: 'intelligibility', label: 'Intelligibility' },
-  { value: 'fluency', label: 'Fluency' },
-  { value: 'appropriateness', label: 'Appropriateness' },
-  { value: 'grammar_expression', label: 'Grammar & expression' },
-  { value: 'relationship_building', label: 'Relationship building' },
-  { value: 'patient_perspective', label: 'Patient perspective' },
-  { value: 'information_giving', label: 'Information giving' },
-  { value: 'information_gathering', label: 'Information gathering' },
+  ...Object.entries(CRITERION_LABEL).map(([value, label]) => ({ value, label })),
 ];
 
 function kindLabel(kind: string): string {
