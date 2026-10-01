@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { motion } from 'motion/react';
 import { Brain, Layers, BookOpen, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { Badge } from '@/components/ui/badge';
+import { CardLink } from '@/components/ui/card-link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { RevisionPlanCard } from '@/components/domain/recalls/revision-plan-card';
 import { WeeklyReportCard } from '@/components/domain/recalls/weekly-report-card';
 import { fetchVocabularyStats, fetchReviewSummary } from '@/lib/api';
@@ -58,7 +59,7 @@ export default function RecallsHomePage() {
       eyebrow: 'Words',
       title: 'Vocabulary banks & flashcards',
       description: 'Curated medical terms, daily set, browse, type-to-spell, and quiz formats.',
-      icon: <BookOpen className="h-6 w-6" />,
+      icon: <BookOpen className="h-6 w-6" aria-hidden="true" />,
       tile: 'bg-info/10 text-info',
       badge: vocab?.dueToday ? `${vocab.dueToday} due` : null,
     },
@@ -67,7 +68,7 @@ export default function RecallsHomePage() {
       eyebrow: 'Favourites',
       title: 'Saved words to review later',
       description: 'Every word you favourited, in one place — ready to revisit or drill.',
-      icon: <Heart className="h-6 w-6" />,
+      icon: <Heart className="h-6 w-6" aria-hidden="true" />,
       tile: 'bg-warning/10 text-warning-strong',
       badge: null,
     },
@@ -75,24 +76,23 @@ export default function RecallsHomePage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Recalls"
-          title="Everything you are trying to remember, in one place"
-          description="Vocabulary cards and spaced-repetition review unified. Click. Listen. Type. Star. Revise. Master."
-          icon={Sparkles}
-          highlights={heroHighlights}
-        />
+      <LearnerPageHero
+        eyebrow="Recalls"
+        title="Everything you are trying to remember, in one place"
+        description="Vocabulary cards and spaced-repetition review unified. Click. Listen. Type. Star. Revise. Master."
+        icon={Sparkles}
+        highlights={heroHighlights}
+      />
 
-        <LearnerSkillSwitcher compact />
+      <LearnerSkillSwitcher compact />
 
-        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
+      <MotionSection className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Today"
           title="Pick a mode to start your recall session"
           description="Each tab routes into the same SM-2 engine; your progress is shared across vocabulary and review."
-          className="mb-4"
         />
 
         {loading ? (
@@ -103,40 +103,32 @@ export default function RecallsHomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {tabs.map((t) => (
-              <Link key={t.href} href={t.href} className="rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                <motion.div
-                  whileHover={{ scale: 1.01 }}
-                  className="group flex h-full cursor-pointer items-start gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:shadow-md"
-                >
+            {tabs.map((t, i) => (
+              <MotionItem key={t.href} delayIndex={i} className="h-full">
+                <CardLink href={t.href} className="group flex h-full items-start gap-4">
                   <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${t.tile}`}>
                     {t.icon}
                   </div>
-                  <div className="flex-1">
-                    <div className="eyebrow text-muted">{t.eyebrow}</div>
-                    <div className="mt-1 flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="eyebrow text-muted">{t.eyebrow}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-navy">{t.title}</span>
-                      {t.badge && (
-                        <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning-strong">
-                          {t.badge}
-                        </span>
-                      )}
+                      {t.badge && <Badge variant="warning">{t.badge}</Badge>}
                     </div>
                     <p className="mt-1 text-sm text-muted">{t.description}</p>
                   </div>
-                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hoverable:translate-x-0.5" aria-hidden="true" />
-                </motion.div>
-              </Link>
+                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
+                </CardLink>
+              </MotionItem>
             ))}
           </div>
         )}
+      </MotionSection>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <RevisionPlanCard />
-          <WeeklyReportCard />
-        </div>
-
-      </div>
+      <MotionSection delayIndex={1} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <RevisionPlanCard />
+        <WeeklyReportCard />
+      </MotionSection>
     </>
   );
 }

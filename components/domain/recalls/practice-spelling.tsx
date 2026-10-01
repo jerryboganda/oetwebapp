@@ -166,7 +166,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
         <button
           type="button"
           onClick={onClose}
-          className="text-xs text-muted underline-offset-2 hover:underline"
+          className="-me-2 inline-flex min-h-11 items-center rounded-control px-2 text-xs text-muted underline-offset-2 hover:text-navy hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8"
         >
           Close
         </button>
@@ -178,7 +178,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
         type="button"
         onClick={() => void replay()}
         aria-label="Replay audio"
-        className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        className="pressable mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8"
       >
         <Volume2 size={13} strokeWidth={2} className="h-3.5 w-3.5" aria-hidden="true" />
         {playing ? 'Playing…' : 'Replay audio'}
