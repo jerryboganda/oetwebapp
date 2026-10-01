@@ -276,7 +276,7 @@ export default function WritingSubmissionResultsPage() {
         <LearnerPageHero
           eyebrow={t('writing.submissions.results.eyebrow')}
           icon={Award}
-          accent="amber"
+          accent="writing"
           title={t('writing.submissions.results.awaiting')}
           description={t('writing.submissions.results.description')}
         />

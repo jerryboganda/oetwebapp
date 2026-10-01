@@ -25,7 +25,13 @@ export type LearnerSurfaceAccent =
   | 'purple'
   | 'rose'
   | 'emerald'
-  | 'slate';
+  | 'slate'
+  // Sub-test identity (DESIGN.md §2 skill-* tokens), not status: use these for
+  // a module's own heroes and cards instead of a hue that reads as a status.
+  | 'listening'
+  | 'reading'
+  | 'writing'
+  | 'speaking';
 
 export interface LearnerSurfaceMetaItem {
   label: string;

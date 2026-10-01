@@ -46,7 +46,7 @@ export default function WritingSubmissionDetailPage() {
       <LearnerPageHero
         eyebrow={t('writing.submissions.detail.eyebrow')}
         icon={FileText}
-        accent="amber"
+        accent="writing"
         title={submission ? t('writing.submissions.detail.heroTitle', { mode: submission.mode }) : t('writing.submissions.detail.heroTitleFallback')}
         description={t('writing.submissions.detail.heroDescription')}
         highlights={submission ? [

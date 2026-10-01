@@ -107,7 +107,7 @@ export default function WritingAskToolPage() {
       <LearnerPageHero
         eyebrow={t('writing.tools.ask.eyebrow')}
         icon={Sparkles}
-        accent="amber"
+        accent="writing"
         title={t('writing.tools.ask.title')}
         description={t('writing.tools.ask.description')}
       />

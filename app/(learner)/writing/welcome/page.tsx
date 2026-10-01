@@ -48,7 +48,7 @@ export default function WritingWelcomePage() {
       <LearnerPageHero
         eyebrow={t('writing.welcome.eyebrow')}
         icon={PenTool}
-        accent="amber"
+        accent="writing"
         title={t('writing.welcome.hero.title')}
         description={t('writing.welcome.hero.description')}
       />

@@ -93,7 +93,7 @@ export default function WritingMocksCataloguePage() {
       <LearnerPageHero
         eyebrow={t('writing.mocks.catalogue.eyebrow')}
         icon={Award}
-        accent="amber"
+        accent="writing"
         title={t('writing.mocks.catalogue.title')}
         description={t('writing.mocks.catalogue.description')}
         highlights={[

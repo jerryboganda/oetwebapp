@@ -39,7 +39,7 @@ export default function WritingCanonPage() {
       <LearnerPageHero
         eyebrow={t('writing.canon.library.eyebrow')}
         icon={BookOpen}
-        accent="amber"
+        accent="writing"
         title={t('writing.canon.library.hero.title')}
         description={t('writing.canon.library.hero.description')}
         highlights={[

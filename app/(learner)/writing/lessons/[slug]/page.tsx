@@ -58,7 +58,7 @@ export default function WritingLessonPage() {
       <LearnerPageHero
         eyebrow={lesson ? t('writing.lessons.detail.eyebrowWith', { skill: lesson.skillCode }) : t('writing.lessons.detail.eyebrowFoundation')}
         icon={BookOpenCheck}
-        accent="amber"
+        accent="writing"
         title={lesson?.title ?? t('writing.lessons.detail.titleFallback')}
         description={lesson ? writingSkillLabels[lesson.skillCode] ?? lesson.skillCode : t('writing.lessons.detail.descriptionLoading')}
         highlights={[

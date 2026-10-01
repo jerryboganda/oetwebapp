@@ -105,7 +105,7 @@ export default function WritingAnalyticsPage() {
       <LearnerPageHero
         eyebrow="Writing Analytics"
         icon={TrendingDown}
-        accent="amber"
+        accent="writing"
         title="Your weakness map"
         description="See exactly where you keep losing marks across drills, rewrites and expert feedback. Use this to choose what to practise next."
         highlights={summary

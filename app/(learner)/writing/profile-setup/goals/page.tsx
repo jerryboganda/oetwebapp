@@ -68,7 +68,7 @@ export default function ProfileSetupGoalsPage() {
       <LearnerPageHero
         eyebrow="Step 2 of 4"
         icon={Target}
-        accent="amber"
+        accent="writing"
         title="Set your target and your weekly budget"
         description="The plan generator uses these to size your daily work and lock the trajectory toward your exam date."
       />

@@ -85,7 +85,7 @@ export default function ProfileSetupConfirmPage() {
       <LearnerPageHero
         eyebrow="Step 4 of 4"
         icon={ClipboardCheck}
-        accent="amber"
+        accent="writing"
         title="Review and confirm"
         description="One last check before we generate your personalised writing pathway."
       />

@@ -45,7 +45,7 @@ export default function WritingDrillsPage() {
       <LearnerPageHero
         eyebrow="Writing Practice"
         icon={Dumbbell}
-        accent="amber"
+        accent="writing"
         title={skill ? `${skill}: ${writingSkillLabels[skill] ?? 'Targeted drills'}` : 'Targeted Writing drills'}
         description="Short deterministic drills practise one Writing skill at a time and store attempts separately from exam submissions."
         highlights={[{ icon: Target, label: 'Available', value: `${drills.length}` }]}

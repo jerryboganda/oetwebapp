@@ -89,7 +89,7 @@ export default function WritingSkillTreePage() {
       <LearnerPageHero
         eyebrow={t('writing.skillTree.eyebrow')}
         icon={Route}
-        accent="amber"
+        accent="writing"
         title={t('writing.skillTree.title')}
         description={t('writing.skillTree.hero.description')}
         highlights={[

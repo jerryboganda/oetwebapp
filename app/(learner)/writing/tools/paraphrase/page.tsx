@@ -50,7 +50,7 @@ export default function WritingParaphraseToolPage() {
       <LearnerPageHero
         eyebrow={t('writing.tools.paraphrase.eyebrow')}
         icon={Sparkles}
-        accent="amber"
+        accent="writing"
         title={t('writing.tools.paraphrase.title')}
         description={t('writing.tools.paraphrase.description')}
       />

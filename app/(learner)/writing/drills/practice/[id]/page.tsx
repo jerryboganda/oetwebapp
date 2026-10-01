@@ -46,7 +46,7 @@ export default function WritingDrillPracticeDetailPage() {
       <LearnerPageHero
         eyebrow={drill ? drill.targetSubSkill : 'Writing Drill'}
         icon={Dumbbell}
-        accent="amber"
+        accent="writing"
         title={drill?.title ?? 'Writing drill'}
         description={drill ? writingSkillLabels[drill.targetSubSkill] ?? drill.targetSubSkill : 'Loading drill'}
         highlights={[{ icon: Dumbbell, label: 'Attempts', value: `${drill?.attemptCount ?? 0}` }]}

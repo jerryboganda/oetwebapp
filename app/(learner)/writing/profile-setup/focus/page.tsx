@@ -64,7 +64,7 @@ export default function ProfileSetupFocusPage() {
       <LearnerPageHero
         eyebrow="Step 3 of 4"
         icon={Layers}
-        accent="amber"
+        accent="writing"
         title="What letter types do you need most?"
         description="We rotate practice across the types you pick, with weighting toward your weakest."
         highlights={[{ icon: Layers, label: 'Picked', value: `${focus.length}` }]}

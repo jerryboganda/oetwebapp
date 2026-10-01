@@ -155,7 +155,7 @@ export default function WritingTodayPage() {
       <LearnerPageHero
         eyebrow={t('writing.today.eyebrow')}
         icon={ListChecks}
-        accent="amber"
+        accent="writing"
         title={t('writing.today.title')}
         description={t('writing.today.hero.description')}
         highlights={[

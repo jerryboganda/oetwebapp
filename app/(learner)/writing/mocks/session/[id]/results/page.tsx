@@ -153,7 +153,7 @@ export default function WritingMockResultsPage() {
         <LearnerPageHero
           eyebrow={t('writing.mocks.results.eyebrow', { n: Math.max(1, mockNumber) })}
           icon={Award}
-          accent="amber"
+          accent="writing"
           title={t('writing.mocks.results.heroTitleFallback')}
           description={t('writing.mocks.results.description')}
         />

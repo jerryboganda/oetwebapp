@@ -109,7 +109,7 @@ export default function WritingStatsPage() {
       <LearnerPageHero
         eyebrow={t('writing.stats.eyebrow')}
         icon={BarChart3}
-        accent="amber"
+        accent="writing"
         title={t('writing.stats.title')}
         description={t('writing.stats.description')}
         highlights={[

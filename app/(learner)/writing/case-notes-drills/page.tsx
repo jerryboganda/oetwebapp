@@ -90,7 +90,7 @@ export default function WritingCaseNoteDrillsPage() {
       <LearnerPageHero
         eyebrow="Selection drills"
         icon={ClipboardList}
-        accent="amber"
+        accent="writing"
         title="Train relevance triage on real case notes"
         description="Picking the right notes is half of W1 mastery. These drills score every sentence against the gold-standard tag."
         highlights={[

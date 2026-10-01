@@ -51,6 +51,22 @@ const accentTokens = {
     icon: 'bg-background-light text-muted',
     eyebrow: 'bg-background-light text-muted border-border',
   },
+  listening: {
+    icon: 'bg-skill-listening/10 text-skill-listening',
+    eyebrow: 'bg-skill-listening/10 text-skill-listening border-skill-listening/20',
+  },
+  reading: {
+    icon: 'bg-skill-reading/10 text-skill-reading',
+    eyebrow: 'bg-skill-reading/10 text-skill-reading border-skill-reading/20',
+  },
+  writing: {
+    icon: 'bg-skill-writing/10 text-skill-writing',
+    eyebrow: 'bg-skill-writing/10 text-skill-writing border-skill-writing/20',
+  },
+  speaking: {
+    icon: 'bg-skill-speaking/10 text-skill-speaking',
+    eyebrow: 'bg-skill-speaking/10 text-skill-speaking border-skill-speaking/20',
+  },
 } as const;
 
 function renderIcon(icon: ElementType | ReactNode | undefined, className?: string) {

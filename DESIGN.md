@@ -131,7 +131,7 @@ Raw status hues map onto the tokens: a tint is `bg-<status>/10`, a border `borde
 | Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open; bottom-nav tabs carry a one-word `mobileLabel` (≤ 6 characters at 360px) |
 | Command palette | `GlobalSearch`: a `Modal`-based combobox/listbox, mounted once per AppShell | Ctrl/⌘K or the header trigger; not mounted on `distractionFree` or exam/live routes (`isExamOrLiveRoute`); rows only from the role's real nav plus learner content search |
 | Empty / Error | `EmptyState` / `ErrorState`; the empty icon pops in once | Always explain the situation and offer the next action or a retry |
-| Page hero | `LearnerPageHero`: one per page, never nested in another card or a flex row; `aside` sits beside the title and highlights run full width | Highlights are real data only |
+| Page hero | `LearnerPageHero`: one per page, never nested in another card or a flex row; `aside` sits beside the title and highlights run full width; a module's own pages take its skill accent (`accent="writing"`, …), never a status hue | Highlights are real data only |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 
 ## 7. Layout and responsive behaviour

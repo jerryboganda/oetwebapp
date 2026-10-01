@@ -53,7 +53,7 @@ export default async function WritingDrillPlayerPage({
       <LearnerPageHero
         eyebrow="Writing Drill"
         icon={<Dumbbell />}
-        accent="amber"
+        accent="writing"
         title={drill.title}
         description={drill.brief}
         highlights={[

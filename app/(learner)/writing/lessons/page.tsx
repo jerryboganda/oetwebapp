@@ -94,7 +94,7 @@ function WritingLessonsCatalogueInner() {
       <LearnerPageHero
         eyebrow={t('writing.lessons.eyebrow')}
         icon={BookOpen}
-        accent="amber"
+        accent="writing"
         title={t('writing.lessons.catalogue.title')}
         description={t('writing.lessons.catalogue.description')}
         highlights={[

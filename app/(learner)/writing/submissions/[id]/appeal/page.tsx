@@ -135,7 +135,7 @@ export default function WritingAppealPage() {
       <LearnerPageHero
         eyebrow="Submission"
         icon={Scale}
-        accent="amber"
+        accent="writing"
         title="Score appeal"
         description="A second AI examiner regrades your letter independently. If their score differs by more than 3 raw points, we average the two and update your record."
         aside={

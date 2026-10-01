@@ -103,7 +103,7 @@ export default function WritingPracticeLibraryPage() {
       <LearnerPageHero
         eyebrow={t('writing.practice.library.eyebrow')}
         icon={Library}
-        accent="amber"
+        accent="writing"
         title={t('writing.practice.library.title')}
         description={t('writing.practice.library.description')}
         highlights={[

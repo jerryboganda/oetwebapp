@@ -85,7 +85,7 @@ export default function WritingHome() {
       <LearnerPageHero
         eyebrow={t('writing.hub.eyebrow')}
         icon={PenTool}
-        accent="amber"
+        accent="writing"
         title={t('writing.hub.hero.title')}
         description={t('writing.hub.hero.description')}
       />

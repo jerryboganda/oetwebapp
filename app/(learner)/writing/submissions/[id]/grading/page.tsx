@@ -147,7 +147,7 @@ export default function WritingSubmissionGradingPage() {
       <LearnerPageHero
         eyebrow={t('writing.submissions.grading.eyebrow')}
         icon={Sparkles}
-        accent="amber"
+        accent="writing"
         title={t('writing.submissions.grading.title')}
         description={t('writing.submissions.grading.description')}
         highlights={[

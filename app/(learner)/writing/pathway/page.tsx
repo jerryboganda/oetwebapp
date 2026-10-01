@@ -28,7 +28,7 @@ export default function WritingPathwayPage() {
       <LearnerPageHero
         eyebrow="Writing Pathway"
         icon={Compass}
-        accent="amber"
+        accent="writing"
         title="Your route from baseline to exam-ready Writing"
         description="The pathway reads your real attempts, evaluations, rule violations, and practice plan without replacing the existing grading pipeline."
         // Chips show once the pathway is in: before that the stage would read

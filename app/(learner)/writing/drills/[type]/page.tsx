@@ -56,7 +56,7 @@ export default async function WritingDrillsTypeListPage({
       <LearnerPageHero
         eyebrow="Writing Practice"
         icon={<Dumbbell />}
-        accent="amber"
+        accent="writing"
         title={TYPE_TITLES[type]}
         description={typeDescription(type)}
         aside={

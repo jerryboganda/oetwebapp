@@ -61,7 +61,7 @@ export default function WritingShowcasePage() {
       <LearnerPageHero
         eyebrow={t('writing.showcase.eyebrow')}
         icon={Sparkles}
-        accent="amber"
+        accent="writing"
         title={t('writing.showcase.title')}
         description={t('writing.showcase.description')}
       />

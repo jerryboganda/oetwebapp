@@ -61,7 +61,7 @@ export default function ProfileSetupProfessionPage() {
       <LearnerPageHero
         eyebrow="Step 1 of 4"
         icon={ClipboardList}
-        accent="amber"
+        accent="writing"
         title="Tell us who you are"
         description="Your profession decides letter types we drill, scenarios we surface, and exemplar libraries we compare against."
       />

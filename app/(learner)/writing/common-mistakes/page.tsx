@@ -60,7 +60,7 @@ export default function WritingCommonMistakesPage() {
       <LearnerPageHero
         eyebrow={t('writing.mistakes.library.eyebrow')}
         icon={AlertCircle}
-        accent="amber"
+        accent="writing"
         title={t('writing.mistakes.library.title')}
         description={t('writing.mistakes.library.description')}
         aside={

@@ -106,6 +106,10 @@ const accentStyles: Record<LearnerSurfaceAccent, { icon: string; badge: string }
   rose: { icon: 'bg-danger/10 text-danger-strong', badge: 'border-danger/20 bg-danger/10 text-danger-strong' },
   emerald: { icon: 'bg-success/10 text-success-strong', badge: 'border-success/20 bg-success/10 text-success-strong' },
   slate: { icon: 'bg-background-light text-navy', badge: 'border-border bg-background-light text-navy' },
+  listening: { icon: 'bg-skill-listening/10 text-skill-listening', badge: 'border-skill-listening/20 bg-skill-listening/10 text-skill-listening' },
+  reading: { icon: 'bg-skill-reading/10 text-skill-reading', badge: 'border-skill-reading/20 bg-skill-reading/10 text-skill-reading' },
+  writing: { icon: 'bg-skill-writing/10 text-skill-writing', badge: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing' },
+  speaking: { icon: 'bg-skill-speaking/10 text-skill-speaking', badge: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking' },
 };
 
 /** Sub-test tags wear their skill identity colour, never a status colour. */

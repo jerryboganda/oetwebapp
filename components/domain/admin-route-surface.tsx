@@ -28,6 +28,10 @@ const accentClassMap: Record<LearnerSurfaceAccent, { icon: string; chip: string 
   rose: { icon: 'bg-danger/15 text-danger-strong', chip: 'bg-danger/10 text-rose-300 border-danger/20' },
   emerald: { icon: 'bg-success/15 text-success-strong', chip: 'bg-success/10 text-emerald-300 border-success/20' },
   slate: { icon: 'bg-slate-500/15 text-slate-300', chip: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
+  listening: { icon: 'bg-skill-listening/15 text-skill-listening', chip: 'bg-skill-listening/10 text-skill-listening border-skill-listening/20' },
+  reading: { icon: 'bg-skill-reading/15 text-skill-reading', chip: 'bg-skill-reading/10 text-skill-reading border-skill-reading/20' },
+  writing: { icon: 'bg-skill-writing/15 text-skill-writing', chip: 'bg-skill-writing/10 text-skill-writing border-skill-writing/20' },
+  speaking: { icon: 'bg-skill-speaking/15 text-skill-speaking', chip: 'bg-skill-speaking/10 text-skill-speaking border-skill-speaking/20' },
 };
 
 function renderAdminRouteIcon(icon: AdminRouteIcon | undefined, className: string) {

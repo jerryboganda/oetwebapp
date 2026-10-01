@@ -56,7 +56,7 @@ export default function WritingMyMistakesPage() {
       <LearnerPageHero
         eyebrow={t('writing.mistakes.mine.eyebrow')}
         icon={TrendingUp}
-        accent="amber"
+        accent="writing"
         title={t('writing.mistakes.mine.title')}
         description={t('writing.mistakes.mine.description')}
         highlights={[

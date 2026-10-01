@@ -62,7 +62,7 @@ export default function WritingCanonRuleDetailPage() {
       <LearnerPageHero
         eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
         icon={BookOpen}
-        accent="amber"
+        accent="writing"
         // Rule id is a canonical identifier (e.g. "PURPOSE-01") — keep verbatim.
         title={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}
         // Rule text is Dr Ahmed's authored English canon content (spec §32).
