@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, CheckCircle2, Shield, Timer } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { Input } from '@/components/ui/form-controls';
-import { buttonClassName } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { cancelFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
@@ -171,46 +175,55 @@ export default function FreezePage() {
     }
   };
 
+  // The status itself failed to load: the policy defaults below would not be the learner's.
+  const loadFailed = !loading && !freezeState && Boolean(error);
+
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Account Freeze"
-          icon={Shield}
-          accent="primary"
-          title="Pause learner access without touching billing history"
-          description="Pause your subscription temporarily. Your study records stay safe and your progress is preserved."
-          highlights={highlights}
-        />
+      <LearnerPageHero
+        eyebrow="Account Freeze"
+        icon={Shield}
+        accent="primary"
+        title="Pause learner access without touching billing history"
+        description="Pause your subscription temporarily. Your study records stay safe and your progress is preserved."
+        highlights={freezeState ? highlights : undefined}
+      />
 
-        {loading ? <InlineAlert variant="info">Loading freeze status...</InlineAlert> : null}
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
-        {currentFreeze && currentStatus === 'active' ? (
-          <InlineAlert variant="warning">
-            This account is actively frozen. Study mutations are paused until the freeze ends.
-          </InlineAlert>
-        ) : null}
-        {currentFreeze && currentStatus === 'pendingapproval' ? (
-          <InlineAlert variant="info">Your freeze request is waiting for admin approval. You can cancel it before approval.</InlineAlert>
-        ) : null}
-        {currentFreeze && currentStatus === 'scheduled' ? (
-          <InlineAlert variant="info">Your freeze is scheduled. You can cancel it before the start time.</InlineAlert>
-        ) : null}
+      {loadFailed ? <ErrorState message={error ?? undefined} /> : null}
+      {error && !loadFailed ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+      {currentFreeze && currentStatus === 'active' ? (
+        <InlineAlert variant="warning">
+          This account is actively frozen. Study mutations are paused until the freeze ends.
+        </InlineAlert>
+      ) : null}
+      {currentFreeze && currentStatus === 'pendingapproval' ? (
+        <InlineAlert variant="info">Your freeze request is waiting for admin approval. You can cancel it before approval.</InlineAlert>
+      ) : null}
+      {currentFreeze && currentStatus === 'scheduled' ? (
+        <InlineAlert variant="info">Your freeze is scheduled. You can cancel it before the start time.</InlineAlert>
+      ) : null}
 
-        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Freeze request</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      {loading ? (
+        <>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <Skeleton className="h-80 rounded-2xl" />
+            <Skeleton className="h-80 rounded-2xl" />
+          </div>
+          <Skeleton className="h-32 rounded-2xl" />
+        </>
+      ) : loadFailed ? null : (
+        <>
+          <MotionSection className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <Card padding="lg" className="space-y-4">
+              <h2 className="text-lg font-bold text-navy">Freeze request</h2>
               <p className="text-sm text-muted">
                 {canRequest
                   ? 'Request a one-time pause to your subscription. We will check eligibility and confirm the duration before it starts.'
                   : 'A subscription pause is not available for your account right now.'}
               </p>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   label="Start at"
                   type="datetime-local"
@@ -240,40 +253,33 @@ export default function FreezePage() {
                 <Button onClick={submitRequest} loading={busy} disabled={!canSubmit}>
                   Submit Freeze Request
                 </Button>
-                <Link
-                  href="/"
-                  className={buttonClassName({ variant: 'outline', className: 'border-border-hover' })}
-                >
-                  Back to dashboard
-                </Link>
+                <Button asChild variant="outline">
+                  <Link href="/">Back to dashboard</Link>
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+            </Card>
 
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Current status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <Card padding="lg" className="space-y-4">
+              <h2 className="text-lg font-bold text-navy">Current status</h2>
               {currentFreeze ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
+                <div className="space-y-3 rounded-xl bg-background-light p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="eyebrow text-muted">Freeze ID</p>
-                      <p className="mt-1 text-sm font-semibold text-navy">{currentFreeze.id}</p>
+                    <div className="min-w-0">
+                      <p className="tile-label text-muted">Freeze ID</p>
+                      <p className="mt-1 break-all text-sm font-semibold text-navy">{currentFreeze.id}</p>
                     </div>
-                    <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
+                    <Badge variant="warning" className="shrink-0">
                       {currentFreeze.status}
-                    </span>
+                    </Badge>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <p className="eyebrow text-muted">Starts</p>
-                      <p className="mt-1 text-sm text-navy">{currentFreeze.startedAt ? new Date(currentFreeze.startedAt).toLocaleString() : currentFreeze.scheduledStartAt ? new Date(currentFreeze.scheduledStartAt).toLocaleString() : 'Pending'}</p>
+                      <p className="tile-label text-muted">Starts</p>
+                      <p className="mt-1 text-sm tabular-nums text-navy">{currentFreeze.startedAt ? new Date(currentFreeze.startedAt).toLocaleString() : currentFreeze.scheduledStartAt ? new Date(currentFreeze.scheduledStartAt).toLocaleString() : 'Pending'}</p>
                     </div>
                     <div>
-                      <p className="eyebrow text-muted">Ends</p>
-                      <p className="mt-1 text-sm text-navy">{currentFreeze.endedAt ? new Date(currentFreeze.endedAt).toLocaleString() : 'Not set'}</p>
+                      <p className="tile-label text-muted">Ends</p>
+                      <p className="mt-1 text-sm tabular-nums text-navy">{currentFreeze.endedAt ? new Date(currentFreeze.endedAt).toLocaleString() : 'Not set'}</p>
                     </div>
                   </div>
                   {canCancelCurrent ? (
@@ -285,12 +291,12 @@ export default function FreezePage() {
                   ) : null}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-border bg-background-light p-4 text-sm text-muted">
+                <p className="rounded-xl bg-background-light p-4 text-sm text-muted">
                   No active freeze is currently applied. Requests will appear here after they are submitted or approved.
-                </div>
+                </p>
               )}
 
-              <div className="rounded-2xl border border-border bg-surface p-4">
+              <div className="border-t border-border pt-4">
                 <p className="eyebrow text-muted">Eligibility</p>
                 <p className="mt-2 text-sm text-navy">
                   {eligibility.eligible === false
@@ -298,48 +304,46 @@ export default function FreezePage() {
                     : 'This account can request a freeze under the current policy.'}
                 </p>
                 {eligibilityMessages.length > 1 ? (
-                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
+                  <ul className="mt-3 list-disc space-y-1 ps-5 text-sm text-muted">
                     {eligibilityMessages.slice(1).map((message) => <li key={message}>{message}</li>)}
                   </ul>
                 ) : null}
               </div>
-            </CardContent>
-          </Card>
-        </section>
+            </Card>
+          </MotionSection>
 
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="History"
-            title="Freeze history remains immutable"
-            description="A permanent record of your past pause requests, approvals, and cancellations."
-            className="mb-4"
-          />
-          <div className="grid gap-4">
-            {history.length > 0 ? history.map((record) => (
-              <Card key={record.id} className="shadow-sm">
-                <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-navy">{record.id}</p>
-                    <p className="text-xs text-muted">
-                      {record.status} · requested {record.requestedAt ? new Date(record.requestedAt).toLocaleString() : 'unknown time'}
-                    </p>
+          <MotionSection delayIndex={1} className="space-y-4">
+            <LearnerSurfaceSectionHeader
+              eyebrow="History"
+              title="Freeze history remains immutable"
+              description="A permanent record of your past pause requests, approvals, and cancellations."
+            />
+            {history.length > 0 ? (
+              <Card padding="none" className="divide-y divide-border overflow-hidden">
+                {history.map((record) => (
+                  <div key={record.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                    <div className="min-w-0">
+                      <p className="break-all text-sm font-semibold text-navy">{record.id}</p>
+                      <p className="text-xs tabular-nums text-muted">
+                        {record.status} · requested {record.requestedAt ? new Date(record.requestedAt).toLocaleString() : 'unknown time'}
+                      </p>
+                    </div>
+                    <div className="text-sm tabular-nums text-muted">
+                      {record.startedAt ? `Started ${new Date(record.startedAt).toLocaleString()}` : record.scheduledStartAt ? `Starts ${new Date(record.scheduledStartAt).toLocaleString()}` : 'Pending start'}
+                      {record.endedAt ? ` · Ended ${new Date(record.endedAt).toLocaleString()}` : ''}
+                    </div>
                   </div>
-                  <div className="text-sm text-muted">
-                    {record.startedAt ? `Started ${new Date(record.startedAt).toLocaleString()}` : record.scheduledStartAt ? `Starts ${new Date(record.scheduledStartAt).toLocaleString()}` : 'Pending start'}
-                    {record.endedAt ? ` · Ended ${new Date(record.endedAt).toLocaleString()}` : ''}
-                  </div>
-                </CardContent>
+                ))}
               </Card>
-            )) : (
-              <Card className="shadow-sm">
-                <CardContent className="p-5 text-sm text-muted">
-                  No freeze history has been recorded for this learner yet.
-                </CardContent>
-              </Card>
+            ) : (
+              <EmptyState
+                icon={<CalendarClock className="h-8 w-8" />}
+                title="No freeze history has been recorded for this learner yet."
+              />
             )}
-          </div>
-        </section>
-      </div>
+          </MotionSection>
+        </>
+      )}
     </>
   );
 }
