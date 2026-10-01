@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotionConfig } from 'motion/react';
 import { Loader2, Volume2 } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/motion';
 import { resolveApiMediaUrl } from '@/lib/media-url';
@@ -26,7 +26,7 @@ interface Props {
 
 export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partialTranscript, turnState, onReplay }: Props) {
   // FE-008: honor prefers-reduced-motion for the per-message entrance animation.
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   return (
     <div className="flex-1 overflow-y-auto space-y-3 px-1 pb-4" role="log" aria-live="polite" aria-atomic="false">
       <AnimatePresence>

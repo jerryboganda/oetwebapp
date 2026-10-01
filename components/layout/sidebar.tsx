@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { useLearnerNavVisibility } from '@/hooks/use-learner-nav-visibility';
@@ -333,7 +333,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const activeWorkspaceRole = workspaceRole ?? user?.role;
   const isPrivilegedPath = pathname?.startsWith('/expert') || pathname?.startsWith('/admin');
   const isLearnerWorkspace = activeWorkspaceRole === 'learner' && !isPrivilegedPath;

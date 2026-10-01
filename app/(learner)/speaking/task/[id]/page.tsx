@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotionConfig } from 'motion/react';
 import {
   Mic, RotateCcw, CheckCircle2, AlertCircle,
   User, ShieldCheck, Loader2,
@@ -37,7 +37,7 @@ type TaskMode = 'self' | 'exam';
 type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 
 function LiveSpeakingTaskContent() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const realtimeTransition = getRealtimeValueTransition(reducedMotion);
   const params = useParams();
   const router = useRouter();

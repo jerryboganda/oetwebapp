@@ -33,6 +33,7 @@ vi.mock('motion/react', () => ({
   motion: new Proxy({}, { get: () => (props: { children?: React.ReactNode }) => <div {...(props as Record<string, unknown>)}>{props.children}</div> }),
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useReducedMotion: () => false,
+  useReducedMotionConfig: () => false,
 }));
 
 vi.mock('@/components/ui/card', () => ({

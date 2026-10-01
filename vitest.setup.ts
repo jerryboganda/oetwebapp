@@ -36,9 +36,10 @@ vi.mock('next/link', () => ({
  */
 const MOTION_PROPS = [
 	'initial', 'animate', 'exit', 'transition', 'variants',
-	'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView',
+	'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView', 'viewport',
 	'custom', 'layout', 'layoutId', 'layoutScroll', 'layoutDependency',
 	'onAnimationStart', 'onAnimationComplete', 'onLayoutAnimationStart', 'onLayoutAnimationComplete',
+	'onViewportEnter', 'onViewportLeave',
 ];
 
 function sanitizeStyle(style: unknown): Record<string, unknown> | undefined {
@@ -119,6 +120,7 @@ function AnimatePresenceMock({
 vi.mock('motion/react', () => ({
 	motion: new Proxy({}, { get: (_target, prop: string) => makeMotionElement(prop) }),
 	useReducedMotion: () => false,
+	useReducedMotionConfig: () => false,
 	AnimatePresence: AnimatePresenceMock,
 	MotionConfig: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
 }));

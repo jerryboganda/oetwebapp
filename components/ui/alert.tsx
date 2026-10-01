@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { AlertCircle, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { getCelebrateMotion, getSurfaceMotion, getMotionPresenceMode, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 
@@ -30,7 +30,7 @@ interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'o
 
 export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
   const [visible, setVisible] = useState(true);
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('item', reducedMotion);
 
   const config = alertConfig[variant];
@@ -81,7 +81,7 @@ interface ToastProps {
 export function Toast({ variant = 'info', message, onClose, className, duration = 5000 }: ToastProps & { duration?: number }) {
   const config = alertConfig[variant];
   const Icon = config.icon;
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const celebrateProps = variant === 'success' ? getCelebrateMotion(reducedMotion) : getSurfaceMotion('overlay', reducedMotion);
 
   useEffect(() => {

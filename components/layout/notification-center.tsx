@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
 import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
@@ -299,7 +299,7 @@ function NotificationCenterContent({
   // Backend-side ops alerts (manual fulfilment queue). Rendered as a pinned
   // group above the personal feed; adds to the bell's unread pill below.
   const { alerts: adminAlerts } = useAdminAlerts();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const [tab, setTab] = useState<'all' | 'unread'>('all');
   const [category, setCategory] = useState<string | null>(null);
 

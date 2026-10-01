@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { MotionConfig, motion, useReducedMotion } from 'motion/react';
+import { MotionConfig, motion, useReducedMotionConfig } from 'motion/react';
 import type { Transition } from 'motion/react';
 import { AlertTriangle, CheckCircle2, Clock, FileAudio, FileText, Inbox, UserRoundCheck } from 'lucide-react';
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
@@ -29,7 +29,7 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 export default function ReviewOpsPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [], priority: [] });

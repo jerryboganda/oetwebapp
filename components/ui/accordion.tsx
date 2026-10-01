@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { MotionCollapse } from './motion-primitives';
 
@@ -24,7 +24,7 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
   const [openIds, setOpenIds] = useState<Set<string>>(
     new Set(items.filter((i) => i.defaultOpen).map((i) => i.id)),
   );
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
 
   const toggle = (id: string) => {
     setOpenIds((prev) => {

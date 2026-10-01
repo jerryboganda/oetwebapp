@@ -543,7 +543,6 @@
     --pressable-transition-duration: 180ms;
     --pressable-active-scale: 0.98;
     --page-enter-duration: 320ms;
-    --page-enter-distance: 10px;
   }
 
   html[data-app-active='false'] {
@@ -579,7 +578,6 @@
     --pressable-transition-duration: 160ms;
     --pressable-active-scale: 0.985;
     --page-enter-duration: 280ms;
-    --page-enter-distance: 8px;
   }
 
   /* Desktop dense surfaces: subtler hover for table rows and data-dense cards */
@@ -600,7 +598,6 @@
     --pressable-transition-duration: 140ms;
     --pressable-active-scale: 0.975;
     --page-enter-duration: 240ms;
-    --page-enter-distance: 6px;
   }
 
   /* Capacitor mobile: active press feedback for touch-first interaction */
@@ -731,7 +728,6 @@
       --pressable-transition-duration: 1ms;
       --pressable-active-scale: 1;
       --page-enter-duration: 1ms;
-      --page-enter-distance: 0px;
     }
 
     *,
@@ -811,25 +807,32 @@ html.a11y-high-contrast *:focus-visible {
 
 /* Reduce motion — class-based mirror of the prefers-reduced-motion block above,
    so the learner's in-app toggle collapses CSS animation/transition too (the
-   motion/react components are handled by MotionConfig in the provider). */
-html.a11y-reduce-motion {
+   motion/react components are handled by MotionConfig in the provider).
+   [data-motion="still"] is the same switch for exam and live routes, set by
+   LearnerShellLayout (DESIGN.md §5: nothing on them animates). */
+html.a11y-reduce-motion,
+[data-motion='still'] {
   scroll-behavior: auto;
   --surface-blur: 0px;
   --pressable-transition-duration: 1ms;
   --pressable-active-scale: 1;
   --page-enter-duration: 1ms;
-  --page-enter-distance: 0px;
 }
 html.a11y-reduce-motion *,
 html.a11y-reduce-motion *::before,
-html.a11y-reduce-motion *::after {
+html.a11y-reduce-motion *::after,
+[data-motion='still'] *,
+[data-motion='still'] *::before,
+[data-motion='still'] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
 html.a11y-reduce-motion .pressable:hover,
-html.a11y-reduce-motion .pressable:active {
+html.a11y-reduce-motion .pressable:active,
+[data-motion='still'] .pressable:hover,
+[data-motion='still'] .pressable:active {
   transform: none !important;
 }
 

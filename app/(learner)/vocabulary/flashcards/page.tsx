@@ -1,6 +1,6 @@
 'use client';
 
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotionConfig } from 'motion/react';
 import { getFadeSwitchTransition, prefersReducedMotion } from '@/lib/motion';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -29,7 +29,7 @@ const QUALITY_OPTIONS = [
 ];
 
 export default function FlashcardsPage() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const flipTransition = getFadeSwitchTransition(reducedMotion);
   const [cards, setCards] = useState<VocabularyFlashcard[]>([]);
   const [current, setCurrent] = useState(0);

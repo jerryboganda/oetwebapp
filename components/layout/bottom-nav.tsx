@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { useEnabledModules } from '@/hooks/use-enabled-modules';
@@ -13,7 +13,7 @@ import { isActive, mobileNavItems, type NavItem } from './sidebar';
 /** Mobile bottom navigation (hidden at lg+). Split out of sidebar.tsx. */
 export function BottomNav({ className, items = mobileNavItems }: { className?: string; items?: NavItem[] }) {
   const pathname = usePathname();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const bottomNavMotion = getSurfaceMotion('overlay', reducedMotion);
   // Only fetch the module list when this nav actually carries module-gated items (learner bottom
   // nav). The admin/tutor bottom nav has none, so this stays a no-op fetch there.

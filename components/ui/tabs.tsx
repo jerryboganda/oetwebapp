@@ -2,7 +2,7 @@
 
 import { getSharedLayoutId, motionTokens } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { type KeyboardEvent, type ReactNode, useId, useRef } from 'react';
 
 export interface Tab {
@@ -21,7 +21,7 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }: TabsProps) {
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useReducedMotionConfig() ?? false;
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // Per-instance id: a shared layoutId made the active pill fly between
   // unrelated tab bars when two were mounted on the same page.
@@ -119,7 +119,7 @@ export function TabPanel({
   children: ReactNode;
   className?: string;
 }) {
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useReducedMotionConfig() ?? false;
 
   if (id !== activeTab) return null;
 

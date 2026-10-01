@@ -40,7 +40,7 @@ describe('motion helpers', () => {
     expect(getMotionPresenceMode(true)).toBe('sync');
   });
 
-  it('keeps route transitions premium but subtle', () => {
+  it('drives route transitions from the route spring token', () => {
     const transition = getSurfaceTransition('route', false);
 
     expect(transition).toMatchObject({
@@ -75,8 +75,8 @@ describe('motion helpers', () => {
     const desktopHidden = desktopRouteMotion.variants.hidden as { y?: number; scale?: number };
 
     expect(getMotionDelay(4, false)).toBeCloseTo(0.144, 3);
-    expect(desktopHidden.y).toBeCloseTo(14.4, 1);
-    expect(desktopHidden.scale).toBeCloseTo(0.994, 3);
+    expect(desktopHidden.y).toBeCloseTo(motionTokens.distance.route * 0.9, 1);
+    expect(desktopHidden.scale).toBeCloseTo(1 - (1 - motionTokens.scale.route) * 0.75, 3);
     expect(getSurfaceTransition('state', true).duration).toBeCloseTo(0.114, 3);
 
     document.documentElement.dataset.runtimeKind = 'capacitor-native';
@@ -85,8 +85,8 @@ describe('motion helpers', () => {
     const mobileHidden = mobileRouteMotion.variants.hidden as { y?: number; scale?: number };
 
     expect(getMotionDelay(4, false)).toBeCloseTo(0.128, 3);
-    expect(mobileHidden.y).toBeCloseTo(12.8, 1);
-    expect(mobileHidden.scale).toBeCloseTo(0.995, 3);
+    expect(mobileHidden.y).toBeCloseTo(motionTokens.distance.route * 0.8, 1);
+    expect(mobileHidden.scale).toBeCloseTo(1 - (1 - motionTokens.scale.route) * 0.6, 3);
     expect(getSurfaceTransition('state', true).duration).toBeCloseTo(0.108, 3);
   });
 

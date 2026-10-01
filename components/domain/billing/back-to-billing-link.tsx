@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 
 /**
@@ -11,7 +11,7 @@ import { ArrowLeft } from 'lucide-react';
  * fluent and consistent.
  */
 export function BackToBillingLink({ label = 'Back to billing' }: { label?: string }) {
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
   const initial = prefersReducedMotion ? false : { opacity: 0, x: -4 };
   const animate = prefersReducedMotion ? undefined : { opacity: 1, x: 0 };
 

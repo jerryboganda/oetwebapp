@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import {
   Facebook,
@@ -93,7 +93,7 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
   const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);
   const emailHintId = 'sign-in-email-hint';
   const errorMessageId = 'sign-in-error';
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
 
   React.useEffect(() => {
     let cancelled = false;

@@ -118,10 +118,11 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   return (
     <AccessibilityContext.Provider value={preferences}>
       {/*
-        `reducedMotion="always"` makes every motion/react component that calls
-        useReducedMotion() (all of components/ui/motion-primitives) collapse its
-        animation — no per-component wiring needed. `"user"` falls back to the
-        OS prefers-reduced-motion media query when the learner hasn't opted in.
+        `reducedMotion="always"` makes motion/react skip transform and layout
+        animations everywhere below. Code that branches on the preference must
+        read it with useReducedMotionConfig() — plain useReducedMotion() only sees
+        the OS setting. `"user"` falls back to the OS prefers-reduced-motion media
+        query when the learner hasn't opted in.
       */}
       <MotionConfig reducedMotion={preferences.reduceMotion ? 'always' : 'user'}>
         {children}

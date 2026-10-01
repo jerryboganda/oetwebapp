@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { type ReactNode } from 'react';
-import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
+import { motion, useReducedMotionConfig, AnimatePresence } from 'motion/react';
 import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 
 export interface Step {
@@ -28,7 +28,7 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, className, orientation = 'horizontal', onStepClick }: StepperProps) {
   const isVertical = orientation === 'vertical';
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const springTransition = reducedMotion
     ? { duration: motionTokens.duration.instant }
     : { type: 'spring' as const, stiffness: 500, damping: 35, mass: 0.7 };
