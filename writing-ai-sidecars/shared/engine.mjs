@@ -13,7 +13,7 @@
 //    the CLI's session store. Other CLI bookkeeping under CLAUDE_CONFIG_DIR
 //    (credential refresh, caches) is outside those switches.
 //  - Codex (codex/server.mjs): read-only sandbox and approval policy `never`;
-//    the prompt travels on argv. It does NOT have the Claude switches above, and
+//    the prompt travels on stdin. It does NOT have the Claude switches above, and
 //    whether `codex exec` keeps session/rollout files on disk is unverified, so
 //    do not assume candidate content stays off disk there. Speaking has no Codex
 //    leg; it carries Writing letters only.

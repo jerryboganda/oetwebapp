@@ -47,14 +47,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Check deployed Codex CLI arguments without AI calls
-        env:
-          DEPLOYED_CODEX_IMAGE: ghcr.io/jerryboganda/oetwebapp-writing-codex:63751c35bc0b87e70445340c25c433620fd44786
-        run: >-
-          docker run --rm --network none --entrypoint codex "$DEPLOYED_CODEX_IMAGE"
-          exec --skip-git-repo-check --ignore-user-config --json --model gpt-6-sol
-          -c 'model_reasoning_effort="high"' -c 'approval_policy="never"'
-          -c 'sandbox_mode="read-only"' --help
       - name: Build & push Claude sidecar
         uses: docker/build-push-action@v6
         with:
@@ -83,6 +75,12 @@ jobs:
             ghcr.io/${{ github.repository }}-writing-codex:latest
           cache-from: type=gha,scope=writing-codex
           cache-to: type=gha,mode=max,scope=writing-codex
+      - name: Check built Codex CLI arguments without AI calls
+        run: >-
+          docker run --rm --network none --entrypoint codex "$CODEX_IMAGE"
+          exec --skip-git-repo-check --ignore-user-config --json --model gpt-6-sol
+          -c 'model_reasoning_effort="high"' -c 'approval_policy="never"'
+          -c 'sandbox_mode="read-only"' - --help
 
   deploy:
     needs: build

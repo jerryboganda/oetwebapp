@@ -6,8 +6,8 @@
 //   GET  /usage                →  quota snapshot for the subscription selector
 //
 // Uses `codex exec` (non-interactive headless mode) with a JSON event stream.
-// Tools are sandboxed off; the prompt travels on argv; nothing is written to
-// disk by the request path.
+// Tools are sandboxed off; the prompt travels on stdin. CLI session/rollout
+// persistence is unverified.
 
 import { createSidecarServer } from '../shared/http.mjs';
 import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
@@ -58,12 +58,12 @@ async function complete(body) {
       '-c', `model_reasoning_effort="${EFFORT}"`,
       '-c', 'approval_policy="never"',
       '-c', 'sandbox_mode="read-only"',
-      prompt,
+      '-',
     ];
 
     let result;
     try {
-      result = await runCli('codex', args, { timeoutMs: TIMEOUT_MS, cwd: '/tmp' });
+      result = await runCli('codex', args, { timeoutMs: TIMEOUT_MS, cwd: '/tmp', input: prompt });
     } catch (err) {
       throw err;
     }
