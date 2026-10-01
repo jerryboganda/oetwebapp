@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Card, cardClassName } from '@/components/ui/card';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/empty-error';
+import { isApiError } from '@/lib/api/client';
 import {
   cancelLiveClassEnrollment,
   enrollLiveClassSession,
@@ -55,6 +57,9 @@ export default function LiveClassDetailPage() {
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // A load failure (not a missing class) keeps its message and offers a retry.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -70,7 +75,8 @@ export default function LiveClassDetailPage() {
         if (!cancelled) setDetail(data);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load this class.');
+        if (cancelled || (isApiError(err) && err.status === 404)) return;
+        setLoadError(err instanceof Error ? err.message : 'Could not load this class.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -78,7 +84,7 @@ export default function LiveClassDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function refresh() {
     if (!id) return;
@@ -127,7 +133,19 @@ export default function LiveClassDetailPage() {
   }
 
   if (!detail) {
-    return <InlineAlert variant="warning">Live class not found.</InlineAlert>;
+    return loadError ? (
+      <ErrorState
+        title="Could not load this class"
+        message={loadError}
+        onRetry={() => {
+          setLoadError(null);
+          setLoading(true);
+          setReloadKey((key) => key + 1);
+        }}
+      />
+    ) : (
+      <InlineAlert variant="warning">Live class not found.</InlineAlert>
+    );
   }
 
   return (
