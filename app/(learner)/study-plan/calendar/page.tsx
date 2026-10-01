@@ -224,7 +224,7 @@ export default function StudyPlanCalendarPage() {
                       <span
                         className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium tabular-nums ${
                           isToday
-                            ? 'bg-primary text-primary-foreground dark:bg-violet-700'
+                            ? 'bg-primary text-primary-foreground dark:bg-primary-700'
                             : isCurrentMonth || view === 'week'
                               ? 'text-navy'
                               : 'text-muted'
