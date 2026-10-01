@@ -13,6 +13,22 @@
  */
 
 import dynamic from 'next/dynamic';
+import { useReducedMotionConfig } from 'motion/react';
+import type { ComponentType } from 'react';
+import { prefersReducedMotion } from '@/lib/motion';
+
+type SeriesProps = { isAnimationActive?: boolean | 'auto' };
+
+/**
+ * Recharts' `'auto'` default reads only the OS setting. Series also stop for the
+ * in-app Reduce motion toggle and exam stillness, which both reach MotionConfig.
+ */
+function honourReducedMotion<P extends SeriesProps>(Series: ComponentType<P>) {
+  return function MotionAwareSeries(props: P) {
+    const reduced = prefersReducedMotion(useReducedMotionConfig());
+    return <Series {...props} {...(reduced ? { isAnimationActive: false } : {})} />;
+  };
+}
 
 export const ResponsiveContainer = dynamic(
   () => import('recharts').then((m) => m.ResponsiveContainer),
@@ -30,18 +46,18 @@ export const AreaChart = dynamic(
   () => import('recharts').then((m) => m.AreaChart),
   { ssr: false },
 );
-export const Line = dynamic(
+export const Line = honourReducedMotion(dynamic(
   () => import('recharts').then((m) => m.Line),
   { ssr: false },
-);
-export const Bar = dynamic(
+));
+export const Bar = honourReducedMotion(dynamic(
   () => import('recharts').then((m) => m.Bar),
   { ssr: false },
-);
-export const Area = dynamic(
+));
+export const Area = honourReducedMotion(dynamic(
   () => import('recharts').then((m) => m.Area),
   { ssr: false },
-);
+));
 export const CartesianGrid = dynamic(
   () => import('recharts').then((m) => m.CartesianGrid),
   { ssr: false },
@@ -66,10 +82,10 @@ export const PieChart = dynamic(
   () => import('recharts').then((m) => m.PieChart),
   { ssr: false },
 );
-export const Pie = dynamic(
+export const Pie = honourReducedMotion(dynamic(
   () => import('recharts').then((m) => m.Pie),
   { ssr: false },
-);
+));
 export const Cell = dynamic(
   () => import('recharts').then((m) => m.Cell),
   { ssr: false },
@@ -82,10 +98,10 @@ export const RadarChart = dynamic(
   () => import('recharts').then((m) => m.RadarChart),
   { ssr: false },
 );
-export const Radar = dynamic(
+export const Radar = honourReducedMotion(dynamic(
   () => import('recharts').then((m) => m.Radar),
   { ssr: false },
-);
+));
 export const PolarGrid = dynamic(
   () => import('recharts').then((m) => m.PolarGrid),
   { ssr: false },
