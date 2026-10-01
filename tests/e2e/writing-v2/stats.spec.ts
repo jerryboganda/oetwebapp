@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
  * Writing V2 - stats dashboard smoke.
@@ -18,12 +19,13 @@ import { expect, test } from '@playwright/test';
 test.describe('Writing V2 stats dashboard @writing-v2 @smoke', () => {
   test('stats page renders hero + at least one widget', async ({
     page,
+    request,
   }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
 
-    await page.goto('/writing/stats', { waitUntil: 'domcontentloaded' });
+    await recoverBrowserSession(page, request, 'learner', '/writing/stats');
 
     await expect(
       page.getByRole('heading', {

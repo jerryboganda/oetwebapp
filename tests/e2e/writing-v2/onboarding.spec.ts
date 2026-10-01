@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { signInApi } from '../fixtures/api-auth';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
  * Writing V2 — onboarding wizard smoke (4-step wizard then diagnostic redirect).
@@ -31,7 +32,7 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
     // re-runs. Hit the welcome page once for the smoke metric and then
     // navigate directly to the first wizard step (idempotent — the backend's
     // PUT endpoints accept re-saves and the spec covers that explicitly).
-    await page.goto('/writing/welcome', { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await recoverBrowserSession(page, request, 'learner', '/writing/welcome');
     await page.goto('/writing/profile-setup/profession', { waitUntil: 'domcontentloaded' });
 
     // Step 1 — Profession

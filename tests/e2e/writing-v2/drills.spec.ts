@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
  * Writing V2 — drills smoke (catalogue → category → first drill → submit).
@@ -16,12 +17,13 @@ import { expect, test } from '@playwright/test';
 test.describe('Writing V2 drills @writing-v2 @smoke', () => {
   test('drills page → category → first drill submit roundtrip', async ({
     page,
+    request,
   }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
 
-    await page.goto('/writing/drills', { waitUntil: 'domcontentloaded' });
+    await recoverBrowserSession(page, request, 'learner', '/writing/drills');
     await expect(
       page.getByRole('heading', { name: /targeted writing drills/i }),
     ).toBeVisible({ timeout: 30_000 });

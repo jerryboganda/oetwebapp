@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
  * Writing V2 — mocks catalogue smoke (catalogue → start mock → session render).
@@ -18,12 +19,13 @@ import { expect, test } from '@playwright/test';
 test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
   test('mocks catalogue → start mock → session page renders', async ({
     page,
+    request,
   }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
 
-    await page.goto('/writing/mocks', { waitUntil: 'domcontentloaded' });
+    await recoverBrowserSession(page, request, 'learner', '/writing/mocks');
 
     await expect(
       page.getByRole('heading', {
