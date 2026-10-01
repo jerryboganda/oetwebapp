@@ -50,6 +50,10 @@ export default function ReadinessCenter() {
   const [refreshing, setRefreshing] = useState(false);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [trendSeries, setTrendSeries] = useState<typeof TREND_SERIES_OPTIONS[number]['value']>('overall');
+  // The selected series' own target from the learner's readiness; "overall" has none.
+  const trendTarget = trendSeries === 'vocabulary'
+    ? data?.vocabulary?.target
+    : trendSeries === 'overall' ? undefined : data?.subTests.find((subTest) => subTest.id === trendSeries)?.target;
 
   const loadAll = useCallback(async () => {
     setError('');
@@ -287,7 +291,7 @@ export default function ReadinessCenter() {
             className="mb-4 w-auto"
           />
           <TabPanel id={trendSeries} activeTab={trendSeries}>
-            <ReadinessTrendChart data={history} series={trendSeries} target={70} />
+            <ReadinessTrendChart data={history} series={trendSeries} target={trendTarget} />
           </TabPanel>
         </Card>
       </MotionSection>

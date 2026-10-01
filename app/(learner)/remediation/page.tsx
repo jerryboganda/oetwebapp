@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionItem } from '@/components/ui/motion-primitives';
@@ -8,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import { InlineAlert } from '@/components/ui/alert';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -36,7 +37,6 @@ interface RemediationData {
   recommendations: { area: WeakArea; suggestedResources: { id: string; title: string }[] }[];
 }
 
-type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 const apiRequest = apiClient.request;
 
@@ -44,8 +44,6 @@ export default function RemediationPage() {
   const [data, setData] = useState<RemediationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
-  const [starting, setStarting] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'remediation' });
@@ -54,21 +52,6 @@ export default function RemediationPage() {
       .catch(() => setError('Unable to load remediation data.'))
       .finally(() => setLoading(false));
   }, []);
-
-  async function handleStart(subtestCode: string, criterionCode: string) {
-    setStarting(`${subtestCode}:${criterionCode}`);
-    try {
-      await apiRequest('/v1/learner/remediation/start', {
-        method: 'POST',
-        body: JSON.stringify({ subtestCode, criterionCode }),
-      });
-      setToast({ variant: 'success', message: `Remediation session started for ${subtestCode} · ${criterionCode}` });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to start remediation session.' });
-    } finally {
-      setStarting(null);
-    }
-  }
 
   return (
     <>
@@ -135,14 +118,13 @@ export default function RemediationPage() {
                       ) : null}
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => handleStart(wa.subtestCode, wa.criterionCode)}
-                    disabled={starting === `${wa.subtestCode}:${wa.criterionCode}`}
-                  >
-                    {starting === `${wa.subtestCode}:${wa.criterionCode}` ? 'Starting…' : 'Practice'}
-                    <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                  {/* The sub-test's own practice area: "start" used to post a session
+                      the page then ignored, leaving the learner where they were. */}
+                  <Button asChild size="sm" className="shrink-0">
+                    <Link href={`/${wa.subtestCode.toLowerCase()}`}>
+                      Practice
+                      <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                    </Link>
                   </Button>
                 </Card>
               </MotionItem>
@@ -151,7 +133,6 @@ export default function RemediationPage() {
         </section>
       )}
 
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
 }

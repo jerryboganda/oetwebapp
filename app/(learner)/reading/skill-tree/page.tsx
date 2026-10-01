@@ -91,15 +91,7 @@ function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
             Practice
           </Link>
         </Button>
-
-        {lesson ? (
-          <Button asChild variant="outline" size="sm" fullWidth>
-            <Link href={`/reading/lessons/${lesson.lesson.slug}`}>
-              <BookOpen className="h-4 w-4" aria-hidden />
-              {lesson.progress?.completedAt ? 'Review lesson' : 'Study lesson'}
-            </Link>
-          </Button>
-        ) : null}
+        {/* No "Study lesson" link: /reading/lessons/[slug] has no page yet, so it could only 404. */}
       </div>
     </Card>
   );

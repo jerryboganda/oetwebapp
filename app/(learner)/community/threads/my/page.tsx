@@ -11,7 +11,6 @@ import { Pagination } from '@/components/ui/pagination';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton, EmptyState } from '@/components/ui';
-import { useAuth } from '@/contexts/auth-context';
 import { fetchForumThreads, fetchForumCategories } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -57,7 +56,6 @@ function formatRelativeDate(dateStr: string) {
 
 export default function MyThreadsPage() {
   const router = useRouter();
-  const { user } = useAuth();
 
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
@@ -80,20 +78,17 @@ export default function MyThreadsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchForumThreads(undefined, p, pageSize) as ThreadsResponse;
-      const allThreads = res.threads ?? [];
-      // Filter client-side by author display name match
-      const myThreads = user?.displayName
-        ? allThreads.filter(t => t.authorDisplayName === user.displayName)
-        : [];
-      setThreads(myThreads);
-      setTotal(myThreads.length);
+      // The caller's own threads, matched by user id on the server across every page
+      // (a display-name match on page 1 missed later pages and took in namesakes).
+      const res = await fetchForumThreads(undefined, p, pageSize, true) as ThreadsResponse;
+      setThreads(res.threads ?? []);
+      setTotal(res.total ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load threads');
     } finally {
       setLoading(false);
     }
-  }, [user, pageSize]);
+  }, [pageSize]);
 
   useEffect(() => {
     loadCategories();

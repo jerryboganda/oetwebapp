@@ -25,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
-import { Skeleton, EmptyState } from '@/components/ui';
+import { Skeleton, EmptyState, ErrorState } from '@/components/ui';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -98,6 +98,7 @@ export default function ThreadPage() {
   const [replies, setReplies] = useState<ForumReply[]>([]);
   const [repliesTotal, setRepliesTotal] = useState(0);
   const [repliesPage, setRepliesPage] = useState(1);
+  const [repliesError, setRepliesError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState('');
   const [loadingThread, setLoadingThread] = useState(true);
   const [loadingReplies, setLoadingReplies] = useState(true);
@@ -126,12 +127,14 @@ export default function ThreadPage() {
   const loadReplies = useCallback(async (p: number) => {
     if (!threadId) return;
     setLoadingReplies(true);
+    setRepliesError(null);
     try {
       const res = await fetchThreadReplies(threadId, p, REPLIES_PAGE_SIZE) as RepliesResponse;
       setReplies(res.replies ?? []);
       setRepliesTotal(res.total ?? 0);
-    } catch {
-      // Non-critical: thread still shown
+    } catch (err) {
+      // The thread still shows; the replies say they failed instead of claiming there are none.
+      setRepliesError(err instanceof Error ? err.message : 'Could not load the replies.');
     } finally {
       setLoadingReplies(false);
     }
@@ -331,6 +334,8 @@ export default function ThreadPage() {
               <Skeleton aria-hidden key={i} className="h-20 w-full rounded-2xl" />
             ))}
           </div>
+        ) : repliesError ? (
+          <ErrorState title="Could not load the replies" message={repliesError} onRetry={() => void loadReplies(repliesPage)} />
         ) : replies.length === 0 ? (
           <EmptyState
             icon={<MessageCircle className="h-7 w-7" />}

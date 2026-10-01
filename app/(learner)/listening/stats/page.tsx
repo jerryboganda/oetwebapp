@@ -136,7 +136,6 @@ export default function ListeningStatsPage() {
               className="py-8"
               icon={<CalendarDays className="h-7 w-7" aria-hidden />}
               title="Your roadmap will be generated after the diagnostic."
-              action={{ label: 'Take the diagnostic', href: '/listening/diagnostic' }}
             />
           )}
         </Card>

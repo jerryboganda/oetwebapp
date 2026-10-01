@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Shuffle, BookOpen, Headphones, Mic, PenLine, Lightbulb } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,8 @@ import { apiClient } from '@/lib/api';
 interface PracticeTask {
   order: number; contentId: string; title: string; subtestCode: string; taskType: string;
   durationMinutes: number; difficulty: string; isWeakArea: boolean;
+  /** Where the task opens; set by the API. */
+  route?: string;
 }
 
 interface InterleavedSession {
@@ -40,13 +44,19 @@ export default function InterleavedPracticePage() {
   const [session, setSession] = useState<InterleavedSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [duration, setDuration] = useState(20);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { analytics.track('interleaved_practice_viewed'); }, []);
 
   const generate = async () => {
     setLoading(true);
+    setError(null);
     try { setSession(await apiRequest<InterleavedSession>(`/v1/learner/interleaved-practice?durationMinutes=${duration}`)); }
-    catch { setSession(null); }
+    catch (err) {
+      // Say so instead of silently clearing the plan.
+      setSession(null);
+      setError(err instanceof Error ? err.message : 'Could not generate a session. Please try again.');
+    }
     finally { setLoading(false); }
   };
 
@@ -88,6 +98,8 @@ export default function InterleavedPracticePage() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
         </div>
       ) : null}
+
+      {error ? <InlineAlert variant="error" dismissible onDismiss={() => setError(null)}>{error}</InlineAlert> : null}
 
       {session ? (
         <>
@@ -132,7 +144,11 @@ export default function InterleavedPracticePage() {
                           </div>
                           <p className="text-xs capitalize text-muted">{task.subtestCode} • {task.taskType.replace(/-/g, ' ')} • <span className="tabular-nums">{task.durationMinutes}</span> min</p>
                         </div>
-                        <Button variant="outline" size="sm" className="shrink-0">Start</Button>
+                        {task.route ? (
+                          <Button asChild variant="outline" size="sm" className="shrink-0">
+                            <Link href={task.route}>Start</Link>
+                          </Button>
+                        ) : null}
                       </Card>
                     </MotionItem>
                   </li>

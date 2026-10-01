@@ -16,7 +16,7 @@ import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { CriterionScoreRow } from '@/components/domain/results/criterion-score-row';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
-import { WritingPassCelebration } from '@/components/domain/writing/writing-pass-celebration';
+import { WritingPassCelebration, useWritingPassMark, writingGaugeColor } from '@/components/domain/writing/writing-pass-celebration';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import {
   appealWritingSubmission,
@@ -34,8 +34,6 @@ import { cn } from '@/lib/utils';
 import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
   OET_SCALED_MAX,
-  OET_SCALED_PASS_B,
-  OET_SCALED_PASS_C_PLUS,
   WRITING_RAW_MAX,
   writingRawTotalFromCriterionScores,
 } from '@/lib/scoring';
@@ -105,6 +103,7 @@ function assessmentToScores(report: WritingAssessmentV11ReportDto): WritingCrite
 
 export default function WritingSubmissionResultsPage() {
   const t = useTranslations();
+  const writingPassMark = useWritingPassMark();
   const params = useParams<{ id: string }>();
   const submissionId = String(params?.id ?? '');
 
@@ -246,7 +245,7 @@ export default function WritingSubmissionResultsPage() {
             </>
           }
           gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
-          gaugeColor={practiceScore >= OET_SCALED_PASS_B ? 'var(--color-success)' : practiceScore >= OET_SCALED_PASS_C_PLUS ? 'var(--color-warning)' : 'var(--color-danger)'}
+          gaugeColor={writingGaugeColor(practiceScore, writingPassMark)}
           stats={[
             { label: 'Score', value: <span data-testid="ai-estimated-score"><CountUp value={practiceScore} suffix={`/${OET_SCALED_MAX}`} /></span>, tone: 'info', icon: <Award /> },
             ...(assessment.gradeBand ? [{ label: 'Grade band', value: <span data-testid="ai-grade-band">{assessment.gradeBand}</span>, tone: 'info' as const, icon: <Award /> }] : []),
