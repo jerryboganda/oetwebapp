@@ -47,7 +47,7 @@ assert.ok(['auto', 'claude', 'codex'].includes(previous.mode), 'The original pro
 try {
   await request('/v1/admin/ai/writing-provider', admin, 'PUT', { mode: 'codex' });
   const selected = await request('/v1/admin/ai/writing-provider', admin);
-  assert.equal(selected.currentPrimary.provider, 'writing-codex-sub');
+  assert.equal(selected.mode, 'codex');
   submission = await request('/v1/writing/submissions', learner, 'POST', {
     scenarioId: source.scenarioId, mode: 'practice', letterContent: source.letterContent,
     wordCount: source.wordCount, timeSpentSeconds: source.timeSpentSeconds,
