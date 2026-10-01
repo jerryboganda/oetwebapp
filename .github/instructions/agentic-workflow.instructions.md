@@ -18,12 +18,26 @@ How agents operate in this repo. Repo rules win over generic skill/agent/plugin 
 
 ## Continuity protocol (canonical)
 
-- For non-trivial work, first read `PROGRESS.md` and `.github/agent-state.local.md` if present.
-- Continue from `.github/agent-state.local.md` only when it matches the newest user request;
-  otherwise repoint it to the new goal.
-- Keep `PROGRESS.md` compact — no pasted historical ledgers; history lives in git.
-- Before ending substantial work, update `.github/agent-state.local.md` with goal, touched files,
-  validation evidence, blockers, and the next concrete step.
+Externalized working memory. Three layers, exclusive ownership — no file has two jobs.
+
+| Layer | File | Lifetime |
+| --- | --- | --- |
+| Permanent rules | `AGENTS.md`, `.github/instructions/**`, `docs/**` | months–years |
+| Current run | `SESSION_STATE.md`, `TASKS.json` | hours–days |
+| Objective truth | `VERIFICATION.md`, git, GitHub Actions runs | always |
+
+- Non-trivial work: `pnpm run ax:status`, then read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`.
+  Continue from `SESSION_STATE.md` only when its Goal matches the newest request; otherwise re-goal it
+  with `pnpm run ax:init`. Schema: `scripts/agent/session-state.template.md`.
+- Choose the next unit of work with `pnpm run ax:next`; move `TASKS.json` statuses as you go.
+- Never tick a gate without evidence. `pnpm run ax:check` rejects a `PASS` row whose evidence is not a
+  run id, a workflow file, or `local:<command>`.
+- After the deploy for this SHA is green, `pnpm run ax:record` writes real run ids into `VERIFICATION.md`
+  and raw logs into the gitignored `.github/agent-state.local.md`; `pnpm run ax:verify` re-checks them
+  against GitHub. `VERIFICATION.md` is machine-written — never hand-edit a result.
+- `PROGRESS.md` is the compact durable ledger only; history lives in `docs/PROGRESS-ARCHIVE-2026.md`
+  and git.
+- Before handoff: `pnpm run ax:check` passes and `SESSION_STATE.md` names the next concrete step.
 
 ## Default loop
 
@@ -34,6 +48,7 @@ How agents operate in this repo. Repo rules win over generic skill/agent/plugin 
 - Review the diff for OET contracts, security, tests, and regressions.
 - Validate with the lightest credible GitHub Actions run (`validation.instructions.md`) before reporting done.
 - After a `main` push, `pnpm run ship:watch` until Build & Deploy for this SHA succeeds. Failure logs are the agent's job to fix and re-push. Do not stop at "deploy initiated" and do not wait for the owner to notice.
+- Once live health is green, `pnpm run ax:record` then `pnpm run ax:verify` so `VERIFICATION.md` carries this SHA's real evidence.
 - Ask only when a missing decision blocks correctness or safety; offer a recommended option.
 
 ## Lean context policy

@@ -8,4 +8,4 @@ tools: ["agent", "read", "search", "edit", "execute", "web", "todo"]
 
 Run the Ralph loop for: `${input:goal:continue the current PRD}`.
 
-Read `AGENTS.md`, `.github/agent-state.local.md` if present, compact `PROGRESS.md`, and then only the relevant `PRD.md` sections. Treat `AGENTS.md` as higher priority for Docker/local/VPS rules. Execute one coherent task slice at a time, review it, update `.github/agent-state.local.md` and `PROGRESS.md` when appropriate, and continue until complete or blocked.
+Read `AGENTS.md`, `SESSION_STATE.md`, `TASKS.json`, compact `PROGRESS.md`, and then only the relevant `PRD.md` sections. Treat `AGENTS.md` as higher priority for compute-locality rules. Run `pnpm run ax:next` and execute one coherent task slice at a time, review it, move `TASKS.json` statuses as you go, and update `SESSION_STATE.md` with validation evidence (real run ids via `pnpm run ax:record`) and the next concrete step. Continue until complete or blocked.

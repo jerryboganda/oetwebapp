@@ -25,7 +25,7 @@ The upstream Superpowers package is installed locally from https://github.com/ob
 
 ## Priority Order
 1. User/system/developer instructions.
-2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, compact `PROGRESS.md`, and `.github/agent-state.local.md` if present.
+2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, and the current-run state: `SESSION_STATE.md`, `TASKS.json`, compact `PROGRESS.md`.
 3. Relevant OET domain docs for scoring, rulebooks, AI, uploads, auth, deployment, frontend, backend, and testing.
 4. Superpowers skills.
 5. Generic model defaults.
@@ -42,7 +42,7 @@ When instructions conflict, OET repo safety and user intent win over generic Sup
 - You run in GitHub Copilot Chat for VS Code, not Claude Code, Cursor, OpenCode, Codex CLI, or Copilot CLI.
 - Use Copilot custom agents, Copilot skill files, and available VS Code tools. Do not claim OpenCode/Claude/Codex plugin runtime features unless the tool exists in the active session.
 - The official upstream `GitHub Copilot CLI` plugin install is separate from this VS Code workspace adapter.
-- Heavy validation for this repo is Docker-only per `AGENTS.md`: use `docker exec oet-local-web ...`, `docker exec oet-local-api ...`, or local compose commands. If Docker is unavailable, report the blocker instead of running host or VPS equivalents.
+- Validation runs on GitHub Actions only (`AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT"). The only local checks are `pnpm run ship:gate` and `pnpm run ax:check`; push the branch or dispatch `qa-smoke.yml` for anything else. Never build, test or debug on this host, in local Docker, or on the VPS.
 
 ## Bootstrap Rule
 Before any substantive response or action, check whether a Superpowers skill applies. If a skill applies, follow that skill's procedure. If Copilot has not automatically loaded the skill content, read the matching `SKILL.md` from the installed Superpowers plugin skill directory and apply it.
@@ -64,15 +64,15 @@ Skill trigger map:
 If multiple skills apply, load the process skill first, then OET domain instructions/docs. For example: systematic-debugging before framework docs, brainstorming before new feature design, verification-before-completion before final success claims.
 
 ## OET Operating Loop
-1. Continuity gate: read `AGENTS.md`, `.github/copilot-instructions.md`, compact `PROGRESS.md`, and `.github/agent-state.local.md` if present; follow it only when it matches the newest user request.
+1. Continuity gate: run `pnpm run ax:status`; read `AGENTS.md`, `.github/copilot-instructions.md`, `SESSION_STATE.md`, `TASKS.json` and compact `PROGRESS.md`; follow that state only when it matches the newest user request, otherwise re-goal with `pnpm run ax:init`.
 2. Intent gate: classify the OET surface and define acceptance criteria, risk, and the smallest useful validation.
 3. Research gate: inspect current code, nearby tests, matching file-scoped instructions, relevant domain docs, and repo memories before editing.
 4. Superpowers gate: load the applicable skill and adapt it to OET constraints.
 5. Plan gate: produce enough plan detail to make edits safely; include files/contracts, risks, rejected approaches, and validation.
 6. Execution gate: implement automatically unless a user decision blocks correctness.
 7. Review gate: inspect the diff and use `OET Reviewer`, `OET Security Reviewer`, `OmO Momus`, or another available helper for non-trivial changes.
-8. Verification gate: run the lightest credible Docker validation available for touched files and report exact results.
-9. Handoff gate: update `.github/agent-state.local.md`, then report changed files, evidence, skipped checks, residual risks, and next concrete step.
+8. Verification gate: `pnpm run ship:gate` + `pnpm run ax:check` locally, the lightest credible GitHub Actions run for the rest, then record real run ids with `pnpm run ax:record` and report exact results.
+9. Handoff gate: update `SESSION_STATE.md` and `TASKS.json` so `pnpm run ax:check` passes, then report changed files, evidence, skipped checks, residual risks, and next concrete step.
 
 ## Delegation
 Prefer OET specialist agents for repo-specific work when available, and broader OmO/Ralph agents for high-level planning, autonomous loops, external research, visual QA, or independent review. Serialize edits if helper agents might touch the same file.

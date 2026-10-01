@@ -566,7 +566,32 @@ export function selfTest() {
       failures.push(`${item.name}: expected fail=${item.wantFail} got ${JSON.stringify(found)}`);
     }
   }
+
+  // Regression tripwire: the ledger advisory added to main() must stay guarded
+  // out of CI. deploy.yml runs `--self-test` then `--ci` on a bare checkout
+  // where the ledger may be absent or stale, and neither may be able to fail
+  // the gate.
+  const ownSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  if (!ownSource.includes('if (!ci && !process.env.CI && !process.env.GITHUB_ACTIONS)')) {
+    failures.push('the ledger advisory is no longer guarded out of CI');
+  }
   return { ok: failures.length === 0, failures };
+}
+
+// Local-only advisory: surface a stale or dishonest state ledger without ever
+// changing this gate's verdict. The hard failure lives in `pnpm run ax:check`.
+// Not reachable in CI (guard at the call site, tripwire in selfTest) so
+// `deploy.yml`'s `--self-test` and `--ci` steps behave exactly as before.
+async function reportLedgerAdvisory() {
+  try {
+    const { readLedger, checkState } = await import('../agent/state.mjs');
+    const { errors, warnings } = checkState(readLedger());
+    for (const line of errors) console.log(`state-warn: ${line}`);
+    for (const line of warnings) console.log(`state-warn: ${line}`);
+    if (errors.length) console.log('state-warn: run `pnpm run ax:check` for the strict verdict');
+  } catch {
+    // The ledger is advisory here; it must never affect the gate.
+  }
 }
 
 async function main(argv) {
@@ -593,6 +618,9 @@ async function main(argv) {
     process.exit(1);
   }
   console.log('ship-gate OK');
+  if (!ci && !process.env.CI && !process.env.GITHUB_ACTIONS) {
+    await reportLedgerAdvisory();
+  }
 }
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;

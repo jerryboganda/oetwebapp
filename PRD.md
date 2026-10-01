@@ -1,4 +1,10 @@
-﻿# PRD — Ultrawork Completion: Mocks, Speaking V2, Real Content
+﻿> **⚠️ Superseded for compute and execution state — 2026-10-01.**
+> This file is product intent only, dated 2026-05-21. Its "local Docker Desktop" validation rule
+> and its worktree snapshot are stale. `AGENTS.md` is authoritative for compute (GitHub Actions
+> only), and the current run lives in `SESSION_STATE.md` / `TASKS.json`. Read this for product
+> requirements, never for how to build, test or validate.
+
+# PRD — Ultrawork Completion: Mocks, Speaking V2, Real Content
 
 Last updated: 2026-05-21 22:59:00 +05:00
 

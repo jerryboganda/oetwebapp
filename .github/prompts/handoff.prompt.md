@@ -8,4 +8,4 @@ tools: ["read", "search"]
 
 Create a handoff for: `${input:task:current work}`.
 
-Read `PROGRESS.md` and `.github/agent-state.local.md` if present. Include current goal, relevant files, completed work, open risks, validation evidence, blockers, and the next concrete step. Keep it concise, then update `.github/agent-state.local.md` with the same compact state.
+Read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`. Record any newly finished GitHub Actions runs with `pnpm run ax:record` first, so every validation claim carries a real run id. Include current goal, relevant files, completed work, open risks, validation evidence, blockers, and the next concrete step. Keep it concise, then update `SESSION_STATE.md` and `TASKS.json` with the same compact state and make `pnpm run ax:check` pass.

@@ -21,14 +21,15 @@ Before product catalogue, checkout, entitlement, dashboard, add-on, Tutor Book, 
 
 ## Default Workflow
 
-- For non-trivial work, first read `PROGRESS.md` and `.github/agent-state.local.md` if present; continue from the state file only when it matches the newest user request.
+- For non-trivial work, first run `pnpm run ax:status`, then read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`; continue from `SESSION_STATE.md` only when its Goal matches the newest user request.
 - Classify the task area, inspect existing patterns, and identify invariants.
 - Use a todo list for multi-step work.
 - Prefer focused tests for behavior changes and bug fixes.
 - Make minimal edits that fit existing boundaries.
 - Review the diff for OET contracts, security, tests, and regressions.
-- Verify with the lightest meaningful GitHub Actions run before reporting done (`pnpm run ship:gate` is the only local check).
-- Before handoff, update `.github/agent-state.local.md` with current goal, changed files, validation, blockers, and next concrete step.
+- Verify with the lightest meaningful GitHub Actions run before reporting done (`pnpm run ship:gate` and `pnpm run ax:check` are the only local checks).
+- Never record a gate as PASS without a run id, a workflow file, or `local:<command>`; `pnpm run ax:record` fills `VERIFICATION.md` from real Actions runs.
+- Before handoff, update `SESSION_STATE.md` and `TASKS.json` with goal, changed files, validation, blockers, and the next concrete step, and make `pnpm run ax:check` pass.
 
 Ask only when a missing decision blocks correctness or safety.
 

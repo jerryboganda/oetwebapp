@@ -35,10 +35,20 @@ Only skip the auto-push if the user explicitly says "don't push" for that task. 
 
 ## Continuity Protocol
 
-- For non-trivial work, read `PROGRESS.md` and `.github/agent-state.local.md` if present before broad exploration.
-- Treat `.github/agent-state.local.md` as the current task handoff: goal, constraints, touched files, validation, blockers, and next concrete step.
-- Keep `PROGRESS.md` compact. Do not paste historical ledgers into it; old history lives in git and local archives.
-- Before ending substantial work, update `.github/agent-state.local.md` with the latest next step and evidence.
+Externalized working memory. Three layers, exclusive ownership — no file has two jobs.
+
+| Layer | File | Lifetime |
+| --- | --- | --- |
+| Permanent rules | `AGENTS.md`, `.github/instructions/**`, `docs/**` | months–years |
+| Current run | `SESSION_STATE.md`, `TASKS.json` | hours–days |
+| Objective truth | `VERIFICATION.md`, git, GitHub Actions runs | always |
+
+- Non-trivial work: `pnpm run ax:status`, then read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`. Continue from `SESSION_STATE.md` only when its Goal matches the newest request; otherwise re-goal it with `pnpm run ax:init`.
+- Pick work with `pnpm run ax:next`. Move `TASKS.json` statuses as tasks start and finish.
+- Never tick a verification gate without evidence. A `PASS` row needs a run id, a workflow file, or `local:<command>`. `pnpm run ax:check` rejects anything else.
+- After the deploy for this SHA is green: `pnpm run ax:record` writes the real run ids into `VERIFICATION.md` and the raw logs into the gitignored `.github/agent-state.local.md`; `pnpm run ax:verify` re-checks them against GitHub. `VERIFICATION.md` is machine-written — never hand-edit a result.
+- `PROGRESS.md` is the compact durable ledger only. History lives in `docs/PROGRESS-ARCHIVE-2026.md` and git.
+- Before handoff: `pnpm run ax:check` must pass and `SESSION_STATE.md` "Next action" must name the next concrete step.
 - Prefer scoped `git status --short -- <paths>` over broad status when catalog archives or unrelated work would flood output.
 
 ## ⛔ GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT — COMPULSORY
@@ -119,7 +129,7 @@ user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-consol
 - **(e)** Watch deploys with `gh run watch` (not `ship:watch` / `watch-deploy.ps1`).
 - **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": subscription engines are not
   `AiProvider`s and write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts.
-- **(g)** Continuity state lives in the sidecar session volume, not `PROGRESS.md` / `.github/agent-state.local.md`.
+- **(g)** Continuity state lives in the sidecar session volume. Console sessions read and write neither `SESSION_STATE.md` / `TASKS.json` nor `PROGRESS.md`.
 - **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`, `docker stop
   oet-agent-console`) is ops, not compute.
 
@@ -258,6 +268,13 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `AGENTS.md` — always-on repo contract; authoritative for storage persistence, the `apiClient`
   exception list, OET domain invariants, and this file map.
 - `.github/copilot-instructions.md` — always-on lean startup: source of truth, lean context, routing.
+- `SESSION_STATE.md` — the current run's working memory (goal, decisions, gates, next action).
+  Schema: `scripts/agent/session-state.template.md`. Written by the active session.
+- `TASKS.json` — the execution queue. `pnpm run ax:next` picks the next ready task.
+- `VERIFICATION.md` — machine-written evidence index: one row per GitHub Actions run.
+  Written only by `pnpm run ax:record`; re-checked by `pnpm run ax:verify`. Never hand-edit.
+- `PROGRESS.md` — compact durable checkpoint ledger. `docs/PROGRESS-ARCHIVE-2026.md` is frozen history.
+- `scripts/agent/README.md` — the `ax:*` ledger commands and the compute-locality rule for that script.
 - `.github/instructions/agentic-workflow.instructions.md` — continuity protocol, default loop, agents.
 - `.github/instructions/frontend.instructions.md` — Next.js/React/TS/Tailwind/motion UI rules.
 - `.github/instructions/backend.instructions.md` — ASP.NET Core / EF Core / services / DTOs.

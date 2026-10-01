@@ -15,7 +15,15 @@ the local machine or the production VPS.
 ```powershell
 pnpm run ship:gate          # REQUIRED before every main push (seconds, static checks only)
 pnpm run ship:watch         # REQUIRED after every main push (watches Build & Deploy only)
+pnpm run ax:check           # validate the state ledger (static; fails on a gate with no evidence)
+pnpm run ax:status          # read the current run's goal, gates and next action
+pnpm run ax:next            # pick the next ready task from TASKS.json
+pnpm run ax:record          # after a green deploy: real run ids -> VERIFICATION.md (uses gh)
+pnpm run ax:verify          # re-check recorded run ids against GitHub (uses gh)
 ```
+
+`ax:check` is static, like `ship:gate`. `ax:record` and `ax:verify` make read-only `gh` calls;
+like `ship:watch` they are local tooling, not compute. See `scripts/agent/README.md`.
 
 ## CI (push the branch or `gh workflow run qa-smoke.yml --ref <branch>`)
 
@@ -38,6 +46,11 @@ Ship-it default is `ship:gate` only. Never treat "pushed" as done.
   CI job to be green; broad refactors warrant the full `qa-smoke.yml` run.
 - Never claim a check passed without a GitHub Actions run behind it. Report the workflow, run, job
   and step, what did not run, and any remaining risk.
+- Never record a gate as `PASS` without evidence. `SESSION_STATE.md` accepts a run id, a workflow
+  file, or `local:<command>`; `pnpm run ax:check` fails anything else. A check that was genuinely
+  not run is recorded as `NOT RUN` — that is honest and passes.
+- `VERIFICATION.md` is machine-written by `pnpm run ax:record`. Never hand-edit a result; re-check it
+  with `pnpm run ax:verify`.
 - The VPS is deploy-only. Storage persistence, protected volumes, and production container rules are a
   deployment/runtime invariant — see `deployment.instructions.md`.
 - Get approval before destructive, networked, production, or credential-adjacent commands.

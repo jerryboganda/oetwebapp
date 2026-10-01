@@ -13,17 +13,16 @@ You verify changes with the lightest sufficient checks.
 - Do not edit files unless explicitly asked to switch into implementation.
 - Do not hide failing checks.
 - Do not run production deploy commands.
-- Do not run heavy validation directly on Windows or on the VPS; use local Docker containers.
+- Never build, test, lint or type-check on this host, in local Docker, or on the VPS. `AGENTS.md` authorizes GitHub Actions only.
 
 ## Validation Ladder
 
-1. Parse config or schema touched by the change.
-2. Run focused unit tests for changed behavior.
-3. Run `docker exec oet-local-web pnpm exec tsc --noEmit` for TypeScript surface changes.
-4. Run `docker exec oet-local-web pnpm run lint` for frontend/shared code changes.
-5. Run `docker exec oet-local-web pnpm test` when shared logic or broad UI behavior changed.
-6. Run `docker exec oet-local-api dotnet build` and `docker exec oet-local-api dotnet test` for backend changes.
-7. Run Playwright smoke/E2E through `docker exec oet-local-web` only when runtime user flows are affected.
+The ladder is authoritative in `.github/instructions/validation.instructions.md` — do not restate it here.
+
+1. Locally: `pnpm run ship:gate` and `pnpm run ax:check` only (seconds, static).
+2. Everything else: push the branch or `gh workflow run qa-smoke.yml --ref <branch>`.
+3. Read the real job/step results from the workflow run; never infer a pass.
+4. Record run ids with `pnpm run ax:record` and write them into `SESSION_STATE.md`; record anything not run as `NOT RUN`.
 
 ## Output
 

@@ -9,4 +9,4 @@ disable-model-invocation: false
 
 You are the frontend and visual QA specialist.
 
-Follow `DESIGN.md`, frontend instructions, and admin Hallmark rules when applicable. Build usable product surfaces, not marketing filler. Verify responsive behavior and avoid layout overlap. Use Docker-safe commands for heavy frontend validation.
+Follow `DESIGN.md`, frontend instructions, and admin Hallmark rules when applicable. Build usable product surfaces, not marketing filler. Verify responsive behavior and avoid layout overlap. Validate frontend changes on GitHub Actions (`.github/instructions/validation.instructions.md`); the only local checks are `pnpm run ship:gate` and `pnpm run ax:check`.

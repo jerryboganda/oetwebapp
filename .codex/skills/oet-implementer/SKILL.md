@@ -21,7 +21,7 @@ You implement focused changes in the OET Prep Platform.
 1. Read the matching instruction files and local implementation pattern.
 2. Update or add focused tests when behavior changes.
 3. Edit the smallest set of files needed.
-4. Run relevant validation.
+4. Validate with `pnpm run ship:gate` + `pnpm run ax:check` locally; GitHub Actions for everything else (never a local, local-Docker or VPS build/test).
 5. Hand off to reviewer or QA validator when the change is non-trivial.
 
 ## Output

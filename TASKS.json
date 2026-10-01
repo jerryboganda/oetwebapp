@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "updated": "2026-10-01",
+  "statuses": ["pending", "in_progress", "blocked", "done"],
+  "tasks": [
+    {
+      "id": "AX-01",
+      "title": "Machine layer: scripts/agent/state.mjs + session-state.template.md + README.md",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": [],
+      "verify": "pnpm run ax:self-test",
+      "evidence": ["local:ax:self-test"],
+      "files": [
+        "scripts/agent/state.mjs",
+        "scripts/agent/session-state.template.md",
+        "scripts/agent/README.md"
+      ]
+    },
+    {
+      "id": "AX-02",
+      "title": "Artifacts: SESSION_STATE.md, TASKS.json, VERIFICATION.md, docs/PROGRESS-ARCHIVE-2026.md",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-01"],
+      "verify": "pnpm run ax:check",
+      "evidence": ["local:ax:check"],
+      "files": [
+        "SESSION_STATE.md",
+        "TASKS.json",
+        "VERIFICATION.md",
+        "docs/PROGRESS-ARCHIVE-2026.md"
+      ]
+    },
+    {
+      "id": "AX-03",
+      "title": "Repoint every agent-state.local.md reference to SESSION_STATE.md / TASKS.json",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-02"],
+      "verify": "grep -rn agent-state.local .github .codex AGENTS.md PROGRESS.md docs",
+      "evidence": ["local:grep-reconciliation"],
+      "files": [
+        "AGENTS.md",
+        ".github/copilot-instructions.md",
+        ".github/instructions/agentic-workflow.instructions.md",
+        ".github/prompts/",
+        ".github/agents/",
+        ".codex/skills/"
+      ]
+    },
+    {
+      "id": "AX-04",
+      "title": "Compact PROGRESS.md and remove stale compute-rule contradictions (lessons-learned, PRD, docs index)",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-02"],
+      "verify": "pnpm run ax:check",
+      "evidence": ["local:ax:check"],
+      "files": [
+        "PROGRESS.md",
+        "PRD.md",
+        "docs/README.md",
+        "docs/dev/lessons-learned.md"
+      ]
+    },
+    {
+      "id": "AX-05",
+      "title": "Wire ax:* npm scripts, the local-only ship:gate warning hook and scripts/README.md",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-01"],
+      "verify": "node scripts/ship/pre-push-gate.mjs --self-test",
+      "evidence": ["local:ship-gate-self-test", "local:ship-gate-ci"],
+      "files": ["package.json", "scripts/ship/pre-push-gate.mjs", "scripts/README.md"]
+    },
+    {
+      "id": "AX-06",
+      "title": "Static verification + completeness sweep (self-tests, --ci unchanged, grep reconciliation)",
+      "status": "done",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-03", "AX-04", "AX-05"],
+      "verify": "pnpm run ax:check && node scripts/ship/pre-push-gate.mjs --self-test",
+      "evidence": ["local:ax:check", "local:ship-gate-self-test", "local:ship-gate-ci"],
+      "files": []
+    },
+    {
+      "id": "AX-07",
+      "title": "Ship: public flip, commit, push, ship:watch, ax:record, ax:verify, private flip",
+      "status": "in_progress",
+      "owner": "ax-session-state-ledger",
+      "blockedBy": ["AX-06"],
+      "verify": "deploy.yml",
+      "evidence": [],
+      "files": ["VERIFICATION.md"]
+    }
+  ]
+}

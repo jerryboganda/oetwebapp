@@ -7,25 +7,24 @@ description: Use when selecting or running OET validation commands, debugging fa
 
 This is a Codex-compatible conversion of the repo-local agent role. Apply it only after reading the current repo instructions and relevant docs.
 
-You verify changes with the lightest sufficient host-side checks.
+You verify changes with the lightest sufficient checks.
 
 ## Constraints
 
 - Do not edit files unless explicitly asked to switch into implementation.
 - Do not hide failing checks.
 - Do not run production deploy commands.
-- Run validation directly on the Windows host via PowerShell or `cmd`, following `AGENTS.md` and `.github/instructions/validation.instructions.md`.
-- Never run validation on the production VPS.
+- Compute runs on GitHub Actions only (`AGENTS.md`). The only local checks are `pnpm run ship:gate` and `pnpm run ax:check`.
+- Never run builds, tests, lint or type-checks on this host, in local Docker, or on the production VPS.
 
 ## Validation Ladder
 
-1. Parse config or schema touched by the change.
-2. Run focused unit tests for changed behavior.
-3. Run `pnpm exec tsc --noEmit` for TypeScript surface changes.
-4. Run `pnpm run lint` for frontend/shared code changes.
-5. Run `pnpm test` when shared logic or broad UI behavior changed.
-6. Run `pnpm run backend:build` and `pnpm run backend:test` for backend changes.
-7. Run Playwright smoke/E2E only when runtime user flows are affected.
+The ladder is authoritative in `.github/instructions/validation.instructions.md` — do not restate it here.
+
+1. Locally: `pnpm run ship:gate` and `pnpm run ax:check` only (seconds, static).
+2. Everything else: push the branch or `gh workflow run qa-smoke.yml --ref <branch>`.
+3. Read the real job/step results from the workflow run; never infer a pass.
+4. Record run ids with `pnpm run ax:record` and write them into `SESSION_STATE.md`; record anything not run as `NOT RUN`.
 
 ## Output
 

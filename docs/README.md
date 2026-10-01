@@ -11,6 +11,17 @@ a module sub-doc, or a dated record; check its date before trusting it.
 - [CONTEXT.md](../CONTEXT.md) — domain glossary: canonical terms and the words to avoid.
 - [adr/](adr/) — decisions: hand-authored EF migrations (0001), scoring via canonical helpers (0002), AI via the grounded gateway (0003), media via `IFileStorage` (0004).
 
+## Continuity & verification
+
+Where agent working memory lives. Layers have exclusive ownership — no file has two jobs.
+
+- [SESSION_STATE.md](../SESSION_STATE.md) — the current run: goal, decisions, verification gates, next action. Schema: [scripts/agent/session-state.template.md](../scripts/agent/session-state.template.md).
+- [TASKS.json](../TASKS.json) — the execution queue; `pnpm run ax:next` picks the next ready task.
+- [VERIFICATION.md](../VERIFICATION.md) — machine-written evidence index, one row per GitHub Actions run. Never hand-edit.
+- [PROGRESS.md](../PROGRESS.md) — compact durable checkpoint ledger; history in [PROGRESS-ARCHIVE-2026.md](PROGRESS-ARCHIVE-2026.md).
+- [scripts/agent/README.md](../scripts/agent/README.md) — the `ax:*` commands and the compute-locality rule for that script.
+- [dev/lessons-learned.md](dev/lessons-learned.md) — session-proven gotchas, Mistake → Lesson → Action.
+
 ## Domain rules (do not deviate)
 
 - [SCORING.md](SCORING.md) — canonical OET scoring (`lib/scoring.ts`, `OetScoring.cs`).

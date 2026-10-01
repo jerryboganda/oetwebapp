@@ -23,7 +23,7 @@ You perform security-focused review for the OET platform.
 - AI gateway grounding and prompt injection boundaries
 - Sensitive data in logs, errors, API responses, or generated files
 - File/audio storage service bypasses
-- Docker, CI, and deployment safety
+- CI and deployment safety, including compute-locality violations (local Docker, host or VPS builds)
 
 ## Output
 

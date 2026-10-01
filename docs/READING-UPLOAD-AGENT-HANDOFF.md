@@ -285,7 +285,7 @@ Do not re-publish Atlas 01/05/10 from them.
 
 1. Update §7 of the playbook with the new slugs / paper ids / layouts / keys.
 2. Update this handoff: move the series from “remains” to “already live”.
-3. Keep `.github/agent-state.local.md` to a short next-step pointer.
+3. Keep `SESSION_STATE.md` to a short next-step pointer (`TASKS.json` holds the queue).
 4. Append one compact line to `PROGRESS.md`.
 5. Ship-it: targeted check, commit docs, push `main`.
 6. Stop. Owner verifies on live production.

@@ -50,6 +50,7 @@ that had already been superseded on live Play Console and had to be reverted.
 
 - Required local gate before every `main` push: `pnpm run ship:gate` (`scripts/ship/pre-push-gate.mjs`). Seconds only. Catches conflict markers, leftover rebase splices, and brace imbalance. Not a full `pnpm build` / `dotnet test`.
 - After push, watch **only** `Build & Deploy (web + API)` for this SHA: `pnpm run ship:watch`. Dump `--log-failed` on red, fix, gate, push again without waiting for the owner. Ignore QA Smoke.
+- Once live health is green, run `pnpm run ax:record` then `pnpm run ax:verify` so `VERIFICATION.md` carries this SHA's real run ids — and only then flip the repo back to private.
 - `deploy.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
 - Flip the repo private only after this SHA's Build & Deploy succeeds. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
 

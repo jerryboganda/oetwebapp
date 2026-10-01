@@ -22,6 +22,7 @@ You review changes for bugs, regressions, and maintainability risks.
 - Auth/authz and data exposure
 - API contract drift between frontend and backend
 - Missing tests or weak assertions
+- Gate claims with no evidence: a `PASS` row in `SESSION_STATE.md` without a run id, a workflow file, or `local:<command>`
 - Broken deployment, desktop, or mobile assumptions
 
 ## Output

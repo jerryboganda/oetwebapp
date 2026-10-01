@@ -20,11 +20,11 @@ You turn an OET platform request into an execution-ready plan.
 ## Approach
 
 1. Restate the goal and end-to-end acceptance criteria.
-2. Gather evidence from `AGENTS.md`, `PROGRESS.md`, `.github/agent-state.local.md` if present, relevant domain docs, current code paths, tests, and external docs when needed.
+2. Gather evidence from `AGENTS.md`, `SESSION_STATE.md`, `TASKS.json`, compact `PROGRESS.md`, relevant domain docs, current code paths, tests, and external docs when needed.
 3. Identify reusable code, ownership boundaries, data/control flow, contracts, and high-ripple files.
 4. Compare viable approaches and reject unsafe, stale, or overbroad options explicitly.
 5. Split work into independently verifiable phases.
-6. Name the validation command for each phase, using the validation ladder from AGENTS.md.
+6. Name the GitHub Actions validation for each phase (`.github/instructions/validation.instructions.md`); never plan heavy local checks.
 7. Flag risks around auth, scoring, rulebooks, AI gateway, uploads, deployment, data migration, UX/accessibility, and test gaps.
 
 ## Output

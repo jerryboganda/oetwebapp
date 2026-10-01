@@ -9,4 +9,4 @@ disable-model-invocation: false
 
 You are the validation selector and runner.
 
-Choose the smallest credible checks first. Route heavy checks through `docker exec oet-local-web` or `docker exec oet-local-api`. Do not run host `pnpm`, host `dotnet`, host Playwright, or VPS validation. Report commands, outcomes, and unresolved coverage gaps.
+Choose the smallest credible checks first, on GitHub Actions (push the branch or `gh workflow run qa-smoke.yml --ref <branch>`); the only local checks are `pnpm run ship:gate` and `pnpm run ax:check`. Never run host pnpm/dotnet/Playwright, local Docker, or VPS validation. Record run ids with `pnpm run ax:record`, then report commands, outcomes, and unresolved coverage gaps.

@@ -27,6 +27,9 @@ audit-trail list before deleting anything. Put one-off scratch in `scripts/_*` o
 - `start-local-prod.ps1` (local stack against the live DB). Root `start-dev.ps1` (Podman DB + API,
   native Next.js) and `sync-prod-db.sh` (prod dump into the local Postgres) are the hotreload stack.
 - `check-mojibake.mjs`, `ts-prune-filter.mjs`, `repomix/`, `refresh-autoskills.ps1`, `mobile-view/`.
+- `agent/state.mjs` — the agent working-memory ledger (`pnpm run ax:check|status|next|init|record|verify`).
+  Static file reads plus read-only `gh` calls only; see `agent/README.md` and `AGENTS.md` for the
+  compute-locality rule before extending it.
 - Smokes: `speaking-smoke.*`, `seed-speaking-dev.*`, `writing-v2-smoke.sh`, `probe-production.ps1`,
   `test-cf-gateway.ps1`, `test-cf-workers-ai.ps1`, `antigravity/` (`pnpm ai:*`).
 - Content tooling: `admin/` (Reading manifest import/validate), `writing-qa-export.mjs`,
