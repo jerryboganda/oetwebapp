@@ -125,11 +125,13 @@ Raw status hues map onto the tokens: a tint is `bg-<status>/10`, a border `borde
 | Card | Border, `bg-surface`, `shadow-sm`; `hoverable` gives a clinical hover | Mobile-dense padding |
 | Inputs | `form-controls`: soft surface, 1px border, primary focus ring | Label, hint and error wired with aria |
 | Tabs | Segmented pill with a moving active pill | Arrow/Home/End keys |
+| Switch | `components/ui/switch`: `h-6 w-11` pill, primary when on, knob mirrors under RTL | Real `role="switch"` with `aria-checked`; the visible label lives beside it and the control carries an `aria-label` |
 | Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
 | Overlays | admin Dialog/AlertDialog use `--z-modal`; Select/DropdownMenu use `--z-popover` | One `--z-*` scale in `app/globals.css` |
-| Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
+| Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open; bottom-nav tabs carry a one-word `mobileLabel` (≤ 6 characters at 360px) |
 | Command palette | `GlobalSearch`: a `Modal`-based combobox/listbox, mounted once per AppShell | Ctrl/⌘K or the header trigger; not mounted on `distractionFree` or exam/live routes (`isExamOrLiveRoute`); rows only from the role's real nav plus learner content search |
-| Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
+| Empty / Error | `EmptyState` / `ErrorState`; the empty icon pops in once | Always explain the situation and offer the next action or a retry |
+| Page hero | `LearnerPageHero`: one per page, never nested in another card or a flex row; `aside` sits beside the title and highlights run full width | Highlights are real data only |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 
 ## 7. Layout and responsive behaviour
