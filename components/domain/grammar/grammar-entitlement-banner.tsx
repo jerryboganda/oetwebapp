@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { Lock, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -13,19 +14,18 @@ import type { GrammarEntitlement } from '@/lib/api';
  * has exhausted their allowance. Paid/trial learners never see this.
  */
 export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlement: GrammarEntitlement; lessonId?: string }) {
-  if (entitlement.tier !== 'free') return null;
+  const isBlocked = entitlement.tier === 'free' && !entitlement.allowed;
+  // One paywall impression per blocked view; tracking during render fired it on every re-render.
+  useEffect(() => {
+    if (isBlocked) analytics.track('grammar_paywall_shown', { lessonId: lessonId ?? null, resetAt: entitlement.resetAt });
+  }, [isBlocked, lessonId, entitlement.resetAt]);
 
-  const isBlocked = !entitlement.allowed;
+  if (entitlement.tier !== 'free') return null;
   const resetLabel = entitlement.resetAt
     ? new Date(entitlement.resetAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
     : null;
 
   if (isBlocked) {
-    // Fire a single analytics event on render so we can measure paywall impressions.
-    if (typeof window !== 'undefined') {
-      // Debounce: only once per mount
-      queueMicrotask(() => analytics.track('grammar_paywall_shown', { lessonId: lessonId ?? null, resetAt: entitlement.resetAt }));
-    }
     return (
       <Card className="border-warning/30 bg-warning/5">
         <div className="flex items-start gap-4">
