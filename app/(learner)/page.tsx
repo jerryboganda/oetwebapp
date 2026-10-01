@@ -357,55 +357,57 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="space-y-6">
-        <PostLoginAppModal />
-        {/* Keep the stable, useful dashboard context outside the authenticated
-            data boundary. Slow critical API responses can fill the action
-            cards below without leaving a learner staring at a full-page
-            skeleton on mobile WebKit or a slower connection. */}
-        <div data-testid="learner-dashboard-hero">
-          <LearnerPageHero
-            eyebrow="Current Focus"
-            icon={Sparkles}
-            accent="primary"
-            title="Keep today's priorities and exam signals in view"
-            description="Decide your next action, check your readiness, and move forward with confidence."
-            highlights={dashboardHeroHighlights}
-            footer={(
-              <DashboardSubscriptionStrip
-                subscription={subscription}
-                entitlement={entitlement}
-                isLoading={subscriptionLoading}
-                hasError={subscriptionError}
-                onReloadPaymentStatus={() => void subscriptionQuery.refetch()}
-              />
-            )}
-          />
-        </div>
-
-        <AsyncStateWrapper
-          status={asyncStatus}
-          onRetry={reload}
-          retryLabel={retryLabel}
-          errorMessage={error ?? undefined}
-          initial={false}
-          partialMessage={error ? `${error}${supportRef ? ` Support ref ${supportRef}.` : ''}` : 'Some dashboard data could not be loaded right now. Your course access is active.'}
-          loadingContent={(
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <LearnerDashboardLoadingCard />
-            </div>
-          )}
-          emptyContent={
-            <LearnerEmptyState
-              icon={Sparkles}
-              title="Welcome to your OET workspace"
-              description="Complete onboarding to personalize your dashboard, or set goals first if you already know your exam target."
-              primaryAction={{ label: 'Start Onboarding', href: '/onboarding' }}
-              secondaryAction={{ label: 'Set Goals', href: '/goals' }}
+      <PostLoginAppModal />
+      {/* Keep the stable, useful dashboard context outside the authenticated
+          data boundary. Slow critical API responses can fill the action
+          cards below without leaving a learner staring at a full-page
+          skeleton on mobile WebKit or a slower connection. The hero is the
+          LCP element, so it never animates in. */}
+      <div data-testid="learner-dashboard-hero">
+        <LearnerPageHero
+          eyebrow="Current Focus"
+          icon={Sparkles}
+          accent="primary"
+          title="Keep today's priorities and exam signals in view"
+          description="Decide your next action, check your readiness, and move forward with confidence."
+          highlights={dashboardHeroHighlights}
+          footer={(
+            <DashboardSubscriptionStrip
+              subscription={subscription}
+              entitlement={entitlement}
+              isLoading={subscriptionLoading}
+              hasError={subscriptionError}
+              onReloadPaymentStatus={() => void subscriptionQuery.refetch()}
             />
-          }
-        >
-          <div className="space-y-6">
+          )}
+        />
+      </div>
+
+      <AsyncStateWrapper
+        status={asyncStatus}
+        onRetry={reload}
+        retryLabel={retryLabel}
+        errorMessage={error ?? undefined}
+        initial={false}
+        partialMessage={error ? `${error}${supportRef ? ` Support ref ${supportRef}.` : ''}` : 'Some dashboard data could not be loaded right now. Your course access is active.'}
+        loadingContent={(
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <LearnerDashboardLoadingCard />
+          </div>
+        )}
+        emptyContent={
+          <LearnerEmptyState
+            icon={Sparkles}
+            title="Welcome to your OET workspace"
+            description="Complete onboarding to personalize your dashboard, or set goals first if you already know your exam target."
+            primaryAction={{ label: 'Start Onboarding', href: '/onboarding' }}
+            secondaryAction={{ label: 'Set Goals', href: '/goals' }}
+          />
+        }
+      >
+        {/* Same rhythm as the page flow; most important first: state that blocks
+            practice, getting started, then the next action. */}
+        <div className="learner-page-flow">
           {asyncStatus === 'success' && error ? (
             <InlineAlert
               variant="warning"
@@ -427,13 +429,6 @@ export default function Dashboard() {
                 : 'refreshing your package balance.'}
             </InlineAlert>
           ) : null}
-
-          {aiPackageCredits && hasVisibleCreditActivity(aiPackageCredits) ? (
-            <CreditBalanceCard snapshot={aiPackageCredits} />
-          ) : null}
-
-          <OnboardingChecklist />
-
           {freeze ? (
             <Card className="border-warning/30 bg-warning/10">
               <CardHeader className="pb-3">
@@ -471,16 +466,18 @@ export default function Dashboard() {
             </Card>
           ) : null}
 
+          <OnboardingChecklist />
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {nextActionCard ? (
-              <MotionItem initial={false} layout={false}>
-                <div data-tour="learner-dashboard-next-action">
+              <MotionItem>
+                <div data-tour="learner-dashboard-next-action" className="h-full">
                   <LearnerSurfaceCard card={nextActionCard} className="min-h-[260px]" />
                 </div>
               </MotionItem>
             ) : null}
             {nextMockCard ? (
-              <MotionItem initial={false} layout={false}>
+              <MotionItem delayIndex={1}>
                 <LearnerSurfaceCard card={nextMockCard} className="min-h-[260px]" />
               </MotionItem>
             ) : null}
@@ -516,13 +513,16 @@ export default function Dashboard() {
             aiPackageCredits={aiPackageCredits}
           />
 
+          {aiPackageCredits && hasVisibleCreditActivity(aiPackageCredits) ? (
+            <CreditBalanceCard snapshot={aiPackageCredits} />
+          ) : null}
+
           {/* Keep this optional marketing promotion below the complete
               dashboard content so it cannot compete with the first viewport
               for LCP or introduce a visible mobile layout shift. */}
           <AppDownloadPromo variant="banner" />
         </div>
-        </AsyncStateWrapper>
-      </div>
+      </AsyncStateWrapper>
     </>
   );
 }

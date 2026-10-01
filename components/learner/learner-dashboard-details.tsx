@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion, useReducedMotionConfig } from 'motion/react';
 import {
   ArrowRight,
   BookOpen,
@@ -26,7 +25,7 @@ import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
-import { MotionList } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionList } from '@/components/ui/motion-primitives';
 import { CelebrationBurst } from '@/components/ui/celebration-burst';
 import { CountUp } from '@/components/ui/count-up';
 import { useIncreaseSinceLastVisit } from '@/hooks/use-increase-since-last-visit';
@@ -44,17 +43,17 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
 };
 
 const SUBTEST_COLORS: Record<SubTest, string> = {
-  Writing: 'text-danger-strong bg-danger/10',
-  Speaking: 'text-primary bg-lavender',
-  Reading: 'text-info bg-info/10',
-  Listening: 'text-primary bg-lavender',
+  Writing: 'text-skill-writing bg-skill-writing/10',
+  Speaking: 'text-skill-speaking bg-skill-speaking/10',
+  Reading: 'text-skill-reading bg-skill-reading/10',
+  Listening: 'text-skill-listening bg-skill-listening/10',
 };
 
 const SUBTEST_SPINE: Record<SubTest, string> = {
-  Writing: 'bg-danger',
-  Speaking: 'bg-primary',
-  Reading: 'bg-info',
-  Listening: 'bg-primary',
+  Writing: 'bg-skill-writing',
+  Speaking: 'bg-skill-speaking',
+  Reading: 'bg-skill-reading',
+  Listening: 'bg-skill-listening',
 };
 
 function routeForTask(task: { route?: string; subTest: SubTest }) {
@@ -98,7 +97,6 @@ export function LearnerDashboardDetails({
   scoringPolicy,
 }: LearnerDashboardDetailsProps) {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotionConfig();
   const streakUp = useIncreaseSinceLastVisit('oet_last_seen_streak', engagement?.currentStreak);
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const [catalogAddOns, setCatalogAddOns] = useState<PublicCatalogAddOnRow[]>([]);
@@ -148,18 +146,17 @@ export function LearnerDashboardDetails({
           />
 
           <div className="flex flex-col gap-3">
-            {todayTasks.length > 0 ? todayTasks.map((task) => {
+            {todayTasks.length > 0 ? todayTasks.map((task, index) => {
               const Icon = SUBTEST_ICONS[task.subTest];
               const colorClass = SUBTEST_COLORS[task.subTest];
               const spineClass = SUBTEST_SPINE[task.subTest];
               const isComplete = task.status === 'completed';
 
               return (
-                <motion.div
+                <MotionItem
                   key={task.id}
-                  whileHover={prefersReducedMotion || isComplete ? {} : { scale: 1.01 }}
-                  whileTap={prefersReducedMotion || isComplete ? {} : { scale: 0.98 }}
-                  className={`group relative flex flex-col items-start justify-between overflow-hidden rounded-2xl border bg-surface p-4 pl-5 shadow-sm transition-[border-color,box-shadow,opacity,transform] duration-200 sm:flex-row sm:items-center ${
+                  delayIndex={Math.min(index, 5)}
+                  className={`group relative flex flex-col items-start justify-between gap-3 overflow-hidden rounded-2xl border bg-surface p-4 ps-5 shadow-sm transition-[border-color,box-shadow] duration-200 sm:flex-row sm:items-center ${
                     isComplete
                       ? 'border-border opacity-60'
                       : 'border-border/60 hover:border-border-hover hover:shadow-clinical'
@@ -167,13 +164,13 @@ export function LearnerDashboardDetails({
                 >
                   <span
                     aria-hidden="true"
-                    className={`absolute inset-y-0 left-0 w-1.5 transition-colors ${isComplete ? 'bg-success/50' : spineClass}`}
+                    className={`absolute inset-y-0 start-0 w-1.5 transition-colors ${isComplete ? 'bg-success/50' : spineClass}`}
                   />
-                  <div className="mb-3 flex items-center gap-4 sm:mb-0">
+                  <div className="flex min-w-0 items-center gap-4">
                     <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isComplete ? 'bg-success/10 text-success-strong' : colorClass}`}>
                       {isComplete ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> : <Icon className="h-5 w-5" aria-hidden="true" />}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h3 className={`text-sm font-bold text-navy ${isComplete ? 'line-through' : ''}`}>{task.title}</h3>
                       <p className="text-xs text-muted">{task.duration} · {task.subTest}</p>
                     </div>
@@ -184,10 +181,10 @@ export function LearnerDashboardDetails({
                       size="sm"
                       onClick={() => router.push(routeForTask(task))}
                     >
-                      Start <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      Start <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
                     </Button>
                   ) : null}
-                </motion.div>
+                </MotionItem>
               );
             }) : (
               <LearnerEmptyState
@@ -271,7 +268,7 @@ export function LearnerDashboardDetails({
                 prefetch={false}
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
               >
-                View full readiness centre →
+                View full readiness centre <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
               </Link>
             </CardContent>
           </Card>
@@ -364,7 +361,7 @@ export function LearnerDashboardDetails({
                   <CelebrationBurst active={streakUp} onceKey={`streak:${engagement.currentStreak}`} />
                 </div>
                 <div className="text-center">
-                  <div className="flex items-center gap-1 text-lg font-bold text-warning-strong">
+                  <div className="flex items-center gap-1 text-lg font-bold tabular-nums text-warning-strong">
                     <Trophy className="h-4 w-4" aria-hidden="true" />
                     {engagement.longestStreak}
                   </div>
@@ -383,8 +380,8 @@ export function LearnerDashboardDetails({
                         title={day.day}
                         className={`flex h-9 items-center justify-center rounded-lg text-2xs font-bold uppercase transition-colors duration-200 ${
                           day.active
-                            ? 'bg-warning-strong text-white shadow-sm shadow-amber-200/70 dark:shadow-none'
-                            : `bg-background-light text-muted/70 ${isToday ? 'ring-2 ring-inset ring-amber-400/60' : 'border border-border'}`
+                            ? 'bg-warning-strong text-white shadow-sm'
+                            : `bg-background-light text-muted/70 ${isToday ? 'ring-2 ring-inset ring-warning/60' : 'border border-border'}`
                         }`}
                       >
                         {day.day.slice(0, 1)}
@@ -395,15 +392,15 @@ export function LearnerDashboardDetails({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
-                  <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
+                <div className="rounded-xl border border-border bg-background-light p-2.5 text-center">
+                  <div className="flex items-center justify-center gap-1 text-sm font-bold tabular-nums text-navy">
                     <Timer className="h-3.5 w-3.5 text-warning-strong" aria-hidden="true" />
                     {Math.round(engagement.totalPracticeMinutes / 60)}h
                   </div>
                   <div className="text-2xs text-muted">Total Practice</div>
                 </div>
-                <div className="rounded-xl border border-border bg-background-light p-2.5 text-center transition-colors hoverable:border-border-hover">
-                  <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
+                <div className="rounded-xl border border-border bg-background-light p-2.5 text-center">
+                  <div className="text-sm font-bold tabular-nums text-navy"><CountUp value={engagement.totalPracticeSessions} /></div>
                   <div className="text-2xs text-muted">Sessions</div>
                 </div>
               </div>
