@@ -2,7 +2,9 @@
 
 import { ArrowDown, ArrowUp, Minus, Gauge } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { ProgressBar } from '@/components/ui/progress';
 import type { WritingReadinessSubScoreDto } from '@/lib/writing/types';
 
 export interface ReadinessWidgetProps {
@@ -27,12 +29,13 @@ const SUB_BARS: SubBarSpec[] = [
   { key: 'typeConsistency', label: 'Type consistency', weight: 5 },
 ];
 
-function scoreTone(score: number): { text: string; bg: string; ring: string; label: string } {
+function scoreTone(score: number): { text: string; bg: string; ring: string; bar: 'success' | 'warning' | 'danger'; label: string } {
   if (score >= 85) {
     return {
       text: 'text-success-strong',
       bg: 'bg-success/10',
       ring: 'border-success/30',
+      bar: 'success',
       label: 'Exam-ready',
     };
   }
@@ -41,6 +44,7 @@ function scoreTone(score: number): { text: string; bg: string; ring: string; lab
       text: 'text-warning-strong',
       bg: 'bg-warning/10',
       ring: 'border-warning/30',
+      bar: 'warning',
       label: 'Building',
     };
   }
@@ -48,6 +52,7 @@ function scoreTone(score: number): { text: string; bg: string; ring: string; lab
     text: 'text-danger-strong',
     bg: 'bg-danger/10',
     ring: 'border-danger/30',
+    bar: 'danger',
     label: 'Foundation',
   };
 }
@@ -72,65 +77,51 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
         : 'text-muted';
 
   return (
-    <Card padding="lg" className={cn('border', tone.ring, tone.bg, className)} aria-label="Readiness score widget">
-      <CardContent>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <Gauge className={cn('w-7 h-7 shrink-0', tone.text)} aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="eyebrow text-muted">Readiness</p>
-              <div className="flex items-baseline gap-2">
-                <span className={cn('text-4xl font-extrabold tabular-nums', tone.text)}>{safeScore}</span>
-                <span className="text-xs font-bold text-muted">/ 100</span>
-              </div>
-              <p className={cn('text-xs font-bold mt-0.5', tone.text)}>{tone.label}</p>
+    <Card padding="lg" className={cn(tone.ring, tone.bg, className)} aria-label="Readiness score widget">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Gauge className={cn('h-7 w-7 shrink-0', tone.text)} aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="eyebrow text-muted">Readiness</p>
+            <div className="flex items-baseline gap-2">
+              <CountUp value={safeScore} className={cn('text-4xl font-extrabold', tone.text)} />
+              <span className="text-xs font-bold text-muted">/ 100</span>
             </div>
-          </div>
-          <div className="text-right">
-            {delta !== null ? (
-              <div className={cn('inline-flex items-center gap-1 text-xs font-bold', deltaTone)}>
-                <DeltaIcon className="w-3 h-3" aria-hidden="true" />
-                <span>
-                  {delta > 0 ? '+' : ''}
-                  {delta} vs last week
-                </span>
-              </div>
-            ) : null}
-            {predictedBand ? (
-              <p className="text-xs text-muted mt-1">
-                Likely band on exam day:{' '}
-                <span className="font-bold text-navy dark:text-white">{predictedBand}</span>
-              </p>
-            ) : null}
+            <p className={cn('mt-0.5 text-xs font-bold', tone.text)}>{tone.label}</p>
           </div>
         </div>
+        <div className="text-end">
+          {delta !== null ? (
+            <div className={cn('inline-flex items-center gap-1 text-xs font-bold tabular-nums', deltaTone)}>
+              <DeltaIcon className="h-3 w-3" aria-hidden="true" />
+              <span>
+                {delta > 0 ? '+' : ''}
+                {delta} vs last week
+              </span>
+            </div>
+          ) : null}
+          {predictedBand ? (
+            <p className="mt-1 text-xs text-muted">
+              Likely band on exam day:{' '}
+              <span className="font-bold text-navy">{predictedBand}</span>
+            </p>
+          ) : null}
+        </div>
+      </div>
 
-        <ul className="mt-4 space-y-1.5" aria-label="Readiness sub-score breakdown">
-          {SUB_BARS.map(({ key, label, weight }) => {
-            const value = Math.max(0, Math.min(100, Math.round(subScores[key])));
-            return (
-              <li key={key} className="flex items-center gap-2 text-xs">
-                <span className="w-32 shrink-0 font-bold text-muted">{label}</span>
-                <div
-                  className="flex-1 h-1.5 rounded-full bg-border overflow-hidden"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={value}
-                  aria-label={`${label}: ${value} percent`}
-                >
-                  <div
-                    className={cn('h-full', tone.text.replace('text-', 'bg-'))}
-                    style={{ width: `${value}%` }}
-                  />
-                </div>
-                <span className="w-10 text-right tabular-nums font-bold">{value}</span>
-                <span className="w-8 text-right text-3xs text-muted">{weight}%</span>
-              </li>
-            );
-          })}
-        </ul>
-      </CardContent>
+      <ul className="mt-4 space-y-1.5" aria-label="Readiness sub-score breakdown">
+        {SUB_BARS.map(({ key, label, weight }) => {
+          const value = Math.max(0, Math.min(100, Math.round(subScores[key])));
+          return (
+            <li key={key} className="flex items-center gap-2 text-xs">
+              <span className="w-24 shrink-0 font-bold text-muted sm:w-32">{label}</span>
+              <ProgressBar value={value} color={tone.bar} ariaLabel={`${label}: ${value} percent`} className="min-w-0 flex-1" />
+              <span className="w-8 shrink-0 text-end font-bold tabular-nums sm:w-10">{value}</span>
+              <span className="w-8 shrink-0 text-end text-3xs tabular-nums text-muted">{weight}%</span>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }
