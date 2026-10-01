@@ -3,7 +3,7 @@ import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
- * Route entrance contract (DESIGN.md §5) in the persistent staff shells.
+ * Route entrance contract (DESIGN.md §5) in the persistent staff and learner shells.
  *
  * A client navigation must keep the frame mounted, never render two
  * `#main-content` at once (the old AnimatePresence exit mounted the new page
@@ -11,18 +11,20 @@ import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
  * and reduced motion collapses the entrance to effectively zero.
  */
 
-type StaffRole = 'admin' | 'expert';
+type ShellRole = 'admin' | 'expert' | 'learner';
 
 // Both hrefs are sidebar links in that role's shell (lib/admin-navigation.tsx,
-// app/expert/layout.tsx); `start` is also the way back.
-const JOURNEYS: Record<StaffRole, { start: string; next: string }> = {
+// app/expert/layout.tsx, components/layout/sidebar.tsx); `start` is also the way back.
+const JOURNEYS: Record<ShellRole, { start: string; next: string }> = {
   admin: { start: '/admin', next: '/admin/users' },
   expert: { start: '/expert', next: '/expert/queue' },
+  learner: { start: '/', next: '/listening' },
 };
 
-function roleForProject(projectName: string): StaffRole | null {
+function roleForProject(projectName: string): ShellRole | null {
   if (projectName === 'chromium-admin') return 'admin';
   if (projectName === 'chromium-expert') return 'expert';
+  if (projectName === 'chromium-learner') return 'learner';
   return null;
 }
 
@@ -41,11 +43,13 @@ async function dismissTour(page: Page) {
 test.describe('Route transition @visual', () => {
   test('client navigation keeps one main and plays the enter-only entrance', async ({ page, request }, testInfo) => {
     const role = roleForProject(testInfo.project.name);
-    test.skip(!role, 'runs on chromium-admin and chromium-expert only');
+    test.skip(!role, 'runs on the chromium admin, expert and learner projects only');
     test.setTimeout(180_000);
     const { start, next } = JOURNEYS[role!];
 
     await page.setViewportSize({ width: 1280, height: 900 });
+    // The learner's post-login app-download promo would swallow the nav click.
+    await page.addInitScript(() => window.sessionStorage.setItem('oet_app_promo_dismissed', 'true'));
     // Single-active-session: mint a fresh session for this role first.
     await recoverBrowserSession(page, request, role!, start);
     await page.goto(start, { waitUntil: 'domcontentloaded', timeout: 120_000 });

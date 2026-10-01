@@ -1,6 +1,6 @@
 'use client';
 
-import { AnimatePresence, motion, useReducedMotion, type HTMLMotionProps } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig, type HTMLMotionProps } from 'motion/react';
 import {
   getCollapseTransition,
   getFadeSwitchTransition,
@@ -33,17 +33,25 @@ function useHasHydrated(): boolean {
   );
 }
 
+/**
+ * Reveals when scrolled into view, once, so below-the-fold content animates
+ * where the learner can see it instead of finishing off-screen at mount.
+ * `viewport` keeps its defaults on purpose: any visible pixel triggers, because
+ * a wrapper taller than viewport ÷ amount could never reach a larger threshold
+ * and would stay hidden. Layout animation is opt-in (`layout`), not a default
+ * cost on every reveal.
+ */
 function MotionReveal({
   surface = 'section',
   delayIndex = 0,
   delay = 0,
   className,
-  layout = 'position',
+  layout = false,
   transition,
   ...props
 }: MotionRevealProps) {
   const hasHydrated = useHasHydrated();
-  const reducedMotionPreference = prefersReducedMotion(useReducedMotion());
+  const reducedMotionPreference = prefersReducedMotion(useReducedMotionConfig());
   // The server cannot read the client's prefers-reduced-motion, so SSR always
   // emits the full (non-reduced) variant — including its transform. If the
   // client's first render adopted a different reduced-motion value, the variant
@@ -53,7 +61,9 @@ function MotionReveal({
   // the post-hydration render.
   const reducedMotion = hasHydrated ? reducedMotionPreference : false;
   const runtimeKind = hasHydrated ? undefined : 'web';
-  const motionProps = getSurfaceMotion(surface, reducedMotion, runtimeKind);
+  // `whileInView` replaces the mount-time `animate`; overlays that also use
+  // getSurfaceMotion keep animating on mount.
+  const { initial, exit, variants } = getSurfaceMotion(surface, reducedMotion, runtimeKind);
   const baseTransition = {
     ...getSurfaceTransition(surface, reducedMotion, runtimeKind),
     delay: getMotionDelay(delayIndex, reducedMotion, delay, runtimeKind),
@@ -63,7 +73,11 @@ function MotionReveal({
     <motion.div
       layout={layout}
       className={cn(className)}
-      {...motionProps}
+      initial={initial}
+      exit={exit}
+      variants={variants}
+      whileInView="visible"
+      viewport={{ once: true }}
       transition={typeof transition === 'object' && transition ? { ...baseTransition, ...transition } : baseTransition}
       {...props}
     />
@@ -96,7 +110,7 @@ interface MotionPresenceProps {
 
 /** Thin AnimatePresence wrapper that auto-selects presence mode based on reduced-motion. */
 export function MotionPresence({ children, mode }: MotionPresenceProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const resolvedMode = mode ?? getMotionPresenceMode(reducedMotion);
   return <AnimatePresence mode={resolvedMode}>{children}</AnimatePresence>;
 }
@@ -114,7 +128,7 @@ interface MotionCollapseProps {
 
 /** Animated height expand/collapse using motion layout and overflow clipping. */
 export function MotionCollapse({ open, children, className, ...accessibilityProps }: MotionCollapseProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const transition = getCollapseTransition(reducedMotion);
 
   return (
@@ -148,7 +162,7 @@ interface MotionFadeSwitchProps {
 
 /** AnimatePresence mode="wait" wrapper for mutually exclusive content (steps, tab panels). */
 export function MotionFadeSwitch({ activeKey, children, className, direction = 1 }: MotionFadeSwitchProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const variants = getFadeSwitchVariants(reducedMotion, direction);
   const transition = getFadeSwitchTransition(reducedMotion);
 

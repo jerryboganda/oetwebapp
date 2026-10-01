@@ -91,15 +91,22 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
   - `slow` 280ms
   - `hero` 360ms
 - **Easing:** `ease-standard` (decisive ease-out), `ease-enter`, `ease-exit`. motion/react uses the same values through `motionTokens` in `lib/motion.ts`.
-- **Surface presets:** use `getSurfaceMotion('route'|'section'|'list'|'item'|'overlay'|'state')` or the Motion* components. Don't hand-write springs.
+- **Surface presets:** use `getSurfaceMotion('route'|'section'|'list'|'item'|'overlay'|'state')` or the Motion* components. Don't hand-write springs; use `motionTokens.spring`.
+- **Personality: expressive.** Springs follow Material 3 Expressive physics:
+  - reveals settle with a little life (ζ ≈ 0.8);
+  - sliding indicators use `spring.layout` (ζ ≈ 0.9);
+  - `spring.pop` (ζ ≈ 0.6) is reserved for presses, badges and celebrations. Never put bounce on per-row list reveals, which must stay cheap while scrolling.
+- **Reveals happen in view.** `MotionSection`/`MotionItem`/`MotionList`/`MotionPage` animate once, when scrolled into view (`whileInView`, default viewport), so below-the-fold content doesn't finish animating off-screen. `layout` animation is opt-in.
 - **Animate only `transform` and `opacity`**, never layout properties.
 - **Hover:** a lift of at most 1px, gated with the `hoverable:` variant so touch devices don't stick. Press feedback is a scale of 0.98 (`.pressable`).
 - **Active indicators** (tabs, sidebar, bottom nav) use a shared-layout `layoutId`. Scope each instance's id with `useId`.
 - **Reduced motion is mandatory.**
   - Three layers already handle it: the OS media query, the in-app `a11y-reduce-motion` class, and `MotionConfig` in the accessibility context.
+  - Code that branches on the preference reads it with `useReducedMotionConfig()`, which honours the in-app toggle. Plain `useReducedMotion()` only sees the OS setting.
   - Under reduced motion, keep every **state** visible (active fills, selected rings). Drop only the movement.
 - **Never animate** exam timers, audio/recording controls or anything on the critical path of a live attempt.
-- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content`. It is skipped on first paint, in the learner shell (learner pages animate themselves), with `distractionFree`, and on exam/live routes (`isExamOrLiveRoute`). Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
+  - `LearnerShellLayout` enforces this: on exam/live routes (`isExamOrLiveRoute`) it wraps the page in `MotionConfig reducedMotion="always"` and `data-motion="still"`, which the reduce-motion CSS also honours.
+- **Route changes:** enter-only `.page-enter` (an opacity fade) on `#main-content` in every shell, learner included. It is skipped on first paint (protects LCP), with `distractionFree`, and on exam/live routes. It stays opacity-only: a transform would make `<main>` the containing block for fixed children. Never put an exit animation (`AnimatePresence`) around routes: it keeps the old `<main>` mounted against the new route and renders the page twice.
 
 ## 6. Components
 | Component | Styling | Behaviour |

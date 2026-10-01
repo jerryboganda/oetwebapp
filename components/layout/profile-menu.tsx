@@ -7,7 +7,7 @@ import { trackHelpCenterOpened } from '@/lib/onboarding/tour-events';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { HelpCenterDrawer } from '@/components/onboarding/help-center-drawer';
 import { ChevronDown, HelpCircle, LogOut, Settings } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -47,7 +47,7 @@ export function ProfileMenu({
   }
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const menuMotion = getSurfaceMotion('overlay', reducedMotion);
 
   useEffect(() => {

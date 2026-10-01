@@ -18,7 +18,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
 import { LearnerStreakBadges } from './learner-streak-badges';
 import { ProfileMenu } from './profile-menu';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -118,7 +118,7 @@ export function TopNav({
     setMobileMenuOpen(false);
   }
   const router = useRouter();
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const displayName = userSummary?.displayName?.trim() || 'User';
   const initials = displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
   const authContext = useContext(AuthContext);

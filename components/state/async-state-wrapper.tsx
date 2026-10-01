@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import { PageSkeleton } from '../ui/skeleton';
@@ -43,7 +43,7 @@ export function AsyncStateWrapper({
   initial = true,
   className,
 }: AsyncStateWrapperProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('state', reducedMotion);
 
   const content = (() => {
@@ -124,7 +124,7 @@ export function LoadingPage() {
 
 /* Partial Data Warning */
 export function PartialDataWarning({ message, className }: { message?: string; className?: string }) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('state', reducedMotion);
 
   return (

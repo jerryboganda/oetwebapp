@@ -17,6 +17,7 @@ vi.mock('motion/react', () => ({
   motion: new Proxy({}, { get: () => (props: { children?: React.ReactNode }) => <div>{props.children}</div> }),
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useReducedMotion: () => false,
+  useReducedMotionConfig: () => false,
 }));
 
 vi.mock('@/lib/api', () => ({

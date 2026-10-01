@@ -3,7 +3,7 @@
 import { getMotionPresenceMode, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { cn } from '@/lib/utils';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotionConfig } from 'motion/react';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -287,7 +287,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md', 
   const portalTarget = useBodyPortalTarget();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const panelMotion = getSurfaceMotion('overlay', reducedMotion);
   const backdropMotion = getOverlayBackdropMotion(reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
@@ -360,7 +360,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
   const portalTarget = useBodyPortalTarget();
   const drawerTitleId = useId();
   const drawerRef = useRef<HTMLDivElement>(null);
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const backdropMotion = getOverlayBackdropMotion(reducedMotion);
   const presenceMode = getMotionPresenceMode(reducedMotion);
   const drawerMotion = useMemo(

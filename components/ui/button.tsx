@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Loader2 } from 'lucide-react';
-import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
+import { motion, useReducedMotionConfig, AnimatePresence } from 'motion/react';
 import { getMicroHover, getMicroTap, motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic, type HapticImpactStyle } from '@/lib/mobile/haptics';
 
@@ -82,7 +82,7 @@ export function buttonClassName({ variant = 'primary', size = 'md', fullWidth, c
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, fullWidth, disabled, asChild, children, onClick, ...props }, ref) => {
-    const reducedMotion = prefersReducedMotion(useReducedMotion());
+    const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
     const isDisabled = disabled || loading;
     const classes = buttonClassName({ variant, size, fullWidth, className });
 

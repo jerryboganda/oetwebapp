@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { useRef } from 'react';
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion, useReducedMotionConfig } from 'motion/react';
 import type { Transition } from 'motion/react';
 import { motionTokens } from '@/lib/motion';
 
@@ -35,7 +35,7 @@ export function WritingEditor({
   showFontSizeControls = true,
 }: WritingEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
   const statusTransition: Transition = prefersReducedMotion
     ? { duration: 0.01 }
     : motionTokens.spring.item;

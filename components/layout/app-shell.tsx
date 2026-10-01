@@ -168,13 +168,18 @@ export function AppShell({
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
-          {/* No .page-enter for learners: their pages already animate in via MotionItem/MotionSection. */}
+          {/* Same enter-only contract as the staff shell: client navigations only
+              (a hard load never animates, protecting LCP), never on exam/live routes. */}
           <motion.main
             id="main-content"
             tabIndex={-1}
             key={pathname}
             layout="position"
-            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
+            className={cn(
+              'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6',
+              navigated && !isExamOrLiveRoute(pathname) && 'page-enter',
+              className,
+            )}
           >
             <ScrollReset />
             <EmailVerificationBanner />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import {
   ArrowRight,
   BookOpen,
@@ -95,7 +95,7 @@ export function LearnerDashboardDetails({
   scoringPolicy,
 }: LearnerDashboardDetailsProps) {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = useReducedMotionConfig();
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const [catalogAddOns, setCatalogAddOns] = useState<PublicCatalogAddOnRow[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);

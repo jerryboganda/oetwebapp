@@ -13,12 +13,12 @@ import { getCelebrateMotion, getMicroHover, getMicroTap, getProgressFillTransiti
 import {
     AlertCircle, ChevronLeft, ChevronRight, Loader2, MessageSquare, Mic, Play, RotateCcw, Volume2, Zap
 } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 function BetterPhrasingContent() {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const microHover = getMicroHover(reducedMotion);
   const microTap = getMicroTap(reducedMotion);
   const progressTransition = getProgressFillTransition(reducedMotion);

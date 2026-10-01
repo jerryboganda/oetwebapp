@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotionConfig } from 'motion/react';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppShell } from '@/components/layout/app-shell';
@@ -381,7 +381,7 @@ function PlayerContent() {
     initialAnnotationsJson: null,
     disabled: !annotationsSupported,
   });
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
 
