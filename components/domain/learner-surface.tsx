@@ -67,6 +67,9 @@ function renderIcon(icon: ElementType | ReactNode | undefined, className?: strin
   return <Icon className={className} />;
 }
 
+// The arrow nudges toward where the action goes (hover devices only; mirrored for RTL).
+const actionArrowClassName = 'h-4 w-4 transition-transform duration-200 ease-standard group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none';
+
 function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | LearnerSurfaceCardModel['secondaryAction'], fullWidth = false) {
   if (!action) return null;
 
@@ -74,19 +77,19 @@ function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | Learner
 
   if (action.href) {
     return (
-      <Button asChild fullWidth={fullWidth} variant={variant}>
+      <Button asChild fullWidth={fullWidth} variant={variant} className="group">
         <Link href={action.href}>
           {action.label}
-          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          <ArrowRight className={actionArrowClassName} aria-hidden="true" />
         </Link>
       </Button>
     );
   }
 
   return (
-    <Button fullWidth={fullWidth} variant={variant} onClick={action.onClick}>
+    <Button fullWidth={fullWidth} variant={variant} onClick={action.onClick} className="group">
       {action.label}
-      <ArrowRight className="w-4 h-4" aria-hidden="true" />
+      <ArrowRight className={actionArrowClassName} aria-hidden="true" />
     </Button>
   );
 }
@@ -243,7 +246,7 @@ export function LearnerSurfaceCard({
             <div>
               {card.eyebrow ? (
                 <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 eyebrow sm:text-xs', palette.eyebrow)}>
-                  {EyebrowIcon ? <EyebrowIcon className="w-3.5 h-3.5" /> : null}
+                  {EyebrowIcon ? <EyebrowIcon className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                   {card.eyebrow}
                 </div>
               ) : null}
