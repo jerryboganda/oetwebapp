@@ -7,13 +7,15 @@ import { BookOpen, FilePenLine, FileQuestion, Headphones, Repeat2, Mic } from 'l
 import { cn } from '@/lib/utils';
 import { useEnabledModules } from '@/hooks/use-enabled-modules';
 
+// `tone` tints the idle icon with the sub-test's identity colour (DESIGN.md §2);
+// the active module always takes the primary nav state.
 const learnerSkillModules = [
-  { href: '/reading', label: 'Reading', shortLabel: 'Reading', icon: BookOpen, description: 'Parts A, B, and C' },
-  { href: '/listening', label: 'Listening', shortLabel: 'Listening', icon: Headphones, description: 'Audio, notes, and review' },
-  { href: '/writing', label: 'Writing', shortLabel: 'Writing', icon: FilePenLine, description: 'Letters and case notes' },
-  { href: '/speaking', label: 'Speaking', shortLabel: 'Speaking', icon: Mic, description: 'Roleplay and fluency' },
-  { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice', moduleKey: 'Mocks' },
-  { href: '/recalls', label: 'Recalls', shortLabel: 'Recalls', icon: Repeat2, description: 'Vocabulary and review', moduleKey: 'Recalls' },
+  { href: '/reading', label: 'Reading', shortLabel: 'Reading', icon: BookOpen, description: 'Parts A, B, and C', tone: 'bg-skill-reading/10 text-skill-reading' },
+  { href: '/listening', label: 'Listening', shortLabel: 'Listening', icon: Headphones, description: 'Audio, notes, and review', tone: 'bg-skill-listening/10 text-skill-listening' },
+  { href: '/writing', label: 'Writing', shortLabel: 'Writing', icon: FilePenLine, description: 'Letters and case notes', tone: 'bg-skill-writing/10 text-skill-writing' },
+  { href: '/speaking', label: 'Speaking', shortLabel: 'Speaking', icon: Mic, description: 'Roleplay and fluency', tone: 'bg-skill-speaking/10 text-skill-speaking' },
+  { href: '/mocks', label: 'Mocks', shortLabel: 'Mocks', icon: FileQuestion, description: 'Timed transfer practice', moduleKey: 'Mocks', tone: 'bg-surface text-muted ring-1 ring-border/70' },
+  { href: '/recalls', label: 'Recalls', shortLabel: 'Recalls', icon: Repeat2, description: 'Vocabulary and review', moduleKey: 'Recalls', tone: 'bg-surface text-muted ring-1 ring-border/70' },
 ] as const;
 
 function isActive(pathname: string | null, href: string) {
@@ -58,13 +60,13 @@ export function LearnerSkillSwitcher({
               prefetch={false}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'pressable group flex min-h-11 items-center gap-2 rounded-2xl border px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                'pressable group flex min-h-11 items-center gap-2 rounded-2xl border px-3 py-2 text-start transition-[background-color,border-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 active
                   ? 'border-primary/30 bg-primary/10 text-primary-dark shadow-sm'
                   : 'border-border/70 bg-background-light text-navy hover:border-primary/50 hover-primary',
               )}
             >
-              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors', active ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted ring-1 ring-border/70 group-hover:bg-primary/10 group-hover:text-primary group-hover:ring-primary/20')}>
+              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors', active ? 'bg-primary text-white dark:bg-violet-700' : module.tone)}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0">
