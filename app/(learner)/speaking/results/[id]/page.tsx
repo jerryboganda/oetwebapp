@@ -187,7 +187,7 @@ export default function SpeakingResultSummary() {
         <div className="flex flex-wrap gap-2">
           {failedResult.retryable && failedResult.attemptId ? (
             <Button onClick={() => void retryGrading(failedResult.attemptId as string)} disabled={retrying}>
-              {retrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+              {retrying ? <Loader2 className="me-2 h-4 w-4 animate-spin" aria-hidden /> : null}
               Try grading again
             </Button>
           ) : null}
