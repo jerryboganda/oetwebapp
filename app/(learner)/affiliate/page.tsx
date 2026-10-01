@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { TrendingUp, Users, DollarSign } from 'lucide-react';
-import { LearnerPageHero } from '@/components/domain';
+import { TrendingUp, Users, DollarSign, Link2 } from 'lucide-react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { apiClient, isApiError } from '@/lib/api';
 
 interface AffiliateStats {
@@ -63,59 +66,64 @@ export default function AffiliatePortalPage() {
         eyebrow="Partner"
         title="Affiliate dashboard"
         description="Track clicks, conversions, and commission for your referral code."
+        highlights={stats ? [{ icon: Link2, label: 'Referral code', value: stats.affiliateCode }] : undefined}
       />
 
       {error && <InlineAlert variant="info">{error}</InlineAlert>}
 
       {stats === null && !error ? (
-        <Skeleton className="h-48 w-full" />
-      ) : stats ? (
-        <div className="space-y-6">
+        <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <AffiliateStat icon={<Users className="h-5 w-5" aria-hidden="true" />} label="Clicks" value={stats.totalClicks.toString()} />
-            <AffiliateStat icon={<Users className="h-5 w-5" aria-hidden="true" />} label="Signups" value={stats.totalSignups.toString()} />
-            <AffiliateStat icon={<DollarSign className="h-5 w-5" aria-hidden="true" />} label="Paid earnings" value={`${stats.paidPayoutAmount.toFixed(2)} ${stats.payoutCurrency}`} />
+            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-48 w-full rounded-2xl" />
+        </>
+      ) : stats ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <MotionItem delayIndex={0}>
+              <AffiliateStat icon={<Users className="h-5 w-5" aria-hidden="true" />} label="Clicks" value={<CountUp value={stats.totalClicks} />} />
+            </MotionItem>
+            <MotionItem delayIndex={1}>
+              <AffiliateStat icon={<Users className="h-5 w-5" aria-hidden="true" />} label="Signups" value={<CountUp value={stats.totalSignups} />} />
+            </MotionItem>
+            <MotionItem delayIndex={2}>
+              <AffiliateStat icon={<DollarSign className="h-5 w-5" aria-hidden="true" />} label="Paid earnings" value={`${stats.paidPayoutAmount.toFixed(2)} ${stats.payoutCurrency}`} />
+            </MotionItem>
           </div>
 
-          <Card padding="lg">
-            <h2 className="mb-3 text-lg font-semibold text-navy">Your referral link</h2>
-            <code className="block break-all rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy">
-              https://oet.example.com/?ref={stats.affiliateCode}
-            </code>
-          </Card>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-navy">Recent commissions</h2>
+          <MotionSection delayIndex={1} className="space-y-4">
+            <LearnerSurfaceSectionHeader title="Recent commissions" />
             {stats.commissions.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border bg-background-light px-4 py-6 text-center text-sm text-muted">No commissions yet.</p>
+              <EmptyState icon={<DollarSign className="h-8 w-8" />} title="No commissions yet." />
             ) : (
-              <div className="space-y-2">
+              <Card padding="none" className="divide-y divide-border overflow-hidden">
                 {stats.commissions.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3 text-sm">
+                  <div key={c.id} className="flex items-center justify-between gap-3 p-4 text-sm sm:px-5">
                     <div className="min-w-0">
-                      <p className="font-medium text-navy">{c.amountAmount.toFixed(2)} {c.currency}</p>
-                      <p className="text-xs text-muted">{new Date(c.accruedAt).toLocaleDateString()} · payment {c.paymentTransactionId.slice(0, 12)}…</p>
+                      <p className="font-semibold tabular-nums text-navy">{c.amountAmount.toFixed(2)} {c.currency}</p>
+                      <p className="text-xs tabular-nums text-muted">{new Date(c.accruedAt).toLocaleDateString()} · payment {c.paymentTransactionId.slice(0, 12)}…</p>
                     </div>
-                    <Badge variant={c.status === 'paid' ? 'success' : c.status === 'reversed' ? 'danger' : 'default'}>{c.status}</Badge>
+                    <Badge variant={c.status === 'paid' ? 'success' : c.status === 'reversed' ? 'danger' : 'default'} className="shrink-0">{c.status}</Badge>
                   </div>
                 ))}
-              </div>
+              </Card>
             )}
-          </section>
-        </div>
+          </MotionSection>
+        </>
       ) : null}
     </>
   );
 }
 
-function AffiliateStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function AffiliateStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
-    <Card padding="lg">
+    <Card padding="lg" className="h-full">
       <div className="flex items-center gap-2 text-muted">
         {icon}
-        <span className="text-sm">{label}</span>
+        <span className="tile-label">{label}</span>
       </div>
-      <p className="mt-1 text-2xl font-semibold text-navy">{value}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-navy">{value}</p>
     </Card>
   );
 }

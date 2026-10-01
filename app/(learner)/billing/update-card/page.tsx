@@ -7,6 +7,7 @@ import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiClient } from '@/lib/api';
 
@@ -54,26 +55,28 @@ export default function UpdateCardPage() {
         description="Use this one-time link to update the card on file for your subscription."
       />
 
-      <Card padding="lg" className="space-y-4">
-        {state === 'loading' && <Skeleton className="h-24 w-full" />}
+      <MotionSection>
+        <Card padding="lg" className="space-y-4">
+          {state === 'loading' && <Skeleton className="h-24 w-full rounded-xl" />}
 
-        {state === 'invalid' && (
-          <InlineAlert variant="error">
-            This link is invalid, expired, or has already been used. Please sign in and request a new card-update link from your billing page.
-          </InlineAlert>
-        )}
+          {state === 'invalid' && (
+            <InlineAlert variant="error">
+              This link is invalid, expired, or has already been used. Please sign in and request a new card-update link from your billing page.
+            </InlineAlert>
+          )}
 
-        {state === 'success' && details && (
-          <>
-            <p className="text-sm text-navy">
-              Verified for subscription <code>{details.subscriptionId.slice(0, 12)}…</code>. Click below to open the secure card-update form for your gateway.
-            </p>
-            <div className="flex justify-end">
-              <Button onClick={() => router.push('/billing?intent=update-card')}>Open card-update form</Button>
-            </div>
-          </>
-        )}
-      </Card>
+          {state === 'success' && details && (
+            <>
+              <p className="text-sm text-navy">
+                Verified for subscription <code>{details.subscriptionId.slice(0, 12)}…</code>. Click below to open the secure card-update form for your gateway.
+              </p>
+              <div className="flex justify-end">
+                <Button onClick={() => router.push('/billing?intent=update-card')}>Open card-update form</Button>
+              </div>
+            </>
+          )}
+        </Card>
+      </MotionSection>
     </>
   );
 }

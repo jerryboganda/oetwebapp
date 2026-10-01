@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { XCircle, Tag } from 'lucide-react';
+import { XCircle } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
@@ -91,52 +92,47 @@ export default function CancelSubscriptionPage() {
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <Card padding="lg" className="space-y-4">
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+      <MotionSection>
+        <Card padding="lg" className="space-y-4">
+          {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {step === 'reason' && (
-          <div className="space-y-3">
-            <Select label="Why are you cancelling?" value={reason} options={REASONS} onChange={(e) => setReason(e.target.value)} />
-            <Textarea id="cancel-detail" label="Anything else? (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Anything else? (optional)" />
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" onClick={() => router.push('/billing')}>Never mind</Button>
-              <Button onClick={submitReason} loading={working}>Continue</Button>
+          {step === 'reason' && (
+            <div className="space-y-3">
+              <Select label="Why are you cancelling?" value={reason} options={REASONS} onChange={(e) => setReason(e.target.value)} />
+              <Textarea id="cancel-detail" label="Anything else? (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Anything else? (optional)" />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="ghost" onClick={() => router.push('/billing')}>Never mind</Button>
+                <Button onClick={submitReason} loading={working}>Continue</Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {step === 'deflection' && intent?.offeredCouponCode && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-success/30 bg-success/10 p-5">
-              <Tag className="mb-2 h-5 w-5 text-success-strong" aria-hidden="true" />
-              <p className="text-lg font-semibold text-success-strong">Wait, here’s a discount</p>
-              <p className="mt-1 text-sm text-navy">
+          {step === 'deflection' && intent?.offeredCouponCode && (
+            <div className="space-y-4">
+              <InlineAlert variant="success" live="polite" title="Wait, here’s a discount">
                 Stay with us and we’ll apply the coupon code <strong>{intent.offeredCouponCode}</strong> to your next renewal.
-              </p>
+              </InlineAlert>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="ghost" onClick={() => setStep('confirm')}>Cancel anyway</Button>
+                <Button onClick={acceptOffer} loading={working}>Apply discount &amp; stay</Button>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" onClick={() => setStep('confirm')}>Cancel anyway</Button>
-              <Button onClick={acceptOffer} loading={working}>Apply discount &amp; stay</Button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {step === 'confirm' && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-danger/30 bg-danger/10 p-5">
-              <p className="text-lg font-semibold text-danger-strong">Confirm cancellation</p>
-              <p className="mt-1 text-sm text-navy">
+          {step === 'confirm' && (
+            <div className="space-y-4">
+              <InlineAlert variant="error" live="polite" title="Confirm cancellation">
                 Your subscription will be cancelled. You keep access until the end of your current billing period.
                 After that, premium features lock; your account remains.
-              </p>
+              </InlineAlert>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="ghost" onClick={() => router.push('/billing')}>Take me back</Button>
+                <Button variant="destructive" onClick={confirmCancel} loading={working}>Confirm cancel</Button>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" onClick={() => router.push('/billing')}>Take me back</Button>
-              <Button variant="destructive" onClick={confirmCancel} loading={working}>Confirm cancel</Button>
-            </div>
-          </div>
-        )}
-      </Card>
+          )}
+        </Card>
+      </MotionSection>
     </>
   );
 }

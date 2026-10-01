@@ -7,8 +7,12 @@ import { CalendarDays, Clock, PlayCircle, Users, Video } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonClassName } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ClassesTabs } from '../classes-tabs';
 import {
   cancelLiveClassEnrollment,
   fetchMyUpcomingLiveClasses,
@@ -76,75 +80,60 @@ export default function MyUpcomingClassesPage() {
     }
   }
 
+  // The list itself failed to load; an empty list here would read as "no classes".
+  const loadFailed = Boolean(error) && !loading && classes.length === 0;
+
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          title="My Upcoming Classes"
-          description="Live sessions you have reserved. Class links open 30 minutes before start time."
-          icon={Video}
-        />
+      <LearnerPageHero
+        title="My Upcoming Classes"
+        description="Live sessions you have reserved. Class links open 30 minutes before start time."
+        icon={Video}
+      />
 
-        {error ? (
-          <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <span className="flex shrink-0 gap-2">
+      {error && !loadFailed ? (
+        <InlineAlert
+          variant="warning"
+          action={(
+            <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
                 Retry
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
                 Dismiss
               </Button>
-            </span>
-          </InlineAlert>
-        ) : null}
+            </div>
+          )}
+        >
+          {error}
+        </InlineAlert>
+      ) : null}
 
-        <div className="flex gap-3 border-b border-border pb-1 text-sm">
-          <Link
-            href="/me/classes/upcoming"
-            aria-current="page"
-            className="border-b-2 border-primary pb-2 font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Upcoming
-          </Link>
-          <Link
-            href="/me/classes/past"
-            className="border-b-2 border-transparent pb-2 text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Past
-          </Link>
+      <ClassesTabs active="upcoming" />
+
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-36 rounded-2xl" />
+          <Skeleton className="h-36 rounded-2xl" />
+          <Skeleton className="h-36 rounded-2xl" />
         </div>
-
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-36 rounded-xl" />
-            <Skeleton className="h-36 rounded-xl" />
-            <Skeleton className="h-36 rounded-xl" />
-          </div>
-        ) : classes.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" aria-hidden="true" />
-            <p className="text-sm font-medium text-navy">No upcoming classes</p>
-            <p className="mt-1 text-sm text-muted">
-              Browse the class catalog to enroll.
-            </p>
-            <Link
-              href="/classes"
-              className={buttonClassName({ variant: 'primary', size: 'sm' }) + ' mt-4 inline-flex'}
-            >
-              Browse catalog
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {classes.map((item) => {
-              const session = nextSession(item);
-              if (!session) return null;
-              return (
-                <article
-                  key={`${item.id}-${session.id}`}
-                  className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
-                >
+      ) : loadFailed ? (
+        <ErrorState message={error ?? undefined} onRetry={() => void load()} retryLabel="Retry" />
+      ) : classes.length === 0 ? (
+        <EmptyState
+          icon={<Video className="h-8 w-8" />}
+          title="No upcoming classes"
+          description="Browse the class catalog to enroll."
+          action={{ label: 'Browse catalog', href: '/classes' }}
+        />
+      ) : (
+        <div className="space-y-4">
+          {classes.map((item, index) => {
+            const session = nextSession(item);
+            if (!session) return null;
+            return (
+              <MotionItem key={`${item.id}-${session.id}`} delayIndex={Math.min(index, 5)}>
+                <article className={cardClassName({})}>
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -155,7 +144,7 @@ export default function MyUpcomingClassesPage() {
                         ) : null}
                       </div>
                       <h2 className="text-lg font-semibold text-navy">{item.title}</h2>
-                      <div className="flex flex-wrap gap-4 text-sm text-muted">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm tabular-nums text-muted">
                         <span className="flex items-center gap-1.5">
                           <CalendarDays className="h-4 w-4" aria-hidden="true" />
                           {formatDate(session.scheduledStartAt)}
@@ -172,23 +161,12 @@ export default function MyUpcomingClassesPage() {
                     </div>
 
                     <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
-                      {session.isJoinAvailable ? (
-                        <Link
-                          href={`/classes/${item.slug}/sessions/${session.id}/join`}
-                          className={buttonClassName({ variant: 'primary', size: 'sm' })}
-                        >
+                      <Button asChild variant={session.isJoinAvailable ? 'primary' : 'secondary'} size="sm">
+                        <Link href={`/classes/${item.slug}/sessions/${session.id}/join`}>
                           <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                          Join class
+                          {session.isJoinAvailable ? 'Join class' : 'Open join page'}
                         </Link>
-                      ) : (
-                        <Link
-                          href={`/classes/${item.slug}/sessions/${session.id}/join`}
-                          className={buttonClassName({ variant: 'secondary', size: 'sm' })}
-                        >
-                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                          Open join page
-                        </Link>
-                      )}
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -201,11 +179,11 @@ export default function MyUpcomingClassesPage() {
                     </div>
                   </div>
                 </article>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </MotionItem>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

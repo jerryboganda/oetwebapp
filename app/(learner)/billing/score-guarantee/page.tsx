@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Shield, Target, TrendingUp, Upload } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Shield, Upload } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
 import { Input } from '@/components/ui/form-controls';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { getScoreGuaranteeData } from '@/lib/learner-data';
@@ -75,30 +78,6 @@ export default function ScoreGuaranteePage() {
   const mutationsBlocked = freezeLoadFailed || isFrozen;
   const blockedMessage = freezeLoadFailed ? FREEZE_UNVERIFIED_MESSAGE : FREEZE_BLOCKED_MESSAGE;
 
-  const heroHighlights = useMemo(() => {
-    if (!pledge) {
-      return [
-        { icon: Target, label: 'Eligibility', value: 'Backend checked' },
-        { icon: Calendar, label: 'Claims', value: 'Support reviewed' },
-      ];
-    }
-    const badge = STATUS_BADGE[pledge.status];
-    return [
-      { icon: TrendingUp, label: 'Baseline', value: `${pledge.baselineScore}` },
-      {
-        icon: Target,
-        label: 'Target',
-        value: `${pledge.baselineScore + pledge.guaranteedImprovement}`,
-      },
-      {
-        icon: Calendar,
-        label: 'Expires',
-        value: new Date(pledge.expiresAt).toLocaleDateString(),
-      },
-      { icon: Shield, label: 'Status', value: badge?.label ?? pledge.status },
-    ];
-  }, [pledge]);
-
   async function handleActivate() {
     if (mutationsBlocked) {
       setToast({ variant: 'error', message: blockedMessage });
@@ -129,11 +108,8 @@ export default function ScoreGuaranteePage() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <BackToBillingLink />
-          <Skeleton className="h-44 rounded-2xl" />
-          <Skeleton className="h-48 rounded-2xl" />
-        </div>
+        <Skeleton className="h-44 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
       </>
     );
   }
@@ -144,77 +120,60 @@ export default function ScoreGuaranteePage() {
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
 
-      <div className="space-y-6">
-        <BackToBillingLink />
+      <LearnerPageHero
+        eyebrow="Billing"
+        icon={Shield}
+        accent="emerald"
+        title="Score guarantee"
+        description="Score-guarantee eligibility and outcomes are support-reviewed. Claims require official OET result evidence from the eligible pledge window."
+        aside={<BackToBillingLink />}
+      />
 
-        <LearnerPageHero
-          eyebrow="Billing"
+      {isFrozen ? (
+        <InlineAlert variant="warning">
+          Your account is frozen, so activations and claims are paused. Existing pledges remain visible.
+        </InlineAlert>
+      ) : null}
+      {freezeLoadFailed ? (
+        <InlineAlert variant="error">{FREEZE_UNVERIFIED_MESSAGE}</InlineAlert>
+      ) : null}
+      {error ? (
+        <InlineAlert variant="error" title="Couldn't load guarantee">
+          {error}
+        </InlineAlert>
+      ) : null}
+
+      <MotionSection className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Eligibility"
           icon={Shield}
-          accent="emerald"
-          title="Score guarantee"
-          description="Score-guarantee eligibility and outcomes are support-reviewed. Claims require official OET result evidence from the eligible pledge window."
-          highlights={heroHighlights}
+          title="Guarantee terms and review workflow"
+          description="The pledge is intentionally strict so the program can launch without manual exceptions or abuse-prone loopholes."
         />
-
-        {isFrozen ? (
-          <InlineAlert variant="warning">
-            Your account is frozen, so activations and claims are paused. Existing pledges remain visible.
-          </InlineAlert>
-        ) : null}
-        {freezeLoadFailed ? (
-          <InlineAlert variant="error">{FREEZE_UNVERIFIED_MESSAGE}</InlineAlert>
-        ) : null}
-        {error ? (
-          <InlineAlert variant="error" title="Couldn't load guarantee">
-            {error}
-          </InlineAlert>
-        ) : null}
-
-        <section
-          aria-labelledby="sg-terms-heading"
-          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-        >
-          <LearnerSurfaceSectionHeader
-            eyebrow="Eligibility"
-            icon={Shield}
-            title="Guarantee terms and review workflow"
-            description="The pledge is intentionally strict so the program can launch without manual exceptions or abuse-prone loopholes."
-          />
-          <h2 id="sg-terms-heading" className="sr-only">
-            Score guarantee eligibility terms
-          </h2>
-          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-muted">
+        <Card padding="lg">
+          <ul className="list-disc space-y-1 ps-5 text-sm text-muted">
             <li>Available only to learners with an active paid OET subscription when the pledge is activated.</li>
-              <li>The baseline score must be a real recent OET result; claims require official OET result proof from the pledge window.</li>
+            <li>The baseline score must be a real recent OET result; claims require official OET result proof from the pledge window.</li>
             <li>Claims are reviewed by support before wallet credit is issued, and duplicate or manipulated evidence may be rejected.</li>
             <li>Contact support from the public support page if your result evidence needs manual review or deletion handling.</li>
           </ul>
-        </section>
+        </Card>
+      </MotionSection>
 
-        {!pledge && !error ? (
-          <section
-            aria-labelledby="sg-activate-heading"
-            className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-          >
-            <LearnerSurfaceSectionHeader
-              eyebrow="Activate"
-              icon={Shield}
-              title="Request score-guarantee eligibility"
-              description="Enter your current OET score so the backend can record the pledge terms available to your subscription."
-            />
-            <h2 id="sg-activate-heading" className="sr-only">
-              Request score-guarantee eligibility
-            </h2>
-            <div className="mt-5 flex max-w-md flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+      {!pledge && !error ? (
+        <MotionSection delayIndex={1} className="space-y-4">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Activate"
+            icon={Shield}
+            title="Request score-guarantee eligibility"
+            description="Enter your current OET score so the backend can record the pledge terms available to your subscription."
+          />
+          <Card padding="lg">
+            <div className="flex max-w-md flex-col items-stretch gap-3 sm:flex-row sm:items-end">
               <div className="flex-1">
-                <label
-                  htmlFor="sg-baseline-score"
-                  className="mb-1 block text-sm font-medium text-navy"
-                >
-                  Baseline OET score
-                </label>
                 <Input
                   id="sg-baseline-score"
+                  label="Baseline OET score"
                   type="number"
                   min={0}
                   max={500}
@@ -239,109 +198,93 @@ export default function ScoreGuaranteePage() {
             <p className="mt-3 text-xs text-muted">
               Requires an active subscription. Exact pledge terms are confirmed by the backend after activation.
             </p>
-          </section>
-        ) : null}
+          </Card>
+        </MotionSection>
+      ) : null}
 
-        {pledge ? (
-          <>
-            <section
-              aria-labelledby="sg-summary-heading"
-              className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-            >
-              <LearnerSurfaceSectionHeader
-                eyebrow="Pledge"
-                icon={Shield}
-                title="Your score guarantee"
-                action={
-                  <Badge variant={STATUS_BADGE[pledge.status]?.variant ?? 'default'}>
-                    {STATUS_BADGE[pledge.status]?.label ?? pledge.status}
-                  </Badge>
-                }
-              />
-              <h2 id="sg-summary-heading" className="sr-only">
-                Your score guarantee summary
-              </h2>
-              <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="eyebrow text-muted">
-                    Baseline
-                  </dt>
-                  <dd className="mt-1 text-2xl font-black text-navy">{pledge.baselineScore}</dd>
-                </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="eyebrow text-muted">
-                    Target
-                  </dt>
-                  <dd className="mt-1 text-2xl font-black text-success-strong">
-                    {pledge.baselineScore + pledge.guaranteedImprovement}
-                  </dd>
-                </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="eyebrow text-muted">
-                    Improvement
-                  </dt>
-                  <dd className="mt-1 text-2xl font-black text-primary">
-                    +{pledge.guaranteedImprovement}
-                  </dd>
-                </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <dt className="eyebrow text-muted">
-                    Expires
-                  </dt>
-                  <dd className="mt-1 text-sm font-bold text-navy">
-                    {new Date(pledge.expiresAt).toLocaleDateString()}
-                  </dd>
-                </div>
-              </dl>
-            </section>
+      {pledge ? (
+        <MotionSection delayIndex={1} className="space-y-4">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Pledge"
+            icon={Shield}
+            title="Your score guarantee"
+            action={
+              <Badge variant={STATUS_BADGE[pledge.status]?.variant ?? 'default'} className="self-start sm:self-auto">
+                {STATUS_BADGE[pledge.status]?.label ?? pledge.status}
+              </Badge>
+            }
+          />
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-3">
+            <Card>
+              <dt className="tile-label text-muted">Baseline</dt>
+              <dd className="mt-1 text-2xl font-bold text-navy">
+                <CountUp value={pledge.baselineScore} />
+              </dd>
+            </Card>
+            <Card>
+              <dt className="tile-label text-muted">Target</dt>
+              <dd className="mt-1 text-2xl font-bold text-success-strong">
+                <CountUp value={pledge.baselineScore + pledge.guaranteedImprovement} />
+              </dd>
+            </Card>
+            <Card>
+              <dt className="tile-label text-muted">Improvement</dt>
+              <dd className="mt-1 text-2xl font-bold tabular-nums text-primary">
+                +<CountUp value={pledge.guaranteedImprovement} />
+              </dd>
+            </Card>
+            <Card>
+              <dt className="tile-label text-muted">Expires</dt>
+              <dd className="mt-1 text-sm font-bold tabular-nums text-navy">
+                {new Date(pledge.expiresAt).toLocaleDateString()}
+              </dd>
+            </Card>
+          </dl>
+        </MotionSection>
+      ) : null}
 
-            {pledge.status === 'active' ? (
-              <section
-                aria-labelledby="sg-claim-heading"
-                className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-              >
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Submit a claim"
-                  icon={Upload}
-                  title="Claim submission requires official result proof"
-                  description="Direct claim submission is disabled until an evidence-upload workflow is available. Contact support with your official OET result from the pledge window."
-                />
-                <h2 id="sg-claim-heading" className="sr-only">
-                  Submit a score guarantee claim
-                </h2>
-                <div className="mt-5 max-w-2xl space-y-3">
-                  <InlineAlert variant="info">
-                    Email support with your pledge ID, official OET result, and the result date. Claims are not approved without verifiable evidence.
-                  </InlineAlert>
-                  <Button variant="outline" disabled>
-                    Direct claim submission unavailable
-                  </Button>
-                </div>
-              </section>
-            ) : null}
+      {pledge?.status === 'active' ? (
+        <MotionSection delayIndex={2} className="space-y-4">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Submit a claim"
+            icon={Upload}
+            title="Claim submission requires official result proof"
+            description="Direct claim submission is disabled until an evidence-upload workflow is available. Contact support with your official OET result from the pledge window."
+          />
+          <InlineAlert
+            variant="info"
+            live="polite"
+            className="max-w-2xl"
+            action={(
+              <Button variant="outline" size="sm" disabled>
+                Direct claim submission unavailable
+              </Button>
+            )}
+          >
+            Email support with your pledge ID, official OET result, and the result date. Claims are not approved without verifiable evidence.
+          </InlineAlert>
+        </MotionSection>
+      ) : null}
 
-            {pledge.status === 'claim_submitted' ? (
-              <InlineAlert variant="info" title="Claim under review">
-                Your claim is being reviewed by our team. You&apos;ll be notified once a decision is made.
-              </InlineAlert>
-            ) : null}
+      {pledge?.status === 'claim_submitted' ? (
+        <InlineAlert variant="info" title="Claim under review">
+          Your claim is being reviewed by our team. You&apos;ll be notified once a decision is made.
+        </InlineAlert>
+      ) : null}
 
-            {pledge.status === 'claim_approved' ? (
-              <InlineAlert variant="success" title="Claim approved">
-                Your score guarantee claim has been approved. A credit has been applied to your wallet.
-                {pledge.reviewNote ? <p className="mt-1 text-sm">{pledge.reviewNote}</p> : null}
-              </InlineAlert>
-            ) : null}
+      {pledge?.status === 'claim_approved' ? (
+        <InlineAlert variant="success" title="Claim approved">
+          Your score guarantee claim has been approved. A credit has been applied to your wallet.
+          {pledge.reviewNote ? <p className="mt-1 text-sm">{pledge.reviewNote}</p> : null}
+        </InlineAlert>
+      ) : null}
 
-            {pledge.status === 'claim_rejected' ? (
-              <InlineAlert variant="error" title="Claim rejected">
-                Your claim was not approved.
-                {pledge.reviewNote ? <p className="mt-1 text-sm">{pledge.reviewNote}</p> : null}
-              </InlineAlert>
-            ) : null}
-          </>
-        ) : null}
-      </div>
+      {pledge?.status === 'claim_rejected' ? (
+        <InlineAlert variant="error" title="Claim rejected">
+          Your claim was not approved.
+          {pledge.reviewNote ? <p className="mt-1 text-sm">{pledge.reviewNote}</p> : null}
+        </InlineAlert>
+      ) : null}
     </>
   );
 }

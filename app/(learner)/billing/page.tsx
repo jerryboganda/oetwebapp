@@ -13,8 +13,12 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -57,13 +61,23 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
   }
 }
 
-/** Green status pill shared by the subscription header and invoice rows. */
+/** Badge tone for a subscription or invoice status label, so a failure never reads as green. */
+function statusTone(label: string) {
+  const key = label.toLowerCase();
+  if (key === 'active' || key === 'trial' || key === 'paid') return 'success' as const;
+  if (['past due', 'failed', 'cancelled', 'expired', 'suspended'].includes(key)) return 'danger' as const;
+  if (key === 'frozen' || key.startsWith('freeze')) return 'info' as const;
+  if (key === 'paused' || key.startsWith('pending')) return 'warning' as const;
+  return 'muted' as const;
+}
+
+/** Status pill shared by the subscription header and invoice rows; the label carries the meaning, the tone backs it up. */
 function StatusPill({ label }: { label: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success-strong ring-1 ring-success/20">
-      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+    <Badge variant={statusTone(label)} className="shrink-0 gap-1.5 px-2.5 py-1">
+      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
       {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -90,8 +104,8 @@ function PlanDescription({ text }: { text: string }) {
 type BillingTabId = 'overview' | 'invoices';
 
 const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNode }> = [
-  { id: 'overview', label: 'Overview', icon: <CreditCard className="h-4 w-4" /> },
-  { id: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> },
+  { id: 'overview', label: 'Overview', icon: <CreditCard className="h-4 w-4" aria-hidden="true" /> },
+  { id: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" aria-hidden="true" /> },
 ];
 
 const TAB_COPY_KEYS: Record<BillingTabId, string> = {
@@ -220,22 +234,33 @@ export default function BillingPage() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-44 rounded-2xl" />
-          <Skeleton className="h-12 rounded-2xl" />
+        <Skeleton className="h-44 rounded-2xl" />
+        <Skeleton className="h-12 rounded-2xl" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Skeleton className="h-64 rounded-2xl" />
           <Skeleton className="h-64 rounded-2xl" />
         </div>
       </>
     );
   }
 
+  const heroProps = {
+    eyebrow: copy('billing.hero.eyebrow'),
+    icon: CreditCard,
+    accent: 'navy' as const,
+    title: copy('billing.hero.title'),
+    description: copy('billing.hero.description'),
+  };
+
   if (!data) {
     return (
       <>
-        <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
-        <Button className="mt-4" onClick={loadBilling}>
-          Try again
-        </Button>
+        <LearnerPageHero {...heroProps} />
+        <ErrorState
+          message={error ?? 'Subscription data could not be loaded.'}
+          onRetry={loadBilling}
+          retryLabel="Try again"
+        />
       </>
     );
   }
@@ -249,68 +274,66 @@ export default function BillingPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow={copy('billing.hero.eyebrow')}
-          icon={CreditCard}
-          accent="navy"
-          title={copy('billing.hero.title')}
-          description={copy('billing.hero.description')}
-          highlights={[
-            { icon: CheckCircle2, label: 'Status', value: formatSubscriptionStatus(data.status) },
-            { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
-          ]}
-        />
+      <LearnerPageHero
+        {...heroProps}
+        highlights={[
+          { icon: CheckCircle2, label: 'Status', value: formatSubscriptionStatus(data.status) },
+          { icon: Calendar, label: 'Subscription ends', value: formatOptionalDate(data.nextRenewal) },
+        ]}
+      />
 
-        {/* Offline payers (bank transfer / wallet) upload their receipt for admin approval. */}
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      {/* Status banners — only render when relevant */}
+      {(paymentBanner || isPastDue || freezeLoadFailed || error || success) && (
+        <div className="space-y-2" role="status" aria-live="polite">
+          {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
+          {isPastDue ? (
+            <InlineAlert variant="error">
+              Your last payment failed. Please{' '}
+              <a href="/billing/update-card" className="underline font-medium">update your payment method</a>
+              {' '}to restore full access.
+            </InlineAlert>
+          ) : null}
+          {freezeLoadFailed ? (
+            <InlineAlert variant="error">
+              Freeze status could not be verified. Refresh the page to see the latest state of your subscription.
+            </InlineAlert>
+          ) : null}
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+        </div>
+      )}
+
+      {/* Offline payers (bank transfer / wallet) upload their receipt for admin approval. */}
+      <MotionSection>
+        <Card padding="sm" className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-muted">
             <span className="font-medium text-navy">Paid by bank transfer or wallet?</span>{' '}
             Upload your payment proof — access is granted after admin approval (within 12 hours).
           </p>
-          <Button asChild size="sm" className="shrink-0 font-semibold">
+          <Button asChild size="sm" className="shrink-0">
             <Link href="/billing/manual-payment">Upload payment proof</Link>
           </Button>
-        </div>
+        </Card>
+      </MotionSection>
 
-        {/* Status banners — only render when relevant */}
-        {(paymentBanner || isPastDue || freezeLoadFailed || error || success) && (
-          <div className="space-y-2" role="status" aria-live="polite">
-            {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
-            {isPastDue ? (
-              <InlineAlert variant="error">
-                Your last payment failed. Please{' '}
-                <a href="/billing/update-card" className="underline font-medium">update your payment method</a>
-                {' '}to restore full access.
-              </InlineAlert>
-            ) : null}
-            {freezeLoadFailed ? (
-              <InlineAlert variant="error">
-                Freeze status could not be verified. Refresh the page to see the latest state of your subscription.
-              </InlineAlert>
-            ) : null}
-            {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-            {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
-          </div>
-        )}
+      {/* Section navigation */}
+      <Tabs
+        tabs={billingTabs}
+        activeTab={activeTab}
+        onChange={(id) => setActiveTab(id as BillingTabId)}
+      />
 
-        {/* Section navigation */}
-        <Tabs
-          tabs={billingTabs}
-          activeTab={activeTab}
-          onChange={(id) => setActiveTab(id as BillingTabId)}
-        />
-
-        {/* ── OVERVIEW ────────────────────────────────────────────── */}
-        <TabPanel id="overview" activeTab={activeTab}>
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-stretch">
-            {/* Current subscription */}
-            <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      {/* ── OVERVIEW ────────────────────────────────────────────── */}
+      <TabPanel id="overview" activeTab={activeTab} className="space-y-6 sm:space-y-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-stretch">
+          {/* Current subscription */}
+          <MotionItem delayIndex={0}>
+            <Card padding="lg" className="flex h-full flex-col">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="eyebrow text-muted">{copy('billing.overview.currentSubscription')}</p>
-                  <h2 className="mt-2 text-xl font-semibold leading-snug tracking-tight text-navy sm:text-2xl">{data.currentPlan}</h2>
-                  <p className="mt-1 text-sm font-semibold text-primary">
+                  <h2 className="mt-2 text-xl font-bold leading-snug tracking-tight text-navy sm:text-2xl">{data.currentPlan}</h2>
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-primary">
                     {data.price} <span className="font-medium text-muted">/ {formatBillingInterval(data.interval)}</span>
                   </p>
                 </div>
@@ -319,17 +342,17 @@ export default function BillingPage() {
               {data.planDescription ? <PlanDescription text={data.planDescription} /> : null}
 
               <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
-                  <dt className="flex items-center gap-1.5 eyebrow text-muted/80">
+                <div className="rounded-xl border border-border bg-background-light p-3.5">
+                  <dt className="flex items-center gap-1.5 tile-label text-muted">
                     <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
                     Ends
                   </dt>
-                  <dd className="mt-1.5 text-sm font-semibold text-navy">
+                  <dd className="mt-1.5 text-sm font-semibold tabular-nums text-navy">
                     {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
-                <div className="rounded-xl border border-border/70 bg-background-light/60 p-3.5">
-                  <dt className="flex items-center gap-1.5 eyebrow text-muted/80">
+                <div className="rounded-xl border border-border bg-background-light p-3.5">
+                  <dt className="flex items-center gap-1.5 tile-label text-muted">
                     <Stethoscope className="h-3.5 w-3.5" aria-hidden="true" />
                     Profession
                   </dt>
@@ -337,8 +360,8 @@ export default function BillingPage() {
                     {professionLabel(DEFAULT_CATALOG_STOREFRONT, data.profession)}
                   </dd>
                 </div>
-                <div className="col-span-2 rounded-xl border border-border/70 bg-background-light/60 p-3.5 sm:col-span-1">
-                  <dt className="flex items-center gap-1.5 eyebrow text-muted/80">
+                <div className="col-span-2 rounded-xl border border-border bg-background-light p-3.5 sm:col-span-1">
+                  <dt className="flex items-center gap-1.5 tile-label text-muted">
                     <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                     {copy('billing.overview.invoiceAccess')}
                   </dt>
@@ -350,20 +373,22 @@ export default function BillingPage() {
 
               <div className="mt-auto flex flex-wrap gap-2 pt-6">
                 <Button variant="outline" onClick={() => setActiveTab('invoices')}>
-                  <Receipt className="h-4 w-4" /> {copy('billing.overview.viewInvoices')}
+                  <Receipt className="h-4 w-4" aria-hidden="true" /> {copy('billing.overview.viewInvoices')}
                 </Button>
               </div>
-            </section>
+            </Card>
+          </MotionItem>
 
-            {/* Subscription freeze */}
-            <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          {/* Subscription freeze */}
+          <MotionItem delayIndex={1}>
+            <Card padding="lg" className="flex h-full flex-col">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="eyebrow text-muted">Subscription</p>
-                  <h3 className="mt-2 text-lg font-semibold tracking-tight text-navy">Subscription freeze</h3>
+                  <h2 className="mt-2 text-lg font-bold tracking-tight text-navy">Subscription freeze</h2>
                 </div>
-                <div className={`rounded-xl p-2.5 ${isFrozen ? 'bg-sky-500/10 text-sky-600' : 'bg-success/10 text-success-strong'}`}>
-                  {isFrozen ? <Snowflake className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                <div className={`rounded-xl p-2.5 ${isFrozen ? 'bg-info/10 text-info' : 'bg-success/10 text-success-strong'}`}>
+                  {isFrozen ? <Snowflake className="h-5 w-5" aria-hidden="true" /> : <CheckCircle2 className="h-5 w-5" aria-hidden="true" />}
                 </div>
               </div>
 
@@ -377,21 +402,21 @@ export default function BillingPage() {
                     {currentFreeze.reason ? (
                       <div className="flex items-start justify-between gap-3">
                         <dt className="text-muted">Reason</dt>
-                        <dd className="max-w-[60%] text-right font-semibold text-navy">{currentFreeze.reason}</dd>
+                        <dd className="max-w-[60%] text-end font-semibold text-navy">{currentFreeze.reason}</dd>
                       </div>
                     ) : null}
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-muted">From</dt>
-                      <dd className="font-semibold text-navy">{formatOptionalDate(freezeStart, 'Now')}</dd>
+                      <dd className="font-semibold tabular-nums text-navy">{formatOptionalDate(freezeStart, 'Now')}</dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-muted">Until</dt>
-                      <dd className="font-semibold text-navy">{formatOptionalDate(currentFreeze.endedAt, 'Indefinite')}</dd>
+                      <dd className="font-semibold tabular-nums text-navy">{formatOptionalDate(currentFreeze.endedAt, 'Indefinite')}</dd>
                     </div>
                     {currentFreeze.durationDays ? (
                       <div className="flex items-center justify-between gap-3">
                         <dt className="text-muted">Duration</dt>
-                        <dd className="font-semibold text-navy">{currentFreeze.durationDays} days</dd>
+                        <dd className="font-semibold tabular-nums text-navy">{currentFreeze.durationDays} days</dd>
                       </div>
                     ) : null}
                   </dl>
@@ -414,7 +439,7 @@ export default function BillingPage() {
                     disabled={!freezeEligible}
                     title={!freezeEligible ? freezeDisabledReason : undefined}
                   >
-                    <Snowflake className="h-4 w-4" /> Freeze my subscription
+                    <Snowflake className="h-4 w-4" aria-hidden="true" /> Freeze my subscription
                   </Button>
                 ) : null}
                 {!isFrozen && !freezeEligible ? (
@@ -424,42 +449,40 @@ export default function BillingPage() {
                   View freeze details &amp; history
                 </Button>
               </div>
-            </section>
-          </div>
+            </Card>
+          </MotionItem>
+        </div>
 
-          {/* Recent invoices */}
-          <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="eyebrow text-muted">{copy('billing.overview.activity')}</p>
-                <h3 className="mt-1 text-base font-semibold text-navy">{copy('billing.overview.recentInvoices')}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('invoices')}
-                className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
-              >
+        {/* Recent invoices */}
+        <MotionSection delayIndex={2} className="space-y-4">
+          <LearnerSurfaceSectionHeader
+            eyebrow={copy('billing.overview.activity')}
+            title={copy('billing.overview.recentInvoices')}
+            action={(
+              <Button variant="ghost" size="sm" className="self-start text-primary sm:self-auto" onClick={() => setActiveTab('invoices')}>
                 {copy('billing.overview.viewAll')}
-              </button>
-            </div>
-            {recentInvoices.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">{copy('billing.overview.noInvoices')}</p>
-            ) : (
-              <ul className="mt-4 divide-y divide-border/60">
+              </Button>
+            )}
+          />
+          {recentInvoices.length === 0 ? (
+            <EmptyState
+              icon={<Receipt className="h-8 w-8" />}
+              title={copy('billing.overview.noInvoices')}
+            />
+          ) : (
+            <Card padding="none" className="overflow-hidden">
+              <ul className="divide-y divide-border">
                 {recentInvoices.map((invoice) => (
-                  <li
-                    key={invoice.id}
-                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex items-center gap-3">
+                  <li key={invoice.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
+                    <div className="flex min-w-0 items-center gap-3">
                       <div className="rounded-lg bg-background-light p-2 text-muted">
-                        <FileText className="h-4 w-4" />
+                        <FileText className="h-4 w-4" aria-hidden="true" />
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-navy">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold tabular-nums text-navy">
                           {new Date(invoice.date).toLocaleDateString()}
                         </p>
-                        <p className="text-2xs text-muted">
+                        <p className="text-2xs tabular-nums text-muted">
                           {invoice.amount} · <span title="Invoice reference (masked)">{maskProviderId(invoice.id)}</span>
                         </p>
                       </div>
@@ -468,73 +491,70 @@ export default function BillingPage() {
                   </li>
                 ))}
               </ul>
-            )}
-          </section>
-        </TabPanel>
+            </Card>
+          )}
+        </MotionSection>
+      </TabPanel>
 
-        {/* ── INVOICES ──────────────────────────────────────────── */}
-        <TabPanel id="invoices" activeTab={activeTab}>
-          <LearnerSurfaceSectionHeader
-            eyebrow={copy('billing.invoices.eyebrow')}
-            title={copy('billing.invoices.title')}
-            description={copy('billing.invoices.description')}
-            className="mb-4"
+      {/* ── INVOICES ──────────────────────────────────────────── */}
+      <TabPanel id="invoices" activeTab={activeTab} className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow={copy('billing.invoices.eyebrow')}
+          title={copy('billing.invoices.title')}
+          description={copy('billing.invoices.description')}
+        />
+        {invoices.length === 0 ? (
+          <EmptyState
+            icon={<Receipt className="h-8 w-8" />}
+            title={copy('billing.invoices.empty')}
           />
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-            {invoices.length === 0 ? (
-              <div className="p-10 text-center">
-                <Receipt className="mx-auto h-10 w-10 text-muted/40" />
-                <p className="mt-3 text-sm text-muted">
-                  {copy('billing.invoices.empty')}
-                </p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border/60">
-                {invoices.map((invoice) => (
-                  <li
-                    key={invoice.id}
-                    className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="rounded-xl bg-background-light p-3 text-muted">
-                        <FileText className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-navy">
-                          {new Date(invoice.date).toLocaleDateString()}
-                        </p>
-                        <p className="text-sm text-muted">
-                          {invoice.amount} · <span title="Invoice reference (masked)">{maskProviderId(invoice.id)}</span>
-                        </p>
-                      </div>
+        ) : (
+          <Card padding="none" className="overflow-hidden">
+            <ul className="divide-y divide-border">
+              {invoices.map((invoice) => (
+                <li
+                  key={invoice.id}
+                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="rounded-xl bg-background-light p-3 text-muted">
+                      <FileText className="h-5 w-5" aria-hidden="true" />
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-                      <StatusPill label={invoice.status} />
-                      <Button
-                        variant="outline"
-                        loading={busyKey === `invoice:${invoice.id}`}
-                        disabled={!invoiceDownloadsAvailable}
-                        aria-busy={busyKey === `invoice:${invoice.id}`}
-                        aria-disabled={!invoiceDownloadsAvailable || undefined}
-                        title={!invoiceDownloadsAvailable ? 'Invoice downloads are unavailable on your current plan.' : undefined}
-                        onClick={() => handleDownloadInvoice(invoice.id)}
-                      >
-                        <Download className="h-4 w-4" />
-                        {copy('billing.invoices.download')}
-                      </Button>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold tabular-nums text-navy">
+                        {new Date(invoice.date).toLocaleDateString()}
+                      </p>
+                      <p className="text-sm tabular-nums text-muted">
+                        {invoice.amount} · <span title="Invoice reference (masked)">{maskProviderId(invoice.id)}</span>
+                      </p>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {!invoiceDownloadsAvailable ? (
-            <p className="mt-3 text-xs text-muted">
-              {copy('billing.invoices.unavailableNote')}
-            </p>
-          ) : null}
-        </TabPanel>
-      </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                    <StatusPill label={invoice.status} />
+                    <Button
+                      variant="outline"
+                      loading={busyKey === `invoice:${invoice.id}`}
+                      disabled={!invoiceDownloadsAvailable}
+                      aria-busy={busyKey === `invoice:${invoice.id}`}
+                      aria-disabled={!invoiceDownloadsAvailable || undefined}
+                      title={!invoiceDownloadsAvailable ? 'Invoice downloads are unavailable on your current plan.' : undefined}
+                      onClick={() => handleDownloadInvoice(invoice.id)}
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      {copy('billing.invoices.download')}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+        {!invoiceDownloadsAvailable ? (
+          <p className="text-xs text-muted">
+            {copy('billing.invoices.unavailableNote')}
+          </p>
+        ) : null}
+      </TabPanel>
 
       <FreezeRequestModal
         open={freezeModalOpen}
