@@ -31,7 +31,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       )}
     >
       {icon ? (
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-muted shadow-sm" aria-hidden="true">
+        <div className="pop-in mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-muted shadow-sm" aria-hidden="true">
           {icon}
         </div>
       ) : null}
