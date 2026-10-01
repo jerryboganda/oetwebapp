@@ -38,6 +38,15 @@ assert.ok(source.userId && source.scenarioId, 'An owned persisted source submiss
 assert.ok(source.letterContent.trim(), 'A nonblank original letter is required');
 assert.notEqual(source.mode, 'mock', 'Mock Writing must remain human-marked');
 let submission;
+const retryId = process.env.RETRY_SUBMISSION_ID;
+if (retryId) {
+  assert.match(retryId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  assert.notEqual(retryId, source.id, 'The original submission must not be retried by QA');
+  submission = await request(`/v1/writing/submissions/${retryId}`, learner);
+  assert.equal(submission.status, 'failed', 'Only the existing failed QA attempt may be resumed');
+  assert.equal(submission.scenarioId, source.scenarioId);
+  assert.equal(submission.contentHash, source.contentHash);
+}
 const usagePath = `/v1/admin/ai/usage?featureCode=writing.grade&userId=${encodeURIComponent(source.userId)}&pageSize=100`;
 const before = await request(usagePath, admin);
 const previousUsage = new Set(before.rows.map(row => row.id));
@@ -48,14 +57,20 @@ try {
   await request('/v1/admin/ai/writing-provider', admin, 'PUT', { mode: 'codex' });
   const selected = await request('/v1/admin/ai/writing-provider', admin);
   assert.equal(selected.mode, 'codex');
-  submission = await request('/v1/writing/submissions', learner, 'POST', {
-    scenarioId: source.scenarioId, mode: 'practice', letterContent: source.letterContent,
-    wordCount: source.wordCount, timeSpentSeconds: source.timeSpentSeconds,
-    inputSource: 'typed', simulationMode: null,
-    idempotencyKey: `writing-incident-qa-${process.env.GITHUB_RUN_ID}`,
-  });
+  if (retryId) {
+    submission = await request(`/v1/writing/submissions/${retryId}/retry-grade`, learner, 'POST', {});
+    assert.equal(submission.id, retryId);
+    console.log('QA_RESUMED_SAME_SUBMISSION', submission.id);
+  } else {
+    submission = await request('/v1/writing/submissions', learner, 'POST', {
+      scenarioId: source.scenarioId, mode: 'practice', letterContent: source.letterContent,
+      wordCount: source.wordCount, timeSpentSeconds: source.timeSpentSeconds,
+      inputSource: 'typed', simulationMode: null,
+      idempotencyKey: `writing-incident-qa-${process.env.GITHUB_RUN_ID}`,
+    });
+    console.log('QA_CREATED_SUBMISSION', submission.id);
+  }
   assert.notEqual(submission.id, source.id, 'QA must leave the original submission untouched');
-  console.log('QA_CREATED_SUBMISSION', submission.id);
 
   const deadline = Date.now() + 8 * 60 * 1000;
   while (submission.status !== 'graded') {
