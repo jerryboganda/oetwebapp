@@ -20,7 +20,7 @@ export function DashboardHero({ readinessScore, predictedScore, daysToExam, stre
       label: 'Readiness',
       value: `${readinessScore}%`,
       sub: readinessScore >= 80 ? 'Exam ready' : readinessScore >= 60 ? 'Getting there' : 'Keep going',
-      accent: readinessScore >= 80 ? 'text-success' : readinessScore >= 60 ? 'text-warning' : 'text-danger',
+      accent: readinessScore >= 80 ? 'text-success-strong' : readinessScore >= 60 ? 'text-warning-strong' : 'text-danger-strong',
     },
     {
       label: 'AI Practice Score',
@@ -32,7 +32,7 @@ export function DashboardHero({ readinessScore, predictedScore, daysToExam, stre
       label: 'Days to Exam',
       value: daysToExam != null ? String(daysToExam) : '–',
       sub: daysToExam != null ? (daysToExam <= 14 ? 'Final sprint!' : `${Math.ceil(daysToExam / 7)} weeks`) : 'No exam set',
-      accent: daysToExam != null && daysToExam <= 14 ? 'text-danger' : 'text-muted',
+      accent: daysToExam != null && daysToExam <= 14 ? 'text-danger-strong' : 'text-muted',
     },
     {
       label: 'Streak',

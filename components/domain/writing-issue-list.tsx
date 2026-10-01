@@ -19,8 +19,8 @@ interface WritingIssueListProps {
 }
 
 const issueConfig: Record<IssueType, { label: string; icon: typeof AlertCircle; color: string }> = {
-  omission: { label: 'Omission', icon: MinusCircle, color: 'text-warning' },
-  unnecessary: { label: 'Unnecessary Detail', icon: AlertCircle, color: 'text-danger' },
+  omission: { label: 'Omission', icon: MinusCircle, color: 'text-warning-strong' },
+  unnecessary: { label: 'Unnecessary Detail', icon: AlertCircle, color: 'text-danger-strong' },
   suggestion: { label: 'Revision Suggestion', icon: Lightbulb, color: 'text-info' },
 };
 

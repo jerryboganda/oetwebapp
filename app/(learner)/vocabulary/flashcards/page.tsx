@@ -135,7 +135,7 @@ export default function FlashcardsPage() {
       ) : done ? (
         <MotionSection className="mx-auto max-w-md py-16 text-center">
           <Card className="border-border bg-surface p-8">
-            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-success" />
+            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-success-strong" />
             <h2 className="mb-2 text-2xl font-bold text-navy">All done!</h2>
             <p className="mb-6 text-muted">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
           <div className="flex gap-3 justify-center">
@@ -150,7 +150,7 @@ export default function FlashcardsPage() {
         </MotionSection>
       ) : cards.length === 0 ? (
         <Card className="border-border bg-surface px-4 sm:px-8 py-8 sm:py-16 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-success" />
+          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-success-strong" />
           <p className="text-muted">No flashcards due right now. Come back later!</p>
           <Button variant="outline" asChild className="mt-4">
             <Link href="/vocabulary">Back to Vocabulary</Link>
@@ -203,7 +203,7 @@ export default function FlashcardsPage() {
                 </>
               ) : (
                 <>
-                  <div className="mb-4 text-xs font-medium uppercase text-success">Definition</div>
+                  <div className="mb-4 text-xs font-medium uppercase text-success-strong">Definition</div>
                   <div className="mb-4 text-lg text-navy">{card.definition}</div>
                   {cardExampleText && (
                     <div className="mt-2 w-full border-t border-border pt-3 text-sm italic text-muted">

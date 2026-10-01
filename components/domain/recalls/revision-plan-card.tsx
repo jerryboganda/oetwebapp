@@ -59,7 +59,7 @@ export function RevisionPlanCard() {
         <Skeleton className="mt-3 h-24 rounded-xl" />
       ) : error ? (
         <div className="mt-3 flex flex-wrap items-center gap-3" role="alert">
-          <p className="text-xs text-warning">{error}</p>
+          <p className="text-xs text-warning-strong">{error}</p>
           <Button onClick={refresh} variant="outline" size="sm">
             Retry
           </Button>

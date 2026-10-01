@@ -152,11 +152,11 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
             data-testid="listening-attempt-timer"
             className={`flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 font-mono text-xs sm:text-sm font-black ${
               attemptSecondsRemaining === 0
-                ? 'bg-danger/20 text-danger'
+                ? 'bg-danger/20 text-danger-strong'
                 : attemptSecondsRemaining <= dangerThreshold
-                  ? 'bg-danger/20 text-danger'
+                  ? 'bg-danger/20 text-danger-strong'
                   : attemptSecondsRemaining <= warningThreshold
-                    ? 'bg-warning/20 text-warning'
+                    ? 'bg-warning/20 text-warning-strong'
                     : 'bg-white/10 text-white'
             }`}
             aria-label={`Attempt time remaining ${formatReviewSeconds(attemptSecondsRemaining)}`}

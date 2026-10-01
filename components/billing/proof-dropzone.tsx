@@ -86,7 +86,7 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onChange(null); setLocalError(null); if (inputRef.current) inputRef.current.value = ''; }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-danger hover:bg-danger/10"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-danger-strong hover:bg-danger/10"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" /> Remove
             </button>
@@ -105,7 +105,7 @@ export function ProofDropzone({ value, onChange, error }: ProofDropzoneProps) {
           onChange={(e) => accept(e.target.files?.[0])}
         />
       </div>
-      {shownError ? <p className="mt-1.5 text-xs text-danger">{shownError}</p> : null}
+      {shownError ? <p className="mt-1.5 text-xs text-danger-strong">{shownError}</p> : null}
     </div>
   );
 }

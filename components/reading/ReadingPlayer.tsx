@@ -479,7 +479,7 @@ function TimerDisplay({
         <span
           className={cn(
             'font-mono font-semibold tabular-nums',
-            isLowTime ? 'text-danger' : 'text-navy',
+            isLowTime ? 'text-danger-strong' : 'text-navy',
           )}
         >
           {fmt(remaining)}

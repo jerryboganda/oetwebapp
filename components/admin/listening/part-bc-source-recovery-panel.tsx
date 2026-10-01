@@ -85,7 +85,7 @@ export function PartBCSourceRecoveryPanel({
   if (report.partBCQuestionCount > 0 && report.alreadyUsable === report.partBCQuestionCount) {
     return (
       <div className="flex items-center gap-2 rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-muted">
-        <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
+        <CheckCircle2 className="h-4 w-4 text-success-strong" aria-hidden />
         All {report.partBCQuestionCount} Part B/C items show their printed question.
       </div>
     );
@@ -102,7 +102,7 @@ export function PartBCSourceRecoveryPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-bold text-admin-fg-strong">
-            <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
+            <AlertTriangle className="h-4 w-4 text-warning-strong" aria-hidden />
             {missing.length} Part B/C item{missing.length === 1 ? '' : 's'} have no printed question
           </h3>
           <p className="max-w-2xl text-xs text-admin-fg-muted">

@@ -193,9 +193,9 @@ export function TimeAnalyticsBreakdown({
                           className={
                             'font-black ' +
                             (row.overran
-                              ? 'text-danger'
+                              ? 'text-danger-strong'
                               : row.utilisationPct >= 90
-                                ? 'text-warning'
+                                ? 'text-warning-strong'
                                 : 'text-primary')
                           }
                         >
@@ -231,7 +231,7 @@ export function TimeAnalyticsBreakdown({
                     ) : null}
                   </div>
                   {row.overran ? (
-                    <p className="mt-1 flex items-center gap-1 text-2xs font-bold text-danger">
+                    <p className="mt-1 flex items-center gap-1 text-2xs font-bold text-danger-strong">
                       <AlertCircle className="h-3 w-3" />
                       Ran past the deadline by{' '}
                       {formatDuration(
@@ -249,7 +249,7 @@ export function TimeAnalyticsBreakdown({
       {longestQuestions.length > 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
-            <Timer className="h-5 w-5 text-warning" />
+            <Timer className="h-5 w-5 text-warning-strong" />
             <h3 className="text-sm font-black uppercase tracking-widest text-muted">
               Longest {longestQuestions.length} question
               {longestQuestions.length === 1 ? '' : 's'}
@@ -280,11 +280,11 @@ export function TimeAnalyticsBreakdown({
                       {formatDuration(q.secondsSpent)}
                     </span>
                     {correct ? (
-                      <span className="tile-label text-success">
+                      <span className="tile-label text-success-strong">
                         Correct
                       </span>
                     ) : wrong ? (
-                      <span className="tile-label text-danger">
+                      <span className="tile-label text-danger-strong">
                         Incorrect
                       </span>
                     ) : null}

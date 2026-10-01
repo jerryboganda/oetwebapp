@@ -259,7 +259,7 @@ export function ReadingStructureEditor({ paperId }: Props) {
       {report && report.issues.length > 0 && (
         <ul className="mb-4 space-y-1 text-sm">
           {report.issues.map((iss, i) => (
-            <li key={i} className={iss.severity === 'error' ? 'text-danger' : 'text-warning'}>
+            <li key={i} className={iss.severity === 'error' ? 'text-danger-strong' : 'text-warning-strong'}>
               <Badge variant={iss.severity === 'error' ? 'danger' : 'warning'}>{iss.code}</Badge>
               <span className="ml-2">{iss.message}</span>
             </li>
@@ -402,8 +402,8 @@ function PartEditor({
           <h3 className="font-black text-lg text-navy">{expected.label}</h3>
           <p className="text-xs text-muted">
             {part.timeLimitMinutes} min · {part.texts.length}/{expected.texts} text units ({expected.textLabel}) · {part.questions.length}/{expected.items} items
-            {textShort > 0 && <span className="text-danger"> · {textShort} more text unit(s) needed</span>}
-            {short > 0 && <span className="text-danger"> · {short} more needed</span>}
+            {textShort > 0 && <span className="text-danger-strong"> · {textShort} more text unit(s) needed</span>}
+            {short > 0 && <span className="text-danger-strong"> · {short} more needed</span>}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">

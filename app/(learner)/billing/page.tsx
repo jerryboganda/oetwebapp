@@ -60,7 +60,7 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
 /** Green status pill shared by the subscription header and invoice rows. */
 function StatusPill({ label }: { label: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success ring-1 ring-success/20">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-bold text-success-strong ring-1 ring-success/20">
       <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
       {label}
     </span>
@@ -362,7 +362,7 @@ export default function BillingPage() {
                   <p className="eyebrow text-muted">Subscription</p>
                   <h3 className="mt-2 text-lg font-semibold tracking-tight text-navy">Subscription freeze</h3>
                 </div>
-                <div className={`rounded-xl p-2.5 ${isFrozen ? 'bg-sky-500/10 text-sky-600' : 'bg-success/10 text-success'}`}>
+                <div className={`rounded-xl p-2.5 ${isFrozen ? 'bg-sky-500/10 text-sky-600' : 'bg-success/10 text-success-strong'}`}>
                   {isFrozen ? <Snowflake className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
                 </div>
               </div>

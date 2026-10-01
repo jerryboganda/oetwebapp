@@ -107,7 +107,7 @@ export const SEVERITY_STYLE: Record<WritingSeverity, SeverityStyle> = {
     tag: 'MED',
     glyph: '◆',
     highlightClass: 'bg-warning/20 underline decoration-warning decoration-2 decoration-dashed',
-    badgeClass: 'bg-warning/15 text-warning',
+    badgeClass: 'bg-warning/15 text-warning-strong',
     borderClass: 'border-l-warning',
   },
   low: {
@@ -136,9 +136,9 @@ export const CHECKLIST_VERDICTS: { value: WritingChecklistVerdict; label: string
 ];
 
 export const VERDICT_BADGE_CLASS: Record<WritingChecklistVerdict, string> = {
-  included: 'bg-success/10 text-success',
+  included: 'bg-success/10 text-success-strong',
   missing: 'bg-error/10 text-error',
-  inaccurate: 'bg-warning/15 text-warning',
+  inaccurate: 'bg-warning/15 text-warning-strong',
   irrelevant: 'bg-muted/40 text-muted',
 };
 

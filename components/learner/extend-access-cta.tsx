@@ -58,7 +58,7 @@ export function ExtendAccessCta({ hasEligibleSubscription = false, expiresAt }: 
         </header>
         <p
           className={`mt-2 flex items-center gap-1.5 text-sm font-semibold ${
-            expired || expiryInfo.daysRemaining <= 3 ? 'text-danger' : 'text-navy'
+            expired || expiryInfo.daysRemaining <= 3 ? 'text-danger-strong' : 'text-navy'
           }`}
         >
           <Clock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />

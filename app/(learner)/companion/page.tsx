@@ -178,7 +178,7 @@ export default function CompanionPage() {
                   data-testid="companion-error"
                   className="flex items-start gap-2 border-b border-border bg-danger/10 px-4 py-2 text-xs text-navy"
                 >
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-hidden="true" />
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-strong" aria-hidden="true" />
                   <span className="flex-1">{error}</span>
                   <button type="button" onClick={clearError} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
                     {t('companion.error.dismiss')}

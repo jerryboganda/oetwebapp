@@ -111,7 +111,7 @@ export default function VocabularyQuizHistoryPage() {
               </div>
               <div className="text-right">
                 <div className="text-sm font-bold text-navy">{item.correctCount}/{item.termsQuizzed}</div>
-                <div className={`text-xs font-medium ${item.score >= 80 ? 'text-success' : item.score >= 60 ? 'text-warning' : 'text-danger'}`}>
+                <div className={`text-xs font-medium ${item.score >= 80 ? 'text-success-strong' : item.score >= 60 ? 'text-warning-strong' : 'text-danger-strong'}`}>
                   {Math.round(item.score)}%
                 </div>
               </div>

@@ -65,7 +65,7 @@ export function ScoreConversionEvidence({
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
             {grade ? <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">Grade {grade}</span> : null}
             {passed != null ? (
-              <span className={`rounded-full px-3 py-1 ${passed ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+              <span className={`rounded-full px-3 py-1 ${passed ? 'bg-success/10 text-success-strong' : 'bg-danger/10 text-danger-strong'}`}>
                 Owner table: {passed ? 'passed' : 'not passed'}
               </span>
             ) : null}

@@ -33,7 +33,7 @@ function StrategyCard({ strategy }: { strategy: ReadingStrategyDto }) {
       <div className="flex items-start justify-between gap-2">
         <h3 className="flex-1 text-sm font-semibold leading-snug text-foreground">{strategy.title}</h3>
         {strategy.isRead ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-label="Read" />
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success-strong" aria-label="Read" />
         ) : (
           <BookOpen className="h-4 w-4 shrink-0 text-muted" aria-label="Unread" />
         )}

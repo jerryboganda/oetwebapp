@@ -74,7 +74,7 @@ export function ConversationPrepCard({
       )}
 
       {scenario.expectedRedFlags && scenario.expectedRedFlags.length > 0 && (
-        <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/5 p-3 text-danger">
+        <div className="mb-4 rounded-2xl border border-danger/20 bg-danger/5 p-3 text-danger-strong">
           <div className="mb-1 text-xs font-semibold uppercase">
             Watch for red flags
           </div>

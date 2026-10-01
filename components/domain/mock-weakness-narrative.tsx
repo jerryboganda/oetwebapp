@@ -64,11 +64,11 @@ export function WeaknessNarrative({
         >
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-6 h-6 text-danger" />
+              <AlertTriangle className="w-6 h-6 text-danger-strong" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-danger mb-2">Area for Improvement</h3>
-              <p className="text-sm text-danger/80 leading-relaxed">
+              <h3 className="text-lg font-black text-danger-strong mb-2">Area for Improvement</h3>
+              <p className="text-sm text-danger-strong/80 leading-relaxed">
                 Review your sub-test breakdown to identify priority focus areas.
               </p>
             </div>
@@ -86,20 +86,20 @@ export function WeaknessNarrative({
       >
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-6 h-6 text-danger" />
+            <AlertTriangle className="w-6 h-6 text-danger-strong" />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="eyebrow text-danger">
+              <span className="eyebrow text-danger-strong">
                 {fallback.subtest}
               </span>
-              <span className="text-danger/40">•</span>
-              <span className="eyebrow text-danger">
+              <span className="text-danger-strong/40">•</span>
+              <span className="eyebrow text-danger-strong">
                 Weakest Criterion
               </span>
             </div>
-            <h3 className="text-lg font-black text-danger mb-2">{fallback.criterion}</h3>
-            <p className="text-sm text-danger/80 leading-relaxed">{fallback.description}</p>
+            <h3 className="text-lg font-black text-danger-strong mb-2">{fallback.criterion}</h3>
+            <p className="text-sm text-danger-strong/80 leading-relaxed">{fallback.description}</p>
           </div>
         </div>
       </div>
@@ -115,11 +115,11 @@ export function WeaknessNarrative({
     >
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
-          <Sparkles className="w-6 h-6 text-danger" />
+          <Sparkles className="w-6 h-6 text-danger-strong" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className="eyebrow text-danger">
+            <span className="eyebrow text-danger-strong">
               Personalised weakness analysis
             </span>
           </div>

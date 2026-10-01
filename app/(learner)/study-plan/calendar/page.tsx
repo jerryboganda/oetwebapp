@@ -39,10 +39,10 @@ const SUBTEST_DOT: Record<SubTest, string> = {
 };
 
 const STATUS_ICON: Record<string, { Icon: React.ElementType; className: string }> = {
-  completed: { Icon: CheckCircle2, className: 'text-success' },
+  completed: { Icon: CheckCircle2, className: 'text-success-strong' },
   not_started: { Icon: Clock, className: 'text-muted' },
   in_progress: { Icon: Clock, className: 'text-info' },
-  missed: { Icon: AlertTriangle, className: 'text-danger' },
+  missed: { Icon: AlertTriangle, className: 'text-danger-strong' },
 };
 
 type ViewMode = 'week' | 'month';
@@ -279,9 +279,9 @@ export default function StudyPlanCalendarPage() {
             </span>
           ))}
           <span className="mx-2 text-border" aria-hidden="true">|</span>
-          <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-success" /> Completed</span>
+          <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-success-strong" /> Completed</span>
           <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-muted" /> Pending</span>
-          <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-danger" /> Missed</span>
+          <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-danger-strong" /> Missed</span>
         </div>
       </div>
     </>

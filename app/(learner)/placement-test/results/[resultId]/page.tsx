@@ -49,7 +49,7 @@ export default function PlacementResultPage() {
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted">
         {notFound ? (
           <>
-            <AlertTriangle className="h-6 w-6 text-warning" aria-hidden />
+            <AlertTriangle className="h-6 w-6 text-warning-strong" aria-hidden />
             <p>That result does not exist or belongs to another account.</p>
             <Button asChild variant="outline" size="sm">
               <Link href="/placement-test/history">Back to your placement history</Link>

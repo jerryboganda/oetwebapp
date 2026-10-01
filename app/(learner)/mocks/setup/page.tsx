@@ -95,7 +95,7 @@ const ENTITLEMENT_GATED_TYPES: ReadonlySet<MockTypeToken> = new Set<MockTypeToke
 const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string }> = {
   listening: { label: 'Listening', icon: Headphones, active: 'border-primary bg-primary/10 text-primary' },
   reading: { label: 'Reading', icon: FileText, active: 'border-info bg-info/10 text-info' },
-  writing: { label: 'Writing', icon: PenTool, active: 'border-danger bg-danger/10 text-danger' },
+  writing: { label: 'Writing', icon: PenTool, active: 'border-danger bg-danger/10 text-danger-strong' },
   speaking: { label: 'Speaking', icon: Mic, active: 'border-primary bg-primary/10 text-primary' },
 };
 
@@ -449,7 +449,7 @@ export default function MockSetup() {
                         </p>
                       </div>
                       {exhausted ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 tile-label text-danger">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-2 py-1 tile-label text-danger-strong">
                           <Lock className="h-3 w-3" /> Exhausted
                         </span>
                       ) : null}
@@ -465,7 +465,7 @@ export default function MockSetup() {
           {entitlementSummary?.anyExhausted ? (
             <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-danger/40 bg-danger/5 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger-strong">
                   <CreditCard className="h-5 w-5" />
                 </span>
                 <div>
@@ -681,7 +681,7 @@ export default function MockSetup() {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {bundle.releasePolicy ? (
-                          <span className="rounded-md bg-warning/10 px-2 py-1 eyebrow text-warning">
+                          <span className="rounded-md bg-warning/10 px-2 py-1 eyebrow text-warning-strong">
                             {bundle.releasePolicy.replace(/_/g, ' ')}
                           </span>
                         ) : null}
@@ -715,7 +715,7 @@ export default function MockSetup() {
                   onClick={() => handleModeChange('exam')}
                   className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'exam' ? 'border-danger bg-danger/10' : 'border-border hover:bg-background-light'}`}
                 >
-                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-danger' : 'text-muted'}`} />
+                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-danger-strong' : 'text-muted'}`} />
                   <p className="text-sm font-bold text-navy">Exam Mode</p>
                   <p className="mt-1 text-xs text-muted">Strict timing and full simulation behavior.</p>
                 </button>
@@ -789,7 +789,7 @@ export default function MockSetup() {
                           }
                         }}
                         className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-                          strictness === item.id ? 'border-danger bg-danger/10 text-danger' : 'border-border bg-surface text-navy hover:bg-background-light'
+                          strictness === item.id ? 'border-danger bg-danger/10 text-danger-strong' : 'border-border bg-surface text-navy hover:bg-background-light'
                         }`}
                       >
                         <span className="text-sm font-bold">{item.label}</span>
@@ -804,7 +804,7 @@ export default function MockSetup() {
                   <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
                   <p className="mt-1 text-xs text-muted">Use the official timing for each section automatically.</p>
                   {mode === 'exam' ? (
-                    <p className="mt-2 flex items-center gap-1 tile-label text-danger">
+                    <p className="mt-2 flex items-center gap-1 tile-label text-danger-strong">
                       <Info className="h-3 w-3" /> Required in exam mode
                     </p>
                   ) : null}
@@ -822,7 +822,7 @@ export default function MockSetup() {
                 </button>
               </div>
               {mockType === 'final_readiness' ? (
-                <p className="mt-3 text-xs font-semibold text-danger">
+                <p className="mt-3 text-xs font-semibold text-danger-strong">
                   Final-readiness mocks always run in exam mode with the strict OET@Home-style preset.
                 </p>
               ) : null}
@@ -886,7 +886,7 @@ export default function MockSetup() {
                 description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />
-              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label text-warning">
+              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label text-warning-strong">
                 {availableCredits} credits available
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

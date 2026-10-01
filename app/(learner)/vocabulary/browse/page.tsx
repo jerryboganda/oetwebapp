@@ -326,7 +326,7 @@ export default function BrowseVocabularyPage() {
                   <button
                     onClick={() => handleAdd(term.id)}
                     disabled={adding.has(term.id) || added.has(term.id)}
-                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-success/10 text-success border border-success/20' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-success/10 text-success-strong border border-success/20' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                     title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
                     aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                   >

@@ -234,12 +234,12 @@ export default function AdminRealContentFolderImportPage() {
         <Card>
           <CardContent className="space-y-3 pt-5">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-success" />
+            <CheckCircle2 className="h-5 w-5 text-success-strong" />
             Commit complete
           </h2>
           <div className="text-sm">
             <strong>{commitResult.created.length}</strong> row(s) created as Drafts.
-            {commitResult.errors.length > 0 ? <span className="text-danger"> · {commitResult.errors.length} error(s)</span> : null}
+            {commitResult.errors.length > 0 ? <span className="text-danger-strong"> · {commitResult.errors.length} error(s)</span> : null}
           </div>
           {commitResult.created.length > 0 ? (
             <ul className="text-xs space-y-1 max-h-60 overflow-y-auto">

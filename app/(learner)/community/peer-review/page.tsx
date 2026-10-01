@@ -205,7 +205,7 @@ export default function PeerReviewPage() {
             </div>
 
             {submitSuccess && (
-              <div role="status" className="flex items-center gap-2 text-sm text-success">
+              <div role="status" className="flex items-center gap-2 text-sm text-success-strong">
                 <CheckCircle className="w-4 h-4" aria-hidden="true" />
                 Submitted successfully! You will be notified when feedback is available.
               </div>
@@ -296,7 +296,7 @@ export default function PeerReviewPage() {
                         {item.feedback && (
                           <div className="mt-3 pt-3 border-t border-border">
                             <div className="flex items-center gap-1 text-sm">
-                              <Star className="w-4 h-4 fill-warning text-warning" aria-hidden="true" />
+                              <Star className="w-4 h-4 fill-warning text-warning-strong" aria-hidden="true" />
                               <span className="font-medium">{item.feedback.rating}/5</span>
                               <span className="text-muted-foreground ml-2 truncate">
                                 {item.feedback.comments}

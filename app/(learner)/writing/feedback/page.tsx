@@ -199,7 +199,7 @@ function WritingDetailedFeedbackContent() {
                                <div className="text-sm font-medium text-navy">{comment.comment}</div>
                                {comment.suggestedFix ? (
                                  <div className="mt-3 rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
-                                   <div className="eyebrow text-success mb-1">Suggested fix</div>
+                                   <div className="eyebrow text-success-strong mb-1">Suggested fix</div>
                                    <div className="text-navy/80">{comment.suggestedFix}</div>
                                  </div>
                                ) : null}
@@ -215,14 +215,14 @@ function WritingDetailedFeedbackContent() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                       {criterion.omissions.length > 0 && (
                         <div className="rounded-2xl border border-danger/30 bg-danger/10 p-4">
-                          <h4 className="eyebrow text-danger mb-3 flex items-center gap-2"><MinusCircle className="w-4 h-4" /> Omissions</h4>
-                          <ul className="space-y-2">{criterion.omissions.map((item, i) => (<li key={i} className="text-sm text-danger flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                          <h4 className="eyebrow text-danger-strong mb-3 flex items-center gap-2"><MinusCircle className="w-4 h-4" /> Omissions</h4>
+                          <ul className="space-y-2">{criterion.omissions.map((item, i) => (<li key={i} className="text-sm text-danger-strong flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
                       )}
                       {criterion.unnecessaryDetails.length > 0 && (
                         <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
-                          <h4 className="eyebrow text-warning mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Unnecessary</h4>
-                          <ul className="space-y-2">{criterion.unnecessaryDetails.map((item, i) => (<li key={i} className="text-sm text-warning flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                          <h4 className="eyebrow text-warning-strong mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Unnecessary</h4>
+                          <ul className="space-y-2">{criterion.unnecessaryDetails.map((item, i) => (<li key={i} className="text-sm text-warning-strong flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
                       )}
                     </div>
@@ -231,8 +231,8 @@ function WritingDetailedFeedbackContent() {
                   {/* Revision Suggestions */}
                   {criterion.revisionSuggestions.length > 0 && (
                     <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
-                      <h4 className="eyebrow text-success mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
-                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-success flex items-start gap-2"><ArrowRight className="w-4 h-4 text-success shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
+                      <h4 className="eyebrow text-success-strong mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
+                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-success-strong flex items-start gap-2"><ArrowRight className="w-4 h-4 text-success-strong shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
                     </div>
                   )}
                 </Card>

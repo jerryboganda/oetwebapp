@@ -132,7 +132,7 @@ export default function StudyPlanPage() {
                   {task.subTest}
                 </span>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-success/10 text-success border border-success/20">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-success/10 text-success-strong border border-success/20">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Done
                   </span>
                 )}

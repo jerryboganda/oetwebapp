@@ -19,8 +19,8 @@ type TutoringSession = {
 
 const STATE_COLORS: Record<string, string> = {
   booked: 'bg-info/10 text-info',
-  completed: 'bg-success/10 text-success',
-  cancelled: 'bg-danger/10 text-danger',
+  completed: 'bg-success/10 text-success-strong',
+  cancelled: 'bg-danger/10 text-danger-strong',
 };
 
 function formatDate(iso: string) {
@@ -101,7 +101,7 @@ export default function TutoringPage() {
                     {[1, 2, 3, 4, 5].map(v => (
                       <button key={v} type="button" onClick={() => setRatingValue(v)}
                         aria-label={`${v} star${v === 1 ? '' : 's'}`} aria-pressed={ratingValue === v}
-                        className={`w-11 h-11 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>
+                        className={`w-11 h-11 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${ratingValue >= v ? 'text-warning-strong' : 'text-muted/40'}`}>
                         ★
                       </button>
                     ))}
@@ -109,13 +109,13 @@ export default function TutoringPage() {
                     <Button size="sm" variant="ghost" onClick={() => setRatingSession(null)}>Cancel</Button>
                   </div>
                 ) : (
-                  <Button size="sm" variant="ghost" onClick={() => setRatingSession(session.id)} className="text-warning">
+                  <Button size="sm" variant="ghost" onClick={() => setRatingSession(session.id)} className="text-warning-strong">
                     <Star className="w-4 h-4" aria-hidden="true" /> Rate
                   </Button>
                 )
               )}
               {session.learnerRating !== null && (
-                <div className="flex items-center gap-1 text-warning text-sm">
+                <div className="flex items-center gap-1 text-warning-strong text-sm">
                   {'★'.repeat(session.learnerRating)}{'☆'.repeat(5 - session.learnerRating)}
                 </div>
               )}

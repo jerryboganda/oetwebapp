@@ -34,7 +34,7 @@ export function AudioUnavailable({
   return (
     <div role="alert" className="space-y-3 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3">
       <p className="flex items-center gap-2 text-sm font-semibold text-navy">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden /> Audio unavailable
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning-strong" aria-hidden /> Audio unavailable
       </p>
       <p className="text-sm text-navy">
         The audio for this task could not be loaded, so it cannot be started yet. Check your connection and press Retry.

@@ -214,7 +214,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
       </form>
 
       {error && (
-        <p role="alert" className="mt-2 text-xs text-danger">
+        <p role="alert" className="mt-2 text-xs text-danger-strong">
           {error}
         </p>
       )}
@@ -222,12 +222,12 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
       {result && (
         <div role="status" className="mt-3 rounded-lg border border-border bg-surface p-3">
           {result.correct ? (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-success-strong">
               <CheckCircle2 size={15} className="h-4 w-4" aria-hidden="true" />
               Correct spelling
             </p>
           ) : (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger-strong">
               <XCircle size={15} className="h-4 w-4" aria-hidden="true" />
               Incorrect
             </p>

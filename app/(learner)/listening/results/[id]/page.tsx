@@ -148,7 +148,7 @@ function ListeningResultsContent() {
     return (
       <>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-danger" aria-hidden />
+          <AlertCircle className="h-12 w-12 text-danger-strong" aria-hidden />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
           <Button variant="ghost" asChild>
@@ -188,7 +188,7 @@ function ListeningResultsContent() {
         {requiresAdminReview ? (
           <div
             data-testid="listening-admin-review-warning"
-            className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning"
+            className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning-strong"
           >
             <p className="font-black">Listening attempt requires administrator review.</p>
             <p>
@@ -225,8 +225,8 @@ function ListeningResultsContent() {
               <div className={`rounded-2xl border p-4 text-center ${
                 hasApprovedConversion
                   ? result.passed
-                    ? 'border-success/20 bg-success/10 text-success'
-                    : 'border-danger/20 bg-danger/10 text-danger'
+                    ? 'border-success/20 bg-success/10 text-success-strong'
+                    : 'border-danger/20 bg-danger/10 text-danger-strong'
                   : 'border-border bg-background-light text-navy'
               }`}>
                 <p className="eyebrow">
@@ -313,7 +313,7 @@ function ListeningResultsContent() {
           description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
         />
 
-        <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+        <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong">
           AI Practice Score — not an official OET result.
         </p>
         <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
@@ -335,11 +335,11 @@ function ListeningResultsContent() {
                   >
                     <div className="mt-0.5 shrink-0">
                       {item.isInvalid ? (
-                        <AlertTriangle className="h-6 w-6 text-warning" />
+                        <AlertTriangle className="h-6 w-6 text-warning-strong" />
                       ) : item.isCorrect ? (
-                        <CheckCircle2 className="h-6 w-6 text-success" />
+                        <CheckCircle2 className="h-6 w-6 text-success-strong" />
                       ) : (
-                        <XCircle className="h-6 w-6 text-danger" />
+                        <XCircle className="h-6 w-6 text-danger-strong" />
                       )}
                     </div>
                     <div className="flex-1 pr-4">
@@ -347,7 +347,7 @@ function ListeningResultsContent() {
                         Part {item.partCode} / Question {item.number}
                       </span>
                         <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
-                        {item.isInvalid ? <p className="mt-1 eyebrow text-warning">Invalid — admin review</p> : null}
+                        {item.isInvalid ? <p className="mt-1 eyebrow text-warning-strong">Invalid — admin review</p> : null}
                     </div>
                     <div className="shrink-0 text-muted">
                       {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -358,25 +358,25 @@ function ListeningResultsContent() {
                         <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
-                              <span className={`mb-2 block text-3xs font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                              <span className={`mb-2 block text-3xs font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
                                 Your Answer
                               </span>
-                              <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}`}>
+                              <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
                                 {item.learnerAnswer || 'No answer recorded'}
                               </p>
                             </div>
                             {!item.isCorrect && !item.isInvalid ? (
                               <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-                                <span className="mb-2 block tile-label text-success">
+                                <span className="mb-2 block tile-label text-success-strong">
                                   Correct Answer
                                 </span>
-                                <p className="text-sm font-medium text-success">{item.correctAnswer}</p>
+                                <p className="text-sm font-medium text-success-strong">{item.correctAnswer}</p>
                               </div>
                             ) : null}
                           </div>
 
                           {item.isInvalid ? (
-                            <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning">
+                            <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning-strong">
                               This multiple-choice response was invalid for automated marking. The original payload is retained for administrator review; no automated explanation or answer correction is provided.
                             </div>
                           ) : null}
@@ -384,7 +384,7 @@ function ListeningResultsContent() {
                           {missReason ? (
                             <div
                               data-testid={`listening-miss-${item.questionId}`}
-                              className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning"
+                              className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning-strong"
                             >
                               <span className="mb-1 block eyebrow">
                                 Missed because: {missReason.label}
@@ -395,10 +395,10 @@ function ListeningResultsContent() {
 
                           {!item.isCorrect && !item.isInvalid && item.distractorExplanation ? (
                             <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
-                              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+                              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" />
                               <div>
-                                <span className="mb-1 block eyebrow text-warning">Distractor Trap</span>
-                                <p className="text-sm leading-relaxed text-warning">{item.distractorExplanation}</p>
+                                <span className="mb-1 block eyebrow text-warning-strong">Distractor Trap</span>
+                                <p className="text-sm leading-relaxed text-warning-strong">{item.distractorExplanation}</p>
                               </div>
                             </div>
                           ) : null}

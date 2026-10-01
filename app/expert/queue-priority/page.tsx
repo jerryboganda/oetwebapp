@@ -25,8 +25,8 @@ interface QueueData {
 const apiRequest = apiClient.request;
 
 const PRIORITY_CONFIG: Record<string, { icon: typeof AlertOctagon; color: string; bg: string }> = {
-  critical: { icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10 dark:bg-danger/15 border-danger/30' },
-  high: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10 dark:bg-warning/15 border-warning/30' },
+  critical: { icon: AlertOctagon, color: 'text-danger-strong', bg: 'bg-danger/10 dark:bg-danger/15 border-danger/30' },
+  high: { icon: AlertTriangle, color: 'text-warning-strong', bg: 'bg-warning/10 dark:bg-warning/15 border-warning/30' },
   normal: { icon: CheckCircle2, color: 'text-muted', bg: 'border-border' },
 };
 
@@ -64,7 +64,7 @@ export default function QueuePriorityPage() {
           <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
         ) : error ? (
           <Card className="p-8 text-center">
-            <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-warning" />
+            <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-warning-strong" />
             <p className="font-medium">{error}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={() => void load()}>
               <RefreshCw className="w-4 h-4 mr-1" /> Retry
@@ -77,8 +77,8 @@ export default function QueuePriorityPage() {
             {/* Summary */}
             <div className="grid grid-cols-4 gap-3">
               <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.total}</p><p className="text-xs text-muted">Total</p></Card>
-              <Card className="p-3 text-center bg-danger/10 dark:bg-danger/15"><p className="text-2xl font-bold text-danger">{data.summary.critical}</p><p className="text-xs text-danger">Critical</p></Card>
-              <Card className="p-3 text-center bg-warning/10 dark:bg-warning/15"><p className="text-2xl font-bold text-warning">{data.summary.high}</p><p className="text-xs text-warning">High</p></Card>
+              <Card className="p-3 text-center bg-danger/10 dark:bg-danger/15"><p className="text-2xl font-bold text-danger-strong">{data.summary.critical}</p><p className="text-xs text-danger-strong">Critical</p></Card>
+              <Card className="p-3 text-center bg-warning/10 dark:bg-warning/15"><p className="text-2xl font-bold text-warning-strong">{data.summary.high}</p><p className="text-xs text-warning-strong">High</p></Card>
               <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.normal}</p><p className="text-xs text-muted">Normal</p></Card>
             </div>
 

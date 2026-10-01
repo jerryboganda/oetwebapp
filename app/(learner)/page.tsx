@@ -105,10 +105,10 @@ function subscriptionStatusLabel(subscription: SubscriptionMe | null, entitlemen
 
 function subscriptionStatusClass(subscription: SubscriptionMe | null, entitlement: MyEntitlementSnapshot | null) {
   const status = subscriptionStatusLabel(subscription, entitlement).toLowerCase();
-  if (status === 'active' || status === 'trial') return 'bg-success/10 text-success';
-  if (status === 'past due') return 'bg-warning/10 text-warning';
+  if (status === 'active' || status === 'trial') return 'bg-success/10 text-success-strong';
+  if (status === 'past due') return 'bg-warning/10 text-warning-strong';
   if (status === 'paused') return 'bg-amber-100 text-amber-800';
-  if (status === 'cancelled' || status === 'expired') return 'bg-danger/10 text-danger';
+  if (status === 'cancelled' || status === 'expired') return 'bg-danger/10 text-danger-strong';
   return 'bg-background-light text-muted';
 }
 
@@ -441,7 +441,7 @@ export default function Dashboard() {
                   <div>
                     <p className="tile-label text-muted">Read-only mode</p>
                     <CardTitle className="mt-2 flex items-center gap-2 text-xl text-navy">
-                      <Shield className="h-5 w-5 text-warning" aria-hidden="true" />
+                      <Shield className="h-5 w-5 text-warning-strong" aria-hidden="true" />
                       Your account is currently frozen
                     </CardTitle>
                   </div>

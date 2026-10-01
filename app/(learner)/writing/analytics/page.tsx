@@ -128,7 +128,7 @@ export default function WritingAnalyticsPage() {
         />
 
         {status === 'error' ? (
-          <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger">
+          <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger-strong">
             <p className="font-semibold">Failed to load analytics.</p>
             <p className="mt-1 text-xs">{error}</p>
           </Card>

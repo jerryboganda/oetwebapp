@@ -30,10 +30,10 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 const CATEGORY_COLORS: Record<string, string> = {
   practice: 'bg-info/10 text-info',
-  streak: 'bg-warning/10 text-warning',
+  streak: 'bg-warning/10 text-warning-strong',
   milestone: 'bg-primary/10 text-primary',
-  mastery: 'bg-success/10 text-success',
-  social: 'bg-danger/10 text-danger',
+  mastery: 'bg-success/10 text-success-strong',
+  social: 'bg-danger/10 text-danger-strong',
   xp: 'bg-primary/10 text-primary',
 };
 
@@ -143,7 +143,7 @@ export default function AchievementsPage() {
             <MotionItem delayIndex={2}>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
-                  <Flame className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
+                  <Flame className="w-4 h-4 text-warning-strong shrink-0" aria-hidden="true" />
                   <span className="text-sm font-semibold text-muted">Streak</span>
                 </div>
                 <div className="text-3xl font-bold text-navy">{streak?.currentStreak ?? '–'} <span className="text-base font-normal text-muted">days</span></div>

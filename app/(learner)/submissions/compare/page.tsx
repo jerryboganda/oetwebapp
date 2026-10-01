@@ -84,8 +84,8 @@ export default function SubmissionComparisonPage() {
                   />
                   <div className="rounded-2xl border border-success/30 bg-success/10 p-5">
                     <div className="flex items-start gap-3">
-                      <TrendingUp className="mt-0.5 h-5 w-5 text-success" />
-                      <p className="text-sm leading-6 text-success">{comparison.summary}</p>
+                      <TrendingUp className="mt-0.5 h-5 w-5 text-success-strong" />
+                      <p className="text-sm leading-6 text-success-strong">{comparison.summary}</p>
                     </div>
                   </div>
                 </section>

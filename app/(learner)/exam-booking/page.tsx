@@ -28,9 +28,9 @@ const EXAM_TYPE_OPTIONS = [
 
 const STATUS_COLORS: Record<string, string> = {
   planned: 'bg-info/10 text-info',
-  confirmed: 'bg-success/10 text-success',
+  confirmed: 'bg-success/10 text-success-strong',
   completed: 'bg-background-light text-muted',
-  cancelled: 'bg-danger/10 text-danger',
+  cancelled: 'bg-danger/10 text-danger-strong',
 };
 
 function daysUntil(dateStr: string) {
@@ -188,7 +188,7 @@ export default function ExamBookingPage() {
                             <ExternalLink className="w-4 h-4" aria-hidden="true" />
                           </a>
                         )}
-                        <button type="button" onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} aria-label={`Remove ${booking.examTypeCode.toUpperCase()} booking`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">
+                        <button type="button" onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} aria-label={`Remove ${booking.examTypeCode.toUpperCase()} booking`} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:text-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">
                           <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>

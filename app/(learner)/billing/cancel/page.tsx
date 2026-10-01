@@ -108,8 +108,8 @@ export default function CancelSubscriptionPage() {
         {step === 'deflection' && intent?.offeredCouponCode && (
           <div className="space-y-4">
             <div className="rounded-xl border border-success/30 bg-success/10 p-5">
-              <Tag className="mb-2 h-5 w-5 text-success" aria-hidden="true" />
-              <p className="text-lg font-semibold text-success">Wait, here’s a discount</p>
+              <Tag className="mb-2 h-5 w-5 text-success-strong" aria-hidden="true" />
+              <p className="text-lg font-semibold text-success-strong">Wait, here’s a discount</p>
               <p className="mt-1 text-sm text-navy">
                 Stay with us and we’ll apply the coupon code <strong>{intent.offeredCouponCode}</strong> to your next renewal.
               </p>
@@ -124,7 +124,7 @@ export default function CancelSubscriptionPage() {
         {step === 'confirm' && (
           <div className="space-y-4">
             <div className="rounded-xl border border-danger/30 bg-danger/10 p-5">
-              <p className="text-lg font-semibold text-danger">Confirm cancellation</p>
+              <p className="text-lg font-semibold text-danger-strong">Confirm cancellation</p>
               <p className="mt-1 text-sm text-navy">
                 Your subscription will be cancelled. You keep access until the end of your current billing period.
                 After that, premium features lock; your account remains.

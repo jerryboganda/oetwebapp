@@ -34,7 +34,7 @@ export function PublishGateChecklist({ title, rows }: PublishGateChecklistProps)
               {row.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
             </span>
             <span className="flex-1">
-              <span className={cn(row.ok ? 'text-navy' : 'text-danger')}>{row.label}</span>
+              <span className={cn(row.ok ? 'text-navy' : 'text-danger-strong')}>{row.label}</span>
               {row.detail ? <span className="ml-1 text-xs text-muted">· {row.detail}</span> : null}
             </span>
           </li>

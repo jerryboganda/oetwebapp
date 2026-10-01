@@ -36,7 +36,7 @@ interface FluencyData {
   benchmarks: { idealWordsPerMinute: { min: number; max: number }; maxAcceptableFillerRatio: number; maxAcceptablePauseSeconds: number };
 }
 
-const RATING_COLORS: Record<string, string> = { good: 'bg-success/10 text-success', fair: 'bg-warning/10 text-warning', poor: 'bg-danger/10 text-danger' };
+const RATING_COLORS: Record<string, string> = { good: 'bg-success/10 text-success-strong', fair: 'bg-warning/10 text-warning-strong', poor: 'bg-danger/10 text-danger-strong' };
 
 export default function FluencyTimelinePage() {
   const [data, setData] = useState<FluencyData | null>(null);
@@ -73,7 +73,7 @@ export default function FluencyTimelinePage() {
             <LearnerSurfaceSectionHeader title="Overview Metrics" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold text-navy">{data.averageWordsPerMinute}</p><p className="text-xs text-muted">Avg WPM</p><p className="text-xs text-muted/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold text-navy">{data.totalFillerWords}</p><p className="text-xs text-muted">Filler Words</p><p className="text-xs text-muted/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning-strong" /><p className="text-2xl font-bold text-navy">{data.totalFillerWords}</p><p className="text-xs text-muted">Filler Words</p><p className="text-xs text-muted/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
               <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold text-navy">{data.pauseCount}</p><p className="text-xs text-muted">Long Pauses</p></Card></MotionItem>
               <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold text-navy">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted">Total Duration</p><p className="text-xs text-muted/70">{data.totalWords} words</p></Card></MotionItem>
             </div>
@@ -91,8 +91,8 @@ export default function FluencyTimelinePage() {
                       <p className="text-sm">{seg.text}</p>
                       <div className="flex gap-3 mt-1">
                         <span className="text-xs text-muted">{seg.wordsPerMinute} WPM</span>
-                        {seg.fillerCount > 0 && <span className="text-xs text-warning">{seg.fillerCount} filler{seg.fillerCount > 1 ? 's' : ''}</span>}
-                        {seg.isPause && <span className="text-xs text-danger">{seg.pauseBefore}s pause</span>}
+                        {seg.fillerCount > 0 && <span className="text-xs text-warning-strong">{seg.fillerCount} filler{seg.fillerCount > 1 ? 's' : ''}</span>}
+                        {seg.isPause && <span className="text-xs text-danger-strong">{seg.pauseBefore}s pause</span>}
                       </div>
                     </div>
                     <div className="flex-shrink-0 w-20">

@@ -214,7 +214,7 @@ export function RolePlayCardEditor({
             </Button>
           </div>
         </div>
-        {suggestError ? <p className="text-xs text-danger">{suggestError}</p> : null}
+        {suggestError ? <p className="text-xs text-danger-strong">{suggestError}</p> : null}
         <div className="flex flex-wrap items-center gap-4">
           <span className="text-sm font-medium text-navy">Behavioural tags:</span>
           {SPEAKING_BEHAVIOURAL_TAGS.map((tag) => (

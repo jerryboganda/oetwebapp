@@ -468,7 +468,7 @@ export function AnnotationLayer({
                     </p>
                     <p className="mt-1 text-sm text-navy">{a.feedbackText}</p>
                     {a.suggestion ? (
-                      <p className="mt-1 text-xs text-success">
+                      <p className="mt-1 text-xs text-success-strong">
                         <span className="font-semibold">Suggestion:</span> {a.suggestion}
                       </p>
                     ) : null}

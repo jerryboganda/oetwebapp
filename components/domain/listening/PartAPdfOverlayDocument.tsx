@@ -159,7 +159,7 @@ export function PartAPdfOverlayDocument({
 
   return (
     <div data-testid="part-a-pdf-overlay-document">
-      {error ? <p className="p-2 text-sm text-danger">{error}</p> : null}
+      {error ? <p className="p-2 text-sm text-danger-strong">{error}</p> : null}
       {loading ? <p className="p-2 text-sm text-muted">Loading paper…</p> : null}
       <div className="space-y-4">
         {pages.map((page) => {

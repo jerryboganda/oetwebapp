@@ -144,7 +144,7 @@ function WritingCompareContent() {
           <Card className="h-full">
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-success" />
+                <BookOpen className="w-5 h-5 text-success-strong" />
                 <h3 className="font-semibold text-navy">Model Answer</h3>
               </div>
             </div>

@@ -304,14 +304,14 @@ export default function ReviewQueuePage() {
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession.replace('_', ' ')}</span> },
     { key: 'type', header: 'Sub-test', render: (row) => <span className="capitalize">{row.type}</span> },
     { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">Unknown</span> : <span className="capitalize">{row.aiConfidence}</span> },
-    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'font-semibold capitalize text-danger' : 'capitalize'}>{row.priority}</span> },
+    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'font-semibold capitalize text-danger-strong' : 'capitalize'}>{row.priority}</span> },
     {
       key: 'slaDue',
       header: 'SLA Due',
       render: (row) => {
         const date = new Date(row.slaDue);
         const formatted = `${date.toISOString().split('T')[0]} ${date.toISOString().split('T')[1].slice(0, 5)}`;
-        return <span className={row.isOverdue ? 'font-bold text-danger' : row.slaState === 'at_risk' ? 'font-semibold text-warning' : ''}>{formatted} UTC</span>;
+        return <span className={row.isOverdue ? 'font-bold text-danger-strong' : row.slaState === 'at_risk' ? 'font-semibold text-warning-strong' : ''}>{formatted} UTC</span>;
       },
     },
     { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => <span className={row.assignedReviewerName ? 'text-navy' : 'italic text-muted'}>{row.assignedReviewerName ?? 'Unassigned'}</span> },

@@ -109,7 +109,7 @@ export default function RemediationPage() {
               <MotionItem key={`${wa.subtestCode}-${wa.criterionCode}`}>
                 <Card className="p-4 flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-danger">#{i + 1}</span>
+                    <span className="text-sm font-bold text-danger-strong">#{i + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-navy capitalize">

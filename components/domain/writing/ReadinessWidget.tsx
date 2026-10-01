@@ -30,7 +30,7 @@ const SUB_BARS: SubBarSpec[] = [
 function scoreTone(score: number): { text: string; bg: string; ring: string; label: string } {
   if (score >= 85) {
     return {
-      text: 'text-success',
+      text: 'text-success-strong',
       bg: 'bg-success/10',
       ring: 'border-success/30',
       label: 'Exam-ready',
@@ -38,14 +38,14 @@ function scoreTone(score: number): { text: string; bg: string; ring: string; lab
   }
   if (score >= 65) {
     return {
-      text: 'text-warning',
+      text: 'text-warning-strong',
       bg: 'bg-warning/10',
       ring: 'border-warning/30',
       label: 'Building',
     };
   }
   return {
-    text: 'text-danger',
+    text: 'text-danger-strong',
     bg: 'bg-danger/10',
     ring: 'border-danger/30',
     label: 'Foundation',
@@ -66,9 +66,9 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
   const deltaTone = delta === null
     ? 'text-muted'
     : delta > 0
-      ? 'text-success'
+      ? 'text-success-strong'
       : delta < 0
-        ? 'text-danger'
+        ? 'text-danger-strong'
         : 'text-muted';
 
   return (

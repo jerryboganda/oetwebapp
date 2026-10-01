@@ -39,9 +39,9 @@ const CHECKLIST: ChecklistItem[] = [
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   documents: { label: 'Documents', icon: <FileText className="w-5 h-5" />, color: 'text-info' },
-  logistics: { label: 'Logistics', icon: <MapPin className="w-5 h-5" />, color: 'text-success' },
+  logistics: { label: 'Logistics', icon: <MapPin className="w-5 h-5" />, color: 'text-success-strong' },
   preparation: { label: 'Final Preparation', icon: <BookOpen className="w-5 h-5" />, color: 'text-primary' },
-  on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-warning' },
+  on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-warning-strong' },
 };
 
 export default function TestDayPrepPage() {
@@ -79,7 +79,7 @@ export default function TestDayPrepPage() {
           </div>
           <ProgressBar value={progressPct} size="md" ariaLabel="Test-day preparation progress" />
           {progressPct === 100 && (
-            <p className="mt-2 text-sm text-success font-medium" role="status">
+            <p className="mt-2 text-sm text-success-strong font-medium" role="status">
               All done! You&apos;re ready for test day.
             </p>
           )}
@@ -109,7 +109,7 @@ export default function TestDayPrepPage() {
                       }`}
                     >
                       {isChecked
-                        ? <CheckCircle2 className="w-5 h-5 text-success mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        ? <CheckCircle2 className="w-5 h-5 text-success-strong mt-0.5 flex-shrink-0" aria-hidden="true" />
                         : <Circle className="w-5 h-5 text-muted/60 mt-0.5 flex-shrink-0" aria-hidden="true" />
                       }
                       <div>
@@ -137,7 +137,7 @@ export default function TestDayPrepPage() {
         <MotionItem>
           <Link href="/strategies" className="mt-3 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
             <Card className="p-4 bg-warning/5 border-warning/30 hover:bg-warning/10 transition-colors">
-              <p className="text-sm font-semibold text-warning">View detailed strategies →</p>
+              <p className="text-sm font-semibold text-warning-strong">View detailed strategies →</p>
               <p className="text-xs text-muted mt-1">Listening, Reading, Writing, and Speaking tactical guides.</p>
             </Card>
           </Link>

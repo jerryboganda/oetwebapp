@@ -87,7 +87,7 @@ export default function MockResultsPage() {
           <>
             <p
               data-testid="reading-mock-practice-score-disclosure"
-              className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning"
+              className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong"
             >
               AI Practice Score — not an official OET result.
             </p>

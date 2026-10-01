@@ -34,11 +34,11 @@ const TASK_ICONS: Record<string, LucideIcon> = {
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
   preparing: { label: 'Preparing', color: 'bg-background-light text-muted border border-border' },
   active: { label: 'In Progress', color: 'bg-info/10 text-info border border-info/20' },
-  evaluating: { label: 'Evaluating…', color: 'bg-warning/10 text-warning border border-warning/20' },
-  evaluated: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
-  completed: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
-  abandoned: { label: 'Abandoned', color: 'bg-danger/10 text-danger border border-danger/20' },
-  failed: { label: 'Failed', color: 'bg-danger/10 text-danger border border-danger/20' },
+  evaluating: { label: 'Evaluating…', color: 'bg-warning/10 text-warning-strong border border-warning/20' },
+  evaluated: { label: 'Completed', color: 'bg-success/10 text-success-strong border border-success/20' },
+  completed: { label: 'Completed', color: 'bg-success/10 text-success-strong border border-success/20' },
+  abandoned: { label: 'Abandoned', color: 'bg-danger/10 text-danger-strong border border-danger/20' },
+  failed: { label: 'Failed', color: 'bg-danger/10 text-danger-strong border border-danger/20' },
 };
 
 export default function ConversationPage() {

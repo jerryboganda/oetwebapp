@@ -106,7 +106,7 @@ function ModuleCard({
             )}
           </div>
           {module.isCompleted ? (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
           ) : null}
         </div>
 

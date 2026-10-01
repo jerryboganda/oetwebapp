@@ -24,9 +24,9 @@ const shellTint: Record<PerfTone, string> = {
 };
 
 const scoreText: Record<PerfTone, string> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  danger: 'text-danger',
+  success: 'text-success-strong',
+  warning: 'text-warning-strong',
+  danger: 'text-danger-strong',
 };
 
 /**

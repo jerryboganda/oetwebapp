@@ -68,7 +68,7 @@ export function ListeningPlayerSkinShell({
         className="min-h-screen bg-navy dark:bg-surface text-white"
       >
         <div className="flex items-center gap-3 border-b border-white/10 bg-navy px-4 py-2 text-sm font-semibold">
-          <ShieldAlert className="h-4 w-4 text-warning" aria-hidden="true" />
+          <ShieldAlert className="h-4 w-4 text-warning-strong" aria-hidden="true" />
           <span>OET@Home guidance mode. Keep this test window visible when possible.</span>
         </div>
         <div className="listening-home-surface">

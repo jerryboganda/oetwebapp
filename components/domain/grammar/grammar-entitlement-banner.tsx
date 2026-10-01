@@ -29,11 +29,11 @@ export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlemen
     return (
       <Card className="border-warning/30 bg-warning/5">
         <div className="flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning-strong">
             <Lock className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="eyebrow text-warning">Free tier limit reached</p>
+            <p className="eyebrow text-warning-strong">Free tier limit reached</p>
             <h2 className="mt-0.5 text-base font-bold text-navy">You&apos;ve reached your free grammar lessons for this week.</h2>
             <p className="mt-1 text-sm leading-6 text-muted">
               {entitlement.reason}

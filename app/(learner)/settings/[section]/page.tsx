@@ -690,7 +690,7 @@ function ProfessionLockNotice() {
     <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5 shadow-sm">
       <div className="flex items-start gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-warning/30 bg-warning/15">
-          <Lock className="h-5 w-5 text-warning" aria-hidden="true" />
+          <Lock className="h-5 w-5 text-warning-strong" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-3">
           <p className="text-sm font-black uppercase tracking-widest text-navy">Profession locked</p>
@@ -1075,7 +1075,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
             <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">
               Shown across your account. JPG, PNG, GIF, or WEBP up to 10 MB. Optional — a picture isn&apos;t required.
             </p>
-            {error ? <p id="avatar-upload-error" className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+            {error ? <p id="avatar-upload-error" className="mt-2 text-sm font-semibold text-danger-strong">{error}</p> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -1101,7 +1101,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
             <Button
               type="button"
               variant="ghost"
-              className="gap-2 rounded-full font-bold text-danger hover:bg-danger/10"
+              className="gap-2 rounded-full font-bold text-danger-strong hover:bg-danger/10"
               disabled={busy}
               onClick={() => { void handleRemove(); }}
             >
@@ -1138,7 +1138,7 @@ function PrivacyControlsCard() {
                 Manage my recordings
               </Link>
             </Button>
-            <Button asChild variant="outline" className="rounded-full border-danger/30 bg-danger/10 font-bold text-danger hover:border-danger/40 hover:bg-danger/20">
+            <Button asChild variant="outline" className="rounded-full border-danger/30 bg-danger/10 font-bold text-danger-strong hover:border-danger/40 hover:bg-danger/20">
               <Link href="/settings/danger-zone">
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 Delete my account &amp; data
@@ -1187,11 +1187,11 @@ function DangerZoneDeleteSection() {
       <div className="rounded-2xl border-2 border-danger/30 bg-danger/10 p-6 shadow-sm">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10">
-            <Trash2 className="h-5 w-5 text-danger" />
+            <Trash2 className="h-5 w-5 text-danger-strong" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-danger">Delete your account</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-danger">
+            <h3 className="text-lg font-bold text-danger-strong">Delete your account</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-danger-strong">
               This action cannot be undone. After 30 days, your account and all associated data will be permanently deleted. During the grace period you can contact support to cancel the deletion.
             </p>
           </div>
@@ -1199,7 +1199,7 @@ function DangerZoneDeleteSection() {
 
         <div className="mt-6 space-y-4">
           <div>
-            <label htmlFor="delete-password" className="block text-sm font-semibold text-danger">
+            <label htmlFor="delete-password" className="block text-sm font-semibold text-danger-strong">
               Confirm your password
             </label>
             <input
@@ -1217,8 +1217,8 @@ function DangerZoneDeleteSection() {
           </div>
 
           <div>
-            <label htmlFor="delete-reason" className="block text-sm font-semibold text-danger">
-              Reason for leaving <span className="font-normal text-danger">(optional)</span>
+            <label htmlFor="delete-reason" className="block text-sm font-semibold text-danger-strong">
+              Reason for leaving <span className="font-normal text-danger-strong">(optional)</span>
             </label>
             <textarea
               id="delete-reason"

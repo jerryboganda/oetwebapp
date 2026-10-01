@@ -106,7 +106,7 @@ export default function ScoreCalculatorPage() {
                 >
                   <h3 className="font-semibold text-navy text-sm">{inst.institution}</h3>
                   <p className="text-xs text-muted mt-1">{inst.country} &middot; {inst.profession}</p>
-                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success text-xs font-medium self-start">
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success-strong text-xs font-medium self-start">
                     Min. Grade {inst.minimumOetGrade}
                   </div>
                   <Link

@@ -106,7 +106,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
 
   if (error) {
     return (
-      <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger">
+      <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger-strong">
         <p className="font-semibold">Failed to load dual assessment.</p>
         <p className="mt-1 text-xs">{error}</p>
       </Card>
@@ -176,7 +176,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
                 <td className="px-4 py-2 text-center">
                   {row.tutor ? (
                     <>
-                      <span className="font-bold tabular-nums text-success">{row.tutor.score}</span>
+                      <span className="font-bold tabular-nums text-success-strong">{row.tutor.score}</span>
                       <span className="text-muted">/{row.tutor.maxScore}</span>
                     </>
                   ) : (
@@ -188,7 +188,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
                     ? <span className="text-muted">-</span>
                     : row.delta === 0
                       ? <span className="text-muted">0</span>
-                      : <span className={row.delta > 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
+                      : <span className={row.delta > 0 ? 'text-success-strong font-semibold' : 'text-danger-strong font-semibold'}>
                           {row.delta > 0 ? `+${row.delta}` : row.delta}
                         </span>}
                 </td>
@@ -200,7 +200,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
 
       {data.tutor && data.tutor.overallFeedback && (
         <div className="mt-4 rounded-xl border border-success/30 bg-success/10 p-4">
-          <p className="eyebrow text-success">
+          <p className="eyebrow text-success-strong">
             Tutor feedback: {data.tutor.tutorName}
           </p>
           <p className="mt-2 whitespace-pre-line text-sm text-navy">{data.tutor.overallFeedback}</p>

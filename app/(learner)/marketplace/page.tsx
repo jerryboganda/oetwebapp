@@ -45,10 +45,10 @@ const SUBTEST_ICONS: Record<string, typeof BookOpen> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
-  pending: { label: 'Pending Review', icon: Clock, color: 'bg-warning/10 text-warning' },
+  pending: { label: 'Pending Review', icon: Clock, color: 'bg-warning/10 text-warning-strong' },
   in_review: { label: 'In Review', icon: Loader2, color: 'bg-info/10 text-info' },
-  approved: { label: 'Approved', icon: CheckCircle2, color: 'bg-success/10 text-success' },
-  rejected: { label: 'Rejected', icon: XCircle, color: 'bg-danger/10 text-danger' },
+  approved: { label: 'Approved', icon: CheckCircle2, color: 'bg-success/10 text-success-strong' },
+  rejected: { label: 'Rejected', icon: XCircle, color: 'bg-danger/10 text-danger-strong' },
 };
 
 const apiFetch = apiClient.request;
@@ -300,7 +300,7 @@ export default function MarketplacePage() {
                 </div>
                 <div className="flex gap-4 text-center">
                   <div><div className="text-lg font-bold text-primary">{profile.submissionCount}</div><div className="text-xs text-muted/60">Submitted</div></div>
-                  <div><div className="text-lg font-bold text-success">{profile.approvedCount}</div><div className="text-xs text-muted/60">Approved</div></div>
+                  <div><div className="text-lg font-bold text-success-strong">{profile.approvedCount}</div><div className="text-xs text-muted/60">Approved</div></div>
                 </div>
               </div>
             </div>

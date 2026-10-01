@@ -102,7 +102,7 @@ export function AiPreAnalysisPanel({
           <p className="eyebrow text-muted">Word count</p>
           <p className="mt-1 text-sm text-navy">
             <span className="font-black">{pa.wordCount}</span> words ·{' '}
-            <span className={pa.withinWordGuide ? 'text-success' : 'text-error'}>
+            <span className={pa.withinWordGuide ? 'text-success-strong' : 'text-error'}>
               {pa.withinWordGuide ? 'within guide' : 'outside guide'}
             </span>
           </p>
@@ -141,7 +141,7 @@ export function AiPreAnalysisPanel({
 
       {pa.detectedIrrelevantContent.length > 0 ? (
         <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3">
-          <p className="eyebrow text-warning">
+          <p className="eyebrow text-warning-strong">
             Detected irrelevant content ({pa.detectedIrrelevantContent.length})
           </p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-sm text-navy">

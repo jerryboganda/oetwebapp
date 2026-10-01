@@ -272,7 +272,7 @@ export default function ScoreGuaranteePage() {
                   <dt className="eyebrow text-muted">
                     Target
                   </dt>
-                  <dd className="mt-1 text-2xl font-black text-success">
+                  <dd className="mt-1 text-2xl font-black text-success-strong">
                     {pledge.baselineScore + pledge.guaranteedImprovement}
                   </dd>
                 </div>

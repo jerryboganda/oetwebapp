@@ -81,7 +81,7 @@ function formatDate(dateStr: string) {
 function roleColor(role: string) {
   switch (role) {
     case 'expert': return 'text-primary bg-primary/10 border-primary/30';
-    case 'admin': return 'text-danger bg-danger/10 border-danger/30';
+    case 'admin': return 'text-danger-strong bg-danger/10 border-danger/30';
     default: return 'text-info bg-info/10 border-info/30';
   }
 }
@@ -255,7 +255,7 @@ export default function ThreadPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   {thread.isPinned && (
-                    <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                    <Badge variant="outline" className="text-warning-strong border-warning/30 bg-warning/10">
                       <Pin className="mr-1 h-3 w-3" /> Pinned
                     </Badge>
                   )}
@@ -265,7 +265,7 @@ export default function ThreadPage() {
                     </Badge>
                   )}
                   {isAuthor && (
-                    <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+                    <Badge variant="outline" className="text-success-strong border-success/30 bg-success/10">
                       Your thread
                     </Badge>
                   )}
@@ -273,14 +273,14 @@ export default function ThreadPage() {
                 <h1 className="text-2xl font-bold text-navy">{thread.title}</h1>
                 {isAdmin && (
                   <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2">
-                    <Badge variant="outline" className="text-danger border-danger/30 bg-danger/10 text-xs mr-1">Admin</Badge>
+                    <Badge variant="outline" className="text-danger-strong border-danger/30 bg-danger/10 text-xs mr-1">Admin</Badge>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleAdminPin}
                       disabled={moderating}
                     >
-                      <Pin className={`mr-1 h-3.5 w-3.5 ${thread.isPinned ? 'text-warning' : ''}`} />
+                      <Pin className={`mr-1 h-3.5 w-3.5 ${thread.isPinned ? 'text-warning-strong' : ''}`} />
                       {thread.isPinned ? 'Unpin' : 'Pin'}
                     </Button>
                     <Button
@@ -289,7 +289,7 @@ export default function ThreadPage() {
                       onClick={handleAdminLock}
                       disabled={moderating}
                     >
-                      <Lock className={`mr-1 h-3.5 w-3.5 ${thread.isLocked ? 'text-danger' : ''}`} />
+                      <Lock className={`mr-1 h-3.5 w-3.5 ${thread.isLocked ? 'text-danger-strong' : ''}`} />
                       {thread.isLocked ? 'Unlock' : 'Lock'}
                     </Button>
                     <Button
@@ -297,7 +297,7 @@ export default function ThreadPage() {
                       size="sm"
                       onClick={() => setDeleteThreadConfirm(true)}
                       disabled={moderating}
-                      className="text-danger hover:bg-danger/10"
+                      className="text-danger-strong hover:bg-danger/10"
                     >
                       <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
                     </Button>
@@ -386,7 +386,7 @@ export default function ThreadPage() {
                               size="sm"
                               onClick={() => setDeleteReplyTarget(reply)}
                               disabled={moderating}
-                              className="text-danger hover:bg-danger/10 ml-auto text-xs h-6 px-2"
+                              className="text-danger-strong hover:bg-danger/10 ml-auto text-xs h-6 px-2"
                             >
                               <Trash2 className="mr-1 h-3 w-3" /> Delete
                             </Button>

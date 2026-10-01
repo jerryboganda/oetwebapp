@@ -136,7 +136,7 @@ export default function QuestionDiscussionPage() {
         <div className="rounded-xl border border-border bg-surface p-5">
           <h2 className="mb-3 text-sm font-semibold text-navy">Post a comment</h2>
           {postError ? (
-            <p className="mb-2 text-xs text-danger">{postError}</p>
+            <p className="mb-2 text-xs text-danger-strong">{postError}</p>
           ) : null}
           <form onSubmit={handlePost} className="space-y-3">
             <textarea

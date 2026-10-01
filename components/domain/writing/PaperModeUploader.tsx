@@ -183,9 +183,9 @@ export function PaperModeUploader({
           <div className="rounded-lg border border-border bg-surface p-4">
             <div className="flex items-center gap-2 mb-2">
               {status === 'completed' ? (
-                <CheckCircle2 className="w-5 h-5 text-success" aria-hidden="true" />
+                <CheckCircle2 className="w-5 h-5 text-success-strong" aria-hidden="true" />
               ) : status === 'failed' || status === 'manual_required' ? (
-                <AlertCircle className="w-5 h-5 text-danger" aria-hidden="true" />
+                <AlertCircle className="w-5 h-5 text-danger-strong" aria-hidden="true" />
               ) : (
                 <Loader2 className="w-5 h-5 animate-spin text-primary" aria-hidden="true" />
               )}
@@ -217,7 +217,7 @@ export function PaperModeUploader({
 
             {status === 'failed' || status === 'manual_required' ? (
               <>
-                <p className="text-xs text-danger mt-1">
+                <p className="text-xs text-danger-strong mt-1">
                   {job.errorMessage ?? 'OCR could not read the image. Try again with better lighting or transcribe manually.'}
                 </p>
                 <div className="mt-3 flex items-center justify-end">
@@ -236,7 +236,7 @@ export function PaperModeUploader({
         )}
 
         {error ? (
-          <p className="mt-3 text-xs text-danger" role="alert">
+          <p className="mt-3 text-xs text-danger-strong" role="alert">
             {error}
           </p>
         ) : null}

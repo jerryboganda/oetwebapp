@@ -143,7 +143,7 @@ export function TaskListEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className={`${iconButtonClass} text-danger hover:bg-danger/10`}
+              className={`${iconButtonClass} text-danger-strong hover:bg-danger/10`}
               onClick={() => remove(idx)}
               disabled={disabled}
               aria-label={`Remove ${itemNoun.toLowerCase()} ${idx + 1}`}

@@ -109,7 +109,7 @@ export function ForcedUpdateOverlay() {
         );
       }
       return (
-        <Panel icon={<AlertTriangle className="h-9 w-9 text-danger" />} title="Update failed" subtitle={state.error}>
+        <Panel icon={<AlertTriangle className="h-9 w-9 text-danger-strong" />} title="Update failed" subtitle={state.error}>
           <Button
             variant="primary"
             fullWidth

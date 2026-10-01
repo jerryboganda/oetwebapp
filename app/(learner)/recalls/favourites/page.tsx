@@ -110,7 +110,7 @@ export default function RecallsFavouritesPage() {
                     type="button"
                     onClick={() => handleRemove(it)}
                     aria-label={`Remove ${it.term} from favourites`}
-                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning-strong hover:border-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Heart size={13} className="fill-current" aria-hidden="true" />
                     Remove
@@ -120,7 +120,7 @@ export default function RecallsFavouritesPage() {
             </ul>
         ) : (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning-strong">
               <Heart className="h-6 w-6" />
             </div>
             <p className="mt-3 text-sm font-semibold text-navy">No favourites yet</p>

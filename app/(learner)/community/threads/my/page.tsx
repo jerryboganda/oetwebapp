@@ -152,7 +152,7 @@ export default function MyThreadsPage() {
                     >
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         {thread.isPinned && (
-                          <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                          <Badge variant="outline" className="text-warning-strong border-warning/30 bg-warning/10">
                             <Pin className="mr-1 h-3 w-3" /> Pinned
                           </Badge>
                         )}

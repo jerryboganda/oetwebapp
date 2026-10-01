@@ -129,7 +129,7 @@ export default function MockWritingSectionPage() {
                   </span>
                 ) : null}
                 {phase === 'reading' ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 eyebrow text-warning">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 eyebrow text-warning-strong">
                     <Lock className="h-3.5 w-3.5" aria-hidden />
                     Editor locked
                   </span>

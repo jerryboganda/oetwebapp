@@ -185,7 +185,7 @@ export default function PackageDetailPage() {
             <ul className="mt-4 space-y-2">
               {(websitePackage?.features ?? plan.dashboardModules.map(prettyModule)).map((feature) => (
                 <li key={feature} className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                   <span>{feature}</span>
                 </li>
               ))}

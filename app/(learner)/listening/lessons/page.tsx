@@ -77,7 +77,7 @@ export default function ListeningLessonsPage() {
               <h2 className="mt-1 text-base font-semibold text-navy">{l.title}</h2>
               <p className="mt-1 text-xs text-muted">~{l.estimatedMinutes} min</p>
               {l.completedByUser && (
-                <span className="mt-2 inline-block rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
+                <span className="mt-2 inline-block rounded-full bg-success/10 px-2 py-0.5 text-xs text-success-strong">
                   ✓ Completed
                 </span>
               )}

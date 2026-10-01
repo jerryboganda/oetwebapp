@@ -176,9 +176,9 @@ export function WritingReadingWindowOverlay({
 
   const tone =
     secondsRemaining <= 60
-      ? 'text-danger'
+      ? 'text-danger-strong'
       : secondsRemaining <= 300
-        ? 'text-warning'
+        ? 'text-warning-strong'
         : 'text-white';
 
   const clampedTotal = Math.max(1, Math.floor(totalSeconds));

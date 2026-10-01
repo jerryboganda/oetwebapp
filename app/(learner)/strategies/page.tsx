@@ -93,7 +93,7 @@ function StrategyCard({ guide, compact = false }: { guide: StrategyGuideListItem
 
             {guide.recommendedReason ? (
               <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-navy">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden="true" />
                 <span>{guide.recommendedReason}</span>
               </div>
             ) : null}

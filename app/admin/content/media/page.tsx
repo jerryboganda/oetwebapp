@@ -271,13 +271,13 @@ export default function AdminMediaPage() {
                   <div><strong>Total:</strong> {audit.totalAssets}</div>
                   <div><strong>Ready:</strong> {audit.readyCount}</div>
                   <div><strong>Processing:</strong> {audit.processingCount}</div>
-                  <div className="text-danger"><strong>Failed:</strong> {audit.failedCount}</div>
+                  <div className="text-danger-strong"><strong>Failed:</strong> {audit.failedCount}</div>
                 </div>
                 {audit.missingThumbnails.length > 0 && (
-                  <div className="mt-2 text-xs text-warning">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
+                  <div className="mt-2 text-xs text-warning-strong">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
                 )}
                 {audit.missingTranscripts.length > 0 && (
-                  <div className="mt-1 text-xs text-warning">⚠ {audit.missingTranscripts.length} missing transcripts</div>
+                  <div className="mt-1 text-xs text-warning-strong">⚠ {audit.missingTranscripts.length} missing transcripts</div>
                 )}
               </InlineAlert>
             )}

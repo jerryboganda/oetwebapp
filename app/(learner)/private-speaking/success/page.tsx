@@ -29,7 +29,7 @@ export default function PrivateSpeakingSuccessPage() {
     <>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
       <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center">
-        <CheckCircle2 className="w-8 h-8 text-success" />
+        <CheckCircle2 className="w-8 h-8 text-success-strong" />
       </div>
       <div>
         <h1 className="text-2xl font-bold text-navy mb-2">Payment Successful!</h1>

@@ -72,7 +72,7 @@ export function ReadinessForecastSimulator({ open, onClose, initialForecast }: R
           />
         </div>
 
-        {error && <p className="text-xs text-danger mb-3">{error}</p>}
+        {error && <p className="text-xs text-danger-strong mb-3">{error}</p>}
 
         {forecast && (
           <div className="space-y-3">

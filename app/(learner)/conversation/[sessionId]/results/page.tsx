@@ -207,13 +207,13 @@ export default function ConversationResultsPage() {
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           {strengths.length > 0 && (
             <MotionSection delayIndex={2} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-success">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-success-strong">
                 <CheckCircle2 className="h-4 w-4" /> Strengths
               </h3>
               <ul className="space-y-2">
                 {strengths.map((s, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-navy">
-                    <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />{s}
+                    <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success-strong" />{s}
                   </li>
                 ))}
               </ul>
@@ -221,13 +221,13 @@ export default function ConversationResultsPage() {
           )}
           {improvements.length > 0 && (
             <MotionSection delayIndex={3} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-warning">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-warning-strong">
                 <AlertTriangle className="h-4 w-4" /> Areas to improve
               </h3>
               <ul className="space-y-2">
                 {improvements.map((s, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-navy">
-                    <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />{s}
+                    <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-strong" />{s}
                   </li>
                 ))}
               </ul>
@@ -274,10 +274,10 @@ export default function ConversationResultsPage() {
                           <div key={a.id} className="flex items-start gap-2">
                             <span className={`rounded px-1.5 py-0.5 text-3xs font-bold uppercase ${
                               a.type === 'strength'
-                                ? 'bg-success/10 text-success'
+                                ? 'bg-success/10 text-success-strong'
                                 : a.type === 'error'
-                                ? 'bg-danger/10 text-danger'
-                                : 'bg-warning/10 text-warning'
+                                ? 'bg-danger/10 text-danger-strong'
+                                : 'bg-warning/10 text-warning-strong'
                             }`}>{a.type}</span>
                             <div className="flex-1 text-sm text-navy">
                               {a.evidence}

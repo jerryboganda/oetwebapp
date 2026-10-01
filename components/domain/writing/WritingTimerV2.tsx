@@ -123,9 +123,9 @@ export function WritingTimerV2({
     phase === 'completed'
       ? 'text-muted'
       : seconds <= 60
-        ? 'text-danger'
+        ? 'text-danger-strong'
         : seconds <= 300
-          ? 'text-warning'
+          ? 'text-warning-strong'
           : 'text-navy dark:text-white';
 
   const phaseLabel =

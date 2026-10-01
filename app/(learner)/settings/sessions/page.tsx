@@ -188,7 +188,7 @@ export default function SessionsPage() {
         {trustedDevice ? (
           <div className="bg-surface rounded-2xl border border-border shadow-sm p-4 sm:p-5 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-success/10 border-success/20">
-              <ShieldCheck className="w-5 h-5 text-success" aria-hidden="true" />
+              <ShieldCheck className="w-5 h-5 text-success-strong" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -196,7 +196,7 @@ export default function SessionsPage() {
                   Trusted device: {trustedDevice.deviceName || platformLabel(trustedDevice.platform) || 'Unknown device'}
                 </h3>
                 {trustedDevice.isCurrentDevice ? (
-                  <span className="inline-flex items-center rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-2xs font-semibold text-success">
+                  <span className="inline-flex items-center rounded-full bg-success/10 border border-success/20 px-2 py-0.5 text-2xs font-semibold text-success-strong">
                     This device
                   </span>
                 ) : null}

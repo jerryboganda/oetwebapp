@@ -27,8 +27,8 @@ import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 const MASTERY_COLORS: Record<string, string> = {
   new: 'bg-background-light text-navy',
   learning: 'bg-info/10 text-info',
-  reviewing: 'bg-warning/10 text-warning',
-  mastered: 'bg-success/10 text-success',
+  reviewing: 'bg-warning/10 text-warning-strong',
+  mastered: 'bg-success/10 text-success-strong',
 };
 
 export default function VocabularyTermDetailPage() {
@@ -325,7 +325,7 @@ export default function VocabularyTermDetailPage() {
                 <button
                   onClick={handleRemove}
                   disabled={saving}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger-strong hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" /> Remove from my list
                 </button>

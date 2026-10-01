@@ -84,7 +84,7 @@ export function VideoCard({
               }}
               className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-background-dark/70 text-white transition-colors hover:bg-background-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger' : ''}`} aria-hidden="true" />
+              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger-strong' : ''}`} aria-hidden="true" />
             </button>
           )}
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-background-dark/70 px-2 py-1 text-xs text-white">

@@ -43,9 +43,9 @@ interface LearningPathData {
 const apiRequest = apiClient.request;
 
 const DIFFICULTY_COLORS: Record<string, string> = {
-  easy: 'text-success bg-success/10',
-  medium: 'text-warning bg-warning/10',
-  hard: 'text-danger bg-danger/10',
+  easy: 'text-success-strong bg-success/10',
+  medium: 'text-warning-strong bg-warning/10',
+  hard: 'text-danger-strong bg-danger/10',
 };
 
 function learningPathHref(subtestCode: string, itemId?: string): string {
@@ -179,7 +179,7 @@ export default function LearningPathsPage() {
               <MotionItem key={item.id}>
                 <Card className={`p-3 flex items-center gap-3 ${item.completed ? 'opacity-60' : ''}`}>
                   {item.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-success-strong flex-shrink-0" />
                   ) : (
                     <ChevronRight className="w-5 h-5 text-muted/60 flex-shrink-0" />
                   )}

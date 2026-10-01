@@ -229,18 +229,18 @@ export default function Settings() {
                     isLink && isFrozen && 'cursor-not-allowed opacity-60',
                   )}
                 >
-                  <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', isDanger ? 'bg-danger/10 text-danger' : 'bg-lavender text-primary')}>
+                  <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', isDanger ? 'bg-danger/10 text-danger-strong' : 'bg-lavender text-primary')}>
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className={cn('text-base font-semibold', isDanger ? 'text-danger' : 'text-navy')}>{item.title}</h3>
-                    <p className={cn('mt-0.5 text-sm', isDanger ? 'text-danger/80' : 'text-muted')}>{item.description}</p>
+                    <h3 className={cn('text-base font-semibold', isDanger ? 'text-danger-strong' : 'text-navy')}>{item.title}</h3>
+                    <p className={cn('mt-0.5 text-sm', isDanger ? 'text-danger-strong/80' : 'text-muted')}>{item.description}</p>
                   </div>
                   {isLink ? (
                     <ChevronRight
                       className={cn(
                         'h-5 w-5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5',
-                        isDanger ? 'text-danger' : 'text-muted group-hover:text-primary',
+                        isDanger ? 'text-danger-strong' : 'text-muted group-hover:text-primary',
                       )}
                       aria-hidden="true"
                     />

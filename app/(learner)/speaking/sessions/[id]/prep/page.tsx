@@ -108,7 +108,7 @@ export default function SpeakingSessionPrepPage() {
 
   if (loadError || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger-strong">
         <h2 className="text-base font-semibold">Could not load this session</h2>
         <p className="mt-1">{loadError ?? 'Session not available.'}</p>
         <Button type="button" variant="outline" className="mt-4" onClick={() => router.push('/speaking')}>
@@ -138,7 +138,7 @@ export default function SpeakingSessionPrepPage() {
       <div className="sticky bottom-0 z-10 border-t border-border bg-surface px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="mx-auto w-full max-w-5xl space-y-2">
           {transitionError ? (
-            <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger-strong">
               {transitionError}
             </p>
           ) : null}

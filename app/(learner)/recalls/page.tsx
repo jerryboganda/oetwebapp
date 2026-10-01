@@ -68,7 +68,7 @@ export default function RecallsHomePage() {
       title: 'Saved words to review later',
       description: 'Every word you favourited, in one place — ready to revisit or drill.',
       icon: <Heart className="h-6 w-6" />,
-      tile: 'bg-warning/10 text-warning',
+      tile: 'bg-warning/10 text-warning-strong',
       badge: null,
     },
   ];
@@ -117,7 +117,7 @@ export default function RecallsHomePage() {
                     <div className="mt-1 flex items-center gap-2">
                       <span className="font-semibold text-navy">{t.title}</span>
                       {t.badge && (
-                        <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                        <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning-strong">
                           {t.badge}
                         </span>
                       )}

@@ -268,7 +268,7 @@ export default function MockPlayerPage() {
             />
 
             {session.reviewReservation ? (
-              <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+              <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning-strong">
                 <p className="eyebrow">Review reservation</p>
                 <p className="mt-1">
                   {session.reviewReservation.pendingCredits} pending / {session.reviewReservation.consumedCredits} consumed / state {session.reviewReservation.state.replace(/_/g, ' ')}
@@ -357,8 +357,8 @@ export default function MockPlayerPage() {
                           return (
                             <div className="mt-3 rounded-2xl border border-warning/30 bg-warning/5 p-3">
                               <div className="flex items-center gap-2">
-                                <ShieldCheck className="h-4 w-4 text-warning" />
-                                <p className="eyebrow text-warning">Active locks:</p>
+                                <ShieldCheck className="h-4 w-4 text-warning-strong" />
+                                <p className="eyebrow text-warning-strong">Active locks:</p>
                               </div>
                               <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-muted">
                                 {lockRules.map((rule) => (

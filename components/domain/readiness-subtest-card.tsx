@@ -35,7 +35,7 @@ export function ReadinessSubtestCard({ test, href }: ReadinessSubtestCardProps) 
               <h3 className="text-base font-bold text-navy flex items-center gap-2">
                 {test.name}
                 {test.isWeakest && (
-                  <span className="bg-danger/10 text-danger tile-label px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="bg-danger/10 text-danger-strong tile-label px-2 py-0.5 rounded-full flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> Weakest
                   </span>
                 )}

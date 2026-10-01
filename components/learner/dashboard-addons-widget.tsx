@@ -104,7 +104,7 @@ export function DashboardAddonsWidget({
                     {ELIGIBILITY_LABELS[addon.eligibilityFlag] ?? addon.eligibilityFlag.replace(/_/g, ' ')}
                   </span>
                   {hasDiscount && savings > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 tile-label text-success">
+                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 tile-label text-success-strong">
                       Save £{savings.toFixed(0)}
                     </span>
                   )}

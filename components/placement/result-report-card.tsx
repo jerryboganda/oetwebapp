@@ -172,9 +172,9 @@ function SkillTile({ skill }: { skill: PlacementSkillResult }) {
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-semibold text-navy">{label}</h4>
         {skill.status === 'measured' ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success-strong" aria-hidden />
         ) : isUnderReview(skill) ? (
-          <Clock3 className="h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <Clock3 className="h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
         ) : (
           <Info className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         )}

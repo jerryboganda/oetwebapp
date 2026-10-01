@@ -37,6 +37,7 @@ This is the single design-system spec for every surface in the web app: learner,
 
 ## 2. Colour
 Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*` for text or surfaces.
+Raw status hues map onto the tokens: a tint is `bg-<status>/10`, a border `border-<status>/30`, text or an icon `text-<status>-strong` (`text-info` for info), so they flip with the theme and need no `dark:` twin.
 
 | Class | Light | Dark | Role |
 | --- | --- | --- | --- |
@@ -50,6 +51,7 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | `muted` | `#526072` | `#94a3b8` | Secondary text, metadata |
 | `border` / `border-hover` | `#d8e0e8` / `#b9c6d1` | `#1f2937` / `#334155` | Borders, dividers |
 | `success` / `warning` / `danger` / `info` | `#10b981` / `#d97706` / `#ef4444` / `#2563eb` | | Status only. Info blue is never the brand accent. |
+| `success-strong` / `warning-strong` / `danger-strong` | `#047857` / `#b45309` / `#b91c1c` | `#34d399` / `#fbbf24` / `#f87171` | Status **text and icons**: the base shades fail AA as small text on light surfaces. Fills, borders and tints keep the base token. |
 | `gold`, `oet-navy`, `oet-teal` | | | OET corporate accents (billing, certificates) |
 
 - **Admin** uses the same violet; there is no separate brand colour. Its `--admin-*` variables are aliases whose light and dark values match the table above.

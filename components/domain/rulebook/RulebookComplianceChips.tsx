@@ -92,7 +92,7 @@ export function RulebookComplianceChips({ chips, title = 'Rulebook compliance' }
               {chip.totalRules} rules · {chip.criticalRules} critical · {chip.unenforcedCount} unenforced ·{' '}
               {chip.aiGroundedCount} AI-grounded · {chip.humanReviewCount} human-review
             </p>
-            {chip.note ? <p className="mt-1 text-2xs text-warning">{chip.note}</p> : null}
+            {chip.note ? <p className="mt-1 text-2xs text-warning-strong">{chip.note}</p> : null}
           </li>
         ))}
       </ul>

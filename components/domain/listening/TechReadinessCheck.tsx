@@ -116,7 +116,7 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
         )}
         {status === 'ok' && (
           <div className="space-y-2">
-            <span role="status" className="inline-flex items-center gap-2 text-sm text-success">
+            <span role="status" className="inline-flex items-center gap-2 text-sm text-success-strong">
               <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Audio confirmed.
             </span>
             {verificationWarning ? (
@@ -128,7 +128,7 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
         )}
         {status === 'failed' && (
           <div className="space-y-2">
-            <span role="alert" className="inline-flex items-center gap-2 text-sm text-danger">
+            <span role="alert" className="inline-flex items-center gap-2 text-sm text-danger-strong">
               <AlertTriangle aria-hidden="true" className="h-4 w-4" /> {error ?? 'Probe failed.'}
             </span>
             <div className="flex gap-2">

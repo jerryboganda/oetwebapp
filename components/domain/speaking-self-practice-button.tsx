@@ -42,7 +42,7 @@ export function SpeakingSelfPracticeButton({
         {busy ? 'Starting…' : label}
       </Button>
       {error ? (
-        <p role="alert" className="mt-2 text-sm text-danger">
+        <p role="alert" className="mt-2 text-sm text-danger-strong">
           {error}
         </p>
       ) : null}

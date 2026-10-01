@@ -62,7 +62,7 @@ export default function MockSpeakingGatewayPage() {
   return (
     <>
       {loadError ? (
-        <p className="text-sm text-danger">{loadError}</p>
+        <p className="text-sm text-danger-strong">{loadError}</p>
       ) : !access ? (
         <p className="text-sm text-muted">Checking your Speaking options…</p>
       ) : (

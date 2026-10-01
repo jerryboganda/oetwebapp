@@ -36,7 +36,7 @@ export function useSecondsLeft(deadlineAt: string | null): number | null {
 export function UnitTimer({ secondsLeft, waitingForAudio }: { secondsLeft: number | null; waitingForAudio: boolean }) {
   if (waitingForAudio) return <p className="text-xs text-muted">Timer starts when the audio begins</p>;
   if (secondsLeft === null) return null;
-  const tone = secondsLeft <= 10 ? 'font-semibold text-danger' : secondsLeft <= 60 ? 'text-warning' : 'text-muted';
+  const tone = secondsLeft <= 10 ? 'font-semibold text-danger-strong' : secondsLeft <= 60 ? 'text-warning-strong' : 'text-muted';
   return (
     <p className={`font-mono text-xs tabular-nums ${tone}`} aria-live="off">
       <span className="sr-only">Time left: </span>
@@ -219,7 +219,7 @@ export function ObjectiveStage({
   if (!unit) {
     return error ? (
       <div className="space-y-3 rounded-2xl border border-border bg-surface p-5 sm:p-6">
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-strong">
           {error}
         </p>
         <button
@@ -292,7 +292,7 @@ export function ObjectiveStage({
 
       {error ? (
         <div className="space-y-2">
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="text-sm text-danger-strong">
             {error}
           </p>
           {unit.audio_url && !deadlineAt ? (

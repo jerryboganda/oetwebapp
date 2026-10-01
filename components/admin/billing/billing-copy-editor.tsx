@@ -234,7 +234,7 @@ export function BillingCopyEditor({ canWrite = true }: BillingCopyEditorProps) {
                                 setDeleteConfirmInput('');
                               }}
                               disabled={!canWrite}
-                              className="inline-flex items-center gap-1 text-2xs font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-2xs font-semibold text-danger-strong transition-colors hover:text-danger-strong/80 disabled:opacity-50"
                             >
                               <Trash2 className="h-3 w-3" /> Delete override
                             </button>

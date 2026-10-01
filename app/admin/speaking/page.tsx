@@ -282,8 +282,8 @@ export default function AdminSpeakingPage() {
       header: 'Role-plays',
       render: (row) => (
         <div className="flex flex-col gap-1 text-xs">
-          <span className={row.rolePlay1.isSpeaking ? '' : 'text-danger'}>1. {row.rolePlay1.title}{!row.rolePlay1.isSpeaking && ' (not speaking!)'}</span>
-          <span className={row.rolePlay2.isSpeaking ? '' : 'text-danger'}>2. {row.rolePlay2.title}{!row.rolePlay2.isSpeaking && ' (not speaking!)'}</span>
+          <span className={row.rolePlay1.isSpeaking ? '' : 'text-danger-strong'}>1. {row.rolePlay1.title}{!row.rolePlay1.isSpeaking && ' (not speaking!)'}</span>
+          <span className={row.rolePlay2.isSpeaking ? '' : 'text-danger-strong'}>2. {row.rolePlay2.title}{!row.rolePlay2.isSpeaking && ' (not speaking!)'}</span>
         </div>
       ),
     },

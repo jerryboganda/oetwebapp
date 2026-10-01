@@ -149,7 +149,7 @@ export default function AiSettingsPage() {
                     ).map((row) => (
                       <li key={row.label} className="flex items-baseline justify-between rounded-xl bg-surface px-4 py-3 border border-border">
                         <span className="text-sm font-bold text-muted">{row.label}</span>
-                        <span className={`text-sm font-black tabular-nums ${row.value === null ? 'text-success' : 'text-navy'}`}>
+                        <span className={`text-sm font-black tabular-nums ${row.value === null ? 'text-success-strong' : 'text-navy'}`}>
                           {row.value === null ? 'Unlimited' : row.value}
                         </span>
                       </li>
@@ -232,7 +232,7 @@ export default function AiSettingsPage() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-warning/20 bg-warning/10">
-                    <KeyRound className="h-5 w-5 text-warning" />
+                    <KeyRound className="h-5 w-5 text-warning-strong" />
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-navy tracking-tight">Stored API keys</h2>
@@ -273,7 +273,7 @@ export default function AiSettingsPage() {
                             </span>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => void handleRevoke(c.id)} className="text-danger hover:bg-danger/10 hover:text-danger rounded-xl font-bold bg-surface shadow-sm border border-border">
+                        <Button variant="ghost" size="sm" onClick={() => void handleRevoke(c.id)} className="text-danger-strong hover:bg-danger/10 hover:text-danger-strong rounded-xl font-bold bg-surface shadow-sm border border-border">
                           <Trash2 className="w-4 h-4" aria-hidden="true" /> Revoke
                         </Button>
                       </li>

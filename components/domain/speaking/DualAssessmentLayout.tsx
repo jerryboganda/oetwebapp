@@ -160,7 +160,7 @@ export function DualAssessmentLayout({
         role="note"
         aria-label="Speaking assessment advisory"
       >
-        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
         <div>
           <p className="font-bold">Both estimates are advisory, not an official OET score.</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted">

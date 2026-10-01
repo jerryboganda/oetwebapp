@@ -271,7 +271,7 @@ export default function SchedulePage() {
                           />
                         </div>
                       </div>
-                      {error ? <p className="mt-1 text-xs text-danger md:ml-36">{error}</p> : null}
+                      {error ? <p className="mt-1 text-xs text-danger-strong md:ml-36">{error}</p> : null}
                     </div>
                   );
                 }) : null}
@@ -383,7 +383,7 @@ export default function SchedulePage() {
                       <div key={exception.id} className="flex items-center justify-between py-3">
                         <div className="flex items-center gap-3">
                           {exception.isBlocked ? (
-                            <Ban className="h-5 w-5 text-danger shrink-0" />
+                            <Ban className="h-5 w-5 text-danger-strong shrink-0" />
                           ) : (
                             <Clock className="h-5 w-5 text-amber-500 shrink-0" />
                           )}
@@ -404,7 +404,7 @@ export default function SchedulePage() {
                           disabled={deletingId === exception.id}
                           aria-label={`Remove exception for ${exception.date}`}
                         >
-                          <Trash2 className="h-4 w-4 text-danger" />
+                          <Trash2 className="h-4 w-4 text-danger-strong" />
                         </Button>
                       </div>
                     ))}

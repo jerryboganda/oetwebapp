@@ -97,7 +97,7 @@ export default function LiveClassJoinPage() {
           <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+                <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success-strong">
                   <ShieldCheck className="h-4 w-4" /> Server-signed join request
                 </div>
                 <h2 className="text-2xl font-semibold text-navy">Zoom meeting {token.meetingNumber}</h2>

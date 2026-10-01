@@ -89,7 +89,7 @@ export function ReviewMistakesList({ refreshToken = 0 }: ReviewMistakesListProps
     <Card className="border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-warning/10 text-warning">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-warning/10 text-warning-strong">
             <RotateCcw size={15} aria-hidden="true" />
           </span>
           <div>
@@ -100,14 +100,14 @@ export function ReviewMistakesList({ refreshToken = 0 }: ReviewMistakesListProps
           </div>
         </div>
         {items.length > 0 && (
-          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning-strong">
             {items.length}
           </span>
         )}
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-danger">
+        <p role="alert" className="mt-3 text-xs text-danger-strong">
           {error}
         </p>
       )}

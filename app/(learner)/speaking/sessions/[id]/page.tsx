@@ -257,7 +257,7 @@ export default function SpeakingSessionRecordingPage() {
 
   if (loadError || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger-strong">
         <h2 className="text-base font-semibold">Could not load this session</h2>
         <p className="mt-1">{loadError ?? 'Session not available.'}</p>
         <Button type="button" variant="outline" className="mt-4" onClick={() => router.push('/speaking')}>
@@ -306,7 +306,7 @@ export default function SpeakingSessionRecordingPage() {
             aria-live={isWarning ? 'polite' : 'off'}
             className={cn(
               'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 font-mono text-base tabular-nums',
-              isWarning ? 'bg-danger/10 text-danger' : 'bg-background-light text-foreground',
+              isWarning ? 'bg-danger/10 text-danger-strong' : 'bg-background-light text-foreground',
             )}
           >
             <Activity className="h-4 w-4" aria-hidden />
@@ -328,7 +328,7 @@ export default function SpeakingSessionRecordingPage() {
           onSpeakingStarted={handleSpeakingStarted}
         />
         {isWarning ? (
-          <p className="text-center text-sm font-medium text-danger" role="status">
+          <p className="text-center text-sm font-medium text-danger-strong" role="status">
             30 seconds left — wrap up. Your role-play submits automatically at 00:00.
           </p>
         ) : null}
@@ -340,7 +340,7 @@ export default function SpeakingSessionRecordingPage() {
       >
         <div className="mx-auto w-full max-w-3xl space-y-2">
           {endError ? (
-            <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger-strong">
               {endError}
             </p>
           ) : null}

@@ -131,8 +131,8 @@ export default function SubmissionEvidencePage() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
-                    <p className="eyebrow text-success">Strengths</p>
-                    <ul className="mt-3 space-y-2 text-sm text-success">
+                    <p className="eyebrow text-success-strong">Strengths</p>
+                    <ul className="mt-3 space-y-2 text-sm text-success-strong">
                       {(detail.strengths.length ? detail.strengths : ['No strengths have been surfaced for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -143,8 +143,8 @@ export default function SubmissionEvidencePage() {
                   </div>
 
                   <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
-                    <p className="eyebrow text-warning">Needs Attention</p>
-                    <ul className="mt-3 space-y-2 text-sm text-warning">
+                    <p className="eyebrow text-warning-strong">Needs Attention</p>
+                    <ul className="mt-3 space-y-2 text-sm text-warning-strong">
                       {(detail.issues.length ? detail.issues : ['No issue summary is available for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
                           <Clock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -309,7 +309,7 @@ export default function SubmissionEvidencePage() {
                           <p className="eyebrow text-muted">Question {item.number}</p>
                           <p className="mt-2 text-sm font-bold text-navy">{item.text}</p>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${item.isCorrect ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${item.isCorrect ? 'bg-success/10 text-success-strong' : 'bg-danger/10 text-danger-strong'}`}>
                           {item.isCorrect ? 'Correct' : 'Review'}
                         </span>
                       </div>

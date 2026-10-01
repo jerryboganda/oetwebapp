@@ -165,7 +165,7 @@ function RuleCard({
   points: string[];
   tone?: 'amber';
 }) {
-  const accent = tone === 'amber' ? 'text-warning' : 'text-primary';
+  const accent = tone === 'amber' ? 'text-warning-strong' : 'text-primary';
   return (
     <MotionItem>
       <Card padding="lg">

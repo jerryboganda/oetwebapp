@@ -739,7 +739,7 @@ function LiveSpeakingTaskContent() {
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <div className={`px-3 py-1 rounded-full text-3xs font-black uppercase tracking-widest flex items-center gap-2 ${
             mode === 'self' ? 'bg-primary/10 text-primary border border-primary/30' :
-            'bg-warning/10 text-warning border border-warning/30'
+            'bg-warning/10 text-warning-strong border border-warning/30'
           }`}>
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
             {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
@@ -751,7 +751,7 @@ function LiveSpeakingTaskContent() {
           ) : null}
           <div className="hidden h-4 w-px bg-border sm:block" />
           <div className="hidden sm:flex items-center gap-2 text-muted">
-            <ShieldCheck className="w-4 h-4 text-success" />
+            <ShieldCheck className="w-4 h-4 text-success-strong" />
             <span className="tile-label">
               Recorder ready
             </span>
@@ -768,8 +768,8 @@ function LiveSpeakingTaskContent() {
               <span
                 className={`mt-1 text-3xs font-bold uppercase tracking-widest ${
                   warningPlayedRef.current && recordingState === 'recording'
-                    ? 'animate-pulse text-danger'
-                    : 'text-warning'
+                    ? 'animate-pulse text-danger-strong'
+                    : 'text-warning-strong'
                 }`}
                 aria-live="polite"
               >
@@ -857,9 +857,9 @@ function LiveSpeakingTaskContent() {
             aria-label="Cancel task"
           >
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-danger/5 group-hover:border-danger/30 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm">
-              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-muted group-hover:text-danger transition-colors" />
+              <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-muted group-hover:text-danger-strong transition-colors" />
             </div>
-            <span className="tile-label sm:text-3xs text-muted group-hover:text-danger transition-colors">Cancel Task</span>
+            <span className="tile-label sm:text-3xs text-muted group-hover:text-danger-strong transition-colors">Cancel Task</span>
           </button>
 
           <div className="flex flex-col items-center gap-3 absolute left-1/2 -translate-x-1/2">
@@ -883,7 +883,7 @@ function LiveSpeakingTaskContent() {
             </Button>
             {submitError ? (
               <>
-                <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger bg-danger/10 px-3 py-1.5 rounded-lg border border-danger/20">
+                <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger-strong bg-danger/10 px-3 py-1.5 rounded-lg border border-danger/20">
                   {submitError}
                 </p>
                 {micPermissionDenied && <OpenAppSettingsButton />}
@@ -918,7 +918,7 @@ function LiveSpeakingTaskContent() {
               aria-labelledby="speaking-stop-dialog-title"
               className="relative max-h-[calc(100dvh-2rem-var(--safe-area-inset-top)-var(--safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
-              <AlertCircle className="w-8 h-8 text-danger mb-4" aria-hidden />
+              <AlertCircle className="w-8 h-8 text-danger-strong mb-4" aria-hidden />
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
               <p className="text-muted text-sm leading-relaxed mb-8">
                 Your current recording will be discarded. You will need to start the task again from the beginning.
@@ -954,7 +954,7 @@ function LiveSpeakingTaskContent() {
               aria-labelledby="speaking-submit-dialog-title"
               className="relative max-h-[calc(100dvh-2rem-var(--safe-area-inset-top)-var(--safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
-              <CheckCircle2 className="w-8 h-8 text-success mb-4" aria-hidden />
+              <CheckCircle2 className="w-8 h-8 text-success-strong mb-4" aria-hidden />
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
               <p className="text-muted text-sm leading-relaxed mb-6">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
@@ -972,7 +972,7 @@ function LiveSpeakingTaskContent() {
                 <p
                   role="status"
                   aria-live="polite"
-                  className="mb-6 rounded-2xl border border-danger/30 bg-danger/10 p-3 text-center text-xs font-bold text-danger"
+                  className="mb-6 rounded-2xl border border-danger/30 bg-danger/10 p-3 text-center text-xs font-bold text-danger-strong"
                 >
                   Time is up. Auto-submitting in {autoSubmitCountdown}s
                   {paperRuleRequired && !paperDestroyed
@@ -983,23 +983,23 @@ function LiveSpeakingTaskContent() {
 
               <div className="mb-6 rounded-2xl border border-warning/30 bg-warning/10 p-4">
                 <div className="flex items-start gap-3">
-                  <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" aria-hidden="true" />
+                  <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning-strong" aria-hidden="true" />
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-warning">
+                    <p className="text-sm font-bold text-warning-strong">
                       Destroy your scratch paper on camera
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-warning/80">
+                    <p className="mt-1 text-xs leading-relaxed text-warning-strong/80">
                       OET rules for the at-home computer-based Speaking test require any paper notes to be
                       torn or cut in full view of the webcam before you submit. This is verified by the proctor
                       from the session recording.
                     </p>
-                    <label className="mt-3 flex items-start gap-2 text-xs text-warning">
+                    <label className="mt-3 flex items-start gap-2 text-xs text-warning-strong">
                       <input
                         type="checkbox"
                         checked={paperDestroyed}
                         onChange={(e) => handlePaperDestroyedToggle(e.target.checked)}
                         disabled={isSubmitting}
-                        className="mt-0.5 h-4 w-4 rounded border-warning/30 text-warning focus:ring-warning"
+                        className="mt-0.5 h-4 w-4 rounded border-warning/30 text-warning-strong focus:ring-warning"
                         aria-describedby="speaking-paper-destroy-hint"
                       />
                       <span id="speaking-paper-destroy-hint">
@@ -1012,7 +1012,7 @@ function LiveSpeakingTaskContent() {
               </div>
 
               {submitError && (
-                <p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-xs font-semibold text-danger">
+                <p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-xs font-semibold text-danger-strong">
                   {submitError}
                 </p>
               )}

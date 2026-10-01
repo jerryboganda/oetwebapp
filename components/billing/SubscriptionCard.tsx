@@ -78,7 +78,7 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
             <span className="inline-flex items-center gap-1 font-medium text-navy">
               <Timer className="h-4 w-4" /> Access timer
             </span>
-            <span className={subscription.expiringSoon ? 'font-semibold text-danger' : 'font-semibold text-navy'}>
+            <span className={subscription.expiringSoon ? 'font-semibold text-danger-strong' : 'font-semibold text-navy'}>
               {remainingDays} day{remainingDays === 1 ? '' : 's'} remaining
             </span>
           </div>
@@ -215,20 +215,20 @@ function Detail({
 function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
   if (paused) {
     return (
-      <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-warning">
+      <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-warning-strong">
         Paused
       </span>
     );
   }
   const tone =
     status === 'active' || status === 'trial'
-      ? 'bg-success/10 text-success'
+      ? 'bg-success/10 text-success-strong'
       : status === 'freeze_requested'
-        ? 'bg-warning/10 text-warning'
+        ? 'bg-warning/10 text-warning-strong'
         : status === 'frozen'
           ? 'bg-info/10 text-info'
       : status === 'cancelled' || status === 'canceled' || status === 'expired'
-        ? 'bg-danger/10 text-danger'
+        ? 'bg-danger/10 text-danger-strong'
         : 'bg-background-light text-muted';
   return (
     <span

@@ -265,7 +265,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               </div>
             </div>
             {mockRetryError ? (
-              <p className="mt-2 text-xs text-danger">{mockRetryError}</p>
+              <p className="mt-2 text-xs text-danger-strong">{mockRetryError}</p>
             ) : null}
           </InlineAlert>
         ) : null}
@@ -651,7 +651,7 @@ function GroundedReadingExplanation({
           </Button>
         ) : null}
       </div>
-      {error ? <p className="mt-3 text-sm font-semibold text-danger" role="alert">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm font-semibold text-danger-strong" role="alert">{error}</p> : null}
       {result ? (
         <div className="mt-4 space-y-3 text-sm leading-6 text-navy dark:text-white/90">
           <p><strong>Why the correct answer fits:</strong> {result.explanation.whyCorrect}</p>

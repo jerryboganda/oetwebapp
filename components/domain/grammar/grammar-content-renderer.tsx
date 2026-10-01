@@ -37,14 +37,14 @@ function GrammarContentBlockView({ block }: { block: GrammarContentBlockLearner 
     case 'example':
       return (
         <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm leading-6 text-navy">
-          <p className="mb-1 eyebrow text-success">Example</p>
+          <p className="mb-1 eyebrow text-success-strong">Example</p>
           <SafeRichText markdown={block.contentMarkdown} className="text-navy" />
         </div>
       );
     case 'note':
       return (
         <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-navy">
-          <p className="mb-1 eyebrow text-warning">Note</p>
+          <p className="mb-1 eyebrow text-warning-strong">Note</p>
           <SafeRichText markdown={block.contentMarkdown} className="text-navy" />
         </div>
       );

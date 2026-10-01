@@ -90,13 +90,13 @@ export default function WritingCanonPage() {
                   <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                     {rule.correctExamples.length > 0 ? (
                       <div>
-                        <p className="mb-1 font-semibold text-success">{t('writing.canon.library.card.correct')}</p>
+                        <p className="mb-1 font-semibold text-success-strong">{t('writing.canon.library.card.correct')}</p>
                         <p className="break-words text-muted" dir="ltr">{rule.correctExamples[0]}</p>
                       </div>
                     ) : null}
                     {rule.incorrectExamples.length > 0 ? (
                       <div>
-                        <p className="mb-1 font-semibold text-danger">{t('writing.canon.library.card.avoid')}</p>
+                        <p className="mb-1 font-semibold text-danger-strong">{t('writing.canon.library.card.avoid')}</p>
                         <p className="break-words text-muted" dir="ltr">{rule.incorrectExamples[0]}</p>
                       </div>
                     ) : null}

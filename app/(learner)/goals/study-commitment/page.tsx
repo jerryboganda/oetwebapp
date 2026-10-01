@@ -89,7 +89,7 @@ export default function StudyCommitmentPage() {
               </MotionItem>
               <MotionItem>
                 <div className="p-3 rounded-lg bg-success/10">
-                  <Shield className="w-5 h-5 text-success mx-auto mb-1" />
+                  <Shield className="w-5 h-5 text-success-strong mx-auto mb-1" />
                   <p className="text-xs text-muted">Freeze Shield</p>
                   <p className="text-xl font-bold text-navy">
                     {commitment.freezeProtections - commitment.freezeProtectionsUsed}/{commitment.freezeProtections}
@@ -98,7 +98,7 @@ export default function StudyCommitmentPage() {
               </MotionItem>
               <MotionItem>
                 <div className="p-3 rounded-lg bg-warning/10">
-                  <Flame className="w-5 h-5 text-warning mx-auto mb-1" />
+                  <Flame className="w-5 h-5 text-warning-strong mx-auto mb-1" />
                   <p className="text-xs text-muted">Status</p>
                   <Badge variant={commitment.isActive ? 'success' : 'outline'}>
                     {commitment.isActive ? 'Active' : 'Inactive'}

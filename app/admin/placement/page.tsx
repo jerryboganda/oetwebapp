@@ -107,7 +107,7 @@ function ReviewAudio({ sessionId, taskId }: { sessionId: string; taskId: string 
     };
   }, [sessionId, taskId]);
 
-  if (failed) return <p className="text-sm text-danger">The recording could not be loaded.</p>;
+  if (failed) return <p className="text-sm text-danger-strong">The recording could not be loaded.</p>;
   if (!url) return <p className="text-sm text-muted">Loading recording…</p>;
   // eslint-disable-next-line jsx-a11y/media-has-caption -- candidate recording playback for review
   return <audio controls preload="metadata" src={url} className="w-full" />;
@@ -417,7 +417,7 @@ export default function AdminPlacementReviewPage() {
                         <span className="mr-2">{task.taskId}</span>
                         <Badge variant={status.variant}>{status.label}</Badge>
                         {task.module === 'SPK' && !task.hasRecording ? (
-                          <span className="ml-2 text-danger">no recording</span>
+                          <span className="ml-2 text-danger-strong">no recording</span>
                         ) : null}
                       </Button>
                     );

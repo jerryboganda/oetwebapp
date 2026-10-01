@@ -43,7 +43,7 @@ export default function ExamSimulationPage() {
             <MotionItem>
               <Card className="p-6">
                 <div className="flex items-start gap-4">
-                  {config.unlocked ? <CheckCircle2 className="w-8 h-8 text-success flex-shrink-0" /> : <Lock className="w-8 h-8 text-warning flex-shrink-0" />}
+                  {config.unlocked ? <CheckCircle2 className="w-8 h-8 text-success-strong flex-shrink-0" /> : <Lock className="w-8 h-8 text-warning-strong flex-shrink-0" />}
                   <div>
                     <h3 className="text-lg font-semibold">{config.unlocked ? 'Simulation Mode Unlocked' : 'Simulation Mode Locked'}</h3>
                     <p className="text-sm text-muted mt-1">{config.recommendation}</p>

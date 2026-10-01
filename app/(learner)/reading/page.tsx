@@ -219,7 +219,7 @@ export default function ReadingHome() {
               variant="outline"
               size="sm"
               onClick={() => setRetryCount((count) => count + 1)}
-              className="border-danger/30 bg-surface text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
+              className="border-danger/30 bg-surface text-danger-strong hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
             >
               Try again
             </Button>

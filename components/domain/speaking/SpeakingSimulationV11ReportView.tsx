@@ -111,7 +111,7 @@ function EvidenceAudioButton({
         <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden />
         {loading ? 'Loading…' : `Play ${formatTime(evidence.startMs)}`}
       </Button>
-      {error ? <span className="text-xs text-danger">{error}</span> : null}
+      {error ? <span className="text-xs text-danger-strong">{error}</span> : null}
     </span>
   );
 }
@@ -244,7 +244,7 @@ function CardBreakdownCard({
       </div>
       {tutorOverride ? (
         <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3">
-          <p className="eyebrow text-success">Human tutor revision</p>
+          <p className="eyebrow text-success-strong">Human tutor revision</p>
           <p className="mt-1 text-sm font-semibold text-navy">{tutorOverride.estimatedPracticeScore} / 500 · range {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>
           <p className="mt-1 text-xs text-navy">{tutorOverride.reason}</p>
         </div>
@@ -356,7 +356,7 @@ export function SpeakingSimulationV11ReportView({
     return (
       <Card className="border-warning/40 bg-warning/10 p-5">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5 h-5 w-5 flex-none text-warning" aria-hidden />
+          <ShieldAlert className="mt-0.5 h-5 w-5 flex-none text-warning-strong" aria-hidden />
           <div>
             <h2 className="font-semibold text-navy">Technical review required</h2>
             <p className="mt-1 text-sm leading-relaxed text-navy">
@@ -365,7 +365,7 @@ export function SpeakingSimulationV11ReportView({
                 : 'This attempt has no estimated score because the authoritative audio, transcript, or assessment pipeline could not be verified. The issue must be reviewed or the controlled retake path used.'}
             </p>
             {response.technicalReviewCode ? (
-              <p className="mt-2 eyebrow text-warning">
+              <p className="mt-2 eyebrow text-warning-strong">
                 Reason: {response.technicalReviewCode}
               </p>
             ) : null}
@@ -448,13 +448,13 @@ export function SpeakingSimulationV11ReportView({
 
       {tutorOverride ? (
         <Card className="border-success/30 bg-success/10 p-5">
-          <p className="eyebrow text-success">Human tutor revision</p>
+          <p className="eyebrow text-success-strong">Human tutor revision</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="text-xl font-bold text-navy">{tutorOverride.estimatedPracticeScore} / 500</p>
             <p className="text-sm text-navy">Reviewed range: {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-navy">{tutorOverride.reason}</p>
-          <p className="mt-2 text-xs text-success">The AI report above remains preserved as the original practice estimate; this human revision is shown separately.</p>
+          <p className="mt-2 text-xs text-success-strong">The AI report above remains preserved as the original practice estimate; this human revision is shown separately.</p>
         </Card>
       ) : null}
 
@@ -482,7 +482,7 @@ export function SpeakingSimulationV11ReportView({
         <div className="space-y-5">
           {report.overallSummary ? <Card className="p-5"><h2 className="text-base font-semibold text-navy">Summary</h2><p className="mt-2 text-sm leading-relaxed text-muted">{report.overallSummary}</p></Card> : null}
           <div className="grid gap-5 lg:grid-cols-2">
-            <Card className="p-5"><h2 className="text-base font-semibold text-navy">Strengths</h2><ul className="mt-3 space-y-2 text-sm text-muted">{report.strengths.map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" aria-hidden />{item}</li>)}</ul></Card>
+            <Card className="p-5"><h2 className="text-base font-semibold text-navy">Strengths</h2><ul className="mt-3 space-y-2 text-sm text-muted">{report.strengths.map((item) => <li key={item} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" aria-hidden />{item}</li>)}</ul></Card>
             <Card className="p-5"><h2 className="text-base font-semibold text-navy">Top improvements</h2><ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted">{(report.topFive.length ? report.topFive : report.weaknesses).map((item) => <li key={item}>{item}</li>)}</ol></Card>
           </div>
           <div className="grid gap-5 lg:grid-cols-2">

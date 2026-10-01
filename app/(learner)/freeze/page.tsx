@@ -262,7 +262,7 @@ export default function FreezePage() {
                       <p className="eyebrow text-muted">Freeze ID</p>
                       <p className="mt-1 text-sm font-semibold text-navy">{currentFreeze.id}</p>
                     </div>
-                    <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning">
+                    <span className="rounded-full bg-warning/10 px-2 py-0.5 tile-label text-warning-strong">
                       {currentFreeze.status}
                     </span>
                   </div>

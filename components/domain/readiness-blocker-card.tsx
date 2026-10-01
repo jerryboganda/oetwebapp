@@ -9,9 +9,9 @@ interface ReadinessBlockerCardProps {
 }
 
 const SEVERITY_TOKENS: Record<string, { chip: string; border: string; bar: string }> = {
-  high: { chip: 'bg-danger/10 text-danger', border: 'border-danger/20', bar: 'bg-danger' },
-  medium: { chip: 'bg-warning/10 text-warning', border: 'border-warning/20', bar: 'bg-warning' },
-  low: { chip: 'bg-success/10 text-success', border: 'border-success/20', bar: 'bg-success' },
+  high: { chip: 'bg-danger/10 text-danger-strong', border: 'border-danger/20', bar: 'bg-danger' },
+  medium: { chip: 'bg-warning/10 text-warning-strong', border: 'border-warning/20', bar: 'bg-warning' },
+  low: { chip: 'bg-success/10 text-success-strong', border: 'border-success/20', bar: 'bg-success' },
 };
 
 export function ReadinessBlockerCard({ blocker }: ReadinessBlockerCardProps) {

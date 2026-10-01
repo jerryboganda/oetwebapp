@@ -16,8 +16,8 @@ import type { LearnerCertificate } from '@/lib/types/learner';
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   study_plan_complete: { label: 'Study Plan', color: 'bg-info/10 text-info' },
   mock_exam: { label: 'Mock Exam', color: 'bg-primary/10 text-primary' },
-  readiness_threshold: { label: 'Readiness', color: 'bg-success/10 text-success' },
-  streak_milestone: { label: 'Streak', color: 'bg-warning/10 text-warning' },
+  readiness_threshold: { label: 'Readiness', color: 'bg-success/10 text-success-strong' },
+  streak_milestone: { label: 'Streak', color: 'bg-warning/10 text-warning-strong' },
 };
 
 export default function CertificatesPage() {
@@ -74,7 +74,7 @@ export default function CertificatesPage() {
                 <MotionItem key={cert.id}>
                   <Card className="p-5 h-full flex flex-col">
                     <div className="flex items-start justify-between mb-3">
-                      <Award className="w-8 h-8 text-warning" />
+                      <Award className="w-8 h-8 text-warning-strong" />
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${typeInfo.color}`}>
                         {typeInfo.label}
                       </span>

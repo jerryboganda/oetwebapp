@@ -195,7 +195,7 @@ export default function PeerReviewDetailPage() {
               {[1, 2, 3, 4, 5].map((star) => (
                 <Star
                   key={star}
-                  className={`w-5 h-5 ${star <= feedback.rating ? 'text-warning fill-warning' : 'text-muted-foreground'}`}
+                  className={`w-5 h-5 ${star <= feedback.rating ? 'text-warning-strong fill-warning' : 'text-muted-foreground'}`}
                 />
               ))}
               <span className="ml-2 text-sm font-medium">{feedback.rating}/5</span>
@@ -203,13 +203,13 @@ export default function PeerReviewDetailPage() {
             <p className="text-sm text-foreground whitespace-pre-wrap">{feedback.comments}</p>
             {feedback.strengthNotes && (
               <div>
-                <span className="text-xs font-medium text-success">Strengths</span>
+                <span className="text-xs font-medium text-success-strong">Strengths</span>
                 <p className="text-sm text-muted-foreground">{feedback.strengthNotes}</p>
               </div>
             )}
             {feedback.improvementNotes && (
               <div>
-                <span className="text-xs font-medium text-warning">Areas for Improvement</span>
+                <span className="text-xs font-medium text-warning-strong">Areas for Improvement</span>
                 <p className="text-sm text-muted-foreground">{feedback.improvementNotes}</p>
               </div>
             )}
@@ -234,7 +234,7 @@ export default function PeerReviewDetailPage() {
                     className="flex h-11 w-11 items-center justify-center rounded-lg transition-transform hoverable:scale-110 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Star
-                      className={`w-6 h-6 ${star <= rating ? 'text-warning fill-warning' : 'text-muted-foreground'}`}
+                      className={`w-6 h-6 ${star <= rating ? 'text-warning-strong fill-warning' : 'text-muted-foreground'}`}
                     />
                   </button>
                 ))}
@@ -269,7 +269,7 @@ export default function PeerReviewDetailPage() {
         {/* Success message after feedback */}
         {submitSuccess && (
           <Card className="p-5">
-            <div role="status" className="flex items-center gap-2 text-success">
+            <div role="status" className="flex items-center gap-2 text-success-strong">
               <CheckCircle className="w-5 h-5" aria-hidden="true" />
               <span className="font-medium">Feedback submitted successfully!</span>
             </div>

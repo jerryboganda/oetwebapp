@@ -250,7 +250,7 @@ export default function MockReadinessPage() {
                   <ul className="mt-3 space-y-2 text-sm text-muted">
                     {completedTasks.map((task) => (
                       <li key={task.id} className="flex items-start gap-2">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden />
                         <span>
                           <span className="font-semibold text-navy">Day {task.dayIndex}: {task.title}</span>
                           {task.completedAt ? (

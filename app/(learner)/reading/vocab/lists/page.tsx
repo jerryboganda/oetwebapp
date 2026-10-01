@@ -153,7 +153,7 @@ export default function VocabListsPage() {
                   </div>
 
                   {list.isSubscribed ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success-strong">
                       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                       Subscribed
                     </span>

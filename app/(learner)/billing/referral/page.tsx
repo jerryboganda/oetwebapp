@@ -240,14 +240,14 @@ export default function ReferralPage() {
                   className="h-12 w-12 shrink-0"
                 >
                   {copied ? (
-                    <CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />
+                    <CheckCircle2 className="h-5 w-5 text-success-strong" aria-hidden="true" />
                   ) : (
                     <Copy className="h-5 w-5" aria-hidden="true" />
                   )}
                 </Button>
               </div>
               {copied ? (
-                <p className="text-center text-xs text-success" role="status">
+                <p className="text-center text-xs text-success-strong" role="status">
                   Copied to clipboard.
                 </p>
               ) : null}
@@ -322,7 +322,7 @@ export default function ReferralPage() {
               </div>
               <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
                 <DollarSign
-                  className="mx-auto mb-1.5 h-5 w-5 text-success"
+                  className="mx-auto mb-1.5 h-5 w-5 text-success-strong"
                   aria-hidden="true"
                 />
                 <dt className="eyebrow text-muted">

@@ -393,7 +393,7 @@ function WritingMockSessionInner() {
                   aria-live="polite"
                   className="mb-3 flex items-start gap-2 rounded-xl border border-success/40 bg-success/10 px-4 py-3"
                 >
-                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden="true" />
                   <div>
                     <p className="text-sm font-bold text-navy">Submitted — awaiting tutor review</p>
                     <p className="mt-0.5 text-xs text-muted">

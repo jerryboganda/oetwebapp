@@ -401,7 +401,7 @@ function ResultSummary({ result }: { result: GrammarAttemptResult }) {
     <Card className="text-center">
       <div className="flex flex-col items-center gap-4 py-2">
         {/* Trophy or check icon */}
-        <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${mastered ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+        <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${mastered ? 'bg-warning/10 text-warning-strong' : 'bg-success/10 text-success-strong'}`}>
           {mastered
             ? <Trophy    className="h-8 w-8" />
             : <CheckCircle2 className="h-8 w-8" />}
@@ -424,12 +424,12 @@ function ResultSummary({ result }: { result: GrammarAttemptResult }) {
             +{xpAwarded} XP
           </span>
           {reviewItemsCreated > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-3 py-1 text-xs font-bold text-warning">
+            <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-3 py-1 text-xs font-bold text-warning-strong">
               {reviewItemsCreated} added to review queue
             </span>
           ) : null}
           {mastered ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-bold text-success">
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-bold text-success-strong">
               <Trophy className="h-3 w-3" /> Mastered
             </span>
           ) : null}

@@ -149,13 +149,13 @@ export function ModerationPanel({
                       ) : delta === 0 ? (
                         <span className="text-muted">0</span>
                       ) : (
-                        <span className={Math.abs(delta) >= 2 ? 'font-bold text-error' : 'font-semibold text-warning'}>
+                        <span className={Math.abs(delta) >= 2 ? 'font-bold text-error' : 'font-semibold text-warning-strong'}>
                           {delta > 0 ? `+${delta}` : delta}
                         </span>
                       )}
                     </td>
                     {moderation.finalScore ? (
-                      <td className="px-3 py-1.5 text-center font-bold tabular-nums text-success">{final ?? '—'}</td>
+                      <td className="px-3 py-1.5 text-center font-bold tabular-nums text-success-strong">{final ?? '—'}</td>
                     ) : null}
                   </tr>
                 );
@@ -168,7 +168,7 @@ export function ModerationPanel({
                   {firstTotal !== null && secondTotal !== null ? Math.abs(secondTotal - firstTotal) : '—'}
                 </td>
                 {moderation.finalScore ? (
-                  <td className="px-3 py-1.5 text-center tabular-nums text-success">{sumScores(moderation.finalScore)}</td>
+                  <td className="px-3 py-1.5 text-center tabular-nums text-success-strong">{sumScores(moderation.finalScore)}</td>
                 ) : null}
               </tr>
             </tbody>
@@ -193,7 +193,7 @@ export function ModerationPanel({
       {/* Finalized decision note */}
       {moderation?.status === 'finalized' && moderation.finalDecisionNote ? (
         <div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3">
-          <p className="eyebrow text-success">Moderator decision</p>
+          <p className="eyebrow text-success-strong">Moderator decision</p>
           <p className="mt-1 whitespace-pre-line text-sm text-navy">{moderation.finalDecisionNote}</p>
         </div>
       ) : null}

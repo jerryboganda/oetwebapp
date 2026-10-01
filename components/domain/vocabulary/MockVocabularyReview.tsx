@@ -132,7 +132,7 @@ export function MockVocabularyReview({
                 aria-label={added.has(term.id) ? `${term.term} added` : `Add ${term.term} to my list`}
                 className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
                   added.has(term.id)
-                    ? 'bg-success/10 text-success'
+                    ? 'bg-success/10 text-success-strong'
                     : 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600'
                 } transition-colors`}
               >

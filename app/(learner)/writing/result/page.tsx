@@ -142,8 +142,8 @@ function WritingResultContent() {
 
         {result.humanReviewRecommended ? (
           <MotionSection delayIndex={2} className="rounded-2xl border border-warning/30 bg-warning/10 p-4 flex items-start gap-3 shadow-sm">
-            <ShieldAlert className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-            <p className="text-sm text-warning leading-relaxed">
+            <ShieldAlert className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" />
+            <p className="text-sm text-warning-strong leading-relaxed">
               Human review is recommended here because the AI score is still a practice estimate. Use tutor review for higher-stakes decisions and borderline readiness calls.
             </p>
           </MotionSection>
@@ -233,7 +233,7 @@ function WritingResultContent() {
             <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center shrink-0">
-                  <ThumbsUp className="w-4 h-4 text-success" />
+                  <ThumbsUp className="w-4 h-4 text-success-strong" />
                 </div>
                 <h2 className="text-lg font-bold text-navy">Top Strengths</h2>
               </div>
@@ -251,7 +251,7 @@ function WritingResultContent() {
             <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-4 h-4 text-warning" />
+                  <AlertTriangle className="w-4 h-4 text-warning-strong" />
                 </div>
                 <h2 className="text-lg font-bold text-navy">Top Issues to Fix</h2>
               </div>
@@ -274,8 +274,8 @@ function WritingResultContent() {
             <span className="text-xs text-info mt-1">See criterion breakdown</span>
           </Link>
           <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:border-warning/30 hover:shadow-md">
-            <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />
-            <span className="font-bold group-hover:text-warning transition-colors">Request Tutor Review</span>
+            <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning-strong transition-colors" />
+            <span className="font-bold group-hover:text-warning-strong transition-colors">Request Tutor Review</span>
             <span className="text-xs text-muted mt-1">Get human feedback</span>
           </Link>
         </MotionSection>

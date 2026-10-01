@@ -66,7 +66,7 @@ function ActivityIndicator({ active, label, level, provider, failedOver, recover
       <span
         className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
-          active ? 'bg-success/15 text-success' : 'bg-background-light text-muted',
+          active ? 'bg-success/15 text-success-strong' : 'bg-background-light text-muted',
         )}
         aria-hidden
       >

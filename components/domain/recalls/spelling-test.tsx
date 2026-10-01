@@ -350,7 +350,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
           Word {position} of {total}
         </span>
         {item.fromMistakes && (
-          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-medium text-warning">
+          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-medium text-warning-strong">
             Review mistake
           </span>
         )}
@@ -402,7 +402,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
       {result && (
         <div role="status" className="rounded-lg border border-border bg-background-light p-3">
           {result.correct ? (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-success-strong">
               <CheckCircle2 size={15} className="h-4 w-4" aria-hidden="true" />
               Correct
             </p>

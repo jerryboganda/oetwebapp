@@ -232,12 +232,12 @@ function VocabQuizContent() {
               {result.durationSeconds}s · {result.format.replace(/_/g, ' ')}
             </div>
             {result.xpAwarded > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-4 py-2 text-sm font-medium text-warning mb-4">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-4 py-2 text-sm font-medium text-warning-strong mb-4">
                 +{result.xpAwarded} XP earned
               </div>
             )}
             {result.newlyMasteredTermIds?.length > 0 && (
-              <div className="mb-6 rounded-2xl bg-success/10 p-3 text-sm text-success">
+              <div className="mb-6 rounded-2xl bg-success/10 p-3 text-sm text-success-strong">
                 🎉 You mastered {result.newlyMasteredTermIds.length} new term{result.newlyMasteredTermIds.length > 1 ? 's' : ''}!
               </div>
             )}
@@ -298,8 +298,8 @@ function VocabQuizContent() {
               {q.options.map((option, idx) => {
                 let cls = 'border border-border bg-surface text-navy hover:border-primary/30 hover:bg-background-light';
                 if (revealed) {
-                  if (idx === q.correctIndex) cls = 'border border-success/30 bg-success/10 text-success';
-                  else if (idx === selectedOption) cls = 'border border-danger/30 bg-danger/10 text-danger';
+                  if (idx === q.correctIndex) cls = 'border border-success/30 bg-success/10 text-success-strong';
+                  else if (idx === selectedOption) cls = 'border border-danger/30 bg-danger/10 text-danger-strong';
                   else cls = 'border border-border bg-background-light text-muted opacity-70';
                 }
                 return (
@@ -313,8 +313,8 @@ function VocabQuizContent() {
                       {idx + 1}
                     </span>
                     <span className="text-sm">{option}</span>
-                    {revealed && idx === q.correctIndex && <CheckCircle2 className="w-4 h-4 text-success ml-auto" />}
-                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="w-4 h-4 text-danger ml-auto" />}
+                    {revealed && idx === q.correctIndex && <CheckCircle2 className="w-4 h-4 text-success-strong ml-auto" />}
+                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="w-4 h-4 text-danger-strong ml-auto" />}
                   </button>
                 );
               })}
@@ -340,7 +340,7 @@ function VocabQuizContent() {
                 </Button>
               )}
               {revealed && (
-                <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-success/10 text-success-strong' : 'bg-danger/10 text-danger-strong'}`}>
                   {answers[q.termId]?.correct ? 'Correct!' : (<>
                     Not quite. The correct answer is <strong>{q.correctAnswer}</strong>.
                   </>)}

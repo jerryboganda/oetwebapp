@@ -38,7 +38,7 @@ export function WeeklyReportCard() {
   if (error) {
     return (
       <Card padding="md">
-        <p className="text-xs text-warning" role="alert">{error}</p>
+        <p className="text-xs text-warning-strong" role="alert">{error}</p>
       </Card>
     );
   }

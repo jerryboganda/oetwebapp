@@ -499,7 +499,7 @@ function CheckoutReviewContent() {
               <p className="mt-2 text-sm text-muted">Pick a payment route on the left — your order summary is on the right.</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-background-light px-3 py-2 text-sm">
-              <ShieldCheck className="h-4 w-4 text-success" /> Secure checkout
+              <ShieldCheck className="h-4 w-4 text-success-strong" /> Secure checkout
             </div>
           </div>
         </div>
@@ -785,7 +785,7 @@ function CheckoutReviewContent() {
           )}
 
           <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-muted">
-            <ShieldCheck className="h-4 w-4 text-success" /> Encrypted, secure checkout
+            <ShieldCheck className="h-4 w-4 text-success-strong" /> Encrypted, secure checkout
           </div>
         </aside>
       </section>
@@ -827,7 +827,7 @@ function PlanBlockedScreen({
 
         <div className="mt-6 rounded-2xl border border-warning/30 bg-warning/10 p-6 shadow-sm">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
+            <AlertTriangle className="mt-0.5 h-6 w-6 flex-none text-warning-strong" aria-hidden="true" />
             <div>
               <h1 className="text-xl font-semibold">{title}</h1>
               {course ? <p className="mt-1 text-sm font-medium text-navy">{course}</p> : null}

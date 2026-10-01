@@ -49,10 +49,10 @@ export function ListeningPartBreakdown({ items }: { items: ListeningBreakdownIte
             {rows.map((row) => (
               <tr key={row.part} className="border-b border-border/70 last:border-0">
                 <th scope="row" className="py-3 pr-4 font-bold text-navy">Part {row.part}</th>
-                <td className="py-3 pr-4 text-right font-semibold text-success">{row.correct}/{row.total}</td>
-                <td className="py-3 pr-4 text-right font-semibold text-danger">{row.incorrect}</td>
-                <td className="py-3 pr-4 text-right font-semibold text-warning">{row.unanswered}</td>
-                <td className="py-3 pr-4 text-right font-semibold text-warning">{row.invalid}</td>
+                <td className="py-3 pr-4 text-right font-semibold text-success-strong">{row.correct}/{row.total}</td>
+                <td className="py-3 pr-4 text-right font-semibold text-danger-strong">{row.incorrect}</td>
+                <td className="py-3 pr-4 text-right font-semibold text-warning-strong">{row.unanswered}</td>
+                <td className="py-3 pr-4 text-right font-semibold text-warning-strong">{row.invalid}</td>
                 <td className="py-3 text-right font-bold tabular-nums text-navy">{row.percentage}%</td>
               </tr>
             ))}

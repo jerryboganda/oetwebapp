@@ -432,8 +432,8 @@ export default function RecallsWordsPage() {
                 onClick={handleFavouritesToggle}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
                   favouritesOnly
-                    ? 'border-warning bg-warning/10 text-warning'
-                    : 'border-border text-muted hover:border-warning hover:text-warning'
+                    ? 'border-warning bg-warning/10 text-warning-strong'
+                    : 'border-border text-muted hover:border-warning hover:text-warning-strong'
                 }`}
               >
                 <Heart size={13} className={favouritesOnly ? 'fill-current' : undefined} aria-hidden="true" />
@@ -637,8 +637,8 @@ export default function RecallsWordsPage() {
                           title={favTermIds.has(term.id) ? 'Remove from favourites' : 'Favourite'}
                           className={`ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
                             favTermIds.has(term.id)
-                              ? 'bg-warning/10 text-warning'
-                              : 'text-muted hover:bg-warning/10 hover:text-warning'
+                              ? 'bg-warning/10 text-warning-strong'
+                              : 'text-muted hover:bg-warning/10 hover:text-warning-strong'
                           }`}
                         >
                           <Heart size={15} className={favTermIds.has(term.id) ? 'fill-current' : undefined} aria-hidden="true" />
@@ -775,7 +775,7 @@ export default function RecallsWordsPage() {
                       type="button"
                       onClick={() => handleUnstar(it)}
                       aria-label={`Remove ${it.title} from favourites`}
-                      className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning"
+                      className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning-strong hover:border-warning"
                     >
                       <Heart size={13} className="fill-current" aria-hidden="true" />
                       Favourited
@@ -787,7 +787,7 @@ export default function RecallsWordsPage() {
                         type="button"
                         onClick={() => handleStar(it)}
                         aria-label={`Favourite ${it.title}`}
-                        className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-muted hover:bg-warning/10 hover:text-warning"
+                        className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-muted hover:bg-warning/10 hover:text-warning-strong"
                       >
                         <Heart size={13} aria-hidden="true" />
                         Favourite
@@ -804,7 +804,7 @@ export default function RecallsWordsPage() {
                         aria-controls={`star-reason-menu-${it.id}`}
                         aria-label={`Add a reason for favouriting ${it.title}`}
                         title="Add a reason (optional)"
-                        className="border-l border-border px-2 py-1 text-muted hover:bg-warning/10 hover:text-warning"
+                        className="border-l border-border px-2 py-1 text-muted hover:bg-warning/10 hover:text-warning-strong"
                       >
                         <ChevronDown size={13} aria-hidden="true" />
                       </button>

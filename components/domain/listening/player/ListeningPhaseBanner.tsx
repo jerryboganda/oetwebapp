@@ -77,19 +77,19 @@ export function ListeningReviewBanner({
       className="flex flex-col gap-3 rounded-2xl border-2 border-warning/30 bg-warning/10 p-5 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex items-start gap-3">
-        <Timer className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+        <Timer className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" />
         <div>
-          <p className="text-sm font-black text-warning">
+          <p className="text-sm font-black text-warning-strong">
             {LISTENING_SECTION_LABEL[section]} review window
           </p>
-          <p className="mt-0.5 text-xs text-warning">
+          <p className="mt-0.5 text-xs text-warning-strong">
             You can finish completing any words you abbreviated. Answers for this section remain
             fully editable until the timer hits zero or you press Next.
           </p>
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <span className="rounded-xl bg-warning/20 px-3 py-2 font-mono text-lg font-black text-warning">
+        <span className="rounded-xl bg-warning/20 px-3 py-2 font-mono text-lg font-black text-warning-strong">
           {formatReviewSeconds(secondsRemaining)}
         </span>
         <Button size="sm" onClick={onNext} className="gap-1">

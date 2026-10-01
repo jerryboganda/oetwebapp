@@ -11,7 +11,7 @@ export default function PrivateSpeakingCancelPage() {
     <>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
       <div className="w-16 h-16 bg-danger/10 rounded-full flex items-center justify-center">
-        <XCircle className="w-8 h-8 text-danger" />
+        <XCircle className="w-8 h-8 text-danger-strong" />
       </div>
       <div>
         <h1 className="text-2xl font-bold text-navy mb-2">Payment Cancelled</h1>

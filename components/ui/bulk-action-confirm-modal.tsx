@@ -57,7 +57,7 @@ export function BulkActionConfirmModal({
     <Modal open={open} onClose={loading ? () => {} : onClose} title={title} size="sm">
       <div className="space-y-5">
         <div className="flex gap-3 rounded-xl border border-border bg-background-light p-4">
-          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger-strong">
             <AlertTriangle className="h-4 w-4" aria-hidden="true" />
           </span>
           <p className="text-sm leading-6 text-muted">{description}</p>

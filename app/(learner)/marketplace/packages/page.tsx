@@ -23,9 +23,9 @@ import {
 
 const PACKAGE_TYPE_COLORS: Record<string, string> = {
   full_course: 'bg-primary/10 text-primary',
-  crash_course: 'bg-warning/10 text-warning',
+  crash_course: 'bg-warning/10 text-warning-strong',
   combo: 'bg-primary/10 text-primary',
-  foundation: 'bg-success/10 text-success',
+  foundation: 'bg-success/10 text-success-strong',
   standalone: 'bg-background-light text-muted',
 };
 
@@ -200,7 +200,7 @@ export default function PackagesPage() {
                           <ul className="mb-4 mt-4 flex-1 space-y-2">
                             {features.map((feature) => (
                               <li key={feature} className="flex items-start gap-2 text-sm">
-                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden="true" />
                                 <span>{feature}</span>
                               </li>
                             ))}

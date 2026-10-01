@@ -108,7 +108,7 @@ function tileClass(status: PathwayStageView['status']) {
 function StatusBadge({ status }: { status: PathwayStageView['status'] }) {
   if (status === 'Completed') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2 py-1 text-xs font-bold text-success">
+      <span className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2 py-1 text-xs font-bold text-success-strong">
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Completed
       </span>
     );

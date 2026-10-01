@@ -146,7 +146,7 @@ export function ProfileMenu({
                   setOpen(false);
                   onSignOut();
                 }}
-                className={cn(MENU_ITEM_CLASS, 'text-danger hover:bg-danger/10')}
+                className={cn(MENU_ITEM_CLASS, 'text-danger-strong hover:bg-danger/10')}
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
                 Sign out

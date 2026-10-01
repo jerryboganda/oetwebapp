@@ -196,7 +196,7 @@ export default function SpeakingSessionLiveTutorPage() {
 
   if (error || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger-strong">
         <h2 className="text-base font-semibold">Could not start the live tutor session</h2>
         <p className="mt-1">{error ?? 'Session not available.'}</p>
         <Button

@@ -101,7 +101,7 @@ export function AccentBarChart({
                   <span
                     className={[
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-semibold',
-                      'bg-warning/10 text-warning',
+                      'bg-warning/10 text-warning-strong',
                     ].join(' ')}
                   >
                     <AlertTriangle aria-hidden="true" className="h-3 w-3" />

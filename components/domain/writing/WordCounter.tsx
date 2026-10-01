@@ -33,16 +33,16 @@ export function WordCounter({ count, target, ariaLabelPrefix, className }: WordC
   if (safeCount === 0) {
     toneClass = 'text-muted';
   } else if (safeCount >= min && safeCount <= max) {
-    toneClass = 'text-success';
+    toneClass = 'text-success-strong';
     labelHint = 'in target range';
   } else if (
     (safeCount >= amberLowStart && safeCount < min)
     || (safeCount > max && safeCount <= amberHighEnd)
   ) {
-    toneClass = 'text-warning';
+    toneClass = 'text-warning-strong';
     labelHint = safeCount < min ? 'approaching target' : 'over target';
   } else if (safeCount > amberHighEnd) {
-    toneClass = 'text-danger';
+    toneClass = 'text-danger-strong';
     labelHint = 'over-length';
   } else {
     toneClass = 'text-muted';

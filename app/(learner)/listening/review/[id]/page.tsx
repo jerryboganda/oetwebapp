@@ -509,7 +509,7 @@ export default function ListeningReviewPage() {
                   })()}
                   <span className="mt-1 block text-xs text-muted">Answers and score are always shown after submission. Vocabulary lookup works on every word of the visible transcript.</span>
                 </div>
-                <div className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-bold capitalize text-success">
+                <div className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-bold capitalize text-success-strong">
                   Available
                 </div>
               </div>
@@ -580,7 +580,7 @@ export default function ListeningReviewPage() {
                     Replay full audio from start
                   </Button>
                   {audioDurationSeconds != null && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 0 ? (
-                    <span className="text-sm font-semibold text-success">
+                    <span className="text-sm font-semibold text-success-strong">
                       Duration loaded: {formatAudioDuration(audioDurationSeconds)}
                     </span>
                   ) : null}
@@ -670,7 +670,7 @@ export default function ListeningReviewPage() {
               }))}
               description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
             />
-            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong">
               AI Practice Score — not an official OET result.
             </p>
             <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
@@ -707,7 +707,7 @@ export default function ListeningReviewPage() {
                       alreadyReported={reportedQuestionIds.has(question.questionId)}
                     />
                     {question.distractorExplanation ? (
-                      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+                      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning-strong">
                         Distractor explanation: {question.distractorExplanation}
                       </div>
                     ) : null}
@@ -716,7 +716,7 @@ export default function ListeningReviewPage() {
                         {question.optionAnalysis.map((option) => (
                           <div
                             key={`${question.questionId}-${option.optionLabel}`}
-                            className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}`}
+                            className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success-strong' : 'border-warning/30 bg-warning/10 text-warning-strong'}`}
                           >
                             <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
                             <p className="mt-2 eyebrow">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
@@ -814,7 +814,7 @@ export default function ListeningReviewPage() {
 
                 {/* Score override note */}
                 {tutorFeedback.rawScoreOverride != null && (
-                  <div className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                  <div className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-strong">
                     <span className="font-semibold">Score adjusted by tutor: </span>
                     {tutorFeedback.rawScoreOverride}
                     {tutorFeedback.scoreOverrideReason

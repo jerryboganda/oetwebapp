@@ -131,7 +131,7 @@ export function SpeakingStage({ sessionId, onComplete }: { sessionId: string; on
   if (!tasks) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted" role="status">
-        {loadError ? <span className="text-danger">{loadError}</span> : <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing speaking tasks…</>}
+        {loadError ? <span className="text-danger-strong">{loadError}</span> : <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing speaking tasks…</>}
       </div>
     );
   }
@@ -271,7 +271,7 @@ export function SpeakingStage({ sessionId, onComplete }: { sessionId: string; on
 
         {phase === 'recording' ? (
           <div className="space-y-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-danger" role="status">
+            <p className="flex items-center gap-2 text-sm font-semibold text-danger-strong" role="status">
               <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-danger" aria-hidden />
               Recording — <span className="font-mono tabular-nums">{remaining ?? responseSeconds}</span> s left
             </p>
@@ -309,7 +309,7 @@ export function SpeakingStage({ sessionId, onComplete }: { sessionId: string; on
         ) : null}
 
         {error ? (
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="text-sm text-danger-strong">
             {error}
           </p>
         ) : null}

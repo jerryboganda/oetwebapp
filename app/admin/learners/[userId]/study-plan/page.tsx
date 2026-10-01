@@ -62,11 +62,11 @@ interface AdminStudyPlan {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  Completed: 'bg-success/10 text-success',
+  Completed: 'bg-success/10 text-success-strong',
   InProgress: 'bg-primary/10 text-primary',
   NotStarted: 'bg-admin-bg-subtle text-admin-fg-muted',
-  Skipped: 'bg-warning/10 text-warning',
-  Overdue: 'bg-danger/10 text-danger',
+  Skipped: 'bg-warning/10 text-warning-strong',
+  Overdue: 'bg-danger/10 text-danger-strong',
 };
 
 const SUBTEST_COLOR: Record<string, string> = {

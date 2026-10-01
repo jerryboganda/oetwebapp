@@ -65,7 +65,7 @@ export function CompanionMemoryPanel() {
               type="button"
               onClick={() => reset.mutate()}
               disabled={reset.isPending}
-              className="text-xs text-muted underline transition-colors hover:text-danger disabled:opacity-50"
+              className="text-xs text-muted underline transition-colors hover:text-danger-strong disabled:opacity-50"
             >
               {t('companion.memory.reset')}
             </button>
@@ -92,7 +92,7 @@ export function CompanionMemoryPanel() {
                 onClick={() => removeNote.mutate(note.id)}
                 disabled={removeNote.isPending}
                 aria-label={t('companion.memory.deleteNote', { title: note.title })}
-                className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-background-light hover:text-danger disabled:opacity-50"
+                className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-background-light hover:text-danger-strong disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -110,7 +110,7 @@ export function CompanionMemoryPanel() {
                 onClick={() => removeBookmark.mutate(bookmark.id)}
                 disabled={removeBookmark.isPending}
                 aria-label={t('companion.memory.deleteBookmark', { term: bookmark.term })}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-navy transition-colors hover:border-danger hover:text-danger disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-navy transition-colors hover:border-danger hover:text-danger-strong disabled:opacity-50"
               >
                 {bookmark.term}
                 <Trash2 className="h-3 w-3" aria-hidden="true" />

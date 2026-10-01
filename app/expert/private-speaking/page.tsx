@@ -514,7 +514,7 @@ export default function ExpertPrivateSpeakingPage() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <StatusBadge status={session.status} />
-                          {isStartingSoon && <span className="text-xs text-warning font-medium animate-pulse">Starting soon</span>}
+                          {isStartingSoon && <span className="text-xs text-warning-strong font-medium animate-pulse">Starting soon</span>}
                         </div>
                         <p className="text-sm font-medium text-navy">
                           {start.toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -541,7 +541,7 @@ export default function ExpertPrivateSpeakingPage() {
                             size="sm"
                             onClick={() => handleMarkNoShow(session)}
                             disabled={markingNoShowId === session.id}
-                            className="border-danger/30 text-danger hover:bg-danger/10"
+                            className="border-danger/30 text-danger-strong hover:bg-danger/10"
                           >
                             <UserX className="w-4 h-4" aria-hidden="true" /> {markingNoShowId === session.id ? 'Marking…' : 'Mark learner no-show'}
                           </Button>
@@ -551,7 +551,7 @@ export default function ExpertPrivateSpeakingPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setCancelTarget(session)}
-                          className="border-danger/30 text-danger hover:bg-danger/10"
+                          className="border-danger/30 text-danger-strong hover:bg-danger/10"
                         >
                           <X className="w-4 h-4" aria-hidden="true" /> Cancel
                         </Button>
@@ -652,7 +652,7 @@ export default function ExpertPrivateSpeakingPage() {
                       <button type="button" onClick={() => startEditRule(rule)} className="text-muted hover:text-navy p-2.5 -m-1" aria-label="Edit rule">
                         <Pencil className="w-4 h-4" aria-hidden="true" />
                       </button>
-                      <button type="button" onClick={() => handleDeleteRule(rule.id)} className="text-danger/80 hover:text-danger p-2.5 -m-1" aria-label="Delete rule">
+                      <button type="button" onClick={() => handleDeleteRule(rule.id)} className="text-danger-strong/80 hover:text-danger-strong p-2.5 -m-1" aria-label="Delete rule">
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>

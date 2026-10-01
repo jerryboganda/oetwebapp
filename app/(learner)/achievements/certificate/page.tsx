@@ -26,11 +26,11 @@ const apiRequest = apiClient.request;
 
 /* ── certificate type config ──────────────────── */
 const TYPE_CONFIG: Record<string, { icon: typeof Award; color: string; bg: string }> = {
-  study_plan_complete:  { icon: Trophy,   color: 'text-warning',  bg: 'bg-warning/10' },
+  study_plan_complete:  { icon: Trophy,   color: 'text-warning-strong',  bg: 'bg-warning/10' },
   mock_exam_passed:     { icon: Star,     color: 'text-info',     bg: 'bg-info/10' },
-  readiness_threshold:  { icon: Award,    color: 'text-success',  bg: 'bg-success/10' },
+  readiness_threshold:  { icon: Award,    color: 'text-success-strong',  bg: 'bg-success/10' },
   diagnostic_complete:  { icon: FileText, color: 'text-primary',  bg: 'bg-primary/10' },
-  streak_milestone:     { icon: Trophy,   color: 'text-warning',  bg: 'bg-warning/10' },
+  streak_milestone:     { icon: Trophy,   color: 'text-warning-strong',  bg: 'bg-warning/10' },
 };
 
 const DEFAULT_TYPE = { icon: Award, color: 'text-primary', bg: 'bg-primary/5' };

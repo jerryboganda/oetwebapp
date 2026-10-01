@@ -65,9 +65,9 @@ function scoreColor(score: string, persistedGrade?: string | null, governedScore
   if (trimmed.length === 0) return 'text-muted';
   if (persistedGrade?.trim()) {
     const grade = persistedGrade.trim().toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '';
-    if (grade === 'A' || grade === 'B') return 'text-success';
-    if (grade === 'C+' || grade === 'C') return 'text-warning';
-    if (grade === 'D' || grade === 'E') return 'text-danger';
+    if (grade === 'A' || grade === 'B') return 'text-success-strong';
+    if (grade === 'C+' || grade === 'C') return 'text-warning-strong';
+    if (grade === 'D' || grade === 'E') return 'text-danger-strong';
     return 'text-muted';
   }
   if (governedScore) return 'text-muted';
@@ -75,27 +75,27 @@ function scoreColor(score: string, persistedGrade?: string | null, governedScore
   const grade = Number.isFinite(numeric)
     ? oetGradeFromScaled(numeric)
     : (trimmed.toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '');
-  if (grade === 'A' || grade === 'B') return 'text-success';
-  if (grade === 'C+' || grade === 'C') return 'text-warning';
-  if (grade === 'D' || grade === 'E') return 'text-danger';
+  if (grade === 'A' || grade === 'B') return 'text-success-strong';
+  if (grade === 'C+' || grade === 'C') return 'text-warning-strong';
+  if (grade === 'D' || grade === 'E') return 'text-danger-strong';
   return 'text-muted';
 }
 
 /** Map a sub-test score to a stat-strip tone (mirrors {@link scoreColor}). */
 function scoreTone(score: string, persistedGrade?: string | null, governedScore = false): 'success' | 'warning' | 'danger' | 'default' {
   const color = scoreColor(score, persistedGrade, governedScore);
-  if (color === 'text-success') return 'success';
-  if (color === 'text-warning') return 'warning';
-  if (color === 'text-danger') return 'danger';
+  if (color === 'text-success-strong') return 'success';
+  if (color === 'text-warning-strong') return 'warning';
+  if (color === 'text-danger-strong') return 'danger';
   return 'default';
 }
 
 /** CSS colour for a sub-test gauge arc, derived from the same grade bands. */
 function scoreGaugeColor(score: string, persistedGrade?: string | null, governedScore = false): string {
   const color = scoreColor(score, persistedGrade, governedScore);
-  if (color === 'text-success') return 'var(--color-success)';
-  if (color === 'text-warning') return 'var(--color-warning)';
-  if (color === 'text-danger') return 'var(--color-danger)';
+  if (color === 'text-success-strong') return 'var(--color-success)';
+  if (color === 'text-warning-strong') return 'var(--color-warning)';
+  if (color === 'text-danger-strong') return 'var(--color-danger)';
   return 'var(--color-primary)';
 }
 
@@ -434,7 +434,7 @@ function MockReportContent() {
           </div>
           <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
-              <CalendarCheck className="h-5 w-5 text-success" />
+              <CalendarCheck className="h-5 w-5 text-success-strong" />
               <h2 className="text-sm font-black uppercase tracking-widest text-muted">Booking advice</h2>
             </div>
             <p className="text-sm leading-6 text-muted">{report.bookingAdvice?.message ?? readiness.description}</p>
@@ -455,8 +455,8 @@ function MockReportContent() {
           >
             <div className="flex items-start gap-4">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                comp.overallTrend === 'up'   ? 'bg-success/10 text-success' :
-                comp.overallTrend === 'down' ? 'bg-danger/10 text-danger' :
+                comp.overallTrend === 'up'   ? 'bg-success/10 text-success-strong' :
+                comp.overallTrend === 'down' ? 'bg-danger/10 text-danger-strong' :
                                                'bg-border text-muted'
               }`}>
                 {comp.overallTrend === 'up'   && <TrendingUp className="w-5 h-5" />}
@@ -496,7 +496,7 @@ function MockReportContent() {
                         <h3 className="text-base font-bold text-navy">{test.name}</h3>
                         <p className="text-xs text-muted">Raw: {test.rawScore}</p>
                         {test.reviewState ? (
-                          <p className="mt-1 tile-label text-warning">
+                          <p className="mt-1 tile-label text-warning-strong">
                             Review {test.reviewState.replace(/_/g, ' ')}
                           </p>
                         ) : null}
@@ -528,7 +528,7 @@ function MockReportContent() {
                         Watermarked “Practice Copy”. For your own study only, not for resale or redistribution.
                       </p>
                       {pdfState === 'error' && pdfError ? (
-                        <p className="mt-2 text-2xs text-danger" role="alert">
+                        <p className="mt-2 text-2xs text-danger-strong" role="alert">
                           {pdfError}
                         </p>
                       ) : null}

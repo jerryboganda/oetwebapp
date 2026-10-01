@@ -18,13 +18,13 @@ const RATING_BUTTONS: Array<{ label: string; quality: Quality; className: string
     label: 'Forgot',
     quality: 0,
     className:
-      'flex-1 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger transition-colors hover:bg-danger/20 disabled:opacity-50',
+      'flex-1 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger-strong transition-colors hover:bg-danger/20 disabled:opacity-50',
   },
   {
     label: 'Hard',
     quality: 3,
     className:
-      'flex-1 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning transition-colors hover:bg-warning/20 disabled:opacity-50',
+      'flex-1 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong transition-colors hover:bg-warning/20 disabled:opacity-50',
   },
   {
     label: 'Good',
@@ -36,7 +36,7 @@ const RATING_BUTTONS: Array<{ label: string; quality: Quality; className: string
     label: 'Easy',
     quality: 5,
     className:
-      'flex-1 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50',
+      'flex-1 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success-strong transition-colors hover:bg-success/20 disabled:opacity-50',
   },
 ];
 

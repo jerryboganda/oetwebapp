@@ -106,16 +106,16 @@ function isUpcomingBooking(booking: Booking): boolean {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  Reserved: 'bg-warning/10 text-warning',
-  PendingPayment: 'bg-warning/10 text-warning',
+  Reserved: 'bg-warning/10 text-warning-strong',
+  PendingPayment: 'bg-warning/10 text-warning-strong',
   Confirmed: 'bg-info/10 text-info',
   InProgress: 'bg-primary/10 text-primary',
-  Completed: 'bg-success/10 text-success',
-  Cancelled: 'bg-danger/10 text-danger',
+  Completed: 'bg-success/10 text-success-strong',
+  Cancelled: 'bg-danger/10 text-danger-strong',
   Expired: 'bg-background-light text-muted',
-  Failed: 'bg-danger/10 text-danger',
+  Failed: 'bg-danger/10 text-danger-strong',
   Refunded: 'bg-info/10 text-info',
-  NoShow: 'bg-danger/10 text-danger',
+  NoShow: 'bg-danger/10 text-danger-strong',
 };
 
 const FRIENDLY_STATUS: Record<string, string> = {
@@ -174,8 +174,8 @@ function refundOutcome(booking: Booking): { label: string; tone: 'success' | 'da
 }
 
 const OUTCOME_TONE: Record<'success' | 'danger' | 'info' | 'muted', string> = {
-  success: 'text-success',
-  danger: 'text-danger',
+  success: 'text-success-strong',
+  danger: 'text-danger-strong',
   info: 'text-info',
   muted: 'text-muted',
 };
@@ -556,7 +556,7 @@ export default function PrivateSpeakingPage() {
             {/* Cancel button — opens the policy confirmation modal (PDF §12). */}
             {booking.status === 'Confirmed' && (
               <button onClick={() => setCancelConfirm(booking)}
-                className="text-xs text-danger hover:text-danger font-medium">
+                className="text-xs text-danger-strong hover:text-danger-strong font-medium">
                 Cancel
               </button>
             )}
@@ -567,7 +567,7 @@ export default function PrivateSpeakingPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   {[1, 2, 3, 4, 5].map(v => (
                     <button key={v} onClick={() => setRatingValue(v)}
-                      className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>★</button>
+                      className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning-strong' : 'text-muted/40'}`}>★</button>
                   ))}
                   <input type="text" placeholder="Feedback" value={ratingFeedback}
                     onChange={e => setRatingFeedback(e.target.value)}
@@ -576,14 +576,14 @@ export default function PrivateSpeakingPage() {
                   <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
                 </div>
               ) : (
-                <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning hover:text-warning font-medium py-2 px-1">
+                <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning-strong hover:text-warning-strong font-medium py-2 px-1">
                   <Star className="w-4 h-4" /> Rate
                 </button>
               )
             )}
 
             {booking.learnerRating !== null && (
-              <div className="flex items-center gap-1 text-warning text-sm">
+              <div className="flex items-center gap-1 text-warning-strong text-sm">
                 {'★'.repeat(booking.learnerRating)}{'☆'.repeat(5 - booking.learnerRating)}
               </div>
             )}
@@ -664,7 +664,7 @@ export default function PrivateSpeakingPage() {
         {/* Edge case #5 — no remaining entitlement → purchase CTA. */}
         {hasNoEntitlement && (
           <div className="mt-3 flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-warning">
+            <p className="text-xs text-warning-strong">
               You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
             </p>
             <Button asChild size="sm" className="w-fit shrink-0">
@@ -740,7 +740,7 @@ export default function PrivateSpeakingPage() {
                     <div>
                       <h4 className="font-medium text-navy text-sm">{t.displayName}</h4>
                       <div className="flex items-center gap-1 text-xs text-muted/60">
-                        {t.averageRating > 0 && <><Star className="w-3 h-3 text-warning fill-warning" /> {t.averageRating.toFixed(1)}</>}
+                        {t.averageRating > 0 && <><Star className="w-3 h-3 text-warning-strong fill-warning" /> {t.averageRating.toFixed(1)}</>}
                         {t.totalSessions > 0 && <span className="ml-1">· {t.totalSessions} sessions</span>}
                       </div>
                     </div>

@@ -358,7 +358,7 @@ export default function GoalSetupPage() {
               )}
             />
             {errors.profession && (
-              <p className="text-xs text-danger">{errors.profession.message}</p>
+              <p className="text-xs text-danger-strong">{errors.profession.message}</p>
             )}
           </Card>
 

@@ -281,7 +281,7 @@ export default function CalibrationCenterPage() {
                       <li key={note.id} className="ml-4">
                         <span aria-hidden="true" className={`absolute -left-2 h-4 w-4 rounded-full border-2 border-surface ${note.type === 'completed' ? 'bg-success' : note.type === 'comment' ? 'bg-info' : 'bg-border'}`} />
                         <div className="mb-0.5 flex items-center gap-2">
-                          {note.type === 'completed' ? <CheckCircle className="h-3.5 w-3.5 text-success" aria-hidden="true" /> : null}
+                          {note.type === 'completed' ? <CheckCircle className="h-3.5 w-3.5 text-success-strong" aria-hidden="true" /> : null}
                           {note.type === 'comment' ? <MessageSquare className="h-3.5 w-3.5 text-info" aria-hidden="true" /> : null}
                           {note.type === 'system' ? <Settings className="h-3.5 w-3.5 text-muted" aria-hidden="true" /> : null}
                           <time className="text-xs text-muted">{new Date(note.createdAt).toLocaleString()}</time>

@@ -160,7 +160,7 @@ export default function ListeningAnalyticsPage() {
                     {data.weaknesses.map((w) => (
                       <li key={w.errorType} className="flex items-center justify-between rounded-lg border border-border bg-background-light p-3">
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
+                          <AlertTriangle className="h-4 w-4 text-warning-strong" aria-hidden />
                           <span className="text-sm font-medium text-navy">{w.label}</span>
                         </div>
                         <Badge variant="muted">{w.count}</Badge>

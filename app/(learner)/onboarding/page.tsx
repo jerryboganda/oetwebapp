@@ -158,7 +158,7 @@ export default function OnboardingPage() {
               <ul className="space-y-3">
                 {step.details.map((detail, i) => (
                   <li key={i} className="flex gap-3 items-start">
-                    <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <CheckCircle2 className="w-5 h-5 text-success-strong flex-shrink-0 mt-0.5" aria-hidden="true" />
                     <span className="text-sm text-navy/80">{detail}</span>
                   </li>
                 ))}

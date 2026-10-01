@@ -24,7 +24,7 @@ interface InterleavedSession {
 const apiRequest = apiClient.request;
 
 const SUBTEST_ICON: Record<string, typeof BookOpen> = { reading: BookOpen, listening: Headphones, writing: PenLine, speaking: Mic };
-const SUBTEST_COLOR: Record<string, string> = { reading: 'bg-info/10 text-info', listening: 'bg-primary/10 text-primary', writing: 'bg-warning/10 text-warning', speaking: 'bg-success/10 text-success' };
+const SUBTEST_COLOR: Record<string, string> = { reading: 'bg-info/10 text-info', listening: 'bg-primary/10 text-primary', writing: 'bg-warning/10 text-warning-strong', speaking: 'bg-success/10 text-success-strong' };
 
 export default function InterleavedPracticePage() {
   const [session, setSession] = useState<InterleavedSession | null>(null);
@@ -85,7 +85,7 @@ export default function InterleavedPracticePage() {
             <MotionItem>
               <Card className="p-5 shadow-sm">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning-strong">
                     <Lightbulb className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">

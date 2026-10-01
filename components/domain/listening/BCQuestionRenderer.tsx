@@ -144,7 +144,7 @@ export function BCQuestionRenderer({
         <span
           data-testid="bc-flagged-indicator"
           aria-hidden="true"
-          className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning"
+          className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning-strong"
         >
           <Flag className="h-3 w-3" />
           Flagged for review

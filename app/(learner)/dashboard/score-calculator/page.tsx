@@ -31,13 +31,13 @@ const apiRequest = apiClient.request;
 
 /* ── grade colour helpers ──────────────────────── */
 const GRADE_COLORS: Record<string, string> = {
-  'A':  'bg-success/10 text-success',
-  'B+': 'bg-success/10 text-success',
+  'A':  'bg-success/10 text-success-strong',
+  'B+': 'bg-success/10 text-success-strong',
   'B':  'bg-info/10 text-info',
-  'C+': 'bg-warning/10 text-warning',
-  'C':  'bg-warning/10 text-warning',
-  'D':  'bg-danger/10 text-danger',
-  'E':  'bg-danger/10 text-danger',
+  'C+': 'bg-warning/10 text-warning-strong',
+  'C':  'bg-warning/10 text-warning-strong',
+  'D':  'bg-danger/10 text-danger-strong',
+  'E':  'bg-danger/10 text-danger-strong',
 };
 
 export default function ScoreCalculatorPage() {

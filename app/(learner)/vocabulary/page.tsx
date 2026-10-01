@@ -26,8 +26,8 @@ type MyVocabItem = Pick<LearnerVocabulary, 'termId' | 'term' | 'mastery' | 'dueA
 const MASTERY_COLORS: Record<string, string> = {
   new: 'bg-background-light text-muted border border-border',
   learning: 'bg-info/10 text-info border border-info/20',
-  reviewing: 'bg-warning/10 text-warning border border-warning/20',
-  mastered: 'bg-success/10 text-success border border-success/20',
+  reviewing: 'bg-warning/10 text-warning-strong border border-warning/20',
+  mastered: 'bg-success/10 text-success-strong border border-success/20',
 };
 
 export default function VocabularyPage() {
@@ -234,7 +234,7 @@ export default function VocabularyPage() {
               <button
                 onClick={() => handleRemove(item.termId)}
                 disabled={removing.has(item.termId)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition hover:bg-danger/10 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted transition hover:bg-danger/10 hover:text-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                 aria-label={`Remove ${item.term} from my word list`}
                 title="Remove from my list"
               >

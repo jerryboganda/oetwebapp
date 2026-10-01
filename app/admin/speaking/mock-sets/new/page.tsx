@@ -80,7 +80,7 @@ export default function NewSpeakingMockSetPage() {
             <Select label="Role-play 1" value={rolePlay1} onChange={(e) => setRolePlay1(e.target.value)} options={selectOptions} required />
             <Select label="Role-play 2" value={rolePlay2} onChange={(e) => setRolePlay2(e.target.value)} options={selectOptions} required />
           </div>
-          {duplicate ? <p className="text-xs text-danger">Role-play 1 and 2 must be different content items.</p> : null}
+          {duplicate ? <p className="text-xs text-danger-strong">Role-play 1 and 2 must be different content items.</p> : null}
 
           <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
             <Button variant="primary" onClick={() => void handleCreate()} disabled={!canCreate || creating}>

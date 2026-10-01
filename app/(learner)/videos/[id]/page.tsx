@@ -184,7 +184,7 @@ export default function VideoDetailPage() {
               aria-pressed={video.bookmarked}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger' : ''}`} aria-hidden="true" />
+              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger-strong' : ''}`} aria-hidden="true" />
             </button>
           </div>
           <h1 className="text-xl font-bold leading-snug text-navy sm:text-2xl">{video.title}</h1>

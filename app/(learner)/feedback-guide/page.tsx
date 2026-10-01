@@ -54,7 +54,7 @@ export default function FeedbackGuidePage() {
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
                 <p className="text-sm text-muted">{c.description}</p>
                 <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
+                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success-strong" /><strong>How to improve:</strong> {c.improve}</p>
                 </div>
               </Card>
             </MotionItem>
@@ -73,7 +73,7 @@ export default function FeedbackGuidePage() {
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
                 <p className="text-sm text-muted">{c.description}</p>
                 <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
+                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success-strong" /><strong>How to improve:</strong> {c.improve}</p>
                 </div>
               </Card>
             </MotionItem>
@@ -86,9 +86,9 @@ export default function FeedbackGuidePage() {
           description="Quick interpretation tips so you know exactly what to do next."
         />
         <Card className="p-5 space-y-3 shadow-sm">
-          <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
-          <div className="flex items-start gap-2"><Target className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
-          <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with a tutor reviewer.</p></div>
+          <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-success-strong flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
+          <div className="flex items-start gap-2"><Target className="w-5 h-5 text-warning-strong flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
+          <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-danger-strong flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with a tutor reviewer.</p></div>
         </Card>
       </MotionSection>
     </>

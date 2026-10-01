@@ -42,7 +42,7 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
       <CardContent>
         <header className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
-            <AlertCircle className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 text-warning-strong shrink-0" aria-hidden="true" />
             <h3 className="font-extrabold text-sm truncate">{mistake.summary}</h3>
           </div>
           <Badge variant="muted" size="sm">{mistake.category}</Badge>
@@ -50,13 +50,13 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
           <div className="rounded border border-danger/30 bg-danger/10 p-2">
-            <dt className="tile-label text-danger mb-0.5">
+            <dt className="tile-label text-danger-strong mb-0.5">
               Wrong
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleWrong}</dd>
           </div>
           <div className="rounded border border-success/30 bg-success/10 p-2">
-            <dt className="tile-label text-success mb-0.5">
+            <dt className="tile-label text-success-strong mb-0.5">
               Right
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleRight}</dd>

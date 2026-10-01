@@ -56,7 +56,7 @@ export function ReadinessTargetDateEdit({ initialDate, onSaved }: ReadinessTarge
           type="button"
           onClick={handleSave}
           disabled={saving || !value}
-          className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-success/10 text-success hover:bg-success/20 disabled:opacity-50"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-success/10 text-success-strong hover:bg-success/20 disabled:opacity-50"
           aria-label="Save target date"
         >
           <Check className="w-3.5 h-3.5" />
@@ -65,13 +65,13 @@ export function ReadinessTargetDateEdit({ initialDate, onSaved }: ReadinessTarge
           type="button"
           onClick={() => { setEditing(false); setValue(initialDate); setError(''); }}
           disabled={saving}
-          className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-danger/10 text-danger hover:bg-danger/20"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-danger/10 text-danger-strong hover:bg-danger/20"
           aria-label="Cancel"
         >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
-      {error && <p className="text-2xs text-danger">{error}</p>}
+      {error && <p className="text-2xs text-danger-strong">{error}</p>}
     </div>
   );
 }

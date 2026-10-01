@@ -173,7 +173,7 @@ export default function ScoreEstimatorPage() {
                         <div className="space-y-1 text-xs text-muted flex-1">
                           <p>Based on <strong>{factors.evaluationCount}</strong> evaluations</p>
                           <p>Recent average: <strong>{factors.recentAverage}</strong></p>
-                          <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-success' : factors.trendDirection === 'declining' ? 'text-danger' : 'text-muted'}>
+                          <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-success-strong' : factors.trendDirection === 'declining' ? 'text-danger-strong' : 'text-muted'}>
                             {factors.trendDirection === 'improving' ? '↑ Improving' : factors.trendDirection === 'declining' ? '↓ Declining' : '→ Stable'}
                             {factors.trend != null && ` (${factors.trend > 0 ? '+' : ''}${factors.trend})`}
                           </span></p>

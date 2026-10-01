@@ -26,12 +26,12 @@ type ReviewItem = {
 
 const QUALITY_LABELS = ['Again', 'Hard', 'Okay', 'Good', 'Easy', 'Perfect'];
 const QUALITY_COLORS = [
-  'bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20',
-  'bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20',
-  'bg-warning/5 text-warning hover:bg-warning/15 border border-warning/15',
+  'bg-danger/10 text-danger-strong hover:bg-danger/20 border border-danger/20',
+  'bg-warning/10 text-warning-strong hover:bg-warning/20 border border-warning/20',
+  'bg-warning/5 text-warning-strong hover:bg-warning/15 border border-warning/15',
   'bg-info/10 text-info hover:bg-info/20 border border-info/20',
-  'bg-success/10 text-success hover:bg-success/20 border border-success/20',
-  'bg-success/15 text-success hover:bg-success/25 border border-success/25',
+  'bg-success/10 text-success-strong hover:bg-success/20 border border-success/20',
+  'bg-success/15 text-success-strong hover:bg-success/25 border border-success/25',
 ];
 
 function parseReviewText(payload: string): string | null {
@@ -138,10 +138,10 @@ export default function ReviewPage() {
           <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="Your review session at a glance." className="mb-4" />
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
           {[
-            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger' },
-            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-warning' },
+            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger-strong' },
+            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-warning-strong' },
             { label: 'Total Items', value: summary?.total ?? 0, color: 'text-info' },
-            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success' },
+            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success-strong' },
           ].map(stat => (
             <Card key={stat.label} className="rounded-2xl p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
@@ -155,7 +155,7 @@ export default function ReviewPage() {
       {!started && !done && items.length === 0 && (
         <div className="mx-auto max-w-xl">
           <Card className="p-8 text-center">
-            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" aria-hidden="true" />
+            <CheckCircle2 className="w-12 h-12 text-success-strong mx-auto mb-3" aria-hidden="true" />
             <h3 className="text-lg font-bold text-navy mb-2">No items due for review</h3>
             <p className="text-muted mb-6">You&apos;re all caught up. New items will appear here as you complete more practice activities.</p>
             <Button
@@ -238,7 +238,7 @@ export default function ReviewPage() {
 
       {done && (
         <MotionPage className="mx-auto max-w-md py-12 text-center">
-          <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
+          <CheckCircle2 className="w-16 h-16 text-success-strong mx-auto mb-4" />
           <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
           <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
           <Button

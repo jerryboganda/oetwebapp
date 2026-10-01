@@ -99,7 +99,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted">Eligibility</dt>
-              <dd className={session.preflight.eligibility.eligible ? 'font-semibold text-success' : 'font-semibold text-danger'}>
+              <dd className={session.preflight.eligibility.eligible ? 'font-semibold text-success-strong' : 'font-semibold text-danger-strong'}>
                 {session.preflight.eligibility.eligible ? 'Checked — eligible to start' : session.preflight.eligibility.reason ?? 'Not eligible to start'}
               </dd>
             </div>
@@ -117,16 +117,16 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
         <h3 className="text-sm font-black uppercase tracking-widest text-muted">Before you start</h3>
         <ul className="space-y-3 text-sm text-muted">
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" />
             <span>Answers autosave to your server attempt as you work.</span>
           </li>
           <li className="flex items-start gap-2">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" />
             <span>Transcript evidence and answer keys stay locked until submit.</span>
           </li>
           {session.modePolicy.onePlayOnly ? (
             <li className="flex items-start gap-2">
-              <Lock className="h-5 w-5 shrink-0 text-warning" />
+              <Lock className="h-5 w-5 shrink-0 text-warning-strong" />
               <span>
                 <strong className="text-navy">Forward-only:</strong> when a section&apos;s audio ends it
                 opens an irreversible finish confirmation. After you confirm, it locks permanently and
@@ -135,7 +135,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
             </li>
           ) : (
             <li className="flex items-start gap-2">
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" />
               <span>
                 <strong className="text-navy">Practice controls:</strong> this mode follows its
                 server policy for pausing, scrubbing, replaying, and section review navigation.
@@ -143,7 +143,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
             </li>
           )}
           <li className="flex items-start gap-2">
-            <Timer className="h-5 w-5 shrink-0 text-warning" />
+            <Timer className="h-5 w-5 shrink-0 text-warning-strong" />
             <span>
               <strong className="text-navy">Reading time:</strong> each section gives you a short
               reading window before its audio starts, so you can preview the questions and mark
@@ -170,8 +170,8 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
           ) : null}
           {session.modePolicy.onePlayOnly ? (
             <li className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
-              <span className="font-bold text-danger">
+              <AlertCircle className="h-5 w-5 shrink-0 text-danger-strong" />
+              <span className="font-bold text-danger-strong">
                 Audio plays once per section and cannot be paused, scrubbed, or replayed. Each section
                 requires an irreversible finish confirmation when its audio ends.
               </span>

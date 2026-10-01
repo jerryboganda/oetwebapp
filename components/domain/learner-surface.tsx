@@ -24,8 +24,8 @@ const accentTokens = {
     eyebrow: 'bg-navy/10 text-navy border-navy/20',
   },
   amber: {
-    icon: 'bg-warning/10 text-warning',
-    eyebrow: 'bg-warning/10 text-warning border-warning/20',
+    icon: 'bg-warning/10 text-warning-strong',
+    eyebrow: 'bg-warning/10 text-warning-strong border-warning/20',
   },
   blue: {
     icon: 'bg-info/10 text-info',
@@ -40,12 +40,12 @@ const accentTokens = {
     eyebrow: 'bg-primary/10 text-primary border-primary/20',
   },
   rose: {
-    icon: 'bg-danger/10 text-danger',
-    eyebrow: 'bg-danger/10 text-danger border-danger/20',
+    icon: 'bg-danger/10 text-danger-strong',
+    eyebrow: 'bg-danger/10 text-danger-strong border-danger/20',
   },
   emerald: {
-    icon: 'bg-success/10 text-success',
-    eyebrow: 'bg-success/10 text-success border-success/20',
+    icon: 'bg-success/10 text-success-strong',
+    eyebrow: 'bg-success/10 text-success-strong border-success/20',
   },
   slate: {
     icon: 'bg-background-light text-muted',

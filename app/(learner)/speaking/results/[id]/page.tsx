@@ -404,7 +404,7 @@ export default function SpeakingResultSummary() {
                 <Download className="w-5 h-5" /> Download Practice PDF
               </Button>
               {pdfState === 'error' && pdfError ? (
-                <p className="text-xs text-danger" role="alert">{pdfError}</p>
+                <p className="text-xs text-danger-strong" role="alert">{pdfError}</p>
               ) : null}
               {/* Wave 5: deep-link this attempt's scenario into the
                   AI-patient Conversation module for unlimited
@@ -497,13 +497,13 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={1}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <Zap className="w-5 h-5 text-success shrink-0" aria-hidden />
+                <Zap className="w-5 h-5 text-success-strong shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Key Strengths</h2>
               </div>
               <ul className="space-y-4">
                 {result.strengths.map((strength, index) => (
                   <li key={index} className="flex gap-4 items-start">
-                    <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-5 h-5 text-success-strong shrink-0 mt-0.5" />
                     <p className="text-sm text-navy font-medium leading-relaxed">{strength}</p>
                   </li>
                 ))}
@@ -514,13 +514,13 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={2}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <Target className="w-5 h-5 text-warning shrink-0" aria-hidden />
+                <Target className="w-5 h-5 text-warning-strong shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Top Improvements</h2>
               </div>
               <ul className="space-y-4">
                 {result.improvements.map((improvement, index) => (
                   <li key={index} className="flex gap-4 items-start">
-                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" />
                     <p className="text-sm text-navy font-medium leading-relaxed">{improvement}</p>
                   </li>
                 ))}
@@ -533,7 +533,7 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={3}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <Headphones className="w-5 h-5 text-danger shrink-0" aria-hidden />
+                <Headphones className="w-5 h-5 text-danger-strong shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Pronunciation Insight</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-center">

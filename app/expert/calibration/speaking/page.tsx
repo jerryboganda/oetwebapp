@@ -254,7 +254,7 @@ export default function ExpertSpeakingCalibrationPage() {
                 {Object.entries(lastResult.perCriterionDelta).map(([k, v]) => (
                   <span key={k} className="tabular-nums">
                     <span className="text-muted">{k}: </span>
-                    <span className={v === 0 ? 'text-success' : 'text-warning'}>{v! > 0 ? `+${v}` : v}</span>
+                    <span className={v === 0 ? 'text-success-strong' : 'text-warning-strong'}>{v! > 0 ? `+${v}` : v}</span>
                   </span>
                 ))}
               </div>

@@ -49,7 +49,7 @@ export function DrillResultPanel({ drill, result }: DrillResultPanelProps) {
 
         {result.errorTags.length > 0 && (
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
-            <p className="eyebrow text-warning mb-2">
+            <p className="eyebrow text-warning-strong mb-2">
               Areas to work on
             </p>
             <div className="flex flex-wrap gap-2">

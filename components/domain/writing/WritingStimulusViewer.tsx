@@ -422,7 +422,7 @@ export function WritingStimulusViewer({
       {/* Document surface */}
       <div className="flex-1 overflow-auto overscroll-contain bg-background-light p-4">
         {error ? (
-          <p className="p-4 text-sm text-danger">{error}</p>
+          <p className="p-4 text-sm text-danger-strong">{error}</p>
         ) : loading ? (
           <p className="p-4 text-sm text-muted">Loading document…</p>
         ) : (

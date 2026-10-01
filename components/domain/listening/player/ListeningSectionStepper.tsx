@@ -58,7 +58,7 @@ export function ListeningSectionStepper({
             : state === 'active'
               ? 'bg-primary text-white dark:bg-primary-700'
               : state === 'reviewing'
-                ? 'bg-warning/10 text-warning'
+                ? 'bg-warning/10 text-warning-strong'
                 : state === 'available'
                   ? 'bg-info/10 text-info hover:bg-info/20'
                   : 'bg-background-light text-muted'

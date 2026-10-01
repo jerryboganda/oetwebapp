@@ -87,7 +87,7 @@ function ExpertReviewRequestContent() {
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <MotionPage className="max-w-md w-full">
             <div className="w-24 h-24 bg-success/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 className="w-12 h-12 text-success" />
+              <CheckCircle2 className="w-12 h-12 text-success-strong" />
             </div>
             <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
             <p className="text-muted mb-10 leading-relaxed">
@@ -260,7 +260,7 @@ function ExpertReviewRequestContent() {
           </Button>
 
           {selectedFocus.length === 0 && (
-            <p className="text-center eyebrow text-warning">
+            <p className="text-center eyebrow text-warning-strong">
               Please select at least one focus area
             </p>
           )}

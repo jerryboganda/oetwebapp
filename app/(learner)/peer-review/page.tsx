@@ -93,10 +93,10 @@ export default function PeerReviewPage() {
                   </div>
                   {item.feedback && item.feedback.length > 0 && item.feedback.map((fb, i) => (
                     <div key={i} className="mt-2 bg-success/10 rounded-lg p-3 text-sm">
-                      <div className="flex items-center gap-1 mb-1">{Array.from({length: fb.rating}).map((_,j) => <Star key={j} className="w-3 h-3 fill-warning text-warning" />)}</div>
+                      <div className="flex items-center gap-1 mb-1">{Array.from({length: fb.rating}).map((_,j) => <Star key={j} className="w-3 h-3 fill-warning text-warning-strong" />)}</div>
                       <p>{fb.comments}</p>
-                      {fb.strengths && <p className="mt-1 text-success"><strong>Strengths:</strong> {fb.strengths}</p>}
-                      {fb.improvements && <p className="mt-1 text-warning"><strong>To improve:</strong> {fb.improvements}</p>}
+                      {fb.strengths && <p className="mt-1 text-success-strong"><strong>Strengths:</strong> {fb.strengths}</p>}
+                      {fb.improvements && <p className="mt-1 text-warning-strong"><strong>To improve:</strong> {fb.improvements}</p>}
                     </div>
                   ))}
                 </Card>

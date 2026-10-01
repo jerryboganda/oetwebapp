@@ -125,7 +125,7 @@ export default function AdminContentImportPage() {
             <div>
               Created: {importResult.created} · Failed: {importResult.failed}
               {importResult.errors.length > 0 && (
-                <ul className="mt-1 list-disc list-inside text-danger">
+                <ul className="mt-1 list-disc list-inside text-danger-strong">
                   {importResult.errors.slice(0, 5).map((e, i) => (
                     <li key={i}>Row {e.rowIndex}: {e.message}</li>
                   ))}

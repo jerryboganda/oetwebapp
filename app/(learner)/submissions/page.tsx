@@ -198,13 +198,13 @@ function SubmissionHistoryInner() {
                           <span className="capitalize">{attempt.subtest}</span>
                           {' · '}started {formatSubmissionAttemptDate(attempt.startedAt)}
                           {' · '}
-                          <span className={attempt.status === 'in_progress' ? 'font-bold text-warning' : 'font-bold text-success'}>
+                          <span className={attempt.status === 'in_progress' ? 'font-bold text-warning-strong' : 'font-bold text-success-strong'}>
                             {attempt.status === 'in_progress' ? 'In progress' : 'Completed'}
                           </span>
                           {attempt.resultLabel ? (
                             <>
                               {' · '}
-                              <span className={SCORE_LABEL.test(attempt.resultLabel) ? 'font-bold text-navy' : 'font-bold text-warning'}>
+                              <span className={SCORE_LABEL.test(attempt.resultLabel) ? 'font-bold text-navy' : 'font-bold text-warning-strong'}>
                                 {attempt.resultLabel}
                               </span>
                             </>

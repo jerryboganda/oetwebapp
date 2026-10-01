@@ -31,10 +31,10 @@ interface DriftData {
 }
 
 const DRIFT_COLOR: Record<string, string> = {
-  severe: 'text-danger bg-danger/10',
-  moderate: 'text-warning bg-warning/10',
-  mild: 'text-warning bg-warning/10',
-  'on-track': 'text-success bg-success/10',
+  severe: 'text-danger-strong bg-danger/10',
+  moderate: 'text-warning-strong bg-warning/10',
+  mild: 'text-warning-strong bg-warning/10',
+  'on-track': 'text-success-strong bg-success/10',
 };
 
 export default function StudyPlanDriftPage() {
@@ -102,7 +102,7 @@ export default function StudyPlanDriftPage() {
                         <Button variant="primary" size="sm" className="mt-3" onClick={handleRegenerate} disabled={regenerating}>
                           <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} /> {regenerating ? 'Regenerating…' : 'Recover my plan'}
                         </Button>
-                        {regenError && <p className="mt-2 text-xs text-danger">{regenError}</p>}
+                        {regenError && <p className="mt-2 text-xs text-danger-strong">{regenError}</p>}
                       </>
                     )}
                   </div>
@@ -124,7 +124,7 @@ export default function StudyPlanDriftPage() {
                         </div>
                         <div className="flex justify-between mt-1 text-xs text-muted">
                           <span>{s.completed}/{s.total} done</span>
-                          {s.overdue > 0 && <span className="text-danger">{s.overdue} overdue</span>}
+                          {s.overdue > 0 && <span className="text-danger-strong">{s.overdue} overdue</span>}
                         </div>
                       </Card>
                     </MotionItem>

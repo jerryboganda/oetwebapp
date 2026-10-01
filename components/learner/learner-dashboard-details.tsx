@@ -170,7 +170,7 @@ export function LearnerDashboardDetails({
                     className={`absolute inset-y-0 left-0 w-1.5 transition-colors ${isComplete ? 'bg-success/50' : spineClass}`}
                   />
                   <div className="mb-3 flex items-center gap-4 sm:mb-0">
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isComplete ? 'bg-success/10 text-success' : colorClass}`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${isComplete ? 'bg-success/10 text-success-strong' : colorClass}`}>
                       {isComplete ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> : <Icon className="h-5 w-5" aria-hidden="true" />}
                     </div>
                     <div>

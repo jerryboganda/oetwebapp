@@ -40,7 +40,7 @@ export function QuestionInput({
           <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
-          <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
+          <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning-strong')} />
           {flagged ? 'Flagged' : 'Flag'}
         </Button>
       </div>

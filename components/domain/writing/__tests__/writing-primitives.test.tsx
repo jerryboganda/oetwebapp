@@ -23,12 +23,12 @@ describe('writing UI primitives', () => {
     rerender(<WordCounter count={180} />);
 
     expect(screen.getByText('180')).toBeInTheDocument();
-    expect(screen.getByLabelText('180 words, in target range, target 180 to 220')).toHaveClass('text-success');
+    expect(screen.getByLabelText('180 words, in target range, target 180 to 220')).toHaveClass('text-success-strong');
 
     rerender(<WordCounter count={251} />);
 
     expect(screen.getByText('251')).toBeInTheDocument();
-    expect(screen.getByLabelText('251 words, over-length, target 180 to 220')).toHaveClass('text-danger');
+    expect(screen.getByLabelText('251 words, over-length, target 180 to 220')).toHaveClass('text-danger-strong');
   });
 
   it('moves from reading to writing when reading time expires', async () => {

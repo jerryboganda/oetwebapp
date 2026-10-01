@@ -30,9 +30,9 @@ interface NextActionsData {
 const apiRequest = apiClient.request;
 
 const PRIORITY_STYLES: Record<string, { border: string; bg: string; icon: React.ReactNode }> = {
-  high: { border: 'border-danger/30', bg: 'bg-danger/10', icon: <AlertTriangle className="w-5 h-5 text-danger" /> },
-  medium: { border: 'border-warning/30', bg: 'bg-warning/10', icon: <Target className="w-5 h-5 text-warning" /> },
-  low: { border: 'border-success/30', bg: 'bg-success/10', icon: <CheckCircle2 className="w-5 h-5 text-success" /> },
+  high: { border: 'border-danger/30', bg: 'bg-danger/10', icon: <AlertTriangle className="w-5 h-5 text-danger-strong" /> },
+  medium: { border: 'border-warning/30', bg: 'bg-warning/10', icon: <Target className="w-5 h-5 text-warning-strong" /> },
+  low: { border: 'border-success/30', bg: 'bg-success/10', icon: <CheckCircle2 className="w-5 h-5 text-success-strong" /> },
 };
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {

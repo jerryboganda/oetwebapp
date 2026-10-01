@@ -163,12 +163,12 @@ export default function ModelAnswerExplainer() {
                   <h3 className="text-sm font-bold text-navy uppercase tracking-wider mb-4">Include / Exclude Logic</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <h4 className="eyebrow text-success mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Included</h4>
+                      <h4 className="eyebrow text-success-strong mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Included</h4>
                       <ul className="space-y-2">{paragraph.included.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                     </div>
                     {paragraph.excluded.length > 0 && (
                       <div>
-                        <h4 className="eyebrow text-danger mb-2 flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Excluded</h4>
+                        <h4 className="eyebrow text-danger-strong mb-2 flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Excluded</h4>
                         <ul className="space-y-2">{paragraph.excluded.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                       </div>
                     )}

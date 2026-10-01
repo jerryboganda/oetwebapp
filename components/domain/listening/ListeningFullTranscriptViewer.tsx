@@ -127,7 +127,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
         <div className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-muted">
           <BookOpen className="h-4 w-4" /> Full transcript
         </div>
-        <p className="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <p className="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning-strong">
           No time-coded transcript segment map is authored for this part yet. If an Audio Script PDF is attached it is shown above. Per-question evidence still works where authored excerpts exist.
         </p>
       </section>

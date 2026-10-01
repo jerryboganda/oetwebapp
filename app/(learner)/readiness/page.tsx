@@ -102,9 +102,9 @@ export default function ReadinessCenter() {
 
   const riskIcon = data.overallRisk === 'High' ? ShieldAlert : data.overallRisk === 'Moderate' ? Shield : ShieldCheck;
   const riskAccent =
-    data.overallRisk === 'High' ? { tile: 'bg-danger/10 text-danger', chip: 'bg-danger/10 text-danger border-danger/20' } :
-    data.overallRisk === 'Moderate' ? { tile: 'bg-warning/10 text-warning', chip: 'bg-warning/10 text-warning border-warning/20' } :
-    data.overallRisk === 'Low' ? { tile: 'bg-success/10 text-success', chip: 'bg-success/10 text-success border-success/20' } :
+    data.overallRisk === 'High' ? { tile: 'bg-danger/10 text-danger-strong', chip: 'bg-danger/10 text-danger-strong border-danger/20' } :
+    data.overallRisk === 'Moderate' ? { tile: 'bg-warning/10 text-warning-strong', chip: 'bg-warning/10 text-warning-strong border-warning/20' } :
+    data.overallRisk === 'Low' ? { tile: 'bg-success/10 text-success-strong', chip: 'bg-success/10 text-success-strong border-success/20' } :
     { tile: 'bg-muted/10 text-muted', chip: 'bg-muted/10 text-muted border-border' };
   const RiskIconCmp = riskIcon;
 
@@ -184,7 +184,7 @@ export default function ReadinessCenter() {
 
           <section className="bg-surface rounded-2xl border border-border p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning-strong">
                 <AlertTriangle className="w-4 h-4" />
               </span>
               <span className="eyebrow text-muted">Risk factors</span>
@@ -194,9 +194,9 @@ export default function ReadinessCenter() {
                 <p className="text-sm text-muted">No critical risk factors detected.</p>
               ) : (
                 riskFactors.slice(0, 5).map((f) => {
-                  const sev = f.severity === 'high' ? { chip: 'bg-danger/10 text-danger', bar: 'bg-danger' }
-                    : f.severity === 'medium' ? { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' }
-                    : { chip: 'bg-success/10 text-success', bar: 'bg-success' };
+                  const sev = f.severity === 'high' ? { chip: 'bg-danger/10 text-danger-strong', bar: 'bg-danger' }
+                    : f.severity === 'medium' ? { chip: 'bg-warning/10 text-warning-strong', bar: 'bg-warning' }
+                    : { chip: 'bg-success/10 text-success-strong', bar: 'bg-success' };
                   return (
                     <div key={f.label}>
                       <div className="flex items-center justify-between mb-1">

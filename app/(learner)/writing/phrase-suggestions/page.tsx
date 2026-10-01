@@ -46,11 +46,11 @@ const apiRequest = apiClient.request;
 
 /* ── category config ─────────────────────────── */
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  grammar:      { label: 'Grammar',      color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  grammar:      { label: 'Grammar',      color: 'text-danger-strong',  bg: 'bg-danger/10 border-danger/30' },
   vocabulary:   { label: 'Better Phrase', color: 'text-info',    bg: 'bg-info/10 border-info/30' },
   tone:         { label: 'Tone',         color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
-  conciseness:  { label: 'Conciseness',  color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  structure:    { label: 'Structure',    color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  conciseness:  { label: 'Conciseness',  color: 'text-warning-strong', bg: 'bg-warning/10 border-warning/30' },
+  structure:    { label: 'Structure',    color: 'text-success-strong', bg: 'bg-success/10 border-success/30' },
 };
 
 export default function PhraseSuggestionsPage() {

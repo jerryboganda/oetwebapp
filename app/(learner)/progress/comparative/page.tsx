@@ -30,10 +30,10 @@ interface ComparativeData {
 const apiRequest = apiClient.request;
 
 const TIER_BADGE: Record<string, { label: string; color: string }> = {
-  top10: { label: 'Top 10%', color: 'bg-success/10 text-success' },
+  top10: { label: 'Top 10%', color: 'bg-success/10 text-success-strong' },
   top25: { label: 'Top 25%', color: 'bg-info/10 text-info' },
-  aboveMedian: { label: 'Above Median', color: 'bg-warning/10 text-warning' },
-  belowMedian: { label: 'Below Median', color: 'bg-danger/10 text-danger' },
+  aboveMedian: { label: 'Above Median', color: 'bg-warning/10 text-warning-strong' },
+  belowMedian: { label: 'Below Median', color: 'bg-danger/10 text-danger-strong' },
 };
 
 export default function ComparativeAnalyticsPage() {

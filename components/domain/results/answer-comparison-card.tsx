@@ -42,10 +42,10 @@ const shellTint: Record<ItemState, string> = {
 };
 
 const iconColor: Record<ItemState, string> = {
-  correct: 'text-success',
-  incorrect: 'text-danger',
-  unanswered: 'text-warning',
-  invalid: 'text-warning',
+  correct: 'text-success-strong',
+  incorrect: 'text-danger-strong',
+  unanswered: 'text-warning-strong',
+  invalid: 'text-warning-strong',
 };
 
 const statusMeta: Record<ItemState, { label: string; variant: 'success' | 'danger' | 'warning' }> = {
@@ -63,10 +63,10 @@ const yourCellTint: Record<ItemState, string> = {
 };
 
 const yourLabelColor: Record<ItemState, string> = {
-  correct: 'text-success',
-  incorrect: 'text-danger',
+  correct: 'text-success-strong',
+  incorrect: 'text-danger-strong',
   unanswered: 'text-muted',
-  invalid: 'text-warning',
+  invalid: 'text-warning-strong',
 };
 
 /**
@@ -143,7 +143,7 @@ export function AnswerComparisonCard({
           </div>
           {correctAnswer ? (
             <div className="rounded-xl border border-success/30 bg-success/10 p-3">
-              <p className="eyebrow text-success">Correct answer</p>
+              <p className="eyebrow text-success-strong">Correct answer</p>
               <p className="mt-1 break-words text-sm font-semibold text-navy dark:text-white">{correctAnswer}</p>
             </div>
           ) : null}

@@ -22,9 +22,9 @@ export function ReadinessDeltaBanner({
 
   const Icon = delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
   const tone = delta > 0
-    ? 'border-success/20 bg-success/5 text-success'
+    ? 'border-success/20 bg-success/5 text-success-strong'
     : delta < 0
-    ? 'border-danger/20 bg-danger/5 text-danger'
+    ? 'border-danger/20 bg-danger/5 text-danger-strong'
     : 'border-border bg-background-light text-muted';
 
   return (

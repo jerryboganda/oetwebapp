@@ -36,9 +36,9 @@ export interface ResultsScorePanelProps {
 
 const statToneClass: Record<ScoreStatTone, string> = {
   default: 'border-border bg-background-light text-navy dark:text-white',
-  success: 'border-success/30 bg-success/10 text-success',
-  warning: 'border-warning/30 bg-warning/10 text-warning',
-  danger: 'border-danger/30 bg-danger/10 text-danger',
+  success: 'border-success/30 bg-success/10 text-success-strong',
+  warning: 'border-warning/30 bg-warning/10 text-warning-strong',
+  danger: 'border-danger/30 bg-danger/10 text-danger-strong',
   info: 'border-info/30 bg-info/10 text-info',
 };
 

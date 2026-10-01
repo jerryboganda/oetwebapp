@@ -138,9 +138,9 @@ function BetterPhrasingContent() {
 
                 <div className="mt-8 pt-8 border-t border-border">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden />
+                    <AlertCircle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" aria-hidden />
                     <div>
-                      <h3 className="eyebrow text-warning mb-1">Issue Explanation</h3>
+                      <h3 className="eyebrow text-warning-strong mb-1">Issue Explanation</h3>
                       <p className="text-sm text-muted leading-relaxed">{currentSegment.issueExplanation}</p>
                     </div>
                   </div>

@@ -98,7 +98,7 @@ export default function ListeningStrategiesPage() {
               <p className="mt-1 text-xs text-muted">~{s.estimatedReadMinutes} min read</p>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {s.markedAsRead && (
-                  <span className="rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">Read</span>
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success-strong">Read</span>
                 )}
                 {s.favorited && <span role="img" aria-label="Favorited">⭐</span>}
               </div>
