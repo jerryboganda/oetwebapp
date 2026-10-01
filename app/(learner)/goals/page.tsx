@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Save, ArrowRight, CalendarDays, Stethoscope, Target } from 'lucide-react';
 import { Button, Card, Checkbox, Input, Select } from '@/components/ui';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ProfessionSelector } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { useAnalytics } from '@/hooks/use-analytics';
@@ -298,23 +299,23 @@ export default function GoalSetupPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Goal Setup"
-          icon={Target}
-          accent="primary"
-          title="Set the signals your study plan should follow"
-          description="Tell the platform your exam, profession, target country, and weekly commitment so your study-plan pacing stays relevant."
-          highlights={[
-            { icon: Stethoscope, label: 'Profession', value: watch('profession') || 'Required' },
-            { icon: CalendarDays, label: 'Exam date', value: watch('examDate') || 'Not scheduled' },
-            { icon: Target, label: 'Target country', value: watch('targetCountry') || 'Required' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Goal Setup"
+        icon={Target}
+        accent="primary"
+        title="Set the signals your study plan should follow"
+        description="Tell the platform your exam, profession, target country, and weekly commitment so your study-plan pacing stays relevant."
+        highlights={[
+          { icon: Stethoscope, label: 'Profession', value: watch('profession') || 'Required' },
+          { icon: CalendarDays, label: 'Exam date', value: watch('examDate') || 'Not scheduled' },
+          { icon: Target, label: 'Target country', value: watch('targetCountry') || 'Required' },
+        ]}
+      />
 
-        <LearnerSkillSwitcher compact />
+      <LearnerSkillSwitcher compact />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <MotionSection delayIndex={0}>
           <Card className="space-y-4">
             <LearnerSurfaceSectionHeader
               title="Exam Focus"
@@ -341,7 +342,9 @@ export default function GoalSetupPage() {
             )}
             <p className="text-sm text-muted">{examFamilyCopy.helperText}</p>
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={1}>
           <Card className="space-y-3">
             <LearnerSurfaceSectionHeader
               title="Profession"
@@ -361,13 +364,15 @@ export default function GoalSetupPage() {
               <p className="text-xs text-danger-strong">{errors.profession.message}</p>
             )}
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={2}>
           <Card className="space-y-4">
             <LearnerSurfaceSectionHeader
               title="Exam Details"
               description="These details help prioritize readiness, review timing, and the diagnostic route."
             />
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Exam Date"
                 type="date"
@@ -392,13 +397,15 @@ export default function GoalSetupPage() {
               error={errors.previousAttempts?.message}
             />
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={3}>
           <Card className="space-y-4">
             <LearnerSurfaceSectionHeader
               title="Exam mode & confidence"
               description="OET runs on paper, on computer, or remotely (OET@Home). Sharing your target mode and confidence helps us tailor strict-mock guidance and pacing."
             />
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select
                 label="Target test mode"
                 options={EXAM_MODE_OPTIONS}
@@ -415,13 +422,15 @@ export default function GoalSetupPage() {
               />
             </div>
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={4}>
           <Card className="space-y-4">
             <LearnerSurfaceSectionHeader
               title="Target Scores (optional)"
               description={examFamilyCopy.scoreHint + ' Leave blank if you are not ready to set a target yet.'}
             />
-            <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {SUB_TESTS.map((subTest) => (
                 <Input
                   key={subTest}
@@ -444,13 +453,15 @@ export default function GoalSetupPage() {
               ))}
             </div>
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={5}>
           <Card className="space-y-3">
             <LearnerSurfaceSectionHeader
               title="Which sub-tests feel hardest?"
               description="This helps surface practice recommendations before enough scored evidence exists."
             />
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {SUB_TESTS.map((subTest) => (
                 <Checkbox
                   key={subTest}
@@ -461,7 +472,9 @@ export default function GoalSetupPage() {
               ))}
             </div>
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={5}>
           <Card className="space-y-3">
             <LearnerSurfaceSectionHeader
               title="Study Commitment"
@@ -478,20 +491,22 @@ export default function GoalSetupPage() {
               error={errors.studyHoursPerWeek?.message}
             />
           </Card>
+        </MotionSection>
 
+        <MotionSection delayIndex={5}>
           <Card className="flex flex-col gap-4 border-primary/20 bg-primary/5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-bold text-navy">Ready to turn goals into evidence?</p>
               <p className="mt-1 text-sm text-muted">Saving sends you to the diagnostic flow so your plan can start with a baseline.</p>
             </div>
             <Button type="submit" variant="primary" loading={saving} fullWidth className="sm:w-auto">
-              <Save className="w-4 h-4 mr-2" />
+              <Save className="h-4 w-4" aria-hidden="true" />
               Save & Continue to Diagnostic
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
             </Button>
           </Card>
-        </form>
-      </div>
+        </MotionSection>
+      </form>
     </>
   );
 }
