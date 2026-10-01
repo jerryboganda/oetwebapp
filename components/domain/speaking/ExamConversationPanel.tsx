@@ -31,7 +31,10 @@ export interface ExamConversationPanelProps {
    */
   liveVoiceAvailable?: boolean;
   className?: string;
-  /** Forces one provider and switches automatic failover off (comparison and QA runs); omitted = the server's candidate order. */
+  /**
+   * Asks the server to pin one provider (comparison and QA runs). Honoured only for a flagged QA account; for everyone
+   * else the server ignores it and the automatic order, failover and recovery apply. Omitted = the server's candidate order.
+   */
   requestedProvider?: LiveVoiceProvider;
   /** Receives the finalize hook: live = save transcript; fallback = stop + upload recording. */
   onVoiceStopReady?: (stop: (() => Promise<boolean>) | null) => void;

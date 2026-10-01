@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { ApiError } from '@/lib/api/client';
 import type { LiveVoicePreflight } from '@/lib/api/speaking-live-voice';
 
@@ -20,6 +20,7 @@ vi.mock('@/lib/api/speaking-live-voice', () => ({
 
 import {
   CONNECT_TIMEOUT_MS,
+  GEMINI_STOP_DRAIN_MS,
   LIVE_VOICE_UNAVAILABLE,
   useSpeakingRealtimeVoice,
   type UseSpeakingRealtimeVoiceResult,
@@ -247,11 +248,12 @@ async function flush(ms = 0) {
   });
 }
 
-async function mount(sessionId = 's1', forced?: 'openai' | 'gemini') {
+// `requested` is the provider the page asks the server to pin (?voiceProvider=); only a pinned:true preflight makes it count.
+async function mount(sessionId = 's1', requested?: 'openai' | 'gemini') {
   const seen: string[] = [];
   const rendered = renderHook(
     ({ id }: { id: string }) => {
-      const voice = useSpeakingRealtimeVoice(id, forced);
+      const voice = useSpeakingRealtimeVoice(id, requested);
       seen.push(voice.connection);
       return voice;
     },
@@ -272,7 +274,10 @@ async function startVoice(voice: Voice) {
 async function stopVoice(voice: Voice) {
   let stopped = false;
   await act(async () => {
-    stopped = await voice.current.stop();
+    const pending = voice.current.stop();
+    // A Gemini link is kept up for a moment so the last transcription lands (GEMINI_STOP_DRAIN_MS); a GPT-Live stop is quicker.
+    await vi.advanceTimersByTimeAsync(GEMINI_STOP_DRAIN_MS);
+    stopped = await pending;
   });
   return stopped;
 }
@@ -324,13 +329,20 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    // The hook keeps a refresh-safe copy of the conversation in sessionStorage: no test may inherit another's.
+    window.sessionStorage.clear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Unmount while the fake clock still runs: the stop() on the way out (the GPT-Live close handshake, the Gemini drain)
+    // must finish here, not on a real timer inside the next test.
+    cleanup();
+    await vi.advanceTimersByTimeAsync(10_000);
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
+    window.sessionStorage.clear();
   });
 
   it('fails over to the second provider after a 503 without an error, with one microphone prompt and one create call each', async () => {
@@ -494,20 +506,46 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
   });
 
   it.each([
-    { name: 'an older server names no candidates', pre: preflight({ candidates: undefined }), forced: undefined },
-    { name: 'the server lists a single candidate', pre: preflight({ candidates: ['openai'] }), forced: undefined },
-    { name: 'the run is pinned by the server', pre: preflight({ candidates: ['openai'], pinned: true }), forced: undefined },
-    { name: 'the page forces a provider', pre: preflight({ candidates: ['openai', 'gemini'] }), forced: 'openai' as const },
-  ])('makes a single attempt when $name', async ({ pre, forced }) => {
+    { name: 'an older server names no candidates', pre: preflight({ candidates: undefined }) },
+    { name: 'the server lists a single candidate', pre: preflight({ candidates: ['openai'] }) },
+    { name: 'the run is pinned by the server', pre: preflight({ candidates: ['openai'], pinned: true }) },
+  ])('makes a single attempt when $name', async ({ pre }) => {
     mockPreflight.mockResolvedValue(pre);
     mockOffer.mockRejectedValue(providerDown());
-    const { result } = await mount('s1', forced);
+    const { result } = await mount();
 
     expect(await startVoice(result)).toBe(false);
 
     expect(mockOffer).toHaveBeenCalledTimes(1);
     expect(mockToken).not.toHaveBeenCalled();
     expect(result.current.error).toBe(LIVE_VOICE_UNAVAILABLE);
+  });
+
+  it('still fails over when the page asked for a provider but the server did not pin it (only a flagged QA account is pinned)', async () => {
+    // ?voiceProvider=gemini from an ordinary learner: the server ignores it (pinned false) and answers the automatic order.
+    mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'], pinned: false }));
+    mockOffer.mockRejectedValue(providerDown());
+    const { result } = await mount('s1', 'gemini');
+    expect(mockPreflight).toHaveBeenCalledWith('s1', 'gemini');
+
+    expect(await startVoice(result)).toBe(true);
+
+    expect(mockOffer).toHaveBeenCalledTimes(1);
+    expect(mockToken).toHaveBeenCalledTimes(1);
+    expect(result.current.provider).toBe('gemini');
+    expect(result.current.failedOver).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('connects to the server\'s first choice, not the page\'s, when the page asked for another provider and was not pinned', async () => {
+    mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'], pinned: false }));
+    const { result } = await mount('s1', 'gemini');
+
+    expect(await startVoice(result)).toBe(true);
+
+    expect(result.current.provider).toBe('openai');
+    expect(result.current.failedOver).toBe(false);
+    expect(mockToken).not.toHaveBeenCalled();
   });
 
   it('an abandoned Gemini socket cannot disturb the provider that took over', async () => {
@@ -552,6 +590,58 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(mockTurn).not.toHaveBeenCalled();
     expect(result.current.connection).toBe('ended');
     expect(streams[0].tracks[0].stop).toHaveBeenCalled();
+  });
+
+  it('stop() keeps a Gemini link up for a moment, so a sentence still being transcribed is not cut off', async () => {
+    // Gemini transcribes a sentence ~1.5 s after it was spoken: a candidate still talking at the buzzer must keep the tail.
+    mockPreflight.mockResolvedValue(preflight({ provider: 'gemini', candidates: ['gemini', 'openai'] }));
+    const { result } = await mount();
+    await startVoice(result);
+    const socket = FakeSocket.instances[0];
+    await act(async () => {
+      socket.message({ serverContent: { inputTranscription: { text: 'How can I help you' } } });
+    });
+
+    await act(async () => {
+      const pending = result.current.stop();
+      await vi.advanceTimersByTimeAsync(1_000);
+      socket.message({ serverContent: { inputTranscription: { text: 'today' } } }); // arrives 1 s after stop()
+      await vi.advanceTimersByTimeAsync(GEMINI_STOP_DRAIN_MS - 1_000 - 1);
+      expect(mockTranscript).not.toHaveBeenCalled(); // still inside the drain
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toBe(true);
+    });
+
+    expect(mockTranscript).toHaveBeenCalledTimes(1);
+    expect(mockTranscript).toHaveBeenCalledWith('s1', {
+      provider: 'gemini',
+      providerSessionId: 'gem-session-1',
+      segments: [expect.objectContaining({ speaker: 'candidate', text: 'How can I help you today' })],
+    });
+    expect(mockTurn).toHaveBeenCalledWith('s1', expect.objectContaining({ candidateText: 'How can I help you today' }));
+  });
+
+  it('does not make stop() wait on a Gemini link that is already closed', async () => {
+    mockPreflight.mockResolvedValue(preflight({ provider: 'gemini', candidates: ['gemini'], pinned: true }));
+    const { result } = await mount();
+    await startVoice(result);
+    const socket = FakeSocket.instances[0];
+    await act(async () => {
+      socket.message({ serverContent: { inputTranscription: { text: 'Hello doctor' } } });
+    });
+    await act(async () => {
+      socket.readyState = 3;
+      socket.onclose?.({ code: 1011 });
+    });
+    expect(result.current.connection).toBe('error');
+
+    // No timer is advanced: a stop() that waited for the drain would hang here.
+    await act(async () => {
+      expect(await result.current.stop()).toBe(true);
+    });
+
+    expect(mockTranscript).toHaveBeenCalledTimes(1);
+    expect(mockTranscript.mock.calls[0][1].segments).toEqual([expect.objectContaining({ speaker: 'candidate', text: 'Hello doctor' })]);
   });
 
   it('a start abandoned by unmount opens nothing more and releases the microphone', async () => {
@@ -698,8 +788,9 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
   });
 
   it('a start after a mid-conversation error releases the previous connection first', async () => {
-    // A forced provider never restores itself (see speaking-realtime-recovery.test.tsx), so the error stays.
-    const { result } = await mount('s1', 'openai');
+    // A run the server pinned never restores itself (see speaking-realtime-recovery.test.tsx), so the error stays.
+    mockPreflight.mockResolvedValue(preflight({ candidates: ['openai'], pinned: true }));
+    const { result } = await mount();
     await startVoice(result);
     const previous = FakePeer.instances[0];
     await act(async () => {
@@ -750,6 +841,17 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     expect(result.current.error).not.toMatch(/Start recording/);
     expect(mockOffer).not.toHaveBeenCalled();
     expect(mockToken).not.toHaveBeenCalled();
+  });
+
+  it('words every other microphone failure for the live patient too: nothing is called a recording', async () => {
+    getUserMedia.mockRejectedValue(new DOMException('', 'OverconstrainedError'));
+    const { result } = await mount();
+
+    expect(await startVoice(result)).toBe(false);
+
+    expect(result.current.error).toBe('This microphone does not support the requested audio settings. Try another device.');
+    expect(result.current.micPermissionDenied).toBe(false);
+    expect(mockOffer).not.toHaveBeenCalled();
   });
 
   it.each(['stop', 'unmount'] as const)('a microphone opened while the audio context is still resuming is released by %s', async (how) => {
