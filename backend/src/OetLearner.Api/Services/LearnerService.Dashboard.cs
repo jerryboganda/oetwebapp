@@ -314,29 +314,27 @@ public partial class LearnerService
             ? (double?)null
             : Math.Round(completedReviewTurnarounds.Average(x => (x.CompletedAt - x.CreatedAt).TotalHours), 1);
 
+        // The completion and volume charts show this learner's real activity.
+        // ponytail: loads the learner's attempt timestamps and buckets them in
+        // memory, which keeps the query provider-neutral; window it in SQL if a
+        // learner ever has thousands of attempts.
+        var activity = await db.Attempts
+            .AsNoTracking()
+            .Where(attempt => attempt.UserId == userId)
+            .Select(attempt => new { attempt.State, attempt.SubmittedAt, attempt.CompletedAt })
+            .ToListAsync(cancellationToken);
+        var (completionSeries, volumeSeries) = BuildProgressActivitySeries(
+            DateTimeOffset.UtcNow,
+            activity.Select(row => row.State == AttemptState.Completed ? row.CompletedAt : null),
+            activity.Select(row => row.SubmittedAt));
+
         return new
         {
             trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScaledScore, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
             subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = GovernedScoreRange(x.SubtestCode, x.ScoreRange, x.ScaledScore, x.ScoreConversionTableVersionKey, x.ScoreConversionPassed), generatedAt = x.GeneratedAt }),
             criterionTrend,
-            completion = new[]
-            {
-                new { day = "Mon", completed = 3 },
-                new { day = "Tue", completed = 2 },
-                new { day = "Wed", completed = 4 },
-                new { day = "Thu", completed = 1 },
-                new { day = "Fri", completed = 3 },
-                new { day = "Sat", completed = 5 },
-                new { day = "Sun", completed = 2 }
-            },
-            submissionVolume = new[]
-            {
-                new { week = "W1", submissions = 4 },
-                new { week = "W2", submissions = 6 },
-                new { week = "W3", submissions = 5 },
-                new { week = "W4", submissions = 8 },
-                new { week = "W5", submissions = 7 }
-            },
+            completion = completionSeries.Select(point => new { day = point.Day, completed = point.Completed }),
+            submissionVolume = volumeSeries.Select(point => new { week = point.Week, submissions = point.Submissions }),
             reviewUsage = new
             {
                 totalRequests = reviewUsage.TotalRequests,
@@ -351,6 +349,33 @@ public partial class LearnerService
                 usesFallbackSeries = evaluations.Count == 0
             }
         };
+    }
+
+    /// <summary>
+    /// Completed attempts per UTC day over the last 7 days, and submitted attempts per
+    /// week (weeks start on Monday) over the last 5 weeks, oldest first and ending with
+    /// the current day and week.
+    /// </summary>
+    internal static (IReadOnlyList<(string Day, int Completed)> Completion, IReadOnlyList<(string Week, int Submissions)> SubmissionVolume)
+        BuildProgressActivitySeries(DateTimeOffset now, IEnumerable<DateTimeOffset?> completedAt, IEnumerable<DateTimeOffset?> submittedAt)
+    {
+        var today = now.UtcDateTime.Date;
+        var completedDays = completedAt.Where(at => at.HasValue).Select(at => at!.Value.UtcDateTime.Date).ToList();
+        var completion = Enumerable.Range(0, 7)
+            .Select(offset => today.AddDays(offset - 6))
+            .Select(day => (day.ToString("ddd", CultureInfo.InvariantCulture), completedDays.Count(completedDay => completedDay == day)))
+            .ToList();
+
+        var thisWeek = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        var submittedDays = submittedAt.Where(at => at.HasValue).Select(at => at!.Value.UtcDateTime.Date).ToList();
+        var submissionVolume = Enumerable.Range(0, 5)
+            .Select(offset => thisWeek.AddDays(7 * (offset - 4)))
+            .Select(weekStart => (
+                weekStart.ToString("d MMM", CultureInfo.InvariantCulture),
+                submittedDays.Count(submittedDay => submittedDay >= weekStart && submittedDay < weekStart.AddDays(7))))
+            .ToList();
+
+        return (completion, submissionVolume);
     }
 
     public Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)
