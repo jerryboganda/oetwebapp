@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, Clock, ListChecks, Lock } from 'lucide-react';
+import { BookOpen, Clock, ListChecks, Lock } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
+import { LearnerSurfaceMetaRow } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import {
   ContentLockedNotice,
   isContentLockedError,
@@ -113,83 +117,74 @@ export default function ReadingFullExamPage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <div className="space-y-5 sm:space-y-8" data-testid="reading-full-exam">
-        <Link
-          href="/reading"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Reading
-        </Link>
+      <LearnerPageHero
+        eyebrow="Full exam"
+        icon={BookOpen}
+        accent="blue"
+        title="Full Reading Exam"
+        description="Open a book folder, then start a published full exam. Each exam is 60 minutes, 42 questions, with Part A hard-locked and Parts B+C sharing a 45-minute window."
+      />
 
-        <LearnerPageHero
-          eyebrow="Full exam"
-          icon={BookOpen}
-          accent="blue"
-          title="Full Reading Exam"
-          description="Open a book folder, then start a published full exam. Each exam is 60 minutes, 42 questions, with Part A hard-locked and Parts B+C sharing a 45-minute window."
-        />
+      {/* A failed load is the error state below; this is for a failed start. */}
+      {error && home ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
-
-        {loading ? (
-          <LearnerSkeleton variant="card-grid" />
-        ) : (
-          <ReadingExamFolderBrowser
-            papers={home?.papers ?? []}
-            emptyMessage="No papers in this series yet. They will appear here after they are published."
-            renderPaper={(paper) => {
-              const allowed = isPaperAllowed(paper);
-              const resumeRoute = activeByPaper.get(paper.id);
-              const starting = startingPaperId === paper.id;
-              return (
-                <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-surface p-5 shadow-sm dark:border-blue-900/40">
-                  <h3 className="text-base font-bold text-navy">{paper.title}</h3>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                    <span className="inline-flex items-center gap-1">
-                      <ListChecks className="h-3 w-3" aria-hidden />
-                      {paper.partACount}+{paper.partBCount}+{paper.partCCount} items
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" aria-hidden />
-                      {paper.estimatedDurationMinutes ||
-                        paper.partATimerMinutes + paper.partBCTimerMinutes}{' '}
-                      min
-                    </span>
-                    {!allowed ? (
-                      <span className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-300">
-                        <Lock className="h-3 w-3" aria-hidden />
-                        Subscription required
-                      </span>
-                    ) : null}
-                  </p>
-                  {paper.lastAttempt?.submittedAt ? (
-                    <p className="mt-2 text-xs text-muted">
-                      Last score {paper.lastAttempt.rawScore ?? '—'}/{paper.totalPoints || 42}
-                    </p>
-                  ) : null}
-                  <div className="mt-auto pt-4">
-                    <Button
-                      size="sm"
-                      onClick={() => handleStart(paper)}
-                      disabled={starting}
-                    >
-                      {starting
-                        ? 'Starting...'
-                        : resumeRoute
-                          ? 'Resume exam'
-                          : allowed
-                            ? 'Start full exam'
-                            : 'View access'}
-                    </Button>
+      {loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : !home ? (
+        <ErrorState message={error ?? undefined} />
+      ) : (
+        <ReadingExamFolderBrowser
+          papers={home.papers ?? []}
+          emptyMessage="No papers in this series yet. They will appear here after they are published."
+          renderPaper={(paper) => {
+            const allowed = isPaperAllowed(paper);
+            const resumeRoute = activeByPaper.get(paper.id);
+            const starting = startingPaperId === paper.id;
+            return (
+              <article className={cn(cardClassName({}), 'flex h-full flex-col')}>
+                <h3 className="text-base font-bold text-navy">{paper.title}</h3>
+                <LearnerSurfaceMetaRow
+                  size="compact"
+                  className="mt-1.5 tabular-nums"
+                  items={[
+                    { label: `${paper.partACount}+${paper.partBCount}+${paper.partCCount} items`, icon: ListChecks },
+                    { label: `${paper.estimatedDurationMinutes || paper.partATimerMinutes + paper.partBCTimerMinutes} min`, icon: Clock },
+                  ]}
+                />
+                {!allowed ? (
+                  <div className="mt-2">
+                    <Badge variant="warning" className="gap-1">
+                      <Lock className="h-3 w-3" aria-hidden />
+                      Subscription required
+                    </Badge>
                   </div>
-                </article>
-              );
-            }}
-          />
-        )}
-      </div>
+                ) : null}
+                {paper.lastAttempt?.submittedAt ? (
+                  <p className="mt-2 text-xs tabular-nums text-muted">
+                    Last score {paper.lastAttempt.rawScore ?? '—'}/{paper.totalPoints || 42}
+                  </p>
+                ) : null}
+                <div className="mt-auto pt-4">
+                  <Button
+                    size="sm"
+                    onClick={() => handleStart(paper)}
+                    disabled={starting}
+                  >
+                    {starting
+                      ? 'Starting...'
+                      : resumeRoute
+                        ? 'Resume exam'
+                        : allowed
+                          ? 'Start full exam'
+                          : 'View access'}
+                  </Button>
+                </div>
+              </article>
+            );
+          }}
+        />
+      )}
     </>
   );
 }

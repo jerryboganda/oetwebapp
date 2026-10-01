@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Library } from 'lucide-react';
 import { toast } from 'sonner';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -106,57 +108,45 @@ export default function VocabListsPage() {
     };
   });
 
+  // The breadcrumb's "Vocab" crumb is the way back, so no back link in the header.
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="mb-0.5 eyebrow text-primary-500">
-              Curated Collections
-            </p>
-            <h1 className="text-2xl font-bold text-navy">
-              Vocabulary Lists
-            </h1>
-          </div>
-          <Link
-            href="/reading/vocab"
-            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-          >
-            ← Back to Vocab
-          </Link>
-        </div>
+      <LearnerPageHero
+        eyebrow="Curated Collections"
+        icon={Library}
+        title="Vocabulary Lists"
+        description=""
+      />
 
-        {loading ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-48 rounded-2xl" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {displayLists.map((list) => (
-              <Card
-                key={list.slug}
-                className="flex flex-col"
-              >
+      {loading ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-48 rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {displayLists.map((list, index) => (
+            <MotionItem key={list.slug} delayIndex={Math.min(index, 5)} className="h-full">
+              <Card className="flex h-full flex-col">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h2 className="truncate text-base font-semibold text-navy">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-base font-semibold text-navy">
                       {list.name}
                     </h2>
                     {list.wordCount > 0 ? (
-                      <p className="mt-0.5 text-xs text-muted">
+                      <p className="mt-0.5 text-xs tabular-nums text-muted">
                         {list.wordCount.toLocaleString()} words
                       </p>
                     ) : null}
                   </div>
 
                   {list.isSubscribed ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success-strong">
+                    <Badge variant="success" size="md" className="shrink-0 gap-1">
                       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                       Subscribed
-                    </span>
+                    </Badge>
                   ) : (
                     <Button
                       size="sm"
@@ -178,20 +168,17 @@ export default function VocabListsPage() {
                 {list.isSubscribed && list.previewWords.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {list.previewWords.slice(0, 5).map((word) => (
-                      <span
-                        key={word}
-                        className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:border-primary-800/50 dark:bg-primary-950/30 dark:text-primary-300"
-                      >
+                      <Badge key={word} variant="violet" className="font-medium">
                         {word}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 ) : null}
               </Card>
-            ))}
-          </div>
-        )}
-      </div>
+            </MotionItem>
+          ))}
+        </div>
+      )}
     </>
   );
 }

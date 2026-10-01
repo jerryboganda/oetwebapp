@@ -57,6 +57,7 @@ vi.mock('@/components/domain/learner-empty-state', () => ({
 
 vi.mock('@/components/ui/motion-primitives', () => ({
   MotionItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  MotionSection: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('@/lib/reading-authoring-api', () => ({

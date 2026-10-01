@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, RotateCcw, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { BookOpen, CheckCircle2, GraduationCap, Headphones, MinusCircle, Quote, RotateCcw, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { cardClassName } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
@@ -155,7 +160,6 @@ function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
 
 export default function ListeningReviewPage() {
   const params = useParams<{ id?: string | string[] }>();
-  const router = useRouter();
   const attemptId = firstParam(params?.id);
   const audioRef = useRef<HTMLAudioElement>(null);
   const evidenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -352,14 +356,9 @@ export default function ListeningReviewPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to listening
-        </Button>
-
+      <div className="learner-page-flow">
         {loading ? <Skeleton className="h-48 rounded-2xl" /> : null}
-        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {!loading && error ? <ErrorState message={error} /> : null}
 
         {!loading && review ? (
           <>
@@ -414,7 +413,7 @@ export default function ListeningReviewPage() {
                   <section
                     id="show-script"
                     aria-labelledby="listening-show-script-heading"
-                    className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm"
+                    className={cn(cardClassName({ padding: 'lg' }), 'scroll-mt-24 border-primary/30 bg-primary/5')}
                   >
                     <LearnerSurfaceSectionHeader
                       eyebrow="Post-submit access"
@@ -447,8 +446,8 @@ export default function ListeningReviewPage() {
                         ) : null}
                       </div>
                     ) : (
-                      <Button type="button" onClick={() => setScriptVisible(true)} className="gap-2">
-                        <BookOpen className="h-4 w-4" />
+                      <Button type="button" onClick={() => setScriptVisible(true)}>
+                        <BookOpen className="h-4 w-4" aria-hidden />
                         Show Script
                       </Button>
                     )}
@@ -474,7 +473,7 @@ export default function ListeningReviewPage() {
               )}
             />
 
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+            <section className={cardClassName({ padding: 'lg' })}>
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Policy"
                 title={availableScriptParts(review).length === 3 ? 'Complete transcript for the full attempt' : 'Full transcript for the submitted part'}
@@ -485,8 +484,8 @@ export default function ListeningReviewPage() {
                 }
                 className="mb-4"
               />
-              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div className="rounded-xl bg-background-light p-4 text-sm leading-6 text-muted">
                   <span className="font-bold text-navy">What you can review now: </span>
                   {(() => {
                     const parts = new Set<string>();
@@ -509,14 +508,15 @@ export default function ListeningReviewPage() {
                   })()}
                   <span className="mt-1 block text-xs text-muted">Answers and score are always shown after submission. Vocabulary lookup works on every word of the visible transcript.</span>
                 </div>
-                <div className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-bold capitalize text-success-strong">
+                <Badge variant="success" size="md" className="w-fit gap-1.5">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
                   Available
-                </div>
+                </Badge>
               </div>
             </section>
 
             {usingPerSectionAudio || review.paper.audioUrl ? (
-              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <section className={cardClassName({ padding: 'lg' })}>
                 <LearnerSurfaceSectionHeader
                   eyebrow="Audio Replay"
                   title="Replay the complete submitted audio"
@@ -533,10 +533,10 @@ export default function ListeningReviewPage() {
                         type="button"
                         onClick={() => loadSection(section)}
                         aria-pressed={section === activeSection}
-                        className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                        className={`min-h-11 rounded-control px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                           section === activeSection
                             ? 'bg-primary text-white dark:bg-primary-700'
-                            : 'bg-background-light text-navy hover:bg-surface'
+                            : 'hover-primary bg-background-light text-navy'
                         }`}
                       >
                         {LISTENING_REVIEW_SECTION_LABEL[section] ?? section}
@@ -550,7 +550,7 @@ export default function ListeningReviewPage() {
                     <button
                       type="button"
                       onClick={() => setAudioRetryKey((k) => k + 1)}
-                      className="ml-2 font-semibold underline"
+                      className="ms-2 rounded-control font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Retry
                     </button>
@@ -562,7 +562,7 @@ export default function ListeningReviewPage() {
                     <button
                       type="button"
                       onClick={() => setAudioRetryKey((key) => key + 1)}
-                      className="ml-2 font-semibold underline"
+                      className="ms-2 rounded-control font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Retry
                     </button>
@@ -575,8 +575,8 @@ export default function ListeningReviewPage() {
                   </div>
                 ) : null}
                 <div className="mb-4 flex flex-wrap items-center gap-3">
-                  <Button type="button" onClick={replayFullAudio} disabled={!resolvedAudioSrc} className="gap-2">
-                    <RotateCcw className="h-4 w-4" />
+                  <Button type="button" onClick={replayFullAudio} disabled={!resolvedAudioSrc}>
+                    <RotateCcw className="h-4 w-4" aria-hidden />
                     Replay full audio from start
                   </Button>
                   {audioDurationSeconds != null && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 0 ? (
@@ -621,61 +621,65 @@ export default function ListeningReviewPage() {
             )}
 
             {(review.paper.extracts?.length ?? 0) > 0 ? (
-              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Extract Map"
-                  title="Accent, speaker, and audio windows"
-                  description="The review keeps the learner oriented by extract instead of treating the paper as one undifferentiated audio file."
-                  className="mb-4"
-                />
-                <div className="grid gap-3 md:grid-cols-2">
-                  {review.paper.extracts?.map((extract) => (
-                    <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-2xl border border-border bg-background-light p-4 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-bold text-navy">{extract.partCode} · {extract.title}</p>
-                        <div className="flex items-center gap-2">
-                          {usingPerSectionAudio && audioByPart[reviewSectionForPartCode(extract.partCode)] ? (
-                            <button
-                              type="button"
-                              onClick={() => playEvidence(extract.audioStartMs ?? 0, extract.audioEndMs, extract.partCode)}
-                              className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-2 py-1 text-xs font-semibold text-info transition hover:bg-info/20"
-                            >
-                              <Volume2 className="h-3.5 w-3.5" aria-hidden /> Play
-                            </button>
-                          ) : null}
-                          <p className="eyebrow text-muted">{extract.kind}</p>
+              <MotionSection>
+                <section className={cardClassName({ padding: 'lg' })}>
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Extract Map"
+                    title="Accent, speaker, and audio windows"
+                    description="The review keeps the learner oriented by extract instead of treating the paper as one undifferentiated audio file."
+                    className="mb-4"
+                  />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {review.paper.extracts?.map((extract) => (
+                      <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-xl border border-border bg-background-light p-4 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 font-bold text-navy">{extract.partCode} · {extract.title}</p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {usingPerSectionAudio && audioByPart[reviewSectionForPartCode(extract.partCode)] ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={() => playEvidence(extract.audioStartMs ?? 0, extract.audioEndMs, extract.partCode)}
+                              >
+                                <Volume2 className="h-3.5 w-3.5" aria-hidden /> Play
+                              </Button>
+                            ) : null}
+                            <p className="eyebrow text-muted">{extract.kind}</p>
+                          </div>
                         </div>
+                        <p className="mt-2 text-muted">{extract.accentCode ?? 'Accent not specified'}</p>
+                        {extract.speakers.length > 0 ? (
+                          <p className="mt-1 text-muted">{extract.speakers.map((speaker) => speaker.role).join(', ')}</p>
+                        ) : null}
+                        {extract.audioStartMs != null || extract.audioEndMs != null ? (
+                          <p className="mt-1 tabular-nums text-muted">
+                            {formatMilliseconds(extract.audioStartMs) ?? '0:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}
+                          </p>
+                        ) : null}
                       </div>
-                      <p className="mt-2 text-muted">{extract.accentCode ?? 'Accent not specified'}</p>
-                      {extract.speakers.length > 0 ? (
-                        <p className="mt-1 text-muted">{extract.speakers.map((speaker) => speaker.role).join(', ')}</p>
-                      ) : null}
-                      {extract.audioStartMs != null || extract.audioEndMs != null ? (
-                        <p className="mt-1 text-muted">
-                          {formatMilliseconds(extract.audioStartMs) ?? '0:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </section>
+                    ))}
+                  </div>
+                </section>
+              </MotionSection>
             ) : null}
 
-            <ListeningPartBreakdown items={review.itemReview} />
-            <TimeUsedSummary
-              totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
-              sections={(review.timeUsed?.sections ?? []).map((section) => ({
-                label: section.sectionCode,
-                milliseconds: section.elapsedMilliseconds,
-              }))}
-              description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
-            />
-            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong">
-              AI Practice Score — not an official OET result.
-            </p>
-            <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
+            <MotionSection>
+              <ListeningPartBreakdown items={review.itemReview} />
+            </MotionSection>
+            <MotionSection>
+              <TimeUsedSummary
+                totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
+                sections={(review.timeUsed?.sections ?? []).map((section) => ({
+                  label: section.sectionCode,
+                  milliseconds: section.elapsedMilliseconds,
+                }))}
+                description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
+              />
+            </MotionSection>
+            <InlineAlert variant="warning" live="polite" title="AI Practice Score — not an official OET result.">
               This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
-            </p>
+            </InlineAlert>
 
             <section className="space-y-4">
               <LearnerSurfaceSectionHeader
@@ -684,54 +688,55 @@ export default function ListeningReviewPage() {
                 description="Your answer beside the correct answer, colour-coded green for correct and red for incorrect, with transcript evidence and distractor analysis."
                 className="mb-1"
               />
-              {review.itemReview.map((question) => {
+              {review.itemReview.map((question, index) => {
                 const chip = missReasonChip(question);
                 const unanswered = !question.learnerAnswer;
                 return (
-                  <AnswerComparisonCard
-                    key={question.questionId}
-                    testId={`listening-review-item-${question.questionId}`}
-                    label={`Part ${question.partCode} · Question ${question.number}`}
-                    stem={question.prompt}
-                    isCorrect={question.isCorrect}
-                    unanswered={!question.isCorrect && unanswered}
-                    yourAnswer={question.learnerAnswer || 'No answer recorded'}
-                    correctAnswer={question.correctAnswer}
-                    missReason={chip ? { title: `Missed because: ${chip.label}`, detail: chip.hint } : null}
-                    explanation={question.explanation ? <p>{question.explanation}</p> : null}
-                  >
-                    <ReportAnswerControl
-                      assessment="listening"
-                      attemptId={attemptId ?? ''}
-                      questionId={question.questionId}
-                      alreadyReported={reportedQuestionIds.has(question.questionId)}
-                    />
-                    {question.distractorExplanation ? (
-                      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning-strong">
-                        Distractor explanation: {question.distractorExplanation}
-                      </div>
-                    ) : null}
-                    {question.optionAnalysis?.length ? (
-                      <div className="grid gap-3 md:grid-cols-3">
-                        {question.optionAnalysis.map((option) => (
-                          <div
-                            key={`${question.questionId}-${option.optionLabel}`}
-                            className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success-strong' : 'border-warning/30 bg-warning/10 text-warning-strong'}`}
-                          >
-                            <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
-                            <p className="mt-2 eyebrow">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
-                            {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </AnswerComparisonCard>
+                  <MotionItem key={question.questionId} delayIndex={Math.min(index, 5)}>
+                    <AnswerComparisonCard
+                      testId={`listening-review-item-${question.questionId}`}
+                      label={`Part ${question.partCode} · Question ${question.number}`}
+                      stem={question.prompt}
+                      isCorrect={question.isCorrect}
+                      unanswered={!question.isCorrect && unanswered}
+                      yourAnswer={question.learnerAnswer || 'No answer recorded'}
+                      correctAnswer={question.correctAnswer}
+                      missReason={chip ? { title: `Missed because: ${chip.label}`, detail: chip.hint } : null}
+                      explanation={question.explanation ? <p>{question.explanation}</p> : null}
+                    >
+                      <ReportAnswerControl
+                        assessment="listening"
+                        attemptId={attemptId ?? ''}
+                        questionId={question.questionId}
+                        alreadyReported={reportedQuestionIds.has(question.questionId)}
+                      />
+                      {question.distractorExplanation ? (
+                        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning-strong">
+                          Distractor explanation: {question.distractorExplanation}
+                        </div>
+                      ) : null}
+                      {question.optionAnalysis?.length ? (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          {question.optionAnalysis.map((option) => (
+                            <div
+                              key={`${question.questionId}-${option.optionLabel}`}
+                              className={`rounded-xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success-strong' : 'border-warning/30 bg-warning/10 text-warning-strong'}`}
+                            >
+                              <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
+                              <p className="mt-2 eyebrow">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
+                              {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </AnswerComparisonCard>
+                  </MotionItem>
                 );
               })}
             </section>
 
             {tutorFeedback ? (
-              <section className="rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+              <section className={cn(cardClassName({ padding: 'lg' }), 'border-primary/20 bg-primary/5')}>
                 <div className="mb-5 flex items-center gap-3">
                   <GraduationCap className="h-6 w-6 shrink-0 text-primary" aria-hidden />
                   <div>
@@ -749,7 +754,7 @@ export default function ListeningReviewPage() {
                 {/* Overall feedback — rendered as pre-wrap to preserve markdown line breaks */}
                 <MarkdownContent
                   markdown={tutorFeedback.overallFeedbackMarkdown}
-                  className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-navy"
+                  className="max-w-prose text-sm leading-relaxed text-navy"
                 />
 
                 {/* Per-question comments */}
@@ -766,19 +771,19 @@ export default function ListeningReviewPage() {
                       <h3 className="mb-3 eyebrow text-muted">
                         Per-Question Comments
                       </h3>
-                      <div className="space-y-2">
+                      <ul className="divide-y divide-primary/10">
                         {perQ.map(({ questionNumber, comment }) => (
-                          <div
+                          <li
                             key={questionNumber}
-                            className="flex gap-3 rounded-xl border border-primary/10 bg-surface p-3 text-sm"
+                            className="flex gap-3 py-2.5 text-sm first:pt-0 last:pb-0"
                           >
-                            <span className="shrink-0 font-bold text-primary">
+                            <span className="shrink-0 font-bold tabular-nums text-primary">
                               Q{questionNumber}
                             </span>
                             <span className="text-navy">{comment}</span>
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                   );
                 })()}
@@ -799,13 +804,10 @@ export default function ListeningReviewPage() {
                       </h3>
                       <div className="flex flex-wrap gap-2">
                         {areas.map((area) => (
-                          <span
-                            key={area}
-                            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
-                          >
-                            <Tag className="h-3 w-3" />
+                          <Badge key={area} size="md" className="gap-1 font-medium capitalize">
+                            <Tag className="h-3 w-3" aria-hidden />
                             {area.replace(/_/g, ' ')}
-                          </span>
+                          </Badge>
                         ))}
                       </div>
                     </div>

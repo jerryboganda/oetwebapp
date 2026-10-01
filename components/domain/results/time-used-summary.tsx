@@ -1,3 +1,6 @@
+import { Badge } from '@/components/ui/badge';
+import { cardClassName } from '@/components/ui/card';
+
 interface TimeUsedSection {
   label: string;
   milliseconds: number | null;
@@ -27,43 +30,43 @@ function formatTime(milliseconds: number | null) {
 export function TimeUsedSummary({ totalMilliseconds, sections, description }: TimeUsedSummaryProps) {
   return (
     <section
-      className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
+      className={cardClassName({})}
       aria-labelledby="time-used-summary-title"
       data-testid="time-used-summary"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="eyebrow text-muted">Detailed analytics</p>
-          <h2 id="time-used-summary-title" className="mt-1 text-base font-black text-navy">Time used</h2>
+          <h2 id="time-used-summary-title" className="mt-1 text-base font-bold text-navy">Time used</h2>
         </div>
-        <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-bold text-muted">
+        <Badge variant="muted" size="md" className="tabular-nums">
           Total {formatTime(totalMilliseconds)}
-        </span>
+        </Badge>
       </div>
 
       {description ? <p className="mt-3 text-sm leading-6 text-muted">{description}</p> : null}
 
       <div className="mt-4 overflow-hidden rounded-xl border border-border">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-start text-sm">
           <caption className="sr-only">Time used by section and total</caption>
           <thead className="bg-background-light eyebrow text-muted">
             <tr>
-              <th scope="col" className="px-4 py-3">Section</th>
-              <th scope="col" className="px-4 py-3 text-right">Time used</th>
+              <th scope="col" className="px-4 py-3 text-start">Section</th>
+              <th scope="col" className="px-4 py-3 text-end">Time used</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {sections.map((section) => (
               <tr key={section.label}>
-                <th scope="row" className="px-4 py-3 font-semibold text-navy">{section.label}</th>
-                <td className="px-4 py-3 text-right font-bold tabular-nums text-muted">
+                <th scope="row" className="px-4 py-3 text-start font-semibold text-navy">{section.label}</th>
+                <td className="px-4 py-3 text-end font-bold tabular-nums text-muted">
                   {formatTime(section.milliseconds)}
                 </td>
               </tr>
             ))}
             <tr className="bg-primary/5">
-              <th scope="row" className="px-4 py-3 font-black text-navy">Total</th>
-              <td className="px-4 py-3 text-right font-black tabular-nums text-primary">
+              <th scope="row" className="px-4 py-3 text-start font-bold text-navy">Total</th>
+              <td className="px-4 py-3 text-end font-bold tabular-nums text-primary">
                 {formatTime(totalMilliseconds)}
               </td>
             </tr>

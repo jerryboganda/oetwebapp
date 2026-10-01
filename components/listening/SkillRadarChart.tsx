@@ -14,17 +14,15 @@
  */
 
 import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { SkillScore } from '@/lib/listening-pathway-api';
 
 const SkillRadarChartInner = dynamic(
   () => import('./SkillRadarChartInner').then((m) => m.SkillRadarChartInner),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex h-64 items-center justify-center text-sm text-muted">
-        Loading chart...
-      </div>
-    ),
+    // Same footprint as the 320px chart, so nothing jumps when it arrives.
+    loading: () => <Skeleton className="h-80 w-full rounded-xl" />,
   },
 );
 

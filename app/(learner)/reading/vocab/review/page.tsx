@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabDue, type VocabItemDto } from '@/lib/reading-pathway-api';
@@ -39,36 +40,29 @@ export default function VocabReviewPage() {
     router.push('/reading/vocab');
   }
 
+  // The breadcrumb's "Vocab" crumb is the way back, so no back link in the header.
   return (
     <>
-      <div className="mx-auto max-w-lg space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-navy">
-            Review Session
-          </h1>
-          <Link
-            href="/reading/vocab"
-            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-          >
-            ← Back to Vocab
-          </Link>
-        </div>
+      <LearnerPageHero
+        eyebrow="SM-2 Spaced Repetition"
+        icon={RefreshCw}
+        title="Review Session"
+        description=""
+      />
 
+      {/* A flashcard reads best in a narrow column: the session caps its own
+          width, the page frame stays full width. */}
+      <div className="mx-auto w-full max-w-lg">
         {loading ? (
           <Skeleton className="h-64 w-full rounded-2xl" />
         ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-success/30 bg-success/10 px-8 py-12 text-center">
-            <p className="text-4xl" aria-hidden="true">🎉</p>
-            <p className="mt-3 text-lg font-semibold text-navy">
-              Nothing to review today!
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              Come back tomorrow. Your next session is scheduled by SM-2.
-            </p>
-            <Button asChild className="mt-5">
-              <Link href="/reading/vocab">Back to Vocab Hub</Link>
-            </Button>
-          </div>
+          <EmptyState
+            className="border-solid border-success/30 bg-success/10"
+            icon={<span className="text-4xl">🎉</span>}
+            title="Nothing to review today!"
+            description="Come back tomorrow. Your next session is scheduled by SM-2."
+            action={{ label: 'Back to Vocab Hub', href: '/reading/vocab' }}
+          />
         ) : (
           <VocabReviewSession items={items} onComplete={handleComplete} />
         )}

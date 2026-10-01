@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { VocabItemDto } from '@/lib/reading-pathway-api';
 import { submitVocabReview } from '@/lib/reading-pathway-api';
 import { Button } from '@/components/ui/button';
+import { ProgressBar } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 import VocabCard from './VocabCard';
 
 interface VocabReviewSessionProps {
@@ -13,30 +15,30 @@ interface VocabReviewSessionProps {
 
 type Quality = 0 | 3 | 4 | 5;
 
+// Recall ratings keep their colours (forgot → danger … easy → success).
+const RATING_BASE =
+  'pressable min-h-11 flex-1 rounded-control border px-3 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50';
+
 const RATING_BUTTONS: Array<{ label: string; quality: Quality; className: string }> = [
   {
     label: 'Forgot',
     quality: 0,
-    className:
-      'flex-1 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger-strong transition-colors hover:bg-danger/20 disabled:opacity-50',
+    className: 'border-danger/30 bg-danger/10 text-danger-strong hover:bg-danger/20',
   },
   {
     label: 'Hard',
     quality: 3,
-    className:
-      'flex-1 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong transition-colors hover:bg-warning/20 disabled:opacity-50',
+    className: 'border-warning/30 bg-warning/10 text-warning-strong hover:bg-warning/20',
   },
   {
     label: 'Good',
     quality: 4,
-    className:
-      'flex-1 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm font-semibold text-info transition-colors hover:bg-info/20 disabled:opacity-50',
+    className: 'border-info/30 bg-info/10 text-info hover:bg-info/20',
   },
   {
     label: 'Easy',
     quality: 5,
-    className:
-      'flex-1 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success-strong transition-colors hover:bg-success/20 disabled:opacity-50',
+    className: 'border-success/30 bg-success/10 text-success-strong hover:bg-success/20',
   },
 ];
 
@@ -77,28 +79,24 @@ export default function VocabReviewSession({ items, onComplete }: VocabReviewSes
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Progress bar */}
+      {/* Progress bar: the shared ProgressBar slides with a transform, not width. */}
       <div className="space-y-1">
-        <div className="flex justify-between text-xs font-medium text-muted">
+        <div className="flex justify-between text-xs font-medium tabular-nums text-muted">
           <span>{completed} of {total} reviewed</span>
           <span>{Math.round(progressPct)}%</span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-lavender dark:bg-primary/20">
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
+        <ProgressBar value={progressPct} ariaLabel={`${completed} of ${total} reviewed`} />
       </div>
 
       {/* Card — controlled flip state keeps review and card in sync */}
       <VocabCard
         item={currentItem}
+        flipped={isFlipped}
         onFlip={() => setIsFlipped((prev) => !prev)}
       />
 
       {/* Actions */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
         {!isFlipped ? (
           <Button fullWidth size="lg" onClick={() => setIsFlipped(true)}>
             Reveal
@@ -110,7 +108,7 @@ export default function VocabReviewSession({ items, onComplete }: VocabReviewSes
               type="button"
               disabled={isSubmitting}
               onClick={() => void handleRate(quality)}
-              className={className}
+              className={cn(RATING_BASE, className)}
             >
               {label}
             </button>

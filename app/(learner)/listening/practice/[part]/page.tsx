@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Headphones, ListChecks } from 'lucide-react';
+import { Clock, Headphones, ListChecks } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
+import { LearnerSurfaceMetaRow } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import { analytics } from '@/lib/analytics';
 import {
   getListeningHome,
@@ -133,69 +136,61 @@ export default function ListeningPartPracticePage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <div className="space-y-5 sm:space-y-8" data-testid={`listening-part-${part}-dispatcher`}>
-        <Link
-          href="/listening"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Listening
-        </Link>
+      <LearnerPageHero
+        eyebrow={`Part ${part}`}
+        icon={Headphones}
+        accent="purple"
+        title={meta.title}
+        description={meta.description}
+      />
 
-        <LearnerPageHero
-          eyebrow={`Part ${part}`}
-          icon={Headphones}
-          accent="purple"
-          title={meta.title}
-          description={meta.description}
+      {/* A failed load is the error state below; this is for a failed start. */}
+      {error && home ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+      {loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : !home ? (
+        <ErrorState message={error ?? undefined} />
+      ) : eligiblePapers.length === 0 ? (
+        <EmptyState
+          icon={<Headphones className="h-8 w-8" aria-hidden />}
+          title={`No published Listening papers contain Part ${part} yet`}
         />
-
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-
-        {loading ? (
-          <LearnerSkeleton variant="card-grid" />
-        ) : eligiblePapers.length === 0 ? (
-          <InlineAlert variant="info">
-            No published Listening papers contain Part {part} yet
-          </InlineAlert>
-        ) : (
-          <section aria-label={`Available Part ${part} listening papers`}>
-            <ListeningExamFolderBrowser
-              papers={eligiblePapers}
-              emptyMessage={`No published Listening papers contain Part ${part} yet`}
-              renderPaper={(paper) => {
-                const itemCount = countForPart(paper, part);
-                return (
-                  <article className="flex h-full flex-col rounded-2xl border border-primary-100 bg-surface p-5 shadow-sm dark:border-primary-900/40">
-                    <h3 className="text-base font-bold text-navy">
-                      {paper.title} · Part {part}
-                    </h3>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                      <span className="inline-flex items-center gap-1">
-                        <ListChecks className="h-3 w-3" aria-hidden />
-                        {itemCount} Part {part} items
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="h-3 w-3" aria-hidden />
-                        {meta.minutes} min
-                      </span>
-                    </p>
-                    <div className="mt-auto pt-4">
-                      <Button
-                        size="sm"
-                        onClick={() => handleStart(paper)}
-                        disabled={startingPaperId === paper.id}
-                      >
-                        {startingPaperId === paper.id ? 'Starting...' : `Start Part ${part} practice`}
-                      </Button>
-                    </div>
-                  </article>
-                );
-              }}
-            />
-          </section>
-        )}
-      </div>
+      ) : (
+        <section aria-label={`Available Part ${part} listening papers`}>
+          <ListeningExamFolderBrowser
+            papers={eligiblePapers}
+            emptyMessage={`No published Listening papers contain Part ${part} yet`}
+            renderPaper={(paper) => {
+              const itemCount = countForPart(paper, part);
+              return (
+                <article className={cn(cardClassName({}), 'flex h-full flex-col')}>
+                  <h3 className="text-base font-bold text-navy">
+                    {paper.title} · Part {part}
+                  </h3>
+                  <LearnerSurfaceMetaRow
+                    size="compact"
+                    className="mt-1.5 tabular-nums"
+                    items={[
+                      { label: `${itemCount} Part ${part} items`, icon: ListChecks },
+                      { label: `${meta.minutes} min`, icon: Clock },
+                    ]}
+                  />
+                  <div className="mt-auto pt-4">
+                    <Button
+                      size="sm"
+                      onClick={() => handleStart(paper)}
+                      disabled={startingPaperId === paper.id}
+                    >
+                      {startingPaperId === paper.id ? 'Starting...' : `Start Part ${part} practice`}
+                    </Button>
+                  </div>
+                </article>
+              );
+            }}
+          />
+        </section>
+      )}
     </>
   );
 }

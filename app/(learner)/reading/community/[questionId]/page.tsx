@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, MessageCircle, ThumbsUp } from 'lucide-react';
-import { InlineAlert } from '@/components/ui/alert';
+import { MessageCircle, ThumbsUp } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getQuestionComments, postComment, type CommentDto } from '@/lib/reading-pathway-api';
 
@@ -68,75 +71,64 @@ export default function QuestionDiscussionPage() {
     }
   }
 
+  // The breadcrumb's "Reading" crumb is the way back, so no back link above the header.
   return (
     <>
-      <div className="space-y-5 sm:space-y-8 max-w-2xl">
-        <Link
-          href="/reading"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to Reading
-        </Link>
+      <LearnerPageHero icon={MessageCircle} accent="blue" title="Discussion" description="" />
 
-        <div className="flex items-center gap-3">
-          <MessageCircle className="h-6 w-6 text-primary" aria-hidden />
-          <h1 className="text-2xl font-bold text-navy">Discussion</h1>
+      {/* Comments list. A failed load is its own state: it used to sit on top of
+          "Be the first to comment!", which told the learner the thread was empty. */}
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
         </div>
-
-        {error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
-        ) : null}
-
-        {/* Comments list */}
-        {loading ? (
-          <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-20 rounded-xl" />
-            ))}
-          </div>
-        ) : comments.length === 0 ? (
-          <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center">
-            <MessageCircle className="mx-auto h-8 w-8 text-muted mb-3" aria-hidden />
-            <p className="text-sm font-medium text-navy">Be the first to comment!</p>
-            <p className="mt-1 text-xs text-muted">Share your thoughts or ask a question below.</p>
-          </div>
-        ) : (
-          <ul className="space-y-4">
-            {comments.map((comment) => (
-              <li key={comment.id} className="rounded-xl border border-border bg-surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-navy">
-                      {comment.userDisplayName}
-                    </span>
-                    {comment.isExpert ? (
-                      <span className="inline-block rounded-full bg-primary-100 dark:bg-primary-900/30 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:text-primary-300">
-                        Expert
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : comments.length === 0 ? (
+        <EmptyState
+          icon={<MessageCircle className="h-8 w-8" aria-hidden />}
+          title="Be the first to comment!"
+          description="Share your thoughts or ask a question below."
+        />
+      ) : (
+        <ul className="space-y-3">
+          {comments.map((comment, index) => (
+            <li key={comment.id}>
+              <MotionItem delayIndex={Math.min(index, 5)}>
+                <Card padding="sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-navy">
+                        {comment.userDisplayName}
                       </span>
-                    ) : null}
+                      {comment.isExpert ? <Badge>Expert</Badge> : null}
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      {formatRelativeTime(comment.createdAt)}
+                    </span>
                   </div>
-                  <span className="flex-shrink-0 text-xs text-muted">
-                    {formatRelativeTime(comment.createdAt)}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-navy/80 whitespace-pre-wrap">
-                  {comment.body}
-                </p>
-                <div className="mt-3 flex items-center gap-1.5 text-xs text-muted">
-                  <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
-                  <span>{comment.upvotes}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <p className="mt-2 max-w-prose whitespace-pre-wrap text-sm text-navy/80">
+                    {comment.body}
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5 text-xs text-muted">
+                    <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
+                    <span className="tabular-nums">{comment.upvotes}</span>
+                  </div>
+                </Card>
+              </MotionItem>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {/* Post a comment */}
-        <div className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="mb-3 text-sm font-semibold text-navy">Post a comment</h2>
+      {/* Post a comment */}
+      <MotionSection>
+        <Card>
+          <h2 className="mb-3 text-base font-bold text-navy">Post a comment</h2>
           {postError ? (
-            <p className="mb-2 text-xs text-danger-strong">{postError}</p>
+            <p role="alert" className="mb-2 text-xs text-danger-strong">{postError}</p>
           ) : null}
           <form onSubmit={handlePost} className="space-y-3">
             <textarea
@@ -146,7 +138,7 @@ export default function QuestionDiscussionPage() {
               rows={4}
               aria-label="Write a reply"
               placeholder="Share your thoughts, ask a question, or explain your approach…"
-              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 dark:bg-background-dark"
+              className="w-full resize-none rounded-control border border-border bg-background-light px-3 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <div className="flex justify-end">
               <Button type="submit" disabled={posting || !body.trim()}>
@@ -154,8 +146,8 @@ export default function QuestionDiscussionPage() {
               </Button>
             </div>
           </form>
-        </div>
-      </div>
+        </Card>
+      </MotionSection>
     </>
   );
 }

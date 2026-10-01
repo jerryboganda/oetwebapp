@@ -4,8 +4,14 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Target, XCircle } from 'lucide-react';
+import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionCollapse, MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
@@ -135,27 +141,21 @@ function ListeningResultsContent() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-64 rounded-2xl" />
-          <Skeleton className="h-32 rounded-2xl" />
-          <Skeleton className="h-48 rounded-2xl" />
-        </div>
+        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
       </>
     );
   }
 
   if (!result || error) {
     return (
-      <>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-danger-strong" aria-hidden />
-          <h2 className="text-xl font-black text-navy">Result not found</h2>
-          <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
-          <Button variant="ghost" asChild>
-            <Link href="/listening">Back to Listening</Link>
-          </Button>
-        </div>
-      </>
+      <EmptyState
+        icon={<AlertCircle className="h-8 w-8 text-danger-strong" aria-hidden />}
+        title="Result not found"
+        description={error ?? 'Complete a Listening task before opening results.'}
+        action={{ label: 'Back to Listening', href: '/listening' }}
+      />
     );
   }
 
@@ -184,252 +184,248 @@ function ListeningResultsContent() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8 pb-24">
-        {requiresAdminReview ? (
-          <div
-            data-testid="listening-admin-review-warning"
-            className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning-strong"
-          >
-            <p className="font-black">Listening attempt requires administrator review.</p>
-            <p>
-              Invalid audio or multiple-selection data is not treated as an ordinary incorrect answer and does not receive an automated converted score.
-              {result.adminReviewReason ? ` Reason: ${result.adminReviewReason.replace(/_/g, ' ')}.` : ''}
-            </p>
-          </div>
-        ) : null}
-        <MotionSection>
-          <ResultsScorePanel
-            eyebrow="Listening result"
-            icon={Headphones}
-            title={result.paper.title}
-            subtitle={isFullOetPaper
-              ? result.scoreDisplay
-              : `${result.rawScore}/${result.maxRawScore} correct · practice paper`}
-            gaugeValue={percentCorrect}
-            gaugeLabel="Accuracy"
-            gaugeColor={hasApprovedConversion ? (result.passed ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-primary)'}
-            grade={hasApprovedConversion ? { label: `Grade ${result.grade}`, tone: result.passed ? 'success' : 'danger' } : null}
-            stats={[
-              { label: 'Correct', value: result.correctCount, tone: 'success', icon: <CheckCircle2 /> },
-              { label: 'Incorrect', value: result.incorrectCount, tone: 'danger', icon: <XCircle /> },
-              { label: 'Unanswered', value: result.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
-              ...(invalidCount > 0 ? [{ label: 'Invalid review', value: invalidCount, tone: 'warning' as const, icon: <AlertTriangle /> }] : []),
-              {
-                label: hasApprovedConversion ? 'Scaled' : 'Raw',
-                value: hasApprovedConversion ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
-                tone: 'info',
-                icon: <Target />,
-              },
-            ]}
-            aside={(
-              <div className={`rounded-2xl border p-4 text-center ${
-                hasApprovedConversion
-                  ? result.passed
-                    ? 'border-success/20 bg-success/10 text-success-strong'
-                    : 'border-danger/20 bg-danger/10 text-danger-strong'
-                  : 'border-border bg-background-light text-navy'
-              }`}>
-                <p className="eyebrow">
-                  {hasApprovedConversion ? (result.passed ? 'Owner table: passed' : 'Owner table: not passed') : 'Scaled score unavailable'}
-                </p>
-                <p className="mt-1 text-xs leading-5 opacity-90">
-                  {hasApprovedConversion
-                    ? `Conversion table ${result.scoreConversionTableVersionKey ?? 'version unavailable'}.`
-                    : 'An owner-approved conversion table has not been configured for this result.'}
-                </p>
-              </div>
-            )}
-            chartSlot={(
-              <ScoreBandGraph
-                rawScore={result.rawScore}
-                maxRawScore={result.maxRawScore}
-                scaledScore={hasApprovedConversion ? result.scaledScore : null}
-                passed={hasApprovedConversion ? result.passed : null}
-                grade={hasApprovedConversion ? result.grade : null}
-                tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
-              />
-            )}
-          />
-        </MotionSection>
-        <ScoreConversionEvidence
-          assessment="Listening"
-          rawScore={result.rawScore}
-          maxRawScore={result.maxRawScore}
-          scaledScore={hasApprovedConversion ? result.scaledScore : null}
-          passed={hasApprovedConversion ? result.passed : null}
-          grade={hasApprovedConversion ? result.grade : null}
-          tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
-          errorCode={result.scoreConversionErrorCode}
-        />
-
-        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="eyebrow text-muted">Full transcript & audio — permanent access</p>
-              <p className="mt-2 text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
-              <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
-            </div>
-            <Button variant="outline" className="gap-2 shrink-0" asChild>
-              <Link href={`/listening/review/${result.attemptId}`}>
-                <FileText className="h-4 w-4" />
-                Open Transcript Review
-              </Link>
-            </Button>
-          </div>
-        </section>
-
-        <section
-          aria-labelledby="listening-show-script-heading"
-          className="rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm"
+      {requiresAdminReview ? (
+        <InlineAlert
+          variant="warning"
+          live="polite"
+          data-testid="listening-admin-review-warning"
+          title="Listening attempt requires administrator review."
         >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 id="listening-show-script-heading" className="text-lg font-black text-navy">
-                Show Script
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle tile-label text-white">
-                  Post-submit
-                </span>
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-muted">
-                Open the complete {scriptScopeLabel} scripts for this submitted attempt. The review page shows every authored segment, not just answer snippets.
+          Invalid audio or multiple-selection data is not treated as an ordinary incorrect answer and does not receive an automated converted score.
+          {result.adminReviewReason ? ` Reason: ${result.adminReviewReason.replace(/_/g, ' ')}.` : ''}
+        </InlineAlert>
+      ) : null}
+      <MotionSection>
+        <ResultsScorePanel
+          eyebrow="Listening result"
+          icon={Headphones}
+          title={result.paper.title}
+          subtitle={isFullOetPaper
+            ? result.scoreDisplay
+            : `${result.rawScore}/${result.maxRawScore} correct · practice paper`}
+          gaugeValue={percentCorrect}
+          gaugeLabel="Accuracy"
+          gaugeColor={hasApprovedConversion ? (result.passed ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-primary)'}
+          grade={hasApprovedConversion ? { label: `Grade ${result.grade}`, tone: result.passed ? 'success' : 'danger' } : null}
+          stats={[
+            { label: 'Correct', value: result.correctCount, tone: 'success', icon: <CheckCircle2 /> },
+            { label: 'Incorrect', value: result.incorrectCount, tone: 'danger', icon: <XCircle /> },
+            { label: 'Unanswered', value: result.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
+            ...(invalidCount > 0 ? [{ label: 'Invalid review', value: invalidCount, tone: 'warning' as const, icon: <AlertTriangle /> }] : []),
+            {
+              label: hasApprovedConversion ? 'Scaled' : 'Raw',
+              value: hasApprovedConversion ? `${result.scaledScore}/500` : `${result.rawScore}/${result.maxRawScore}`,
+              tone: 'info',
+              icon: <Target />,
+            },
+          ]}
+          aside={(
+            <div className={`rounded-2xl border p-4 text-center ${
+              hasApprovedConversion
+                ? result.passed
+                  ? 'border-success/20 bg-success/10 text-success-strong'
+                  : 'border-danger/20 bg-danger/10 text-danger-strong'
+                : 'border-border bg-background-light text-navy'
+            }`}>
+              <p className="eyebrow">
+                {hasApprovedConversion ? (result.passed ? 'Owner table: passed' : 'Owner table: not passed') : 'Scaled score unavailable'}
+              </p>
+              <p className="mt-1 text-xs leading-5 opacity-90">
+                {hasApprovedConversion
+                  ? `Conversion table ${result.scoreConversionTableVersionKey ?? 'version unavailable'}.`
+                  : 'An owner-approved conversion table has not been configured for this result.'}
               </p>
             </div>
-            <Button className="shrink-0 gap-2" asChild>
-              <Link href={`/listening/review/${result.attemptId}#show-script`}>
-                <FileText className="h-4 w-4" />
-                Show Script
-              </Link>
-            </Button>
-          </div>
-        </section>
-
-        <ListeningPartBreakdown items={result.itemReview} />
-        <TimeUsedSummary
-          totalMilliseconds={result.timeUsed?.totalMilliseconds ?? null}
-          sections={(result.timeUsed?.sections ?? []).map((section) => ({
-            label: section.sectionCode,
-            milliseconds: section.elapsedMilliseconds,
-          }))}
-          description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
+          )}
+          chartSlot={(
+            <ScoreBandGraph
+              rawScore={result.rawScore}
+              maxRawScore={result.maxRawScore}
+              scaledScore={hasApprovedConversion ? result.scaledScore : null}
+              passed={hasApprovedConversion ? result.passed : null}
+              grade={hasApprovedConversion ? result.grade : null}
+              tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
+            />
+          )}
         />
+      </MotionSection>
+      <ScoreConversionEvidence
+        assessment="Listening"
+        rawScore={result.rawScore}
+        maxRawScore={result.maxRawScore}
+        scaledScore={hasApprovedConversion ? result.scaledScore : null}
+        passed={hasApprovedConversion ? result.passed : null}
+        grade={hasApprovedConversion ? result.grade : null}
+        tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
+        errorCode={result.scoreConversionErrorCode}
+      />
 
-        <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning-strong">
-          AI Practice Score — not an official OET result.
-        </p>
-        <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
-          This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
-        </p>
+      <section className={cardClassName({})}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="eyebrow text-muted">Full transcript & audio — permanent access</p>
+            <p className="mt-2 max-w-prose text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
+            <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
+          </div>
+          <Button variant="outline" className="shrink-0" asChild>
+            <Link href={`/listening/review/${result.attemptId}`}>
+              <FileText className="h-4 w-4" aria-hidden />
+              Open Transcript Review
+            </Link>
+          </Button>
+        </div>
+      </section>
 
-        <MotionSection delayIndex={2}>
-          <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Detailed Review</h2>
-          <MotionList className="space-y-4">
-            {result.itemReview.map((item, index) => {
-              const isExpanded = expandedItems[item.questionId];
-              const missReason = missReasonChip(item);
-              return (
-                  <MotionItem key={item.questionId} delayIndex={index} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-                  <button
-                    onClick={() => toggleItem(item.questionId)}
-                    aria-expanded={isExpanded}
-                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:p-6"
-                  >
-                    <div className="mt-0.5 shrink-0">
-                      {item.isInvalid ? (
-                        <AlertTriangle className="h-6 w-6 text-warning-strong" />
-                      ) : item.isCorrect ? (
-                        <CheckCircle2 className="h-6 w-6 text-success-strong" />
+      <section
+        aria-labelledby="listening-show-script-heading"
+        className={cn(cardClassName({}), 'border-primary/30 bg-primary/5')}
+      >
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <h2 id="listening-show-script-heading" className="text-lg font-bold text-navy">
+              Show Script
+              <Badge className="ms-2 align-middle">Post-submit</Badge>
+            </h2>
+            <p className="mt-1 max-w-prose text-sm leading-6 text-muted">
+              Open the complete {scriptScopeLabel} scripts for this submitted attempt. The review page shows every authored segment, not just answer snippets.
+            </p>
+          </div>
+          <Button className="shrink-0" asChild>
+            <Link href={`/listening/review/${result.attemptId}#show-script`}>
+              <FileText className="h-4 w-4" aria-hidden />
+              Show Script
+            </Link>
+          </Button>
+        </div>
+      </section>
+
+      <ListeningPartBreakdown items={result.itemReview} />
+      <TimeUsedSummary
+        totalMilliseconds={result.timeUsed?.totalMilliseconds ?? null}
+        sections={(result.timeUsed?.sections ?? []).map((section) => ({
+          label: section.sectionCode,
+          milliseconds: section.elapsedMilliseconds,
+        }))}
+        description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
+      />
+
+      <InlineAlert variant="warning" live="polite" title="AI Practice Score — not an official OET result.">
+        This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
+      </InlineAlert>
+
+      <MotionSection delayIndex={2}>
+        <LearnerSurfaceSectionHeader title="Detailed Review" className="mb-4" />
+        <div className="space-y-4">
+          {result.itemReview.map((item, index) => {
+            const isExpanded = expandedItems[item.questionId];
+            const missReason = missReasonChip(item);
+            return (
+              <MotionItem key={item.questionId} delayIndex={Math.min(index, 5)} className={cn(cardClassName({ padding: 'none' }), 'overflow-hidden')}>
+                <button
+                  type="button"
+                  onClick={() => toggleItem(item.questionId)}
+                  aria-expanded={isExpanded}
+                  className="flex w-full items-start gap-4 p-4 text-start transition-colors hover:bg-background-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:p-6"
+                >
+                  <div className="mt-0.5 shrink-0">
+                    {item.isInvalid ? (
+                      <AlertTriangle className="h-6 w-6 text-warning-strong" aria-hidden />
+                    ) : item.isCorrect ? (
+                      <CheckCircle2 className="h-6 w-6 text-success-strong" aria-hidden />
+                    ) : (
+                      <XCircle className="h-6 w-6 text-danger-strong" aria-hidden />
+                    )}
+                    {/* The icon's shape and colour carry the outcome; say it for screen readers too. */}
+                    <span className="sr-only">{item.isInvalid ? 'Invalid' : item.isCorrect ? 'Correct' : 'Incorrect'}</span>
+                  </div>
+                  <div className="min-w-0 flex-1 pe-4">
+                    <span className="mb-1 block eyebrow text-muted">
+                      Part {item.partCode} / Question {item.number}
+                    </span>
+                    <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
+                    {item.isInvalid ? <p className="mt-1 eyebrow text-warning-strong">Invalid — admin review</p> : null}
+                  </div>
+                  <div className="shrink-0 text-muted">
+                    {isExpanded ? <ChevronUp className="h-5 w-5" aria-hidden /> : <ChevronDown className="h-5 w-5" aria-hidden />}
+                  </div>
+                </button>
+
+                <MotionCollapse open={isExpanded} className="border-t border-border">
+                  <div className="space-y-5 bg-background-light/50 p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
+                        <span className={`mb-2 block tile-label ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
+                          Your Answer
+                        </span>
+                        <p className={`break-words text-sm font-medium ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
+                          {item.learnerAnswer || 'No answer recorded'}
+                        </p>
+                      </div>
+                      {!item.isCorrect && !item.isInvalid ? (
+                        <div className="rounded-xl border border-success/30 bg-success/10 p-4">
+                          <span className="mb-2 block tile-label text-success-strong">
+                            Correct Answer
+                          </span>
+                          <p className="break-words text-sm font-medium text-success-strong">{item.correctAnswer}</p>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {item.isInvalid ? (
+                      <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning-strong">
+                        This multiple-choice response was invalid for automated marking. The original payload is retained for administrator review; no automated explanation or answer correction is provided.
+                      </div>
+                    ) : null}
+
+                    {missReason ? (
+                      <div
+                        data-testid={`listening-miss-${item.questionId}`}
+                        className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning-strong"
+                      >
+                        <span className="mb-1 block eyebrow">
+                          Missed because: {missReason.label}
+                        </span>
+                        <p className="text-sm leading-relaxed">{missReason.hint}</p>
+                      </div>
+                    ) : null}
+
+                    {!item.isCorrect && !item.isInvalid && item.distractorExplanation ? (
+                      <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
+                        <div>
+                          <span className="mb-1 block eyebrow text-warning-strong">Distractor Trap</span>
+                          <p className="text-sm leading-relaxed text-warning-strong">{item.distractorExplanation}</p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* A plain block on the panel: no card inside the item card. */}
+                    <div>
+                      <span className="mb-2 block eyebrow text-muted">Explanation</span>
+                      {item.explanation ? (
+                        <p className="max-w-prose text-sm leading-relaxed text-muted">{item.explanation}</p>
                       ) : (
-                        <XCircle className="h-6 w-6 text-danger-strong" />
+                        <p className="text-sm leading-relaxed text-muted">
+                          No approved explanation is available for this item.
+                        </p>
                       )}
                     </div>
-                    <div className="flex-1 pr-4">
-                      <span className="mb-1 block eyebrow text-muted">
-                        Part {item.partCode} / Question {item.number}
-                      </span>
-                        <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
-                        {item.isInvalid ? <p className="mt-1 eyebrow text-warning-strong">Invalid — admin review</p> : null}
-                    </div>
-                    <div className="shrink-0 text-muted">
-                      {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    </div>
-                  </button>
 
-                  <MotionCollapse open={isExpanded} className="border-t border-border">
-                        <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div className={`rounded-xl border p-4 ${item.isInvalid ? 'border-warning/30 bg-warning/10' : item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
-                              <span className={`mb-2 block text-3xs font-black uppercase tracking-widest ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
-                                Your Answer
-                              </span>
-                              <p className={`text-sm font-medium ${item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}`}>
-                                {item.learnerAnswer || 'No answer recorded'}
-                              </p>
-                            </div>
-                            {!item.isCorrect && !item.isInvalid ? (
-                              <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-                                <span className="mb-2 block tile-label text-success-strong">
-                                  Correct Answer
-                                </span>
-                                <p className="text-sm font-medium text-success-strong">{item.correctAnswer}</p>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {item.isInvalid ? (
-                            <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning-strong">
-                              This multiple-choice response was invalid for automated marking. The original payload is retained for administrator review; no automated explanation or answer correction is provided.
-                            </div>
-                          ) : null}
-
-                          {missReason ? (
-                            <div
-                              data-testid={`listening-miss-${item.questionId}`}
-                              className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning-strong"
-                            >
-                              <span className="mb-1 block eyebrow">
-                                Missed because: {missReason.label}
-                              </span>
-                              <p className="text-sm leading-relaxed">{missReason.hint}</p>
-                            </div>
-                          ) : null}
-
-                          {!item.isCorrect && !item.isInvalid && item.distractorExplanation ? (
-                            <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
-                              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" />
-                              <div>
-                                <span className="mb-1 block eyebrow text-warning-strong">Distractor Trap</span>
-                                <p className="text-sm leading-relaxed text-warning-strong">{item.distractorExplanation}</p>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          <div className="rounded-xl border border-border bg-surface p-4">
-                            <span className="mb-2 block eyebrow text-muted">Explanation</span>
-                            {item.explanation ? (
-                              <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
-                            ) : (
-                              <p className="text-sm leading-relaxed text-muted">
-                                No approved explanation is available for this item.
-                              </p>
-                            )}
-                          </div>
-
-                          {!item.isInvalid ? (
-                            <ReportAnswerControl
-                              assessment="listening"
-                              attemptId={id ?? ''}
-                              questionId={item.questionId}
-                              alreadyReported={reportedQuestionIds.has(item.questionId)}
-                            />
-                          ) : null}
-                        </div>
-                  </MotionCollapse>
-                </MotionItem>
-              );
-            })}
-          </MotionList>
-        </MotionSection>
-      </div>
+                    {!item.isInvalid ? (
+                      <ReportAnswerControl
+                        assessment="listening"
+                        attemptId={id ?? ''}
+                        questionId={item.questionId}
+                        alreadyReported={reportedQuestionIds.has(item.questionId)}
+                      />
+                    ) : null}
+                  </div>
+                </MotionCollapse>
+              </MotionItem>
+            );
+          })}
+        </div>
+      </MotionSection>
     </>
   );
 }
