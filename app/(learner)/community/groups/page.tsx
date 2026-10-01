@@ -51,8 +51,8 @@ export default function GroupsPage() {
       />
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-hidden="true">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="status" aria-busy="true" aria-label="Loading">
+          {[...Array(4)].map((_, i) => <Skeleton aria-hidden key={i} className="h-32 rounded-2xl" />)}
         </div>
       ) : error ? (
         <ErrorState title="Could not load groups" message={error} onRetry={() => void load()} />

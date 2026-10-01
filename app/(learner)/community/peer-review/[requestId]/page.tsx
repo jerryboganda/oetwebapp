@@ -130,10 +130,10 @@ export default function PeerReviewDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4" aria-hidden="true">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-40 rounded-2xl" />
-        <Skeleton className="h-32 rounded-2xl" />
+      <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+        <Skeleton aria-hidden className="h-8 w-48" />
+        <Skeleton aria-hidden className="h-40 rounded-2xl" />
+        <Skeleton aria-hidden className="h-32 rounded-2xl" />
       </div>
     );
   }

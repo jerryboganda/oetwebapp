@@ -62,8 +62,8 @@ function SubtestBadge({ code }: { code: string }) {
 
 function ListSkeleton() {
   return (
-    <div className="space-y-3" aria-hidden="true">
-      {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+    <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
+      {[...Array(3)].map((_, i) => <Skeleton aria-hidden key={i} className="h-20 rounded-2xl" />)}
     </div>
   );
 }

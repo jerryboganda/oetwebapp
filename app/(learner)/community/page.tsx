@@ -156,9 +156,9 @@ export default function CommunityPage() {
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {loading ? (
-          <div className="space-y-3" aria-hidden="true">
+          <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+              <Skeleton aria-hidden key={i} className="h-24 w-full rounded-2xl" />
             ))}
           </div>
         ) : displayedThreads.length === 0 ? (

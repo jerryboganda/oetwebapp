@@ -84,8 +84,8 @@ export default function PeerReviewPage() {
       <Tabs tabs={TABS} activeTab={tab} onChange={(id) => setTab(id as PeerTab)} />
 
       {loading && (
-        <div className="space-y-3" aria-hidden="true">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
+          {[1, 2, 3].map(i => <Skeleton aria-hidden key={i} className="h-20 rounded-2xl" />)}
         </div>
       )}
 

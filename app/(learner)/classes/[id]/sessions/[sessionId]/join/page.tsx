@@ -7,7 +7,9 @@ import { ExternalLink, ShieldCheck, Video } from 'lucide-react';
 
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
-import { Button, buttonClassName } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { fetchLiveClassJoinToken, type LiveClassJoinToken } from '@/lib/api';
@@ -80,69 +82,76 @@ export default function LiveClassJoinPage() {
     );
   }
 
+  // Pre-join lobby only. Once the meeting opens (above) this route is a live room: no motion here.
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero title="Join live class" description="Use the secure Zoom link for this class. Embedded Meeting SDK support is enabled when SDK credentials are configured." icon={Video} />
+      <LearnerPageHero title="Join live class" description="Use the secure Zoom link for this class. Embedded Meeting SDK support is enabled when SDK credentials are configured." icon={Video} />
 
-        {loading ? <Skeleton className="h-56 rounded-xl" /> : null}
+      {loading ? <Skeleton className="h-56 rounded-2xl" /> : null}
 
-        {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        {token ? (
-          (() => {
-            const canEmbed = Boolean(token.sdkKey && token.signature);
-            const joinUrl = safeZoomUrl(token.joinUrl);
-            return (
-          <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success-strong">
-                  <ShieldCheck className="h-4 w-4" /> Server-signed join request
+      {token ? (
+        (() => {
+          const canEmbed = Boolean(token.sdkKey && token.signature);
+          const joinUrl = safeZoomUrl(token.joinUrl);
+          return (
+            <Card padding="lg">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <Badge variant="success" size="md" className="gap-1.5">
+                    <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Server-signed join request
+                  </Badge>
+                  <h2 className="break-words text-2xl font-semibold text-navy">Zoom meeting {token.meetingNumber}</h2>
+                  <p className="max-w-2xl text-sm leading-6 text-muted">
+                    {token.sdkKey
+                      && token.signature
+                      ? 'Click "Join Class" to open the embedded Zoom meeting right here in the browser.'
+                      : 'If the embedded room is not available in this browser, open Zoom directly. Mobile and desktop shells should use this same fallback link.'}
+                  </p>
                 </div>
-                <h2 className="text-2xl font-semibold text-navy">Zoom meeting {token.meetingNumber}</h2>
-                <p className="max-w-2xl text-sm leading-6 text-muted">
-                  {token.sdkKey
-                    && token.signature
-                    ? 'Click "Join Class" to open the embedded Zoom meeting right here in the browser.'
-                    : 'If the embedded room is not available in this browser, open Zoom directly. Mobile and desktop shells should use this same fallback link.'}
-                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Button type="button" variant="primary" onClick={handleJoin}>
+                    {canEmbed ? (
+                      <>
+                        <Video className="h-4 w-4" aria-hidden="true" /> Join class
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open Zoom
+                      </>
+                    )}
+                  </Button>
+                  {!canEmbed && joinUrl ? (
+                    <Button asChild variant="outline">
+                      <a href={joinUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open Zoom directly
+                      </a>
+                    </Button>
+                  ) : null}
+                  {classId ? (
+                    <Button asChild variant="outline">
+                      <Link href={`/classes/${classId}`}>Class details</Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button type="button" variant="primary" onClick={handleJoin}>
-                  {canEmbed ? (
-                    <>
-                      <Video className="h-4 w-4" /> Join class
-                    </>
-                  ) : (
-                    <>
-                      <ExternalLink className="h-4 w-4" /> Open Zoom
-                    </>
-                  )}
-                </Button>
-                {!canEmbed && joinUrl ? (
-                  <a href={joinUrl} target="_blank" rel="noreferrer" className={buttonClassName({ variant: 'outline' })}>
-                    <ExternalLink className="h-4 w-4" /> Open Zoom directly
-                  </a>
-                ) : null}
-                {classId ? <Link href={`/classes/${classId}`} className={buttonClassName({ variant: 'outline' })}>Class details</Link> : null}
-              </div>
-            </div>
 
-            {canEmbed ? (
-              <InlineAlert variant="info" className="mt-5">
-                Meeting SDK credentials are present. The browser client can now mount the SDK room component without exposing the secret.
-              </InlineAlert>
-            ) : (
-              <InlineAlert variant="warning" className="mt-5">
-                Embedded Meeting SDK credentials are not configured yet, so the safe external Zoom fallback is active.
-              </InlineAlert>
-            )}
-          </section>
-            );
-          })()
-        ) : null}
+              {canEmbed ? (
+                <InlineAlert variant="info" className="mt-5">
+                  Meeting SDK credentials are present. The browser client can now mount the SDK room component without exposing the secret.
+                </InlineAlert>
+              ) : (
+                <InlineAlert variant="warning" className="mt-5">
+                  Embedded Meeting SDK credentials are not configured yet, so the safe external Zoom fallback is active.
+                </InlineAlert>
+              )}
+            </Card>
+          );
+        })()
+      ) : null}
 
+      <div>
         <Button type="button" variant="outline" onClick={() => setRetryNonce((current) => current + 1)}>
           Retry join preparation
         </Button>

@@ -245,10 +245,10 @@ export default function ThreadPage() {
 
       {/* Thread header: the page's one h1 block */}
       {loadingThread ? (
-        <div className="space-y-3" aria-hidden="true">
-          <Skeleton className="h-8 w-3/4 rounded-xl" />
-          <Skeleton className="h-4 w-1/2 rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-2xl" />
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
+          <Skeleton aria-hidden className="h-8 w-3/4 rounded-xl" />
+          <Skeleton aria-hidden className="h-4 w-1/2 rounded-lg" />
+          <Skeleton aria-hidden className="h-40 w-full rounded-2xl" />
         </div>
       ) : thread ? (
         <Card padding="lg" className="space-y-4">
@@ -326,9 +326,9 @@ export default function ThreadPage() {
         <LearnerSurfaceSectionHeader title={repliesTotal > 0 ? `Replies (${repliesTotal})` : 'Replies'} />
 
         {loadingReplies ? (
-          <div className="space-y-3" aria-hidden="true">
+          <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+              <Skeleton aria-hidden key={i} className="h-20 w-full rounded-2xl" />
             ))}
           </div>
         ) : replies.length === 0 ? (
