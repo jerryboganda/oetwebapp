@@ -179,7 +179,7 @@ function SubmissionHistoryInner() {
                 return (
                   <li
                     key={`${attempt.subtest}-${attempt.attemptId}`}
-                    className="flex flex-col gap-2 rounded-[20px] border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 rounded-2xl border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.badge}`}>
@@ -230,7 +230,7 @@ function SubmissionHistoryInner() {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-[24px]" />
+              <Skeleton key={i} className="h-36 rounded-surface" />
             ))}
           </div>
         ) : null}
@@ -266,7 +266,7 @@ function SubmissionHistoryInner() {
                   <MotionItem
                     key={sub.id}
                     delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
+                    className="bg-surface rounded-surface border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border-hover transition-colors"
                   >
                     <div className="flex-1 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">

@@ -46,7 +46,7 @@ export default function VocabStatsPage() {
 
   return (
     <>
-      <main className="space-y-6 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <div className="flex items-center justify-between">
           <div>
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
@@ -150,7 +150,7 @@ export default function VocabStatsPage() {
             </section>
           </>
         )}
-      </main>
+      </div>
     </>
   );
 }

@@ -129,7 +129,7 @@ function WritingExpertReviewContent() {
         </div>
       </header>
 
-      <main className="py-8">
+      <div className="py-8">
         {/* Context Banner */}
         <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden dark:border dark:border-border dark:bg-surface dark:text-navy">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
@@ -224,7 +224,7 @@ function WritingExpertReviewContent() {
             Submit Tutor Review Request ({selectedCost} Credit{selectedCost > 1 ? 's' : ''})
           </Button>
         </form>
-      </main>
+      </div>
     </>
   );
 }

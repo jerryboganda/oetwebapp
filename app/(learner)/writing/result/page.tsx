@@ -105,7 +105,7 @@ function WritingResultContent() {
 
   return (
     <>
-      <main className="space-y-5 sm:space-y-8">
+      <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
           eyebrow="Assessment Output"
           icon={FileText}
@@ -279,7 +279,7 @@ function WritingResultContent() {
             <span className="text-xs text-muted mt-1">Get human feedback</span>
           </Link>
         </MotionSection>
-      </main>
+      </div>
     </>
   );
 }

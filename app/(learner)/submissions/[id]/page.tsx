@@ -84,7 +84,7 @@ export default function SubmissionEvidencePage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
+            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-surface" />)}
           </div>
         ) : null}
 
@@ -121,7 +121,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <div className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Strengths & Issues"
                   title="Keep the main evidence readable first"
@@ -156,7 +156,7 @@ export default function SubmissionEvidencePage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <div className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Next Actions"
                   title="Move from evidence to the next step"
@@ -184,7 +184,7 @@ export default function SubmissionEvidencePage() {
             </section>
 
             {detail.voiceNotes?.length ? (
-              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Dr. Ahmed Review"
                   title="Voice-note feedback"
@@ -216,7 +216,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.expertReview ? (
-              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Dr. Ahmed Result"
                   title="Submitted rubric and final comment"
@@ -247,7 +247,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.criteria?.length ? (
-              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Criterion Evidence"
                   title="Criterion-level scoring stays visible for productive skills"
@@ -269,7 +269,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.transcript?.length ? (
-              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Transcript Evidence"
                   title="Reopen the speaking transcript in the same learner workspace"
@@ -294,7 +294,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.questionReview?.length ? (
-              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
+              <section className="rounded-surface border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Question Review"
                   title="Objective evidence stays item by item"

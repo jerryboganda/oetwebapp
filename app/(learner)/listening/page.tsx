@@ -299,7 +299,7 @@ export default function ListeningHome() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <main className="space-y-6 sm:space-y-10">
+      <div className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module focus"
           icon={Headphones}
@@ -453,7 +453,7 @@ export default function ListeningHome() {
             </section>
           </MotionSection>
         ) : null}
-      </main>
+      </div>
     </>
   );
 }

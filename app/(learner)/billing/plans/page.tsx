@@ -17,7 +17,7 @@ export default function BillingPlansPage() {
 
   return (
     <>
-      <main className="space-y-6">
+      <div className="space-y-6">
         <LearnerPageHero
           eyebrow="OET Billing"
           icon={Sparkles}
@@ -35,7 +35,7 @@ export default function BillingPlansPage() {
         <Button variant="primary" onClick={() => router.push('/billing')}>
           Open Billing
         </Button>
-      </main>
+      </div>
     </>
   );
 }

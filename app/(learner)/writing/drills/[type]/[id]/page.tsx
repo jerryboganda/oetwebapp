@@ -72,7 +72,7 @@ export default async function WritingDrillPlayerPage({
         <p className="text-white/70 mt-2 max-w-3xl">{drill.brief}</p>
       </header>
 
-      <main className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-4">
+      <div className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-4">
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20">
           <CardContent className="p-4 text-xs text-amber-900 dark:text-amber-200">
             <strong>Practice mode.</strong> This drill is graded automatically against an authored
@@ -80,7 +80,7 @@ export default async function WritingDrillPlayerPage({
           </CardContent>
         </Card>
         <DrillPlayer drill={drill} />
-      </main>
+      </div>
     </>
   );
 }

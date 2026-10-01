@@ -41,7 +41,7 @@ export default function VocabReviewPage() {
 
   return (
     <>
-      <main className="mx-auto max-w-lg space-y-6">
+      <div className="mx-auto max-w-lg space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-navy">
             Review Session
@@ -72,7 +72,7 @@ export default function VocabReviewPage() {
         ) : (
           <VocabReviewSession items={items} onComplete={handleComplete} />
         )}
-      </main>
+      </div>
     </>
   );
 }

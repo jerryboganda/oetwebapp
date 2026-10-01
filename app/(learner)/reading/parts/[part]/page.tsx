@@ -137,7 +137,7 @@ export default function ReadingPartPracticePage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <main className="space-y-5 sm:space-y-8" data-testid={`reading-part-${part}-dispatcher`}>
+      <div className="space-y-5 sm:space-y-8" data-testid={`reading-part-${part}-dispatcher`}>
         <Link
           href="/reading"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
@@ -202,7 +202,7 @@ export default function ReadingPartPracticePage() {
             />
           </section>
         )}
-      </main>
+      </div>
     </>
   );
 }
