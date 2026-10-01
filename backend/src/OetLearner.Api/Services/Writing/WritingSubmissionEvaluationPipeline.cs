@@ -170,7 +170,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     && s.ScenarioId == attempt.ScenarioId
                     && !s.IsRevision
                     && s.Mode != "mock"
-                    && (s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
+                    && (s.Status == WritingSubmissionStatuses.Queued
+                        || s.Status == WritingSubmissionStatuses.Preflight
+                        || s.Status == WritingSubmissionStatuses.Grading
+                        || s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
             if (alreadyLocked)
             {
                 throw ApiException.Conflict(
