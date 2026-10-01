@@ -35,7 +35,10 @@ const SEEDED_ROUTES = [
 ];
 
 /** Routes whose layout defects fail the build. Each wave adds what it fixed. */
-const ENFORCED_ROUTES = new Set<string>([]);
+const ENFORCED_ROUTES = new Set<string>([
+  // Wave 1: ResultsScorePanel tiles (8 labels/values spilled 61-71px at 1024/1440).
+  '/mocks/report/mock-report-001',
+]);
 
 /** Hub routes for the right-to-left (Arabic) pass. */
 const RTL_ROUTES = [
