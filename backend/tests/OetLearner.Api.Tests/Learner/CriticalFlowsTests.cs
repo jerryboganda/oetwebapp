@@ -160,6 +160,27 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         await db.SaveChangesAsync();
     }
 
+    private static async Task WaitForSubmissionStatusAsync(HttpClient client, Guid submissionId, string expectedStatus)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        string? status = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var submission = await client.GetFromJsonAsync<JsonElement>($"/v1/writing/submissions/{submissionId}");
+            status = submission.GetProperty("status").GetString();
+            if (status == expectedStatus)
+            {
+                return;
+            }
+
+            Assert.True(status != "failed" || expectedStatus == "failed",
+                $"Submission {submissionId} failed before reaching {expectedStatus}.");
+            await Task.Delay(50);
+        }
+
+        Assert.Fail($"Submission {submissionId} did not reach {expectedStatus}; last status was {status}.");
+    }
+
     private async Task<Guid> SubmitV11LetterAsync(HttpClient client, string letterContent)
     {
         var submitResponse = await client.PostAsJsonAsync("/v1/writing/submissions/", new
@@ -261,7 +282,9 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         Assert.Equal(V11ScenarioId, submitJson.RootElement.GetProperty("scenarioId").GetGuid());
         Assert.False(submitJson.RootElement.GetProperty("isRevision").GetBoolean());
 
-        // Grading runs inline: the deterministic test provider returns
+        await WaitForSubmissionStatusAsync(client, submissionId, "graded");
+
+        // The detached deterministic test provider returns
         // purpose 2 + 5s (raw total 27), released to the candidate by the
         // seeded calibration gate.
         var gradeResponse = await client.GetAsync($"/v1/writing/submissions/{submissionId}/grade");
