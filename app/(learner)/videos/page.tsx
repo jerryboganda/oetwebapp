@@ -3,21 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  BookOpenCheck,
   ChevronRight,
   Clock,
   FolderClosed,
   PlayCircle,
-  RotateCcw,
   Search,
   Video,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Card, cardClassName } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
+import { cn } from '@/lib/utils';
 import { fetchVideoLibraryHome, toggleVideoBookmark } from '@/lib/api/videos';
 import { analytics } from '@/lib/analytics';
 import { VideoCard, videoHasProgress } from '@/components/videos/video-card';
@@ -179,13 +179,12 @@ export default function VideoLibraryPage() {
   const heroHighlights = [
     { icon: PlayCircle, label: 'Library', value: `${scopedAll.length} videos` },
     { icon: Clock, label: 'In progress', value: `${continueVideos.length} to resume` },
-    { icon: BookOpenCheck, label: 'Watch on', value: 'Desktop & mobile app' },
   ];
 
   const grid = (videos: VideoSummary[]) => (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {videos.map((video, index) => (
-        <MotionItem key={video.id} delayIndex={index}>
+        <MotionItem key={video.id} delayIndex={Math.min(index, 5)} className="h-full">
           <VideoCard video={video} onToggleBookmark={handleToggleBookmark} />
         </MotionItem>
       ))}
@@ -193,16 +192,12 @@ export default function VideoLibraryPage() {
   );
 
   const emptyCard = (title: string, hint: string, reset?: () => void) => (
-    <Card className="border-dashed border-border p-8 text-center shadow-sm">
-      <p className="text-sm font-semibold text-navy">{title}</p>
-      <p className="mt-2 text-sm text-muted">{hint}</p>
-      {reset && (
-        <Button variant="outline" onClick={reset} className="mt-4">
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          Back to library
-        </Button>
-      )}
-    </Card>
+    <EmptyState
+      icon={<Video className="h-7 w-7" aria-hidden="true" />}
+      title={title}
+      description={hint}
+      action={reset ? { label: 'Back to library', onClick: reset } : undefined}
+    />
   );
 
   function renderBody() {
@@ -222,56 +217,53 @@ export default function VideoLibraryPage() {
     // Search overrides the drill-down.
     if (searchQuery) {
       return (
-        <section>
+        <MotionSection className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="Search"
             title={`${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`}
             description="Matching your search across every subtest."
-            className="mb-4"
           />
           {searchResults.length === 0
             ? emptyCard('No videos match your search.', 'Try a different keyword or clear the search box.', () => setQuery(''))
             : grid(searchResults)}
-        </section>
+        </MotionSection>
       );
     }
 
     if (view === 'continue') {
       return (
-        <section>
+        <MotionSection className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="Continue watching"
             title="Pick up where you stopped"
             description="Resume at the exact second you left — progress syncs across your devices."
-            className="mb-4"
           />
           {continueVideos.length === 0
             ? emptyCard('Nothing in progress.', 'Start a lesson and it will appear here to resume.', () => switchView('browse'))
             : grid(continueVideos)}
-        </section>
+        </MotionSection>
       );
     }
 
     if (view === 'saved') {
       return (
-        <section>
+        <MotionSection className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="Saved"
             title="Your saved videos"
             description="Everything you have bookmarked, in one place."
-            className="mb-4"
           />
           {savedVideos.length === 0
             ? emptyCard('No saved videos yet.', 'Tap the heart on any video to save it for later.', () => switchView('browse'))
             : grid(savedVideos)}
-        </section>
+        </MotionSection>
       );
     }
 
     // ── Drill-down: collection videos (level 3) ─────────────────────────────
     if (activeModule && activeCategory) {
       return (
-        <section className="space-y-5">
+        <MotionSection className="space-y-5">
           <Breadcrumb
             module={activeModule.meta}
             collection={subTitleOf(activeCategory.title)}
@@ -287,7 +279,7 @@ export default function VideoLibraryPage() {
                 goToRoot,
               )
             : grid([...activeCategory.videos].sort(newestFirst))}
-        </section>
+        </MotionSection>
       );
     }
 
@@ -295,15 +287,15 @@ export default function VideoLibraryPage() {
     if (activeModule) {
       const Icon = activeModule.meta.icon;
       return (
-        <section className="space-y-5">
+        <MotionSection className="space-y-5">
           <Breadcrumb module={activeModule.meta} onRoot={goToRoot} />
           <div className="flex items-center gap-3">
-            <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${activeModule.meta.iconWrap}`}>
+            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${activeModule.meta.iconWrap}`}>
               <Icon className="h-6 w-6" aria-hidden="true" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-2xl font-bold text-navy">{activeModule.meta.label}</h2>
-              <p className="text-xs text-muted">
+              <p className="text-xs tabular-nums text-muted">
                 {activeModule.categories.length} collection{activeModule.categories.length === 1 ? '' : 's'} ·{' '}
                 {activeModule.videoCount} video{activeModule.videoCount === 1 ? '' : 's'}
               </p>
@@ -316,46 +308,49 @@ export default function VideoLibraryPage() {
                 goToRoot,
               )
             : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {activeModule.categories.map((category, index) => (
-              <MotionItem key={category.id} delayIndex={index}>
-                <button
-                  type="button"
-                  onClick={() => setCategoryId(category.id)}
-                  className={`group flex w-full items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-5 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-clinical ${activeModule.meta.hoverBorder}`}
-                >
-                  <span className="flex items-center gap-4 min-w-0">
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${activeModule.meta.iconWrap}`}>
-                      <FolderClosed className="h-5 w-5" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold text-navy">{subTitleOf(category.title)}</span>
-                      <span className="text-xs text-muted">
-                        {category.videos.length} video{category.videos.length === 1 ? '' : 's'}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {activeModule.categories.map((category, index) => (
+                  <MotionItem key={category.id} delayIndex={Math.min(index, 5)} className="h-full">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryId(category.id)}
+                      className={cn(
+                        cardClassName({ hoverable: true, interactive: true }),
+                        'group flex h-full w-full items-center justify-between gap-4 text-start',
+                        activeModule.meta.hoverBorder,
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-4">
+                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${activeModule.meta.iconWrap}`}>
+                          <FolderClosed className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-navy">{subTitleOf(category.title)}</span>
+                          <span className="text-xs tabular-nums text-muted">
+                            {category.videos.length} video{category.videos.length === 1 ? '' : 's'}
+                          </span>
+                        </span>
                       </span>
-                    </span>
-                  </span>
-                  <ChevronRight
-                    className={`h-5 w-5 shrink-0 text-muted transition-transform group-hover:translate-x-1 ${activeModule.meta.accentText}`}
-                    aria-hidden="true"
-                  />
-                </button>
-              </MotionItem>
-            ))}
-          </div>
+                      <ChevronRight
+                        className={`h-5 w-5 shrink-0 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5 ${activeModule.meta.accentText}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </MotionItem>
+                ))}
+              </div>
             )}
-        </section>
+        </MotionSection>
       );
     }
 
     // ── Drill-down: the four subtest cards plus Basic English Course ────────
     return (
-      <section className="space-y-5">
+      <MotionSection className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Browse by category"
           title="Choose a course area to start"
           description="Open Listening, Reading, Writing, Speaking, or the Basic English Course to see its video collections."
-          className="mb-1"
         />
         {modules.length === 0 ? (
           emptyCard('No videos for this language.', 'Switch the language filter to see more.', () => setLanguage('all'))
@@ -364,17 +359,21 @@ export default function VideoLibraryPage() {
             {modules.map((mod, index) => {
               const Icon = mod.meta.icon;
               return (
-                <MotionItem key={mod.meta.key} delayIndex={index}>
+                <MotionItem key={mod.meta.key} delayIndex={Math.min(index, 5)} className="h-full">
                   <button
                     type="button"
                     onClick={() => {
                       setModuleKey(mod.meta.key);
                       setCategoryId(null);
                     }}
-                    className={`group relative flex h-full w-full flex-col overflow-hidden rounded-3xl border border-border bg-gradient-to-br ${mod.meta.gradient} p-6 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:shadow-clinical ${mod.meta.hoverBorder}`}
+                    className={cn(
+                      cardClassName({ hoverable: true, interactive: true, padding: 'lg' }),
+                      'group relative flex h-full w-full flex-col overflow-hidden text-start',
+                      mod.meta.hoverBorder,
+                    )}
                   >
                     <Icon
-                      className="pointer-events-none absolute -bottom-6 -right-4 h-32 w-32 opacity-[0.06]"
+                      className={`pointer-events-none absolute -bottom-6 -end-4 h-32 w-32 opacity-[0.06] ${mod.meta.accentText}`}
                       aria-hidden="true"
                     />
                     <div className="flex items-center justify-between">
@@ -382,12 +381,12 @@ export default function VideoLibraryPage() {
                         <Icon className="h-7 w-7" aria-hidden="true" />
                       </span>
                       <ChevronRight
-                        className={`h-6 w-6 text-muted transition-transform group-hover:translate-x-1 ${mod.meta.accentText}`}
+                        className={`h-6 w-6 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5 ${mod.meta.accentText}`}
                         aria-hidden="true"
                       />
                     </div>
                     <h3 className="mt-6 text-2xl font-bold text-navy">{mod.meta.label}</h3>
-                    <p className="mt-1 text-sm text-muted">
+                    <p className="mt-1 text-sm tabular-nums text-muted">
                       {mod.categories.length} collection{mod.categories.length === 1 ? '' : 's'} ·{' '}
                       {mod.videoCount} video{mod.videoCount === 1 ? '' : 's'}
                     </p>
@@ -397,87 +396,95 @@ export default function VideoLibraryPage() {
             })}
           </div>
         )}
-      </section>
+      </MotionSection>
     );
   }
 
+  // Segmented toggles: a primary tint when pressed, never a solid fill.
+  const segmentClass = (active: boolean) =>
+    cn(
+      'min-h-11 px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+      active ? 'bg-primary/10 text-primary' : 'hover-primary',
+    );
+
   return (
     <>
-      <div className="space-y-6">
-        <AppDownloadPromo variant="banner" />
-        <LearnerPageHero
-          eyebrow="Video Library"
-          title="Learn from expert-led OET video lessons"
-          description="Structured video teaching for every subtest — with resume, chapters, captions, and downloadable handouts. Playback is available in the OET desktop and mobile apps."
-          icon={Video}
-          highlights={heroHighlights}
-        />
+      <LearnerPageHero
+        eyebrow="Video Library"
+        title="Learn from expert-led OET video lessons"
+        description="Structured video teaching for every subtest — with resume, chapters, captions, and downloadable handouts. Playback is available in the OET desktop and mobile apps."
+        icon={Video}
+        highlights={heroHighlights}
+      />
 
-        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
-        {/* Slim toolbar: search · language · continue/saved */}
-        <Card className="p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <label className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search all videos…"
-                aria-label="Search videos"
-                className="w-full rounded-lg border border-border bg-surface py-2.5 pl-9 pr-4 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              />
-            </label>
+      {/* Slim toolbar: search · language · continue/saved */}
+      <Card>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <label className="relative w-full lg:max-w-sm">
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search all videos…"
+              aria-label="Search videos"
+              className="min-h-11 w-full rounded-lg border border-border bg-surface py-2.5 ps-9 pe-4 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            />
+          </label>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {hasLanguageTags && (
-                <div
-                  role="group"
-                  aria-label="Filter by instruction language"
-                  className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted"
-                >
-                  {LANGUAGE_TABS.map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => {
-                        setLanguage(key);
-                        setModuleKey(null);
-                        setCategoryId(null);
-                      }}
-                      aria-pressed={language === key}
-                      className={`min-h-11 px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${language === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted">
-                {([
-                  ['browse', 'Browse'],
-                  ['continue', `Continue (${continueVideos.length})`],
-                  ['saved', `Saved (${savedVideos.length})`],
-                ] as const).map(([key, label]) => (
+          <div className="flex flex-wrap items-center gap-3">
+            {hasLanguageTags && (
+              <div
+                role="group"
+                aria-label="Filter by instruction language"
+                className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted"
+              >
+                {LANGUAGE_TABS.map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => switchView(key)}
-                    aria-pressed={view === key && !searchQuery}
-                    className={`min-h-11 px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${view === key && !searchQuery ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
+                    onClick={() => {
+                      setLanguage(key);
+                      setModuleKey(null);
+                      setCategoryId(null);
+                    }}
+                    aria-pressed={language === key}
+                    className={segmentClass(language === key)}
                   >
                     {label}
                   </button>
                 ))}
               </div>
+            )}
+
+            <div className="inline-flex overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold tabular-nums text-muted">
+              {([
+                ['browse', 'Browse'],
+                ['continue', `Continue (${continueVideos.length})`],
+                ['saved', `Saved (${savedVideos.length})`],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => switchView(key)}
+                  aria-pressed={view === key && !searchQuery}
+                  className={segmentClass(view === key && !searchQuery)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-        </Card>
+        </div>
+      </Card>
 
-        {renderBody()}
-      </div>
+      {renderBody()}
+
+      {/* An optional promotion: below the library, as on the dashboard, so it
+          never pushes the videos out of the first viewport. */}
+      <AppDownloadPromo variant="banner" />
     </>
   );
 }
@@ -493,31 +500,28 @@ function Breadcrumb({
   onRoot: () => void;
   onModule?: () => void;
 }) {
+  const crumbClass = 'rounded font-medium text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" size="sm" onClick={onRoot} className="bg-surface font-semibold">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
         All subtests
       </Button>
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm">
-        <button type="button" onClick={onRoot} className="font-medium text-muted transition-colors hover:text-primary">
+        <button type="button" onClick={onRoot} className={crumbClass}>
           Videos
         </button>
-        <ChevronRight className="h-4 w-4 text-muted/60" aria-hidden="true" />
+        <ChevronRight className="h-4 w-4 text-muted/60 rtl:rotate-180" aria-hidden="true" />
         {collection ? (
           <>
-            <button
-              type="button"
-              onClick={onModule}
-              className="font-medium text-muted transition-colors hover:text-primary"
-            >
+            <button type="button" onClick={onModule} className={crumbClass}>
               {module.label}
             </button>
-            <ChevronRight className="h-4 w-4 text-muted/60" aria-hidden="true" />
-            <span className="font-semibold text-navy">{collection}</span>
+            <ChevronRight className="h-4 w-4 text-muted/60 rtl:rotate-180" aria-hidden="true" />
+            <span className="font-semibold text-navy" aria-current="page">{collection}</span>
           </>
         ) : (
-          <span className="font-semibold text-navy">{module.label}</span>
+          <span className="font-semibold text-navy" aria-current="page">{module.label}</span>
         )}
       </nav>
     </div>
