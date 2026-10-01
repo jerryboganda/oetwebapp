@@ -200,6 +200,16 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.Throws<TypeSafeHttpException>(() => TypeSafeJudgmentClient.ParseResponse(body));
     }
 
+    [Theory]
+    [InlineData("jev.response.verify", AiOperationClass.InteractiveLearning)]
+    [InlineData("jev.development.triage", AiOperationClass.AdminBatch)]
+    public void IntegrationFeatures_HaveGovernedNonScoringPolicies(string featureCode, AiOperationClass operationClass)
+    {
+        Assert.True(AiFeaturePolicyDefaults.All.TryGetValue(featureCode, out var policy));
+        Assert.Equal(operationClass, policy.OperationClass);
+        Assert.False(policy.RequiresGrounding);
+    }
+
     // ── Transport: transient-only retries ───────────────────────────────────
 
     [Fact]
