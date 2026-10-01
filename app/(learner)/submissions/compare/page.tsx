@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, GitCompare, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -31,69 +33,72 @@ export default function SubmissionComparisonPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <Button variant="ghost" className="gap-2" onClick={() => router.push('/submissions')}>
-          <ArrowLeft className="h-4 w-4" />
+      <div>
+        <Button variant="ghost" onClick={() => router.push('/submissions')}>
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
           Back to history
         </Button>
+      </div>
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
-          </div>
-        ) : null}
+      {loading ? (
+        <div className="space-y-4" aria-hidden="true">
+          {[1, 2].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
+        </div>
+      ) : null}
 
-        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {!loading && comparison ? (
-          <>
-            <LearnerPageHero
-              eyebrow="Attempt Comparison"
-              icon={GitCompare}
-              accent="slate"
-              title="See what changed between related attempts"
-              description="Use this comparison to spot score movement quickly before you reopen the underlying evidence."
-              highlights={[
-                { icon: GitCompare, label: 'Sub-test', value: comparison.left?.subtest ?? comparison.right?.subtest ?? 'Unknown' },
-                { icon: TrendingUp, label: 'Baseline', value: comparison.left?.scoreRange ?? 'Pending' },
-                { icon: TrendingUp, label: 'Comparison', value: comparison.right?.scoreRange ?? 'Pending' },
-              ]}
-            />
+      {!loading && comparison ? (
+        <>
+          <LearnerPageHero
+            eyebrow="Attempt Comparison"
+            icon={GitCompare}
+            accent="slate"
+            title="See what changed between related attempts"
+            description="Use this comparison to spot score movement quickly before you reopen the underlying evidence."
+            highlights={[
+              { icon: GitCompare, label: 'Sub-test', value: comparison.left?.subtest ?? comparison.right?.subtest ?? 'Unknown' },
+              { icon: TrendingUp, label: 'Baseline', value: comparison.left?.scoreRange ?? 'Pending' },
+              { icon: TrendingUp, label: 'Comparison', value: comparison.right?.scoreRange ?? 'Pending' },
+            ]}
+          />
 
-            {!comparison.canCompare ? (
-              <InlineAlert variant="info">{comparison.reason ?? 'There are not enough related attempts to compare yet.'}</InlineAlert>
-            ) : (
-              <>
-                <section className="grid gap-6 md:grid-cols-2">
-                  {[comparison.left, comparison.right].map((side, index) => (
-                    <div key={side?.attemptId ?? index} className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          {!comparison.canCompare ? (
+            <InlineAlert variant="info">{comparison.reason ?? 'There are not enough related attempts to compare yet.'}</InlineAlert>
+          ) : (
+            <>
+              <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {[comparison.left, comparison.right].map((side, index) => (
+                  <MotionItem key={side?.attemptId ?? index} delayIndex={index} className="h-full">
+                    <Card padding="lg" className="h-full">
                       <p className="eyebrow text-muted">{index === 0 ? 'Baseline attempt' : 'Comparison attempt'}</p>
-                      <h2 className="mt-3 text-xl font-black text-navy">{side?.subtest ?? 'Unknown subtest'}</h2>
-                      <p className="mt-2 text-sm text-muted">Attempt id: {side?.attemptId}</p>
-                      <p className="mt-4 text-3xl font-black text-primary">{side?.scoreRange || 'Pending'}</p>
-                    </div>
-                  ))}
-                </section>
+                      <h2 className="mt-3 text-xl font-bold capitalize text-navy">{side?.subtest ?? 'Unknown subtest'}</h2>
+                      <p className="mt-2 break-all text-sm text-muted">Attempt id: {side?.attemptId}</p>
+                      <p className="mt-4 text-3xl font-bold tabular-nums text-primary">{side?.scoreRange || 'Pending'}</p>
+                    </Card>
+                  </MotionItem>
+                ))}
+              </section>
 
-                <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <MotionSection>
+                <Card padding="lg">
                   <LearnerSurfaceSectionHeader
                     eyebrow="What changed"
                     title="Keep the progress narrative short and explicit"
-                    description="Comparison copy should tell the learner what improved without making them infer the story from raw numbers alone."
                     className="mb-4"
                   />
                   <div className="rounded-2xl border border-success/30 bg-success/10 p-5">
                     <div className="flex items-start gap-3">
-                      <TrendingUp className="mt-0.5 h-5 w-5 text-success-strong" />
-                      <p className="text-sm leading-6 text-success-strong">{comparison.summary}</p>
+                      <TrendingUp className="mt-0.5 h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
+                      <p className="max-w-prose text-sm leading-6 text-success-strong">{comparison.summary}</p>
                     </div>
                   </div>
-                </section>
-              </>
-            )}
-          </>
-        ) : null}
-      </div>
+                </Card>
+              </MotionSection>
+            </>
+          )}
+        </>
+      ) : null}
     </>
   );
 }
