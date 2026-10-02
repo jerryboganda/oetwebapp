@@ -99,6 +99,9 @@ public sealed class TypeSafeOptions
     /// session.</summary>
     public bool ConversationAdvisoryEnabled { get; set; } = false;
 
+    public bool ResponseVerifyEnabled { get; set; } = false;
+    public double ResponseConfidenceThreshold { get; set; } = 0.80;
+
     /// <summary>Guard: any single guard Noul at or above this blocks the
     /// submission from reaching the paid AI grade (flagged to a human).</summary>
     public double GuardBlockThreshold { get; set; } = 0.80;

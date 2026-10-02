@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
 using WritingLetterTypeTaxonomy = OetLearner.Api.Services.Writing.WritingLetterTypeTaxonomy;
@@ -60,7 +61,9 @@ public sealed class AiGatewayService(
     IAiFeaturePolicyRegistry? featurePolicyRegistry = null,
     IAiBudgetService? budgetService = null,
     OetLearner.Api.Services.Ai.IAiCircuitBreakerStore? circuitBreaker = null,
-    ILogger<AiGatewayService>? logger = null)
+    ILogger<AiGatewayService>? logger = null,
+    ITypeSafeJudgmentService? judgments = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? judgmentOptions = null)
     : IAiGatewayService, IAiGatewayCoreExecutor
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -1038,6 +1041,10 @@ public sealed class AiGatewayService(
             }
         }
 
+        var jevAdvisory = judgments is not null && judgmentOptions is not null
+            ? await JevWorkflowAdvisor.ReviewResponseAsync(judgments, judgmentOptions.Value, request, completion.Text, ct)
+            : null;
+
         return new AiGatewayResult
         {
             Completion = completion.Text,
@@ -1052,6 +1059,7 @@ public sealed class AiGatewayService(
             LatencyMs = (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds),
             EstimatedCostUsd = costEstimate,
             RetryCount = 0,
+            JevAdvisory = jevAdvisory,
         };
     }
 
@@ -2247,6 +2255,7 @@ public sealed record AiGatewayRequest
 public sealed class AiGatewayResult
 {
     public string Completion { get; init; } = "";
+    public JevResponseAdvisory? JevAdvisory { get; init; }
     public AiUsage? Usage { get; init; }
     public AiGroundedPromptMetadata Metadata { get; init; } = new();
     public string RulebookVersion { get; init; } = "";
