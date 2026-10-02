@@ -735,13 +735,6 @@ export async function recoverBrowserSession(
   await writeLiveSessionForRole(role, session, frontendCookies);
   await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
   await page.context().addCookies(cookies);
-  const currentOrigin = (() => {
-    try {
-      return new URL(page.url()).origin;
-    } catch {
-      return null;
-    }
-  })();
   // Firefox can abort a navigation kicked off right after cookie mutation with
   // NS_BINDING_ABORTED (a transient redirect/abort race); such navigations are
   // safe to retry.
@@ -759,9 +752,7 @@ export async function recoverBrowserSession(
       }
     }
   };
-  if (currentOrigin !== defaultAppOrigin) {
-    await gotoTolerant('/sign-in');
-  }
+  await gotoTolerant('/api/health');
   await hydrateSessionStorage(page, session);
   await gotoTolerant(targetPath);
 }
