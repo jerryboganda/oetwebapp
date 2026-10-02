@@ -33,18 +33,25 @@ export function createAdminClient({ email, password, readOnly = false, fetchImpl
     });
     return { status: res.status, ok: res.ok, json: await res.json().catch(() => null) };
   }
-  async function signIn() {
-    if (!email || !password) throw new Error('OET_ADMIN_EMAIL / OET_ADMIN_PASSWORD are not available to this job');
-    const r = await send('POST', ENDPOINTS.signIn, { email, password, rememberMe: false });
-    if (!r.ok || !r.json?.accessToken) throw new ApiError('POST', ENDPOINTS.signIn, r.status, errorCode(r.json));
-    token = r.json.accessToken;
+  // Concurrent callers share ONE sign-in (a second admin sign-in would revoke the first session).
+  let signingIn = null;
+  function signIn(staleToken) {
+    if (token && token !== staleToken) return Promise.resolve();
+    signingIn ??= (async () => {
+      if (!email || !password) throw new Error('OET_ADMIN_EMAIL / OET_ADMIN_PASSWORD are not available to this job');
+      const r = await send('POST', ENDPOINTS.signIn, { email, password, rememberMe: false });
+      if (!r.ok || !r.json?.accessToken) throw new ApiError('POST', ENDPOINTS.signIn, r.status, errorCode(r.json));
+      token = r.json.accessToken;
+    })().finally(() => { signingIn = null; });
+    return signingIn;
   }
   async function request(method, path, body) {
     if (readOnly && method !== 'GET') throw new Error(`the read-only discover client refused ${method} ${path}`);
-    if (!token) await signIn();
-    let r = await send(method, path, body, token);
+    if (!token) await signIn(null);
+    const used = token;
+    let r = await send(method, path, body, used);
     if (r.status === 401) {
-      await signIn();
+      await signIn(used);
       r = await send(method, path, body, token);
     }
     if (!r.ok) throw new ApiError(method, path, r.status, errorCode(r.json));

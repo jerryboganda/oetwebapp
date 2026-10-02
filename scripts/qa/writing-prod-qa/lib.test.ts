@@ -5,7 +5,7 @@ import {
   buildTable, categoryForLetterType, contractGaps, correctionsProblems, createLane, creditPreflight, creditVerdict,
   deriveDeviceId, faultSideEffects, freeSampleProblems, gradingStepsProblems, guardDecision, letterTypeCode,
   myWorkProblems, normalizeProfessionId, overallVerdict, pacingDelayMs, paidSpendProblems, parseInputs,
-  planDiscovery, preflightDecision, providerEvidence, reportTextProblems, scoreLabelProblems, sectionOrderProblems,
+  planDiscovery, planRows, preflightDecision, splitText, providerEvidence, reportTextProblems, scoreLabelProblems, sectionOrderProblems,
   syntheticEmail, timerVerdict, validateScripts, verdictOf, writingHealth,
 } from './lib.mjs';
 import {
@@ -98,6 +98,21 @@ describe('discovery plan', () => {
     expect(of('occupational-therapy').enabled).toBe(false);
     expect(of('occupational-therapy').evidence).toMatchObject({ catalogue: 'occupational-therapy (inactive)', vocabularyTasks: 3, exactMatchTasks: 0 });
     expect(of('occupational-therapy').notes.join(' ')).toMatch(/stored as "occupational_therapy"/);
+  });
+
+  it('turns the plan into QA-2 rows: planned letters and one NOT_ENABLED row per other profession', () => {
+    const rows: any[] = planRows(plan, { medicine: 'Medicine' });
+    expect(rows.filter((r) => r.status === 'NOT_RUN')).toHaveLength(6);
+    expect(rows.filter((r) => r.status === 'NOT_ENABLED')).toHaveLength(10);
+    expect(rows[0]).toMatchObject({ profession: 'Medicine', task: 'LT-RR m1', category: 'routine' });
+    expect(rows.find((r) => r.profession === 'dietetics').notes).toMatch(/evidence \{"catalogue":"absent"/);
+  });
+
+  it('splits a script into chunks that type back the exact text', () => {
+    const text = doc.scripts[0].text;
+    const parts = splitText(text, 5);
+    expect(parts).toHaveLength(5);
+    expect(parts.join('')).toBe(text);
   });
 
   it('honours the profession and category filters', () => {
@@ -285,8 +300,12 @@ describe('report and post-submission checks', () => {
     expect(sectionOrderProblems(['score', 'priorities', 'model-answer', 'criteria', 'corrections', 'reference', 'next-actions'])).toEqual([]);
     expect(sectionOrderProblems(['score', 'criteria', 'priorities', 'model-answer', 'corrections', 'next-actions'])[0]).toMatch(/order/);
     expect(sectionOrderProblems(['score', 'priorities', 'criteria', 'corrections', 'next-actions'])[0]).toMatch(/model-answer/);
-    expect(correctionsProblems({ preview: 5, full: 12, api: 12 })).toEqual([]);
-    expect(correctionsProblems({ preview: 5, full: 11, api: 12 })).toHaveLength(1);
+    expect(correctionsProblems({ preview: 5, full: 12, api: 12, expandable: true })).toEqual([]);
+    expect(correctionsProblems({ preview: 4, full: 4, api: 4, expandable: false })).toEqual([]);
+    expect(correctionsProblems({ preview: 5, full: 11, api: 12, expandable: true })).toHaveLength(1);
+    expect(correctionsProblems({ preview: 12, full: 12, api: 12, expandable: false })[0]).toMatch(/no "View all corrections"/);
+    expect(correctionsProblems({ preview: 3, full: 12, api: 12, expandable: true })[0]).toMatch(/preview shows 3/);
+    expect(correctionsProblems({ preview: 4, full: 4, api: 4, expandable: true })[0]).toMatch(/only 4/);
     expect(reportTextProblems('Score 300/500 NaN', ['/writing/submissions/x/appeal'])).toHaveLength(2);
     expect(reportTextProblems('Appeal score')).toHaveLength(1);
     expect(scoreLabelProblems('342/500')).toEqual([]);
@@ -369,7 +388,10 @@ describe('geometry detectors', () => {
   });
 
   it('never passes an unproven native-shell emulation', () => {
-    expect(positiveControl({ handleVisible: false, nativeMenuEntry: false })).toBe('NOT_PROVEN');
+    expect(positiveControl({ width: 390, handleVisible: false, menuEntries: 2 })).toBe('PROVEN');
+    expect(positiveControl({ width: 390, handleVisible: true, menuEntries: 1 })).toBe('NOT_PROVEN');
+    expect(positiveControl({ width: 1366, handleVisible: true, menuEntries: 0 })).toBe('PROVEN');
+    expect(positiveControl({ width: 1366, handleVisible: false, menuEntries: 2 })).toBe('NOT_PROVEN');
     expect(mobileVerdict({ control: 'NOT_PROVEN', problems: [] })).toBe('NOT_PROVEN');
     expect(mobileVerdict({ control: 'PROVEN', problems: [] })).toBe('PASS');
     expect(mobileVerdict({ control: 'NOT_PROVEN', problems: ['x'] })).toBe('FAIL');

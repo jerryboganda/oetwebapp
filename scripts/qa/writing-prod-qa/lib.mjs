@@ -3,7 +3,7 @@
 // report checks and the QA-2 evidence table. Every function here is covered by lib.test.ts.
 import { createHash } from 'node:crypto';
 import {
-  CATEGORIES, CATEGORY_LETTER_TYPE, CONTRACT_GROUPS, CREDITS_PER_LETTER, EMPTY_MODEL, FALLBACK_LETTER_TYPES,
+  CATEGORIES, CATEGORY_LETTER_TYPE, CONTRACT_GROUPS, CORRECTIONS_PREVIEW, CREDITS_PER_LETTER, EMPTY_MODEL, FALLBACK_LETTER_TYPES,
   GRADING_STEP_MODEL_ANSWER, HANDOFF_PROFESSIONS, LEDGER, PROFESSION_ALIASES, PROVIDERS, RESULT_SECTION_ORDER,
   RESULT_SECTIONS_REQUIRED,
 } from './contract.mjs';
@@ -204,6 +204,31 @@ function pickTasks(eligible, categories, notes) {
   return picks.filter((p) => p.task).map((p) => ({
     category: p.category, scenarioId: p.task.scenarioId, title: p.task.title, letterType: p.task.letterType, fallback: p.fallback,
   }));
+}
+
+/**
+ * QA-2 rows of a plan before anything runs: planned letters NOT_RUN, every other profession NOT_ENABLED.
+ * @param {any[]} plan
+ * @param {any} [labels] profession id -> display label
+ */
+export function planRows(plan, labels = {}) {
+  return plan.flatMap((p) => {
+    const profession = labels[p.profession] ?? p.profession;
+    if (!p.enabled) {
+      return [{ profession, task: '-', category: '-', saved: '-', provider: '-', fallback: '-', status: 'NOT_ENABLED', notes: [...p.notes, `evidence ${JSON.stringify(p.evidence)}`].join('; ') }];
+    }
+    return p.picks.map((pick) => ({
+      profession, task: `${pick.letterType} ${pick.scenarioId}`, category: pick.category,
+      saved: '-', provider: '-', fallback: '-', status: 'NOT_RUN', notes: pick.fallback ?? 'planned',
+    }));
+  });
+}
+
+/** Splits a script into `parts` word-aligned chunks that join back to exactly the same text. */
+export function splitText(text, parts) {
+  const words = String(text).match(/\S+\s*/g) ?? [];
+  const size = Math.ceil(words.length / parts);
+  return Array.from({ length: parts }, (_, i) => words.slice(i * size, (i + 1) * size).join('')).filter(Boolean);
 }
 
 // ---- Credits ------------------------------------------------------------------------------------------------------
@@ -469,11 +494,18 @@ export function sectionOrderProblems(sections) {
   return problems;
 }
 
-export function correctionsProblems({ preview, full, api }) {
+/**
+ * Corrections (WAI-09 contract): more than 5 errors = a 5-item preview + a "View all corrections" control that
+ * renders the full list; 5 or fewer = the full list only, no control. Counts are read before/after the click.
+ * @param {any} input { preview, full, api, expandable }
+ */
+export function correctionsProblems(input) {
+  const { preview, full, api, expandable } = input;
   const problems = [];
-  if (full !== api) problems.push(`View all corrections shows ${full}, the report has ${api}`);
-  if (preview > full) problems.push(`the preview (${preview}) is longer than the full list (${full})`);
-  if (api > 0 && preview === 0) problems.push('the corrections preview is empty');
+  if (full !== api) problems.push(`the full corrections list shows ${full}, the report has ${api}`);
+  if (api > CORRECTIONS_PREVIEW && !expandable) problems.push(`${api} corrections but no "View all corrections" control`);
+  if (api > CORRECTIONS_PREVIEW && expandable && preview !== CORRECTIONS_PREVIEW) problems.push(`the preview shows ${preview} corrections, expected ${CORRECTIONS_PREVIEW}`);
+  if (api <= CORRECTIONS_PREVIEW && expandable) problems.push(`a "View all corrections" control appears for only ${api} correction(s)`);
   return problems;
 }
 

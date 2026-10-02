@@ -145,8 +145,14 @@ export function targetProblems(probes, obstacles) {
   return problems;
 }
 
-/** Native-shell emulation is only proven when a native-only control rendered. Otherwise never PASS. */
-export const positiveControl = ({ handleVisible, nativeMenuEntry }) => (handleVisible || nativeMenuEntry ? 'PROVEN' : 'NOT_PROVEN');
+/**
+ * Native-shell emulation is only proven when a native-only control rendered, otherwise never PASS: at >= lg
+ * (1024 px) the quick-access handle; below lg (handle hidden) BOTH native entries of the opened mobile menu.
+ */
+export function positiveControl({ width, handleVisible, menuEntries }) {
+  const proven = width >= 1024 ? handleVisible : menuEntries === 2;
+  return proven ? 'PROVEN' : 'NOT_PROVEN';
+}
 
 export function mobileVerdict({ control, problems }) {
   if (problems.length) return 'FAIL';

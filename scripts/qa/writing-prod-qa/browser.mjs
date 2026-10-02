@@ -246,12 +246,15 @@ export async function gradingSteps(page) {
   return steps.locator('li').allInnerTexts();
 }
 
+// The harness's own server-truth reads carry this marker so a fault_mode=client page route never rewrites them.
+const RAW = '?qa=raw';
+
 /** Polls the submission until graded / failed (or the deadline). */
 export async function waitGradeOutcome(session, submissionId, ms = 15 * 60_000) {
   const deadline = Date.now() + ms;
   let last = null;
   while (Date.now() < deadline) {
-    const res = await session.api(ENDPOINTS.submission(submissionId));
+    const res = await session.api(ENDPOINTS.submission(submissionId) + RAW);
     last = res.body;
     if (last?.status === 'graded' || last?.status === 'failed') return last;
     await sleep(5_000);
@@ -262,7 +265,7 @@ export async function waitGradeOutcome(session, submissionId, ms = 15 * 60_000) 
 /** Grading facts from the learner's own API (counts and flags only: no letter, model answer or case-note text). */
 export async function gradeFacts(session, submissionId, typedText) {
   const [submission, grade, report] = await Promise.all([
-    session.api(ENDPOINTS.submission(submissionId)), session.api(ENDPOINTS.grade(submissionId)), session.api(ENDPOINTS.assessment(submissionId)),
+    session.api(ENDPOINTS.submission(submissionId) + RAW), session.api(ENDPOINTS.grade(submissionId)), session.api(ENDPOINTS.assessment(submissionId)),
   ]);
   const problems = [];
   const s = submission.body;
@@ -300,20 +303,22 @@ export async function postSubmissionRow(session, submissionId, state, shot) {
 }
 
 /** Desktop + report checks on the results page; mobile overlap checks on a second, native-emulated page. */
-export async function resultsUiChecks(session, submissionId, facts, { shotPrefix, mobile = true }) {
+export async function resultsUiChecks(session, submissionId, facts, { shotPrefix, mobile = true, desktop = true }) {
   const { page, context } = session;
   const problems = [];
   const partials = [];
   await page.goto(appUrl(ROUTES.results(submissionId)), { waitUntil: 'domcontentloaded' });
   await page.locator(tid(TEST_IDS.scorePanel)).first().waitFor({ state: 'visible', timeout: 60_000 });
-  for (const width of DESKTOP_WIDTHS) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(400);
-    const sample = await page.evaluate(collectContainment, { root: tid(TEST_IDS.scorePanel), tiles: tid(TEST_IDS.scoreStat) });
-    problems.push(...containmentProblems(sample).map((p) => `${width}px: ${p}`));
+  if (desktop) {
+    for (const width of DESKTOP_WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(400);
+      const sample = await page.evaluate(collectContainment, { root: tid(TEST_IDS.scorePanel), tiles: tid(TEST_IDS.scoreStat) });
+      problems.push(...containmentProblems(sample).map((p) => `${width}px: ${p}`));
+    }
+    await page.setViewportSize({ width: 1366, height: 900 });
   }
-  await page.setViewportSize({ width: 1366, height: 900 });
-  if (shotPrefix) await page.locator(tid(TEST_IDS.scorePanel)).first().screenshot({ path: `${shotPrefix}-score-1366.png` }).catch(() => undefined);
+  if (shotPrefix) await page.locator(tid(TEST_IDS.scorePanel)).first().screenshot({ path: `${shotPrefix}-score.png` }).catch(() => undefined);
   const sections = await page.locator(tid(TEST_IDS.resultSection)).evaluateAll((els) => els.map((e) => e.getAttribute('data-section')));
   problems.push(...sectionOrderProblems(sections));
   problems.push(...scoreLabelProblems(await page.locator(tid(TEST_IDS.estimatedScore)).first().innerText().catch(() => null)));
@@ -322,12 +327,15 @@ export async function resultsUiChecks(session, submissionId, facts, { shotPrefix
   else if ((await answer.evaluate((e) => getComputedStyle(e).whiteSpace)) !== 'pre-wrap') problems.push('the model answer does not keep its line breaks (white-space is not pre-wrap)');
   const main = page.locator(SELECTORS.mainContent).first();
   problems.push(...reportTextProblems(await main.innerText(), await main.locator('a[href]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))));
-  const preview = await page.locator(`${tid(TEST_IDS.correctionsPreview)} li`).count();
+  const criteria = await page.locator(`${tid(TEST_IDS.criteriaList)} > li`).count();
+  if (criteria !== 6) problems.push(`the criteria list shows ${criteria} criteria, expected 6`);
+  // > 5 errors: 5-item preview + View all (then the full list replaces the preview); <= 5: full list only.
   const viewAll = page.locator(tid(TEST_IDS.correctionsViewAll)).first();
   const expandable = await viewAll.isVisible().catch(() => false);
+  const preview = expandable ? await page.locator(`${tid(TEST_IDS.correctionsPreview)} li`).count() : null;
   if (expandable) await viewAll.click();
-  const full = expandable ? await page.locator(`${tid(TEST_IDS.correctionsFullList)} li`).count() : preview;
-  problems.push(...correctionsProblems({ preview, full, api: facts.errorsCount }));
+  const full = await page.locator(`${tid(TEST_IDS.correctionsFullList)} li`).count();
+  problems.push(...correctionsProblems({ preview: preview ?? full, full, api: facts.errorsCount, expandable }));
   // A reload keeps the same saved grade and report (the page's own reads after the reload).
   const reread = Promise.all([
     page.waitForResponse((r) => r.url().endsWith(ENDPOINTS.grade(submissionId)) && r.request().method() === 'GET', { timeout: 60_000 }),
@@ -387,15 +395,19 @@ export async function mobileChecks(context, url, shotPrefix, targets = null) {
         await page.evaluate(collectOverlap, { content: SELECTORS.mainContent, obstacles, fraction: 1 });
         await page.screenshot({ path: `${shotPrefix}-mobile-${viewport.width}.png`, clip: { x: 0, y: viewport.height - 220, width: viewport.width, height: 220 } }).catch(() => undefined);
       }
-      let nativeMenuEntry = false;
-      if (!handleVisible && await page.locator(SELECTORS.mobileMenuButton).first().isVisible().catch(() => false)) {
-        await page.locator(SELECTORS.mobileMenuButton).first().click();
-        nativeMenuEntry = await page.getByText(SELECTORS.nativeMenuEntry).first().isVisible().catch(() => false);
-        await page.keyboard.press('Escape');
+      // Positive control (last, it opens the menu): below lg the native-only mobile-menu entries must render.
+      let menuEntries = 0;
+      const menuButton = page.locator(SELECTORS.mobileMenuButton).first();
+      if (await menuButton.isVisible().catch(() => false)) {
+        await menuButton.click();
+        for (const id of [TEST_IDS.menuReloadApp, TEST_IDS.menuCheckUpdates]) {
+          if (await page.locator(tid(id)).first().waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false)) menuEntries += 1;
+        }
+        await menuButton.click().catch(() => undefined);
       }
-      const verdict = mobileVerdict({ control: positiveControl({ handleVisible, nativeMenuEntry }), problems: found });
+      const verdict = mobileVerdict({ control: positiveControl({ width: viewport.width, handleVisible, menuEntries }), problems: found });
       problems.push(...[...new Set(found)].map((p) => `${at}: ${p}`));
-      if (verdict === 'NOT_PROVEN') partials.push(`${at}: mobile overlap NOT PROVEN (native-shell emulation not confirmed: no quick-access handle or native menu entry)`);
+      if (verdict === 'NOT_PROVEN') partials.push(`${at}: mobile overlap NOT PROVEN (native-shell emulation not confirmed: the native mobile-menu entries did not render)`);
     }
   } finally {
     await page.close().catch(() => undefined);
@@ -407,7 +419,7 @@ export async function mobileChecks(context, url, shotPrefix, targets = null) {
 export async function fakeFailedStatus(page, submissionId) {
   const pattern = new RegExp(`${BROWSER_API_PREFIX.replaceAll('/', '\\/')}\\/v1\\/writing\\/submissions\\/${submissionId}(\\?|$)`);
   const handler = async (route) => {
-    if (route.request().method() !== 'GET') return route.fallback();
+    if (route.request().method() !== 'GET' || route.request().url().includes(RAW)) return route.fallback();
     const res = await route.fetch();
     const json = await res.json().catch(() => ({}));
     return route.fulfill({ response: res, json: { ...json, status: 'failed', canRetry: true, failureCode: 'grading_delayed', autoRetrying: false } });

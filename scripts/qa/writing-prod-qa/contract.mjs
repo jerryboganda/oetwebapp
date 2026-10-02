@@ -66,6 +66,7 @@ export const ENDPOINTS = {
   retryGrade: (id) => `/v1/writing/submissions/${id}/retry-grade`,
   submissions: '/v1/writing/submissions',
   eligibility: (scenarioId) => `/v1/writing/scenarios/${scenarioId}/eligibility`,
+  scenario: (scenarioId) => `/v1/writing/scenarios/${scenarioId}`,
 };
 export const BROWSER_API_PREFIX = '/api/backend';
 
@@ -102,15 +103,23 @@ export const TEST_IDS = {
   shellHandle: 'shell-controls-handle',
   estimatedScore: 'ai-estimated-score',
   modelAnswer: 'grounded-model-answer',
-  criteriaList: 'criteria-list',
+  criteriaList: 'criteria-list', // exactly 6 li
   freeSampleReviseCta: 'free-sample-revise-cta',
+  // Native-shell-only entries of the mobile menu (below lg the floating handle is hidden): the phone-width
+  // positive control of the native-shell emulation.
+  menuReloadApp: 'mobile-menu-reload-app',
+  menuCheckUpdates: 'mobile-menu-check-updates',
+  resumeBanner: 'resume-writing-banner',
 };
+export const CORRECTIONS_PREVIEW = 5;
+export const LG_MIN_WIDTH = 1024;
 export const CONTRACT_GROUPS = {
   editor: [TEST_IDS.editor, TEST_IDS.timer, TEST_IDS.draftStatus, TEST_IDS.submit],
   grading: [TEST_IDS.gradingSteps],
   postSubmissions: [TEST_IDS.postSubmissionsList, TEST_IDS.postSubmissionRow],
+  // corrections-preview / -view-all exist only above 5 errors, so they are checked per report, not here.
   results: [TEST_IDS.scorePanel, TEST_IDS.scoreStat, TEST_IDS.gradeValue, TEST_IDS.resultSection,
-    TEST_IDS.correctionsPreview, TEST_IDS.estimatedScore, TEST_IDS.modelAnswer],
+    TEST_IDS.estimatedScore, TEST_IDS.modelAnswer, TEST_IDS.criteriaList],
 };
 export const GRADING_STEP_MODEL_ANSWER = 'Preparing model answer';
 export const RESULT_SECTION_ORDER = ['score', 'priorities', 'model-answer', 'criteria', 'corrections', 'reference', 'next-actions'];
@@ -122,7 +131,6 @@ export const SELECTORS = {
   bottomNav: 'nav[aria-label="Mobile navigation"]',
   handle: `[data-testid="${TEST_IDS.shellHandle}"], button[aria-label="Open quick access menu"]`,
   mobileMenuButton: 'button[aria-controls="mobile-menu"]',
-  nativeMenuEntry: /reload app|check for updates/i,
   signInEmail: 'input[name="email"]',
   signInPassword: 'input[name="password"]',
   signInSubmit: 'form button[type="submit"]',
