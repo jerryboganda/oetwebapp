@@ -128,6 +128,7 @@ const smokeRuns = [
       projects: ['chromium-unauth'],
     }),
   },
+  { label: 'learner: Writing QA geometry detectors (hermetic setContent)', args: playwrightArgs({ files: ['tests/e2e/learner/writing-qa-detectors.spec.ts'], projects: ['chromium-unauth'], workers: 1 }) },
   ...learnerProjectSmokeRuns('chromium-learner'),
   {
     label: 'learner: Listening V2 smoke on chromium',
