@@ -201,6 +201,48 @@ public sealed class TypeSafeJudgmentServiceTests
     }
 
     [Theory]
+    [InlineData("invalid")]
+    [InlineData(-0.1)]
+    [InlineData(1.1)]
+    [InlineData(0.4)]
+    public void ParseResponse_RejectsInvalidChoiceDistribution(object probability)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model = "jev-1.13.0",
+            answers = new
+            {
+                signal = new
+                {
+                    type = "choice",
+                    choice = "urgent",
+                    probabilities = new Dictionary<string, object>
+                    {
+                        ["urgent"] = probability,
+                        ["routine"] = 0d,
+                    },
+                    confidence = 1d,
+                },
+            },
+            usage = new { input_tokens = 1, output_tokens = 1 },
+        });
+
+        Assert.Throws<TypeSafeHttpException>(() => TypeSafeJudgmentClient.ParseResponse(body));
+    }
+
+    [Fact]
+    public void ParseResponse_RejectsChoiceMissingFromDistribution()
+    {
+        var body = """
+            {"model":"jev-1.13.0","answers":{
+              "signal":{"type":"choice","choice":"foreign","probabilities":{"urgent":1,"routine":0},"confidence":1}},
+             "usage":{"input_tokens":1,"output_tokens":1}}
+            """;
+
+        Assert.Throws<TypeSafeHttpException>(() => TypeSafeJudgmentClient.ParseResponse(body));
+    }
+
+    [Theory]
     [InlineData("jev.response.verify", AiOperationClass.InteractiveLearning)]
     [InlineData("jev.development.triage", AiOperationClass.AdminBatch)]
     public void IntegrationFeatures_HaveGovernedNonScoringPolicies(string featureCode, AiOperationClass operationClass)
