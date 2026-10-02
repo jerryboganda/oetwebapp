@@ -45,7 +45,7 @@ Externalized working memory. Three layers, exclusive ownership — no file has t
 
 - Non-trivial work: `pnpm run ax:status`, then read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`. Continue from `SESSION_STATE.md` only when its Goal matches the newest request; otherwise re-goal it with `pnpm run ax:init`.
 - Loop: PLAN (`Mode: plan`, objective, acceptance, tasks) → EXECUTE (`ax:next`, one task at a time) → VERIFY (Actions run ids via `ax:record`) → RECORD (`SESSION_STATE.md` decisions, touched files, next action) → CHECK GIT (scoped `git status`, `ax:check`) → NEXT. Move `TASKS.json` statuses as tasks start and finish.
-- Never tick a verification gate without evidence. A `PASS` row needs a run id, a workflow file, or `local:<command>`. `pnpm run ax:check` rejects anything else.
+- Never tick a verification gate without evidence. A `PASS` row needs an Actions run id (checked against GitHub by `ax:verify`) or `local:ship:gate` for the static gate; builds and tests can only be claimed with a run id. `pnpm run ax:check` rejects anything else.
 - After the deploy for this SHA is green: `pnpm run ax:record` writes the real run ids into `VERIFICATION.md` and the raw logs into the gitignored `.github/agent-state.local.md`; `pnpm run ax:verify` re-checks them against GitHub. `VERIFICATION.md` is machine-written — never hand-edit a result.
 - `PROGRESS.md` is the compact durable ledger only. History lives in `docs/PROGRESS-ARCHIVE-2026.md` and git.
 - Before handoff: `pnpm run ax:check` must pass and `SESSION_STATE.md` "Next action" must name the next concrete step. A run id typed into a gate row is checked against GitHub by `pnpm run ax:verify`.

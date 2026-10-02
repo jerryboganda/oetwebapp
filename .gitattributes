@@ -30,3 +30,8 @@ docker-compose*.yml text eol=lf
 *.woff2 binary
 *.ttf binary
 *.eot binary
+
+# Agent ledger: VERIFICATION.md is an append-only table, so concurrent branches merge by union
+# (built-in driver, no per-machine config). SESSION_STATE.md / TASKS.json are single-writer per run:
+# on a conflict keep the side with the newer "Updated:" wholesale (scripts/agent/README.md).
+VERIFICATION.md merge=union

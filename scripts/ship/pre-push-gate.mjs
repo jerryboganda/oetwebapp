@@ -19,6 +19,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const conflictRe = /^(<{7}|={7}|>{7})(?:\s|$)/;
+// Claude Code reads AGENTS.md natively only when no CLAUDE.md exists in or above
+// the working directory. A CLAUDE.md that does not import it silently hides the
+// whole repo contract from Claude sessions.
+const claudeImportsAgents = /(^|\s)@AGENTS\.md\b/;
 const leftoverPatterns = [
   { name: 'cleanup-hook-splice', re: new RegExp(String.raw`return\s*\(\)\s*=>\s*\{\s*,`) },
   { name: 'block-open-trailing-comma', re: new RegExp(String.raw`\{\s*,`) },
@@ -383,8 +387,12 @@ export function inspectSource(relPath, source) {
       findings.push(`${relPath}:${idx + 1} conflict marker`);
     }
   });
+  const baseName = relPath.replaceAll('\\', '/').split('/').pop();
+  if (baseName === 'CLAUDE.md' && !claudeImportsAgents.test(source)) {
+    findings.push(`${relPath}: CLAUDE.md must import AGENTS.md with an @AGENTS.md line, or Claude Code stops reading AGENTS.md`);
+  }
   if (codeExt.has(ext)) {
-    const isDetector = relPath.replaceAll('\\', '/').endsWith('scripts/ship/pre-push-gate.mjs');
+    const isDetector =relPath.replaceAll('\\', '/').endsWith('scripts/ship/pre-push-gate.mjs');
     if (!isDetector) {
       for (const pattern of leftoverPatterns) {
         if (pattern.re.test(source)) {
@@ -549,6 +557,18 @@ export function selfTest() {
       path: 'lib/x.ts',
       source: 'const a = 1;\n<<<<<<< HEAD\nconst b = 2;\n=======\nconst b = 3;\n>>>>>>> main\n',
       wantFail: true,
+    },
+    {
+      name: 'CLAUDE.md that hides AGENTS.md fails',
+      path: 'CLAUDE.md',
+      source: '# Rules\nSee AGENTS.md for details.\n',
+      wantFail: true,
+    },
+    {
+      name: 'CLAUDE.md that imports AGENTS.md is legal',
+      path: 'CLAUDE.md',
+      source: '@AGENTS.md\n\n## Claude Code\nUse plan mode for risky changes.\n',
+      wantFail: false,
     },
     {
       name: 'markdown leftover example is not code',

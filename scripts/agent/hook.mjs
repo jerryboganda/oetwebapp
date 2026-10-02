@@ -193,7 +193,7 @@ export function startContext(dir) {
     lines.push('ledger check: OK' + warned);
   }
   lines.push(
-    'Rules: a gate is PASS only with a run id, a workflow file or local:<command>. Run "pnpm run ax:check" before claiming a task done. Continue this run only if it matches the newest request; protocol: AGENTS.md "Continuity Protocol".',
+    'Rules: a gate is PASS only with an Actions run id or local:ship:gate (builds and tests need a run id). Run "pnpm run ax:check" before claiming a task done. Continue this run only if it matches the newest request; protocol: AGENTS.md "Continuity Protocol".',
   );
   return clip(lines.join('\n'));
 }

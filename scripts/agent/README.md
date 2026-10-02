@@ -34,7 +34,10 @@ the evidence that the tooling works, not a local run.
 - **`SESSION_STATE.md`** (tracked) — the current run: objective, acceptance criteria,
   decisions not to revisit, touched files, verification gates, blockers, next action.
   Section order is load-bearing. Schema: `session-state.template.md`.
-  Two sessions writing it at once: take the newer `Updated:` block wholesale.
+  Two sessions writing it at once: take the newer `Updated:` block wholesale. On a merge conflict compare
+  `Updated:` in both versions, then `git checkout --ours|--theirs -- SESSION_STATE.md TASKS.json` for the newer
+  side and `git add` it (`ax:check` errors while conflict markers remain). `VERIFICATION.md` never conflicts:
+  `.gitattributes` merges it by union and `ax:record` de-duplicates by run id.
 - **`TASKS.json`** (tracked) — the execution queue. A task is *ready* when it is
   `pending` and every `blockedBy` id is `done`. Keep at most one `in_progress`.
 - **`VERIFICATION.md`** (tracked) — **machine-written only.** One row per GitHub Actions
@@ -46,7 +49,8 @@ the evidence that the tooling works, not a local run.
 
 A gate may not be ticked without evidence. `ax:check` rejects a `Verification gates` row
 whose `Result` is `PASS` while `Evidence` is blank, `-`, `n/a`, or prose. Legal evidence is
-a run id (`36824151971`), a workflow file (`deploy.yml`), or `local:<command>`.
+an Actions run id (`36824151971`) or `local:ship:gate` / `local:ax:check` / `local:ax:verify` for the sanctioned static checks.
+A bare workflow file name proves nothing about any commit, and `local:` can never claim a build, test, lint or typecheck (those are Actions-only), so both are rejected.
 A gate that genuinely did not run is recorded as `NOT RUN` — that is honest and passes.
 A run id typed into a gate row is a claim too: `ax:verify` asks GitHub whether that run exists, is
 completed and — for a `PASS` row — concluded `success`, so an invented or failed run id is caught.

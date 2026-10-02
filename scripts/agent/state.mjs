@@ -152,17 +152,28 @@ export function isPassResult(result) {
   return PASS_RESULTS.has(norm(result));
 }
 
+// The only checks AGENTS.md lets a workstation run: the seconds-long ship gate and
+// this ledger's own read-only commands. Builds, tests, lint and typechecks are
+// Actions-only, so they can never be claimed as `local:`.
+const LOCAL_STATIC = /^local:(?:ship[:-]gate[A-Za-z0-9:_-]*|ax:(?:check|verify|status))$/;
+const RUN_ID = /^(?:run\s+)?\d{6,}$/i;
+
 /**
- * Where a PASS may point: a GitHub Actions run id, a workflow file, or a
- * `local:<command>` marker. Anything else is a claim with no evidence.
+ * Where a PASS may point: a GitHub Actions run id (checked against GitHub by
+ * `ax:verify`) or a `local:` marker for a sanctioned static check. A bare
+ * workflow file name proves nothing about any commit, so it is not evidence.
  */
 export function isValidEvidence(evidence) {
   const value = String(evidence ?? '').trim();
   if (isBlank(value)) return false;
-  if (/^(run\s+)?\d{6,}$/i.test(value)) return true;
-  if (/^[A-Za-z0-9_.-]+\.ya?ml$/.test(value)) return true;
-  if (/^local:[^\s]+/.test(value)) return true;
-  return false;
+  return RUN_ID.test(value) || LOCAL_STATIC.test(value);
+}
+
+/** True when a ledger file still carries unresolved merge-conflict markers. */
+export function hasConflictMarkers(source) {
+  return String(source ?? '')
+    .split(/\r?\n/)
+    .some((line) => ['<'.repeat(7), '='.repeat(7), '>'.repeat(7)].some((mark) => line === mark || line.startsWith(mark + ' ')));
 }
 
 export function runIdsIn(text) {
@@ -322,6 +333,12 @@ export function checkState({ stateSource, tasksSource, git = null, now = new Dat
     return { errors: ['SESSION_STATE.md is missing or empty'], warnings };
   }
 
+  if (hasConflictMarkers(stateSource) || hasConflictMarkers(tasksSource)) {
+    errors.push(
+      'the ledger has unresolved merge-conflict markers — keep the side with the newer "Updated:" wholesale (see scripts/agent/README.md)',
+    );
+  }
+
   const header = parseHeader(stateSource);
   for (const key of HEADER_KEYS) {
     if (isBlank(header[key])) errors.push(`SESSION_STATE.md header is missing "${key}:"`);
@@ -361,7 +378,7 @@ export function checkState({ stateSource, tasksSource, git = null, now = new Dat
     if (isBlank(gate.result)) errors.push(`${label} has no Result`);
     if (!isBlank(gate.result) && !isBlank(gate.evidence) && isPassResult(gate.result) && !isValidEvidence(gate.evidence)) {
       errors.push(
-        `${label} claims PASS with unusable evidence "${gate.evidence}" — use a run id, a workflow file, or local:<command>`,
+        `${label} claims PASS with unusable evidence "${gate.evidence}" — use an Actions run id, or local:ship:gate for the static gate (builds and tests need a run id)`,
       );
     }
   }
@@ -1084,9 +1101,31 @@ export function selfTest() {
   );
 
   expect('evidence validator accepts run ids', isValidEvidence('36824151971'));
-  expect('evidence validator accepts workflow files', isValidEvidence('deploy.yml'));
-  expect('evidence validator accepts local markers', isValidEvidence('local:ship:gate'));
+  expect('evidence validator rejects a bare workflow file', !isValidEvidence('deploy.yml'));
+  expect('evidence validator accepts the static gate marker', isValidEvidence('local:ship:gate'));
+  expect('evidence validator accepts ledger-command markers', isValidEvidence('local:ax:check') && isValidEvidence('local:ax:verify'));
+  expect('evidence validator rejects a local test claim', !isValidEvidence('local:pnpm-test') && !isValidEvidence('local:ax:self-test'));
   expect('evidence validator rejects prose', !isValidEvidence('should be fine'));
+
+  const bareWorkflow = checkState({
+    stateSource: fixtureState({
+      sections: {
+        'Verification gates':
+          '| Gate | Command / workflow | Evidence | Result |\n| --- | --- | --- | --- |\n| deploy | deploy.yml | deploy.yml | PASS |',
+      },
+    }),
+    tasksSource: okTasks,
+    now: new Date('2026-10-02T00:00:00Z'),
+  });
+  expect('PASS pointing at a bare workflow file fails', bareWorkflow.errors.some((e) => e.includes('unusable evidence')), JSON.stringify(bareWorkflow.errors));
+
+  const conflicted = checkState({
+    stateSource: okState + '\n' + '<'.repeat(7) + ' HEAD\nmine\n' + '='.repeat(7) + '\ntheirs\n' + '>'.repeat(7) + ' main\n',
+    tasksSource: okTasks,
+    now: new Date('2026-10-02T00:00:00Z'),
+  });
+  expect('merge-conflict markers fail', conflicted.errors.some((e) => e.includes('conflict markers')), JSON.stringify(conflicted.errors));
+  expect('a clean ledger has no conflict markers', !hasConflictMarkers(okState));
 
   const gatesTable = [
     '| Gate | Command / workflow | Evidence | Result |',
