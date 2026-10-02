@@ -1,0 +1,73 @@
+name: AX Ledger Tools
+
+# Proves the agent-ledger tooling in scripts/agent on GitHub Actions, the only
+# authorized compute environment (AGENTS.md). The checker is static file reads
+# plus read-only git/gh; its self-tests build throwaway git repos and need no
+# network. Windows legs matter: the Claude Code hooks run on a Windows host.
+
+on:
+  push:
+    paths:
+      - 'scripts/agent/**'
+      - 'scripts/ship/pre-push-gate.mjs'
+      - '.github/workflows/ax-check.yml'
+  pull_request:
+    paths:
+      - 'scripts/agent/**'
+      - 'scripts/ship/pre-push-gate.mjs'
+      - '.github/workflows/ax-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ax-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: self-test (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux, node 22
+            runner: ubuntu-latest
+            node: 22
+          - label: windows, node 22
+            runner: windows-latest
+            node: 22
+          - label: windows, node 24
+            runner: windows-latest
+            node: 24
+
+    steps:
+      # Only scripts/agent is needed. A full checkout fails on Windows runners: one
+      # tracked Medicine-pack PDF path exceeds the 260-character limit (the Tauri
+      # jobs avoid it with core.longpaths; a sparse checkout never touches it).
+      - name: Enable long paths
+        run: git config --global core.longpaths true
+
+      - name: Check out scripts/agent and the ship gate
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/agent
+            scripts/ship
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Ledger checker self-test
+        run: node scripts/agent/state.mjs --self-test
+
+      - name: Hook adapter self-test
+        run: node scripts/agent/hook.mjs --self-test
+
+      - name: Ship gate self-test (includes the CLAUDE.md guard)
+        run: node scripts/ship/pre-push-gate.mjs --self-test

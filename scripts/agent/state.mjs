@@ -152,23 +152,80 @@ export function isPassResult(result) {
   return PASS_RESULTS.has(norm(result));
 }
 
+// The only checks AGENTS.md lets a workstation run: the seconds-long ship gate and
+// this ledger's own read-only commands. Builds, tests, lint and typechecks are
+// Actions-only, so they can never be claimed as `local:`.
+const LOCAL_STATIC = /^local:(?:ship[:-]gate[A-Za-z0-9:_-]*|ax:(?:check|verify|status))$/;
+const RUN_ID = /^(?:run\s+)?\d{6,}$/i;
+
 /**
- * Where a PASS may point: a GitHub Actions run id, a workflow file, or a
- * `local:<command>` marker. Anything else is a claim with no evidence.
+ * Where a PASS may point: a GitHub Actions run id (checked against GitHub by
+ * `ax:verify`) or a `local:` marker for a sanctioned static check. A bare
+ * workflow file name proves nothing about any commit, so it is not evidence.
  */
 export function isValidEvidence(evidence) {
   const value = String(evidence ?? '').trim();
   if (isBlank(value)) return false;
-  if (/^(run\s+)?\d{6,}$/i.test(value)) return true;
-  if (/^[A-Za-z0-9_.-]+\.ya?ml$/.test(value)) return true;
-  if (/^local:[^\s]+/.test(value)) return true;
-  return false;
+  return RUN_ID.test(value) || LOCAL_STATIC.test(value);
+}
+
+/** True when a ledger file still carries unresolved merge-conflict markers. */
+export function hasConflictMarkers(source) {
+  return String(source ?? '')
+    .split(/\r?\n/)
+    .some((line) => ['<'.repeat(7), '='.repeat(7), '>'.repeat(7)].some((mark) => line === mark || line.startsWith(mark + ' ')));
 }
 
 export function runIdsIn(text) {
   const ids = new Set();
   for (const match of String(text ?? '').matchAll(/\b(\d{6,})\b/g)) ids.add(match[1]);
   return [...ids];
+}
+
+/**
+ * Run ids cited as evidence in the "Verification gates" table. A bare workflow
+ * file or a local:<command> marker carries no run id and is skipped.
+ */
+export function gateRunEvidence(source) {
+  const cited = [];
+  for (const gate of parseGateRows(source)) {
+    const match = /^(?:run\s+)?(\d{6,})$/i.exec(String(gate.evidence ?? '').trim());
+    if (match) cited.push({ gate: gate.gate, id: match[1], result: gate.result });
+  }
+  return cited;
+}
+
+/**
+ * Compare the run ids cited by gates with what GitHub reports. `runs` maps a
+ * run id to { status, conclusion, headSha }, or to null when GitHub could not
+ * confirm the run. Errors: unconfirmed run, run not completed, PASS gate whose
+ * run did not succeed. Warning: the run verified a commit that is not an
+ * ancestor of HEAD, so it may not cover the current code.
+ */
+export function compareGateRuns(cited, runs, options = {}) {
+  const isAncestor = options.isAncestor ?? (() => true);
+  const errors = [];
+  const warnings = [];
+  for (const item of cited) {
+    const run = runs.get(item.id);
+    const label = `gate "${item.gate}" cites run ${item.id}`;
+    if (!run) {
+      errors.push(`${label} but GitHub could not confirm it (no such run, or gh unavailable)`);
+      continue;
+    }
+    if (run.status !== 'completed') {
+      errors.push(`${label} but the run is ${run.status}, not completed`);
+      continue;
+    }
+    if (isPassResult(item.result) && String(run.conclusion) !== 'success') {
+      errors.push(`${label} as PASS but GitHub says ${String(run.conclusion).toUpperCase()}`);
+      continue;
+    }
+    if (run.headSha && !isAncestor(run.headSha)) {
+      warnings.push(`${label}, which verified ${String(run.headSha).slice(0, 9)}: not an ancestor of HEAD, so it may not cover the current code`);
+    }
+  }
+  return { errors, warnings };
 }
 
 // ------------------------------------------------------------- task queue
@@ -276,6 +333,12 @@ export function checkState({ stateSource, tasksSource, git = null, now = new Dat
     return { errors: ['SESSION_STATE.md is missing or empty'], warnings };
   }
 
+  if (hasConflictMarkers(stateSource) || hasConflictMarkers(tasksSource)) {
+    errors.push(
+      'the ledger has unresolved merge-conflict markers — keep the side with the newer "Updated:" wholesale (see scripts/agent/README.md)',
+    );
+  }
+
   const header = parseHeader(stateSource);
   for (const key of HEADER_KEYS) {
     if (isBlank(header[key])) errors.push(`SESSION_STATE.md header is missing "${key}:"`);
@@ -315,7 +378,7 @@ export function checkState({ stateSource, tasksSource, git = null, now = new Dat
     if (isBlank(gate.result)) errors.push(`${label} has no Result`);
     if (!isBlank(gate.result) && !isBlank(gate.evidence) && isPassResult(gate.result) && !isValidEvidence(gate.evidence)) {
       errors.push(
-        `${label} claims PASS with unusable evidence "${gate.evidence}" — use a run id, a workflow file, or local:<command>`,
+        `${label} claims PASS with unusable evidence "${gate.evidence}" — use an Actions run id, or local:ship:gate for the static gate (builds and tests need a run id)`,
       );
     }
   }
@@ -752,19 +815,38 @@ function cmdRecord(argv) {
 }
 
 function cmdVerify() {
-  if (!existsSync(PATHS.verification)) {
-    console.log('ax:verify: no VERIFICATION.md yet');
-    return 0;
-  }
-  const rows = parseVerificationRows(readFileSync(PATHS.verification, 'utf8')).filter((row) =>
-    runIdsIn(row.run).length,
-  );
-  if (!rows.length) {
+  const ledger = readLedger();
+  const rows = ledger.verificationSource
+    ? parseVerificationRows(ledger.verificationSource).filter((row) => runIdsIn(row.run).length)
+    : [];
+  // Run ids typed into a SESSION_STATE.md gate row are claims too: confirm each one.
+  const cited = gateRunEvidence(ledger.stateSource ?? '');
+  if (!rows.length && !cited.length) {
     console.log('ax:verify: no recorded run ids to verify');
     return 0;
   }
 
   let failures = 0;
+  const runs = new Map();
+  for (const id of new Set(cited.map((item) => item.id))) {
+    try {
+      runs.set(id, ghJson(['run', 'view', id, '--json', 'status,conclusion,headSha,workflowName']));
+    } catch {
+      runs.set(id, null);
+    }
+  }
+  const compared = compareGateRuns(cited, runs, {
+    isAncestor: (sha) => descendsFrom(sha, ledger.git?.head),
+  });
+  for (const message of compared.errors) {
+    console.log(`ax:verify: ERROR ${message}`);
+    failures += 1;
+  }
+  for (const message of compared.warnings) console.log(`ax:verify: WARN  ${message}`);
+  if (cited.length && !compared.errors.length) {
+    console.log(`ax:verify: ${cited.length} run id(s) cited by gates exist on GitHub`);
+  }
+
   for (const row of rows) {
     const id = runIdsIn(row.run)[0];
     try {
@@ -788,7 +870,7 @@ function cmdVerify() {
     console.error(`ax:verify FAILED (${failures} row(s) do not match GitHub)`);
     return 1;
   }
-  console.log(`ax:verify OK (${rows.length} row(s) match GitHub)`);
+  console.log(`ax:verify OK (${rows.length} ledger row(s) and ${cited.length} gate run id(s) match GitHub)`);
   return 0;
 }
 
@@ -1019,9 +1101,71 @@ export function selfTest() {
   );
 
   expect('evidence validator accepts run ids', isValidEvidence('36824151971'));
-  expect('evidence validator accepts workflow files', isValidEvidence('deploy.yml'));
-  expect('evidence validator accepts local markers', isValidEvidence('local:ship:gate'));
+  expect('evidence validator rejects a bare workflow file', !isValidEvidence('deploy.yml'));
+  expect('evidence validator accepts the static gate marker', isValidEvidence('local:ship:gate'));
+  expect('evidence validator accepts ledger-command markers', isValidEvidence('local:ax:check') && isValidEvidence('local:ax:verify'));
+  expect('evidence validator rejects a local test claim', !isValidEvidence('local:pnpm-test') && !isValidEvidence('local:ax:self-test'));
   expect('evidence validator rejects prose', !isValidEvidence('should be fine'));
+
+  const bareWorkflow = checkState({
+    stateSource: fixtureState({
+      sections: {
+        'Verification gates':
+          '| Gate | Command / workflow | Evidence | Result |\n| --- | --- | --- | --- |\n| deploy | deploy.yml | deploy.yml | PASS |',
+      },
+    }),
+    tasksSource: okTasks,
+    now: new Date('2026-10-02T00:00:00Z'),
+  });
+  expect('PASS pointing at a bare workflow file fails', bareWorkflow.errors.some((e) => e.includes('unusable evidence')), JSON.stringify(bareWorkflow.errors));
+
+  const conflicted = checkState({
+    stateSource: okState + '\n' + '<'.repeat(7) + ' HEAD\nmine\n' + '='.repeat(7) + '\ntheirs\n' + '>'.repeat(7) + ' main\n',
+    tasksSource: okTasks,
+    now: new Date('2026-10-02T00:00:00Z'),
+  });
+  expect('merge-conflict markers fail', conflicted.errors.some((e) => e.includes('conflict markers')), JSON.stringify(conflicted.errors));
+  expect('a clean ledger has no conflict markers', !hasConflictMarkers(okState));
+
+  const gatesTable = [
+    '| Gate | Command / workflow | Evidence | Result |',
+    '| --- | --- | --- | --- |',
+    '| deploy | deploy.yml | run 36824151971 | PASS |',
+    '| lint | qa-smoke.yml | 36824151972 | PASS |',
+    '| ship-gate | pnpm run ship:gate | local:ship:gate | PASS |',
+    '| e2e | qa-smoke.yml | NOT RUN | NOT RUN |',
+  ].join('\n');
+  const cited = gateRunEvidence(fixtureState({ sections: { 'Verification gates': gatesTable } }));
+  expect(
+    'gate run evidence extracts only run ids',
+    cited.map((item) => item.id).join(',') === '36824151971,36824151972',
+    JSON.stringify(cited),
+  );
+
+  const goodRun = { status: 'completed', conclusion: 'success', headSha: 'abc1234def' };
+  const runMap = (entries) => new Map(Object.entries(entries));
+  const confirmed = compareGateRuns(cited, runMap({ 36824151971: goodRun, 36824151972: goodRun }));
+  expect('cited runs that succeeded pass', confirmed.errors.length === 0 && confirmed.warnings.length === 0, JSON.stringify(confirmed));
+
+  const invented = compareGateRuns(cited, runMap({ 36824151971: goodRun, 36824151972: null }));
+  expect('an invented run id fails', invented.errors.some((e) => e.includes('could not confirm')), JSON.stringify(invented));
+
+  const failedRun = compareGateRuns(
+    cited,
+    runMap({ 36824151971: { ...goodRun, conclusion: 'failure' }, 36824151972: goodRun }),
+  );
+  expect('a PASS gate on a failed run fails', failedRun.errors.some((e) => e.includes('FAILURE')), JSON.stringify(failedRun));
+
+  const pendingRun = compareGateRuns(
+    cited,
+    runMap({ 36824151971: { ...goodRun, status: 'in_progress', conclusion: null }, 36824151972: goodRun }),
+  );
+  expect('an in-progress run fails', pendingRun.errors.some((e) => e.includes('not completed')), JSON.stringify(pendingRun));
+
+  const foreign = compareGateRuns(cited, runMap({ 36824151971: goodRun, 36824151972: goodRun }), {
+    isAncestor: () => false,
+  });
+  expect('a run on a foreign commit warns', foreign.errors.length === 0 && foreign.warnings.length === 2, JSON.stringify(foreign));
 
   return { ok: failures.length === 0, failures };
 }
