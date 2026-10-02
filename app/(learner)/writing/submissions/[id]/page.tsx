@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowRight, Clock, FileText, RefreshCw } from 'lucide-react';
@@ -12,7 +12,8 @@ import { cardClassName } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
-import { getWritingSubmission } from '@/lib/writing/api';
+import { getWritingSubmission, retryWritingGrade } from '@/lib/writing/api';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type { WritingSubmissionDto, WritingSubmissionStatus } from '@/lib/writing/types';
 
 const STATUS_BADGE_VARIANT: Record<WritingSubmissionStatus, 'info' | 'warning' | 'success' | 'danger' | 'muted'> = {
@@ -27,9 +28,14 @@ const STATUS_BADGE_VARIANT: Record<WritingSubmissionStatus, 'info' | 'warning' |
 export default function WritingSubmissionDetailPage() {
   const t = useTranslations();
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const submissionId = String(params?.id ?? '');
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  // A ref, not state: a double-click lands before the re-render that disables the button.
+  const retryInFlight = useRef(false);
 
   useEffect(() => {
     if (!submissionId) return;
@@ -37,6 +43,22 @@ export default function WritingSubmissionDetailPage() {
       .then(setSubmission)
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.detail.error.load')));
   }, [submissionId, t]);
+
+  // Re-grades the SAME submission (no new letter, no second charge), once per
+  // click, then follows it on the grading page.
+  const handleRetry = () => {
+    if (retryInFlight.current || !submissionId) return;
+    retryInFlight.current = true;
+    setRetrying(true);
+    setRetryError(null);
+    void retryWritingGrade(submissionId)
+      .then(() => router.push(`/writing/submissions/${encodeURIComponent(submissionId)}/grading`))
+      .catch((err) => {
+        retryInFlight.current = false;
+        setRetrying(false);
+        setRetryError(toCandidateSafeWritingErrorMessage(err, t('writing.myWork.error.retry')));
+      });
+  };
 
   const statusVariant = submission ? STATUS_BADGE_VARIANT[submission.status] : null;
   const statusLabel = submission ? t(`writing.submissions.detail.status.${submission.status}`) : null;
@@ -71,7 +93,16 @@ export default function WritingSubmissionDetailPage() {
               {t('writing.submissions.detail.tierLabel')} <span className="font-bold capitalize text-navy">{submission.gradingTier}</span>{' '}
               · {t('writing.submissions.detail.sourceLabel')} <span className="font-bold capitalize text-navy">{submission.inputSource}</span>
             </p>
+            {submission.autoRetrying ? (
+              <p className="mt-2 text-sm font-semibold text-warning-strong">{t('writing.myWork.delayed')}</p>
+            ) : null}
+            {retryError ? <InlineAlert variant="error" className="mt-3">{retryError}</InlineAlert> : null}
             <div className="mt-3 flex flex-wrap gap-2">
+              {submission.canRetry ? (
+                <Button onClick={handleRetry} disabled={retrying}>
+                  {retrying ? t('writing.myWork.actions.retrying') : t('writing.myWork.actions.retry')}
+                </Button>
+              ) : null}
               {submission.status === 'graded' ? (
                 <Button asChild>
                   <Link href={`/writing/submissions/${encodeURIComponent(submission.id)}/results`}>
