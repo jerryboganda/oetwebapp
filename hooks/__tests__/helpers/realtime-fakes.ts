@@ -65,8 +65,12 @@ export class FakeAudioContext {
   createBuffer(_channels: number, length: number) {
     return { duration: length / 24_000, getChannelData: () => new Float32Array(length) };
   }
+  // Every playback source the page created, so a test can tell whether audio was queued.
+  sources: { start: ReturnType<typeof vi.fn> }[] = [];
   createBufferSource() {
-    return { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), addEventListener: vi.fn() };
+    const source = { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), addEventListener: vi.fn() };
+    this.sources.push(source);
+    return source;
   }
 }
 

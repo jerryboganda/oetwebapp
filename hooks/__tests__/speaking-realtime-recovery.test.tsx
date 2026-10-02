@@ -587,6 +587,27 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     });
   });
 
+  describe('a Gemini disclaimer', () => {
+    it('is kept out of the saved transcript and the rest of the turn is not played', async () => {
+      const { result } = await mount();
+      await startVoice(result);
+      await mic('speech', 1_500);
+      await mic('quiet', 900);
+      await geminiSays(0, { inputTranscription: { text: 'How long did it last' } });
+      await geminiSays(0, { outputTranscription: { text: 'It lasted three days.' } });
+      const playedBefore = FakeAudioContext.instances.reduce((sum, context) => sum + context.sources.length, 0);
+      await geminiSays(0, { outputTranscription: { text: ' This information is not medical advice or diagnosis.' } });
+      await geminiSays(0, { modelTurn: { parts: [{ inlineData: { data: 'AAAA', mimeType: 'audio/pcm;rate=24000' } }] } });
+      await geminiSays(0, { turnComplete: true });
+      const playedAfter = FakeAudioContext.instances.reduce((sum, context) => sum + context.sources.length, 0);
+      expect(playedAfter).toBe(playedBefore); // nothing queued after the disclaimer began
+      expect(await stopVoice(result)).toBe(true);
+
+      const patient = savedSegments().find((segment) => segment.speaker === 'patient');
+      expect(patient?.text).toBe('It lasted three days.');
+    });
+  });
+
   describe('Gemini candidate timing', () => {
     it('gives a candidate sentence the span of its microphone burst instead of a zero-length arrival time', async () => {
       const { result } = await mount();

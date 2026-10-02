@@ -6,8 +6,11 @@ import {
   appendTranscriptFragment,
   inOrderOfStart,
   isClientRejection,
+  isPatientDisclaimer,
   isProviderFailure,
   planProviders,
+  withoutDisclaimerSentences,
+  withoutPatientDisclaimers,
 } from '../useSpeakingRealtimeVoice';
 import { ApiError } from '@/lib/api/client';
 import type { LiveVoicePreflight, LiveVoiceTranscriptSegmentInput } from '@/lib/api/speaking-live-voice';
@@ -248,6 +251,46 @@ const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePrefli
   sessionId: 's1',
   rolePlayCardId: 'c1',
   ...overrides,
+});
+
+describe('patient disclaimers (Gemini appends them whatever the prompt says)', () => {
+  // Sentences Gemini really produced on production, 2 Oct 2026.
+  const real = [
+    'This information is for educational purposes and is not medical advice or diagnosis; please see a healthcare professional.',
+    'This information is not medical advice or diagnosis.',
+    'Please consult a healthcare professional for any medical concerns.',
+    'Please note that this is not medical advice or a diagnosis, and you should seek care from a healthcare professional.',
+  ];
+
+  it.each(real)('recognises: %s', (sentence) => {
+    expect(isPatientDisclaimer(sentence)).toBe(true);
+  });
+
+  it.each([
+    'It lasted for three days, and I have recovered from the illness.',
+    'My doctor said the same thing last year.',
+    'So I should cut down on milk and see you again in six weeks?',
+    "I haven't been to see a doctor about it before.",
+  ])('leaves an ordinary patient line alone: %s', (sentence) => {
+    expect(isPatientDisclaimer(sentence)).toBe(false);
+  });
+
+  it('removes only the disclaimer sentences from a reply', () => {
+    expect(withoutDisclaimerSentences(`It lasted three days. ${real[0]} I feel fine now.`)).toBe('It lasted three days. I feel fine now.');
+    expect(withoutDisclaimerSentences(real[1])).toBe('');
+  });
+
+  it('cleans patient segments, drops the ones left empty and never touches the candidate', () => {
+    const segments: LiveVoiceTranscriptSegmentInput[] = [
+      { speaker: 'candidate', startMs: 0, endMs: 1_000, text: 'This is not medical advice, but I think it is lactose intolerance.' },
+      { speaker: 'patient', startMs: 1_000, endMs: 2_000, text: `Okay. ${real[2]}` },
+      { speaker: 'patient', startMs: 2_000, endMs: 3_000, text: real[1] },
+    ];
+    const cleaned = withoutPatientDisclaimers(segments);
+    expect(cleaned).toHaveLength(2);
+    expect(cleaned[0].text).toBe(segments[0].text);
+    expect(cleaned[1].text).toBe('Okay.');
+  });
 });
 
 describe('inOrderOfStart', () => {

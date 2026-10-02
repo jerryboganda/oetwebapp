@@ -466,6 +466,23 @@ export function inOrderOfStart(segments: readonly LiveVoiceTranscriptSegmentInpu
   return [...segments].sort((a, b) => a.startMs - b.startMs);
 }
 
+/**
+ * The patient is a person in a consultation, never an assistant. Gemini nevertheless appends a safety disclaimer to some
+ * replies ("This information is for educational purposes and is not medical advice; please see a healthcare professional"),
+ * whatever the prompt says (production 2 Oct 2026: 1-3 per run, with or without a restore). The prompt forbids it; this is the
+ * guard for when the model does it anyway: the sentence is kept out of the saved transcript the grader reads.
+ */
+const PATIENT_DISCLAIMER = /not (?:a substitute for )?medical advice|for educational (?:purposes|and informational)|(?:consult|see|speak (?:to|with)) (?:a|your) (?:healthcare|health care|medical)\b[^.!?]*\b(?:professional|provider)/i;
+export const isPatientDisclaimer = (text: string): boolean => PATIENT_DISCLAIMER.test(text);
+export function withoutDisclaimerSentences(text: string): string {
+  return text.split(/(?<=[.!?])\s+/).filter((sentence) => !isPatientDisclaimer(sentence)).join(' ').trim();
+}
+export function withoutPatientDisclaimers(segments: readonly LiveVoiceTranscriptSegmentInput[]): LiveVoiceTranscriptSegmentInput[] {
+  return segments
+    .map((segment) => (segment.speaker === 'patient' ? { ...segment, text: withoutDisclaimerSentences(segment.text) } : segment))
+    .filter((segment) => segment.text.trim() !== '');
+}
+
 // Refresh-safe transcript. The conversation lives in memory until stop() saves it, so a reload or a crashed tab mid-card
 // would lose it (after a reload only what is said afterwards would be saved and graded). A copy per Speaking session is
 // kept in sessionStorage (this tab only, nothing but that session's own conversation, no tokens) and taken back when the
@@ -638,6 +655,9 @@ export function useSpeakingRealtimeVoice(
   const candidateSpokeUntilRef = useRef<number | null>(null);
   // The candidateSpokeUntilRef value the Gemini end-of-audio nudge was already sent for (one nudge per unanswered sentence).
   const nudgedForRef = useRef<number | null>(null);
+  // What the patient has said so far in the turn Gemini is generating, and whether the rest of it is muted (a disclaimer began).
+  const turnPatientTextRef = useRef('');
+  const muteTurnRef = useRef(false);
   const speechTrackerRef = useRef<SpeechTracker>(createSpeechTracker());
   const candidateSpansRef = useRef<SpeechSpan[]>([]);
   const assignedBurstStartRef = useRef(-1);
@@ -851,7 +871,7 @@ export function useSpeakingRealtimeVoice(
     const provider = providerRef.current;
     const providerSessionId = providerSessionIdRef.current;
     const candidateText = pendingCandidateRef.current.trim();
-    const patientText = pendingPatientRef.current.trim();
+    const patientText = withoutDisclaimerSentences(pendingPatientRef.current.trim());
     if (!provider || !providerSessionId || (!candidateText && !patientText)) return null;
 
     const startedAt = pendingStartedAtRef.current;
@@ -1026,6 +1046,8 @@ export function useSpeakingRealtimeVoice(
     if (!serverContent) return;
     if (serverContent.interrupted === true) {
       interruptPlayback();
+      turnPatientTextRef.current = '';
+      muteTurnRef.current = false;
       setPhase('listening');
       return;
     }
@@ -1038,6 +1060,12 @@ export function useSpeakingRealtimeVoice(
       lastPatientOutputAtRef.current = performance.now();
       setPhase('speaking');
       captureTranscript('patient', outputText);
+      turnPatientTextRef.current += outputText;
+      if (!muteTurnRef.current && isPatientDisclaimer(turnPatientTextRef.current)) {
+        // Cut the rest of a disclaimer short; what already played cannot be taken back.
+        muteTurnRef.current = true;
+        interruptPlayback();
+      }
     }
 
     const modelTurn = (serverContent.modelTurn ?? serverContent.model_turn) as Record<string, unknown> | undefined;
@@ -1049,6 +1077,7 @@ export function useSpeakingRealtimeVoice(
         const data = inline?.data;
         if (typeof data !== 'string') continue;
         lastPatientOutputAtRef.current = performance.now();
+        if (muteTurnRef.current) continue;
         const outputContext = outputContextRef.current;
         if (!outputContext) continue;
         const buffer = pcmToAudioBuffer(outputContext, data, audioRate(inline?.mimeType ?? inline?.mime_type));
@@ -1064,6 +1093,8 @@ export function useSpeakingRealtimeVoice(
     }
 
     if (serverContent.turnComplete || serverContent.turn_complete) {
+      turnPatientTextRef.current = '';
+      muteTurnRef.current = false;
       void queueFlush();
       setPhase('listening');
     }
@@ -1593,7 +1624,7 @@ export function useSpeakingRealtimeVoice(
       if (current()) closeTransport();
       // The server rejects an empty transcript, and there is nothing to grade in one.
       if (segments.length > 0) {
-        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments: inOrderOfStart(segments) });
+        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments: inOrderOfStart(withoutPatientDisclaimers(segments)) });
       }
       // Saved: the refresh-safe copy has done its job (a failed save keeps it, so a reload can still bring it back).
       clearTranscriptCheckpoint(sessionId);
