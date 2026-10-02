@@ -115,7 +115,8 @@ jobs:
           -c 'model_reasoning_effort="high"' -c 'approval_policy="never"'
           -c 'sandbox_mode="read-only"' - --help
       # /home/agent is a writable named volume in production and must not exist in the image
-      # (agent-console/Dockerfile), so the checks below mount a tmpfs there.
+      # (agent-console/Dockerfile), so the checks below mount a tmpfs there. Codex also refuses to
+      # start unless CODEX_HOME (/home/agent/.codex, inside that volume) exists.
       - name: Check claude auth status without network (signed out)
         run: |
           set -uo pipefail
@@ -132,7 +133,7 @@ jobs:
         run: |
           set -uo pipefail
           code=0
-          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint codex "$CODEX_IMAGE" login status 2>&1)" || code=$?
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --tmpfs /home/agent/.codex:mode=1777 --entrypoint codex "$CODEX_IMAGE" login status 2>&1)" || code=$?
           printf 'exit=%s\n%s\n' "$code" "$out"
           if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
             echo "::error::codex login status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"
@@ -144,7 +145,7 @@ jobs:
         run: |
           set -euo pipefail
           for image in "$CLAUDE_IMAGE" "$CODEX_IMAGE"; do
-            id="$(docker run -d --network none --tmpfs /home/agent:mode=1777 "$image")"
+            id="$(docker run -d --network none --tmpfs /home/agent:mode=1777 --tmpfs /home/agent/.codex:mode=1777 "$image")"
             out=''
             for _ in $(seq 1 30); do
               out="$(docker exec "$id" node -e "fetch('http://127.0.0.1:8080/readyz').then(async (r) => console.log(r.status, await r.text()), () => process.exit(1))" 2>/dev/null)" && break
