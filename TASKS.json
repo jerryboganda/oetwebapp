@@ -1,17 +1,29 @@
 {
   "version": 1,
   "updated": "2026-10-02",
-  "statuses": ["pending", "in_progress", "blocked", "done"],
+  "statuses": [
+    "pending",
+    "in_progress",
+    "blocked",
+    "done"
+  ],
   "tasks": [
     {
       "id": "WAI-00",
       "title": "Evidence-first diagnosis: production-diagnostics gains diagnose_latest_failures + verify_api_model (the one authorised paid check); record the root-cause table",
-      "status": "in_progress",
+      "status": "done",
       "owner": "writing-ai-launch",
       "blockedBy": [],
       "verify": "writing-rev8-ci.yml",
-      "evidence": [],
-      "files": [".github/workflows/writing-rev8-ci.yml", "SESSION_STATE.md"]
+      "evidence": [
+        "writing-rev8-ci.yml run 37018040352 (production-latest-diagnostics + verify_api_model ok)",
+        "writing-rev8-ci.yml run 37018897335 (breakdowns, L1/L3 profiles, catalogue, subscription probes ok)"
+      ],
+      "files": [
+        ".github/workflows/writing-rev8-ci.yml",
+        "scripts/qa/writing-prod-diagnose.mjs",
+        "SESSION_STATE.md"
+      ]
     },
     {
       "id": "WAI-01",
@@ -47,7 +59,9 @@
       "title": "Grade chain (epoch slots, per-attempt budgets, failover classes), failure codes, auto-resume cron, shutdown requeue, grading/paper page copy",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-01"],
+      "blockedBy": [
+        "WAI-01"
+      ],
       "verify": "writing-rev8-ci.yml",
       "evidence": [],
       "files": [
@@ -65,17 +79,25 @@
       "blockedBy": [],
       "verify": "writing-ai.yml",
       "evidence": [],
-      "files": ["writing-ai-sidecars/", "docker-compose.writing-ai.yml", ".github/workflows/writing-ai.yml"]
+      "files": [
+        "writing-ai-sidecars/",
+        "docker-compose.writing-ai.yml",
+        ".github/workflows/writing-ai.yml"
+      ]
     },
     {
       "id": "WAI-05",
       "title": "QA-only per-learner fault switch (writing_grade_fault / writing_grade_fault_l1l2)",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-03"],
+      "blockedBy": [
+        "WAI-03"
+      ],
       "verify": "writing-rev8-ci.yml",
       "evidence": [],
-      "files": ["backend/src/OetLearner.Api/Services/Writing/WritingQaFault.cs"]
+      "files": [
+        "backend/src/OetLearner.Api/Services/Writing/WritingQaFault.cs"
+      ]
     },
     {
       "id": "WAI-06",
@@ -96,7 +118,9 @@
       "title": "Editor restore fix, draft sync engine, server-restored timer, Resume writing, offline-safe submit rules, revise/mock/paper adoption",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-06"],
+      "blockedBy": [
+        "WAI-06"
+      ],
       "verify": "writing-rev8-ci.yml",
       "evidence": [],
       "files": [
@@ -110,7 +134,10 @@
       "title": "Post Submissions UI (my-work list, Resume banner, Retry on list/detail, free-sample routing)",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-03", "WAI-06"],
+      "blockedBy": [
+        "WAI-03",
+        "WAI-06"
+      ],
       "verify": "writing-rev8-ci.yml",
       "evidence": [],
       "files": [
@@ -138,17 +165,28 @@
       "title": "Live QA harness on Actions (writing-prod-qa.yml): discover, matrix, acceptance, ui, evidence",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-05", "WAI-06", "WAI-07", "WAI-08", "WAI-09"],
+      "blockedBy": [
+        "WAI-05",
+        "WAI-06",
+        "WAI-07",
+        "WAI-08",
+        "WAI-09"
+      ],
       "verify": "writing-prod-qa.yml",
       "evidence": [],
-      "files": [".github/workflows/writing-prod-qa.yml", "scripts/qa/writing-prod-qa/"]
+      "files": [
+        ".github/workflows/writing-prod-qa.yml",
+        "scripts/qa/writing-prod-qa/"
+      ]
     },
     {
       "id": "WAI-11",
       "title": "Ship increments to main, watch deploys, run live QA, fix loop",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-10"],
+      "blockedBy": [
+        "WAI-10"
+      ],
       "verify": "deploy.yml",
       "evidence": [],
       "files": []
@@ -158,10 +196,17 @@
       "title": "Evidence report (QA-2 table + 15 rows), docs, memory, owner notification",
       "status": "pending",
       "owner": "writing-ai-launch",
-      "blockedBy": ["WAI-11"],
+      "blockedBy": [
+        "WAI-11"
+      ],
       "verify": "pnpm run ax:check",
       "evidence": [],
-      "files": ["docs/ops/WRITING-AI-PROVIDERS.md", "docs/AI-USAGE-POLICY.md", "docs/qa/WRITING-PROD-QA.md", "PROGRESS.md"]
+      "files": [
+        "docs/ops/WRITING-AI-PROVIDERS.md",
+        "docs/AI-USAGE-POLICY.md",
+        "docs/qa/WRITING-PROD-QA.md",
+        "PROGRESS.md"
+      ]
     }
   ]
 }
