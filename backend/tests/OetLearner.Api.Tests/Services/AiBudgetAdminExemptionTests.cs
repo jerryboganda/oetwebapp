@@ -42,6 +42,9 @@ public sealed class AiBudgetAdminExemptionTests
         db.AiGlobalPolicies.Add(new AiGlobalPolicy
         {
             Id = "global",
+            // These tests pin cap behaviour, which only refuses calls while
+            // the admin switch is on (owner directive 2026-10-02, default off).
+            EnforceSpendCaps = true,
             KillSwitchEnabled = false,
             KillSwitchScope = AiKillSwitchScope.PlatformKeysOnly,
             DisabledFeaturesCsv = string.Empty,

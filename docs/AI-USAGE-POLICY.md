@@ -163,6 +163,8 @@ Listening Part A Claude call are direct) but each writes exactly one
 | `jev.writing.criteria` | `typesafe-jev` | Jev advisory per-criterion Writing signals (parallel Scores in one call), combined with code-owned weights. Display-only radar — never a grade input. Non-scoring, platform-only. |
 | `jev.companion.rerank` | `typesafe-jev` | Jev rerank of companion hybrid-retrieval candidates (one Score per candidate, downstream of the entitlement prefilter). Ordering-only, advisory — never a filter of record, never a grading path; rerank outage keeps the original hybrid ordering. Non-scoring, platform-only. |
 | `jev.conversation.turn` | `typesafe-jev` | Jev advisory judgment of the learner's latest AI-patient role-play turn (stays-in-role / clinically-appropriate / unsafe Nouls, one parallel call). Informational only — never gates, scores, or ends a session. Non-scoring, platform-only. |
+| `jev.response.verify` | `typesafe-jev` | Jev advisory review of a gateway response (evidence relation, addresses-task, unsafe-recommendation; `JevWorkflowAdvisor`). Advisory only — never changes a grade or the gateway verdict; switches `TypeSafe:Enabled` + `ResponseVerifyEnabled`. Non-scoring, platform-only. |
+| `jev.development.triage` | `typesafe-jev` | Jev typed triage for internal development/review tooling (AdminBatch class). Never on a learner path. Non-scoring, platform-only. |
 
 **TypeSafe SystemOne (Jev):** judgments only — the model returns typed
 Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves
@@ -200,6 +202,7 @@ global switch gates the scoring-critical rows.
 | Option | Meaning | Default | Alternatives |
 |---|---|---|---|
 | `AiGlobalKillSwitch` | Hard-disable all AI calls platform-wide | `false` | `true` |
+| `EnforceSpendCaps` | Whether the platform USD caps (global budget + hard-kill, global daily cap, class daily/monthly caps) may refuse a call | `false` | `true` |
 | `AiGlobalBudgetUsd` | Hard monthly USD cap across all platform-keyed calls | admin-supplied, no default | any decimal ≥ 0 |
 | `AiGlobalBudgetSoftWarnPct` | Email admins at this % of budget | `80` | 0–100 |
 | `AiGlobalBudgetHardKillPct` | Auto-engage kill switch at this % | `100` | 0–150 |
@@ -209,6 +212,29 @@ global switch gates the scoring-critical rows.
 Kill-switch semantics: when engaged, platform-keyed calls throw
 `AiGloballyDisabledException`. **BYOK calls continue** — the switch protects
 the platform budget, not learner sovereignty over their own key.
+
+**Platform spend caps are an admin switch, OFF by default (owner directive,
+2026-10-02: "delete the monthly, weekly and daily AI caps").** While
+`AiGlobalPolicy.EnforceSpendCaps` is off, no platform USD cap refuses a call:
+neither the `AiQuotaService` hard-kill nor any `AiBudgetService` reservation
+(global month/day, class month/day, scoring borrow) denies, but every budget
+period is still reserved, committed and released, so `CurrentSpendUsd`,
+`/admin/ai-usage` and the budget alerts keep showing real spend. Turning it on
+(`/admin/ai-usage → Budget & Kill-switch`) restores the caps exactly as
+described in this section. Not affected by the switch: the kill switch, the
+per-feature kill list, per-user AI disable, plan token caps, learner credits and
+the per-learner caps listed below. The Claude Max weekly usage estimate on
+`/admin/writing-ai` is information only and never switches Writing providers.
+
+**Claude Max is always on (owner hard rule MAX-ALWAYS-ON, 2026-10-02).** The
+Writing subscription route (`writing-claude-sub`) is tried first on every grade
+and can never be switched off or bypassed by an admin toggle, mode, marker,
+threshold or circuit. The admin API refuses it with `max_subscription_always_on`:
+`PUT /v1/admin/ai/writing-provider` accepts only `auto`/`claude` (a weekly
+threshold or quota marker is stored but inert), and the `writing-claude-sub`
+provider row cannot be deactivated or deleted (its other fields stay editable).
+The Anthropic API and Codex are used only inside a single grade after Max
+actually errors.
 
 **Admin-side AI carries no day or class-month ceilings (owner directive,
 2026-09-23).** `AdminBatch`-class calls — `admin.*` content drafts,
@@ -552,8 +578,9 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
   off). Details and revert: [`docs/speaking/ai-providers.md`](speaking/ai-providers.md).
 - **Still under this policy (§0, §12):** the call goes through the coordinator and the gateway:
   grounding enforced, one `AiUsageRecord` per physical call (priced `0.00` on the sidecar row),
-  kill switch, feature policy, platform budget reservation and the provider circuit breaker all
-  apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
+  kill switch, feature policy, platform budget reservation (spend booked; it refuses a call only
+  while `EnforceSpendCaps` is on, off by default since 2026-10-02, see §7) and the provider circuit
+  breaker all apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
   taken at card reveal is committed once, after a grade exists.
 - **Shared allowance and lane:** the sidecar runs one request at a time and shares the Claude
   Max allowance (and the `oet_agent_home` login) with Writing and the console, so Speaking and

@@ -681,6 +681,7 @@ public class AiQuotaServiceTests
     {
         var (db, quota) = Build();
         var global = Assert.Single(db.AiGlobalPolicies);
+        global.EnforceSpendCaps = true;
         global.MonthlyBudgetUsd = 10m;
         global.HardKillPct = 100;
         global.CurrentSpendUsd = 10m;
@@ -698,6 +699,7 @@ public class AiQuotaServiceTests
     {
         var (db, quota) = Build();
         var global = Assert.Single(db.AiGlobalPolicies);
+        global.EnforceSpendCaps = true;
         global.MonthlyBudgetUsd = 10m;
         global.HardKillPct = 100;
         global.CurrentSpendUsd = 10m;
@@ -707,6 +709,32 @@ public class AiQuotaServiceTests
         var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.AdminContentGeneration, AiKeySource.Byok, default);
         Assert.True(decision.Allowed);
         Assert.Equal("byok.unmetered", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SpendCapsOff_ExhaustedGlobalBudget_NeverDenies_AndSpendIsStillBooked()
+    {
+        // Owner directive 2026-10-02: the platform $ caps are an admin switch,
+        // off by default. Same exhausted budget as the test above, switch off.
+        var (db, quota) = Build();
+        var global = Assert.Single(db.AiGlobalPolicies);
+        Assert.False(global.EnforceSpendCaps);
+        global.MonthlyBudgetUsd = 10m;
+        global.HardKillPct = 100;
+        global.CurrentSpendUsd = 10m;
+        await db.SaveChangesAsync();
+
+        var anonymous = await quota.TryReserveAsync(null, AiFeatureCodes.AdminContentGeneration, AiKeySource.Platform, default);
+        var learner = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(anonymous.Allowed);
+        Assert.Equal("anonymous.unmetered", anonymous.PolicyTrace);
+        Assert.True(learner.Allowed);
+        Assert.Equal("plan.pro.ok", learner.PolicyTrace);
+
+        await quota.CommitAsync("user-001", AiFeatureCodes.WritingGrade, 100, 50, 0.25m, default);
+        Assert.Equal(10.25m, (await db.AiGlobalPolicies.AsNoTracking().SingleAsync()).CurrentSpendUsd);
         await db.DisposeAsync();
     }
 }

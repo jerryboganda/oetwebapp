@@ -1437,6 +1437,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<bool>("EnforceSpendCaps")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("HardKillPct")
                         .HasColumnType("integer");
 

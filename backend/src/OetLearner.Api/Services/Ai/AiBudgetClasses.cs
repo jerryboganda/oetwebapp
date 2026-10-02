@@ -21,6 +21,12 @@ namespace OetLearner.Api.Services.Ai;
 /// kind. See <see cref="IsBudgetExempt"/>. The global month reserve, the kill
 /// switch and the per-feature kill list still govern admin calls.
 /// </para>
+///
+/// <para>
+/// Owner directive 2026-10-02: every ceiling here refuses a call only while
+/// <see cref="AiGlobalPolicy.EnforceSpendCaps"/> is on (default off). Spend
+/// against them is booked either way — see <see cref="AiBudgetService"/>.
+/// </para>
 /// </summary>
 public static class AiBudgetClasses
 {

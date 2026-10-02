@@ -127,6 +127,11 @@ export interface AiGlobalPolicy {
   softWarnPct: number;
   hardKillPct: number;
   currentSpendUsd: number;
+  /**
+   * Owner directive 2026-10-02: the platform USD caps refuse AI calls only
+   * while this is true. Default false — spend is still recorded.
+   */
+  enforceSpendCaps: boolean;
   allowByokOnScoringFeatures: boolean;
   allowByokOnNonScoringFeatures: boolean;
   defaultPlatformProviderId: string;
@@ -331,6 +336,7 @@ export interface WritingAiProviderStatus {
     sampledAt: string;
   };
   quotaExceededUntil: string | null;
+  /** Always false: Claude Max is never switched off or bypassed (owner hard rule MAX-ALWAYS-ON, 2 Oct 2026). */
   failoverActive: boolean;
   currentPrimary: { provider: string; model: string };
   gradedToday: number;
@@ -344,18 +350,6 @@ export interface WritingAiProviderStatus {
 
 export function fetchWritingAiProvider() {
   return aiApi<WritingAiProviderStatus>('/v1/admin/ai/writing-provider');
-}
-
-export function updateWritingAiProvider(payload: {
-  mode?: WritingAiProviderMode;
-  warnPct?: number;
-  failoverPct?: number;
-  clearQuotaMarker?: boolean;
-}) {
-  return aiApi<{ ok: boolean }>('/v1/admin/ai/writing-provider', {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
 }
 
 export function fetchAiUsageTrend(fromMonth?: string, toMonth?: string) {

@@ -55,6 +55,14 @@ namespace OetLearner.Api.Services.Ai;
 /// except for budget-exempt AdminBatch calls, which reserve the global month
 /// only (owner directive 2026-09-23: no budget caps on admin-side AI).
 /// </para>
+///
+/// <para>
+/// <b>Spend caps are an admin switch (owner directive 2026-10-02).</b> Every
+/// period above is reserved, committed and released exactly the same way
+/// whatever <see cref="AiGlobalPolicy.EnforceSpendCaps"/> says, so the budget
+/// dashboards and alerts keep the real spend. Only while it is on (default
+/// off) may a reservation be refused for lack of headroom.
+/// </para>
 /// </summary>
 public interface IAiBudgetService
 {
@@ -183,9 +191,10 @@ public sealed class AiBudgetService(
 
             var global = await db.AiGlobalPolicies.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == "global", ct);
+            var enforce = global?.EnforceSpendCaps ?? false;
             var limitUsd = ResolveEffectiveLimit(global);
             limitUsd += await ExtraHeadroomAsync(scope, ct);
-            if (limitUsd <= 0m)
+            if (enforce && limitUsd <= 0m)
             {
                 logger.LogWarning(
                     "AI platform budget is unconfigured or zero for scope {Scope}; refusing the call (zero provider calls made). Set AiGlobalPolicy.MonthlyBudgetUsd on /admin/ai-usage.",
@@ -195,7 +204,7 @@ public sealed class AiBudgetService(
 
             var periodKey = MonthKeyUtc();
             return await TryReservePeriodAsync(
-                db, scope, periodKey, amount, limitUsd, "global_budget_exhausted", ct);
+                db, scope, periodKey, amount, limitUsd, "global_budget_exhausted", enforce, ct);
         }
         catch (Exception ex)
         {
@@ -224,9 +233,10 @@ public sealed class AiBudgetService(
 
             var global = await db.AiGlobalPolicies.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == "global", ct);
+            var enforce = global?.EnforceSpendCaps ?? false;
             var globalMonthLimit = ResolveEffectiveLimit(global);
             globalMonthLimit += await ExtraHeadroomAsync(AiBudgetClasses.GlobalScope, ct);
-            if (globalMonthLimit <= 0m)
+            if (enforce && globalMonthLimit <= 0m)
             {
                 logger.LogWarning(
                     "AI platform budget is unconfigured or zero; refusing the call (zero provider calls made).");
@@ -238,7 +248,7 @@ public sealed class AiBudgetService(
 
             var globalMonth = await TryReservePeriodAsync(
                 db, AiBudgetClasses.GlobalScope, monthKey, amount, globalMonthLimit,
-                "global_budget_exhausted", ct);
+                "global_budget_exhausted", enforce, ct);
             if (!globalMonth.Granted)
             {
                 return globalMonth;
@@ -266,7 +276,7 @@ public sealed class AiBudgetService(
                 + await ExtraHeadroomAsync(AiBudgetClasses.GlobalScope, ct);
             var globalDay = await TryReservePeriodAsync(
                 db, AiBudgetClasses.GlobalScope, dayKey, amount, globalDayLimit,
-                "global_daily_budget_exhausted", ct);
+                "global_daily_budget_exhausted", enforce, ct);
             if (!globalDay.Granted)
             {
                 await ReleaseHoldsAsync(db, grantedIds, amount, ct);
@@ -278,7 +288,7 @@ public sealed class AiBudgetService(
             string? classPeriodId = null;
             string? borrowPeriodId = null;
 
-            var ownClass = await TryReserveClassAsync(db, operationClass, amount, monthKey, dayKey, ct);
+            var ownClass = await TryReserveClassAsync(db, operationClass, amount, monthKey, dayKey, enforce, ct);
             if (ownClass.Ok)
             {
                 grantedIds.Add(ownClass.MonthPeriodId!);
@@ -291,7 +301,7 @@ public sealed class AiBudgetService(
                 foreach (var donor in AiBudgetClasses.ScoringBorrowOrder)
                 {
                     if (!AiBudgetClasses.CanBorrow(operationClass, donor)) continue;
-                    var borrow = await TryReserveClassAsync(db, donor, amount, monthKey, dayKey, ct);
+                    var borrow = await TryReserveClassAsync(db, donor, amount, monthKey, dayKey, enforce, ct);
                     if (!borrow.Ok) continue;
 
                     if (borrow.MonthPeriodId is not null) grantedIds.Add(borrow.MonthPeriodId);
@@ -446,6 +456,7 @@ public sealed class AiBudgetService(
         decimal amount,
         string monthKey,
         string dayKey,
+        bool enforce,
         CancellationToken ct)
     {
         // Borrow path only: an exempt donor class (AdminBatch) grants
@@ -462,12 +473,12 @@ public sealed class AiBudgetService(
 
         var month = await TryReservePeriodAsync(
             db, scope, monthKey, amount, AiBudgetClasses.MonthlyLimitUsd(operationClass) + extra,
-            "class_budget_exhausted", ct);
+            "class_budget_exhausted", enforce, ct);
         if (!month.Granted) return (false, null, null);
 
         var day = await TryReservePeriodAsync(
             db, scope, dayKey, amount, AiBudgetClasses.DailyLimitUsd(operationClass) + extra,
-            "class_budget_exhausted", ct);
+            "class_budget_exhausted", enforce, ct);
         if (!day.Granted)
         {
             await ReleaseHoldsAsync(db, [month.PeriodId!], amount, ct);
@@ -484,9 +495,10 @@ public sealed class AiBudgetService(
         decimal amount,
         decimal limitUsd,
         string exhaustedReason,
+        bool enforce,
         CancellationToken ct)
     {
-        if (limitUsd <= 0m) return AiBudgetReservation.Denied(exhaustedReason);
+        if (enforce && limitUsd <= 0m) return AiBudgetReservation.Denied(exhaustedReason);
 
         // The InMemory test provider cannot execute the raw Postgres ledger
         // SQL below; reserve through EF instead. Same headroom semantics,
@@ -494,7 +506,7 @@ public sealed class AiBudgetService(
         // concurrent reservers). The relational path is untouched.
         if (db.Database.IsInMemory())
         {
-            return await TryReservePeriodInMemoryAsync(db, scope, periodKey, amount, limitUsd, exhaustedReason, ct);
+            return await TryReservePeriodInMemoryAsync(db, scope, periodKey, amount, limitUsd, exhaustedReason, enforce, ct);
         }
 
         var periodId = $"{scope}:{periodKey}";
@@ -509,8 +521,14 @@ public sealed class AiBudgetService(
         {
             await EnsurePeriodRowExistsAsync(db, periodId, scope, periodKey, limitUsd, ct);
 
-            var affected = await db.AiBudgetPeriods
-                .Where(p => p.Id == periodId && p.ReservedUsd + p.CommittedUsd + amount <= limitUsd)
+            // Caps off: the same atomic increment, minus the headroom check.
+            var period = db.AiBudgetPeriods.Where(p => p.Id == periodId);
+            if (enforce)
+            {
+                period = period.Where(p => p.ReservedUsd + p.CommittedUsd + amount <= limitUsd);
+            }
+
+            var affected = await period
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(p => p.ReservedUsd, p => p.ReservedUsd + amount)
                     // Re-synced on every reserve so an admin raising the budget
@@ -548,6 +566,7 @@ public sealed class AiBudgetService(
         decimal amount,
         decimal limitUsd,
         string exhaustedReason,
+        bool enforce,
         CancellationToken ct)
     {
         var periodId = $"{scope}:{periodKey}";
@@ -569,7 +588,7 @@ public sealed class AiBudgetService(
             db.AiBudgetPeriods.Add(row);
         }
 
-        if (row.ReservedUsd + row.CommittedUsd + amount > limitUsd)
+        if (enforce && row.ReservedUsd + row.CommittedUsd + amount > limitUsd)
         {
             logger.LogWarning(
                 "AI platform budget exhausted for scope {Scope} period {PeriodId} (limit {Limit}); refusing the call, zero provider calls made.",

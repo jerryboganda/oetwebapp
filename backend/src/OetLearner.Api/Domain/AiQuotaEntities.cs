@@ -220,6 +220,16 @@ public class AiGlobalPolicy
     public int HardKillPct { get; set; } = 100;
     public decimal CurrentSpendUsd { get; set; }
 
+    /// <summary>
+    /// Owner directive 2026-10-02: the platform USD spend caps (this monthly
+    /// budget + hard-kill, and the global day / per-class ceilings reserved by
+    /// <c>AiBudgetService</c>) refuse AI calls only while this is true.
+    /// Default false: spend is still booked and shown, it just never blocks a
+    /// call. The kill switch, per-feature kill list, per-user disable, plan
+    /// token caps and learner credits are not affected by this switch.
+    /// </summary>
+    public bool EnforceSpendCaps { get; set; }
+
     /// <summary>§1 <c>AllowByokOnScoringFeatures</c>.</summary>
     public bool AllowByokOnScoringFeatures { get; set; } = false;
 
