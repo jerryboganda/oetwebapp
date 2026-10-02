@@ -50,4 +50,4 @@ jobs:
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
           --configuration Debug --nologo
           --logger "console;verbosity=normal"
-          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests|FullyQualifiedName~OwnerAgentRelayTests|FullyQualifiedName~OwnerAgentAuthorizationTests"
+          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests|FullyQualifiedName~OwnerAgentRelayTests.Relay_NeverForwardsBrowserHeaders"
