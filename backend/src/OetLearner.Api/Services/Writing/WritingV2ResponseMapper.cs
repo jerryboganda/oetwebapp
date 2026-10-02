@@ -233,18 +233,6 @@ public static class WritingV2ResponseMapper
             CreatedAt: view.CreatedAt,
             CompletedAt: view.CompletedAt);
 
-    public static WritingScoreAppealResponse ToResponse(WritingAppealResult view)
-        => new(
-            Id: view.AppealId,
-            SubmissionId: view.SubmissionId,
-            Status: view.Status,
-            OriginalRawTotal: view.OriginalRawTotal,
-            SecondOpinionRawTotal: view.SecondOpinionRawTotal,
-            FinalRawTotal: view.FinalRawTotal,
-            Reasoning: view.Reasoning,
-            RequestedAt: view.RequestedAt,
-            ResolvedAt: view.ResolvedAt);
-
     public static WritingGradeResponseV2 ToGradeResponse(
         WritingGrade grade,
         IReadOnlyList<WritingCanonViolation> violations,

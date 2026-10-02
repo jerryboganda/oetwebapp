@@ -32,12 +32,11 @@
  *   POST   /v1/writing/today/items/{id}/complete
  *   POST   /v1/writing/today/regenerate
  *
- *   ─ Submissions / grade / appeal / dispute ──────────────────────────
+ *   ─ Submissions / grade / dispute ───────────────────────────────────
  *   POST   /v1/writing/submissions
  *   GET    /v1/writing/submissions/{id}
  *   GET    /v1/writing/submissions/{id}/grade
  *   POST   /v1/writing/submissions/{id}/revise
- *   POST   /v1/writing/submissions/{id}/appeal
  *   POST   /v1/writing/submissions/{id}/dispute-violation
  *
  *   ─ Drafts V2 ────────────────────────────────────────────────────────
@@ -125,7 +124,6 @@ import type {
   WritingSubmissionDto,
   WritingGradeDto,
   WritingAssessmentV11ReportDto,
-  WritingScoreAppealDto,
   WritingDisputeViolationDto,
   WritingCaseNotesDto,
   WritingDraftV2Dto,
@@ -300,7 +298,7 @@ export const regenerateWritingTodayPlan = () =>
   apiClient.post<WritingTodayPlanDto>('/v1/writing/today/regenerate', {});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Submissions / grade / appeal / dispute
+// Submissions / grade / dispute
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface WritingSubmissionCreatePayload {
@@ -388,41 +386,6 @@ export const reviseWritingSubmission = (submissionId: string, payload: { letterC
     path('/v1/writing/submissions/{id}/revise', { id: submissionId }),
     payload,
   );
-
-export interface WritingAppealRequestPayload {
-  reason: string;
-}
-
-export const appealWritingSubmission = (submissionId: string, payload: WritingAppealRequestPayload) =>
-  apiClient.post<WritingScoreAppealDto>(
-    path('/v1/writing/submissions/{id}/appeal', { id: submissionId }),
-    payload,
-  );
-
-/**
- * Writing V2 Score Appeal alias — preferred name per appeal page spec.
- * Routes to the same backend endpoint as `appealWritingSubmission`.
- */
-export const requestWritingAppeal = (submissionId: string, reason: string) =>
-  appealWritingSubmission(submissionId, { reason });
-
-/**
- * Read the latest appeal record for a submission so the UI can poll
- * status (pending → in_progress → resolved). Returns null when no appeal
- * exists yet for this submission.
- */
-export const getWritingAppealResult = async (submissionId: string): Promise<WritingScoreAppealDto | null> => {
-  try {
-    return await apiClient.get<WritingScoreAppealDto>(
-      path('/v1/writing/submissions/{id}/appeal', { id: submissionId }),
-    );
-  } catch (err) {
-    if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 404) {
-      return null;
-    }
-    throw err;
-  }
-};
 
 export const disputeWritingCanonViolation = (submissionId: string, payload: WritingDisputeViolationDto) =>
   apiClient.post<WritingCanonViolationDto>(

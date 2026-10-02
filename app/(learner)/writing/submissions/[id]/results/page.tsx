@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, FileText, Flag, RefreshCw, Share2, Sparkles, UserRoundCheck } from 'lucide-react';
+import { Award, FileText, RefreshCw, Share2, Sparkles, UserRoundCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -19,7 +19,6 @@ import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { WritingPassCelebration, useWritingPassMark, writingGaugeColor } from '@/components/domain/writing/writing-pass-celebration';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import {
-  appealWritingSubmission,
   disputeWritingCanonViolation,
   getTutorReview,
   getWritingAnswerSheet,
@@ -156,25 +155,6 @@ export default function WritingSubmissionResultsPage() {
         setCaseNotes(notes ?? null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
-  }, [submissionId, t]);
-
-  const onAppeal = useCallback(async () => {
-    if (!submissionId) return;
-    const reason = window.prompt(
-      t('writing.submissions.results.actions.appealPrompt'),
-      '',
-    );
-    if (!reason || reason.trim().length < 20) {
-      setActionStatus(t('writing.submissions.results.actions.appealCancelled'));
-      return;
-    }
-    setActionStatus(t('writing.submissions.results.actions.appealSubmitting'));
-    try {
-      await appealWritingSubmission(submissionId, { reason: reason.trim() });
-      setActionStatus(t('writing.submissions.results.actions.appealSubmitted'));
-    } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.appealError'));
-    }
   }, [submissionId, t]);
 
   const onShowcase = useCallback(async () => {
@@ -529,9 +509,6 @@ export default function WritingSubmissionResultsPage() {
               </Link>
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => void onAppeal()}>
-            <Flag className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.appeal')}
-          </Button>
           {/* Request tutor review removed from this AI result flow (Writing
               Rule Enforcement Addendum Rev5, 10 Sep 2026, §13) — tutor
               review is a separate product/workflow. Already-completed

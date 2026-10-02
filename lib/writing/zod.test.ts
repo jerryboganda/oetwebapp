@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  writingAppealRequestSchema,
   writingLessonQuizSubmissionSchema,
   writingProfileSchema,
   writingSubmissionSchema,
@@ -45,11 +44,7 @@ describe('writing zod schemas', () => {
     expect(parsed.wordCount).toBe(123);
   });
 
-  it('rejects too-short appeals and enforces the five-answer quiz shape', () => {
-    expect(
-      writingAppealRequestSchema.safeParse({ reason: 'Too short' }).success,
-    ).toBe(false);
-
+  it('enforces the five-answer quiz shape', () => {
     expect(
       writingLessonQuizSubmissionSchema.safeParse({
         lessonId: 'lesson-1',

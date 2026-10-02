@@ -148,9 +148,6 @@ public sealed record WritingReviseRequest(
     [property: Range(0, 5000)] int WordCount,
     [property: Range(0, 7200)] int TimeSpentSeconds);
 
-public sealed record WritingAppealRequest(
-    [property: StringLength(1000)] string? Reason);
-
 public sealed record WritingDisputeViolationRequest(
     [property: Required] Guid ViolationId,
     [property: Required, StringLength(8)] string RuleId,
@@ -273,17 +270,6 @@ public sealed record WritingAssessmentV11ReportResponse(
     IReadOnlyList<WritingAssessmentV11ErrorResponse> Errors,
     IReadOnlyList<WritingAssessmentV11FactResponse> Facts,
     WritingAssessmentV11ModelAnswerResponse? ModelAnswer);
-
-public sealed record WritingScoreAppealResponse(
-    Guid Id,
-    Guid SubmissionId,
-    string Status,
-    int OriginalRawTotal,
-    int? SecondOpinionRawTotal,
-    int? FinalRawTotal,
-    string? Reasoning,
-    DateTimeOffset RequestedAt,
-    DateTimeOffset? ResolvedAt);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drafts V2

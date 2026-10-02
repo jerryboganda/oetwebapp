@@ -22,7 +22,6 @@ const {
   getTutorReview,
   getWritingAnswerSheet,
   getWritingSubmissionCaseNotes,
-  appealWritingSubmission,
   disputeWritingCanonViolation,
   publishToShowcase,
   createWritingSubmission,
@@ -35,7 +34,6 @@ const {
   getTutorReview: vi.fn(),
   getWritingAnswerSheet: vi.fn(),
   getWritingSubmissionCaseNotes: vi.fn(),
-  appealWritingSubmission: vi.fn(),
   disputeWritingCanonViolation: vi.fn(),
   publishToShowcase: vi.fn(),
   // Not imported by this page today — kept as spies so a future regression
@@ -54,7 +52,6 @@ vi.mock('@/lib/writing/api', () => ({
   getTutorReview,
   getWritingAnswerSheet,
   getWritingSubmissionCaseNotes,
-  appealWritingSubmission,
   disputeWritingCanonViolation,
   publishToShowcase,
   createWritingSubmission,
@@ -166,19 +163,23 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
 
     // Only reads fired — no mutation, grading, or credit-consuming call.
     expect(getWritingSubmission).toHaveBeenCalledWith('sub-1');
-    expect(appealWritingSubmission).not.toHaveBeenCalled();
     expect(disputeWritingCanonViolation).not.toHaveBeenCalled();
     expect(publishToShowcase).not.toHaveBeenCalled();
     expect(createWritingSubmission).not.toHaveBeenCalled();
     expect(reviseWritingSubmission).not.toHaveBeenCalled();
   });
 
-  it('keeps "Request tutor review" removed from this AI result flow while "Appeal score" stays', async () => {
-    renderPage();
+  // Launch handoff UI-1 (2 Oct 2026): "Appeal score" is removed completely —
+  // no button, no link to the deleted /appeal route, no appeal copy.
+  it('offers neither "Request tutor review" nor any appeal control', async () => {
+    const { container } = renderPage();
     await screen.findByText(/I am writing to refer this patient/);
 
     expect(screen.queryByText(/request tutor review/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /appeal/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /appeal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /appeal/i })).not.toBeInTheDocument();
+    expect(container.querySelector('a[href*="/appeal"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/appeal/i);
   });
 
   it('"Practice this again" starts a distinct new attempt via the practice-session entitlement gate, not this attempt\'s id', async () => {
