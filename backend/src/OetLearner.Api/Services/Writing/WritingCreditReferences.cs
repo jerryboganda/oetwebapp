@@ -27,9 +27,12 @@ internal static class WritingCreditReferences
     public static string Grade(Guid submissionId) => $"writing-grade:{submissionId:N}";
 
     /// <summary>
-    /// Graded, non-mock submissions of this learner at this task. Terminal = graded: a
-    /// queued, grading or failed letter is still the same resumable attempt, so it must
-    /// not advance the count. Mock submissions bill their own mock allowance.
+    /// Graded, non-mock, non-revision submissions of this learner at this task. Terminal =
+    /// graded: a queued, grading or failed letter is still the same resumable attempt, so it
+    /// must not advance the count. Mock submissions bill their own mock allowance, and a
+    /// REVISION pays its own <see cref="Grade"/> reference at grade time, so one finishing
+    /// grading while the learner opens a new attempt can never move that attempt's start
+    /// reference (which would charge the new letter a second time).
     /// </summary>
     public static Task<int> GradedCountAsync(LearnerDbContext db, string? userId, Guid scenarioId, CancellationToken ct)
         => string.IsNullOrWhiteSpace(userId)
@@ -38,5 +41,6 @@ internal static class WritingCreditReferences
                 .CountAsync(s => s.UserId == userId
                     && s.ScenarioId == scenarioId
                     && s.Mode != "mock"
+                    && !s.IsRevision
                     && s.Status == WritingSubmissionStatuses.Graded, ct);
 }

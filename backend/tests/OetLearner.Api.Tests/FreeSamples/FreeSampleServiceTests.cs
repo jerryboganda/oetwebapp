@@ -444,6 +444,31 @@ public sealed class FreeSampleServiceTests
     }
 
     [Fact]
+    public async Task Writing_AFinalFailure_FreesTheUse_SoTheLearnerCanStartOver()
+    {
+        // task_not_ready / manual_review / letter_invalid can never be graded and show no Retry, so the
+        // use must not park the learner on a Retry-less card: it is Dead (never counts, never blocks).
+        await using var db = NewDb();
+        await EnableAsync(db);
+        var scenario = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
+        var content = scenario.ToString("D");
+        await SeedLearnerAsync(db, "u1", "medicine");
+        var svc = new FreeSampleService(db);
+        var submission = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Failed);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, submission.ToString("N"), default));
+
+        var row = await db.WritingSubmissions.SingleAsync(s => s.Id == submission);
+        row.FailureRetryable = null; // legacy / retryable failure: still the same use, Retry re-runs it
+        await db.SaveChangesAsync();
+        Assert.Equal(FreeSampleService.StateGradingFailed, (await svc.ListAsync("u1", "writing", default)).Single().State);
+
+        row.FailureRetryable = false;
+        await db.SaveChangesAsync();
+        var offer = (await svc.ListAsync("u1", "writing", default)).Single();
+        Assert.Equal((FreeSampleService.StateAvailable, 0), (offer.State, offer.SuccessfulCount));
+    }
+
+    [Fact]
     public async Task Writing_TheClaimIsPerLearnerAndPerSubtest()
     {
         await using var db = NewDb();

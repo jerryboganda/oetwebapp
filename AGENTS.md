@@ -168,9 +168,16 @@ from 30 Sep to 7 Oct and the paid API served every grade.
 - Enforced by tests that fail the build: the selector matrix (`WritingMaxAlwaysOnTests`), the source-scan guard, the
   circuit-store exemption tests (`AiCircuitBreakerTests`), the admin endpoint refusals, and the live QA harness
   (`writing-prod-qa.yml`: first hop of every graded letter is `writing-claude-sub`, marker stays null).
-- Not covered on purpose: the global emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only
-  emergency lever. Do not weaken or "fix" the tests above to make something else pass; change the owner's rule only
-  on the owner's explicit say-so.
+- Speaking uses the same Max route, pinned by configuration (`Speaking:Grading:PinnedProviderCode` =
+  `writing-claude-sub`; an empty value would switch that pin off). **Never clear or change that pin**; Writing is the
+  part enforced in code, Speaking is enforced by keeping the configuration.
+- Not covered on purpose (the ONLY exceptions, both owner-approved, both visible in code review): (1) the global
+  emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only emergency lever; (2) the QA-only
+  fault switch (`WritingQaFault`, FeatureFlag rows `writing_grade_fault:{userId}` / `writing_grade_fault_l1l2:{userId}`,
+  approved 2 Oct 2026) which makes ONE named QA learner's hop fail synthetically before any provider call, so failover
+  and Retry can be proven live; it is keyed on the grading learner's id, off by default, fails closed, expires after
+  24 h and can never affect any other learner. Do not weaken or "fix" the tests above to make something else pass;
+  change the owner's rule only on the owner's explicit say-so.
 
 ## Official Reading uploads — COMPULSORY
 

@@ -33,9 +33,10 @@ function sendJson(res, status, obj, headers = {}) {
 }
 
 // Typed engine failures -> [status, code, type] in shapes the .NET AiProviderErrorParser classifies:
-// quota_exceeded = QuotaExhausted and 401 auth_expired/authentication_error = Auth (both quarantined,
-// circuit opens); 503 lane_busy/overloaded_error = Overloaded (retried, then failed over). All are
-// per-request answers; the sidecar keeps serving.
+// quota_exceeded = QuotaExhausted and 401 auth_expired/authentication_error = Auth (the grade moves to its
+// next route; the Claude Max provider's circuit is exempt and never opens, rule MAX-ALWAYS-ON);
+// 503 lane_busy/overloaded_error = Overloaded (retried, then failed over). All are per-request answers;
+// the sidecar keeps serving.
 function failure(err) {
   if (err instanceof QuotaExceededError || err?.quotaExceeded) return [429, 'quota_exceeded', 'rate_limit_error'];
   if (err instanceof AuthExpiredError) return [401, 'auth_expired', 'authentication_error'];

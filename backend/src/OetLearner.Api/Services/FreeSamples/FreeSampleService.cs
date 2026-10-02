@@ -446,17 +446,19 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
                     return new UseStatus(use, UseState.Dead, null, use.ResourceId);
                 }
                 var id = submissionId.ToString("D");
-                var status = await db.WritingSubmissions.AsNoTracking()
+                var row = await db.WritingSubmissions.AsNoTracking()
                     .Where(s => s.Id == submissionId)
-                    .Select(s => s.Status)
+                    .Select(s => new { s.Status, s.FailureRetryable })
                     .FirstOrDefaultAsync(ct);
-                var state = status switch
+                var state = row?.Status switch
                 {
                     null => UseState.Dead,
                     WritingSubmissionStatuses.Graded => UseState.Done,
-                    // Failed grading never counts; RetryGradeAsync re-enters the
-                    // same use through the grading gate.
-                    WritingSubmissionStatuses.Failed => UseState.Failed,
+                    // Failed grading never counts. A retryable failure re-enters the same use through
+                    // RetryGradeAsync (the grading gate); a FINAL failure (task not ready, manual review,
+                    // letter invalid) can never be graded, so the use is Dead and the learner can start
+                    // over instead of being parked on a card with no Retry.
+                    WritingSubmissionStatuses.Failed => row!.FailureRetryable == false ? UseState.Dead : UseState.Failed,
                     _ => UseState.Grading, // queued / preflight / grading
                 };
                 return new UseStatus(use, state, $"/writing/submissions/{id}/results", id);
