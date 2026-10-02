@@ -168,7 +168,12 @@ public sealed record WritingSubmissionResponse(
     Guid? OriginalSubmissionId,
     string Status,
     string GradingTier,
-    string InputSource);
+    string InputSource,
+    // WAI-03 grading recovery (candidate-safe; computed by WritingV2ResponseMapper).
+    string? FailureCode = null,
+    bool CanRetry = false,
+    bool AutoRetrying = false,
+    int AttemptCount = 0);
 
 public sealed record WritingPerCriterionFeedbackResponse(
     int Score,

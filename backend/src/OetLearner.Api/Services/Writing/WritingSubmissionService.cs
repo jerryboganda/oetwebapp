@@ -64,9 +64,9 @@ public sealed class WritingSubmissionService(
     /// <summary>
     /// Claim-lease age after which a row stuck in <c>grading</c> is presumed
     /// orphaned (worker died mid-grade) and becomes resumable via retry-grade.
-    /// Mirrors the background-job stuck threshold so both systems agree.
+    /// The one shared lease, so retry-grade, the recovery cron and the lists agree.
     /// </summary>
-    internal static readonly TimeSpan StuckClaimLease = TimeSpan.FromMinutes(30);
+    internal static readonly TimeSpan StuckClaimLease = WritingGradeTimings.StaleClaimLease;
     public async Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -191,19 +191,17 @@ public sealed class WritingSubmissionService(
             }
         }
 
-        // Claim-lease recovery: a row wedged in grading whose claim is older
-        // than the stuck-job threshold is demoted to failed so the shared
-        // reset below resumes the SAME attempt instead of refusing forever.
-        // Fresh claims still get the controlled in-progress response.
-        if (submission.Status == WritingSubmissionStatuses.Grading
-            && submission.ClaimedAt is { } claimedAt
-            && claimedAt <= DateTimeOffset.UtcNow - StuckClaimLease)
+        // Claim-lease recovery: a grading claim past the lease (its grader died)
+        // or a queued row nobody picked up within it (the worker is down) is
+        // resumed as the SAME attempt instead of refusing forever. Fresh claims
+        // and live queues still get the controlled in-progress response.
+        var now = DateTimeOffset.UtcNow;
+        var stale = WritingGradeRecovery.IsStaleGrading(submission, now) || WritingGradeRecovery.IsStaleQueued(submission, now);
+        if (stale)
         {
             logger.LogWarning(
-                "Writing grade retry recovered stuck submission {SubmissionId} (claim age {ClaimAge}); resuming same attempt.",
-                submission.Id, DateTimeOffset.UtcNow - claimedAt);
-            submission.Status = WritingSubmissionStatuses.Failed;
-            await db.SaveChangesAsync(ct);
+                "Writing grade retry recovered stale {Status} submission {SubmissionId}; resuming same attempt.",
+                submission.Status, submission.Id);
         }
         else if (submission.Status is WritingSubmissionStatuses.Queued
             or WritingSubmissionStatuses.Preflight
@@ -213,20 +211,32 @@ public sealed class WritingSubmissionService(
                 "writing_rubric_already_in_progress",
                 "This submission is already being graded. Please wait a moment and check again.");
         }
-
-        if (submission.Status != WritingSubmissionStatuses.Failed)
+        else if (submission.Status != WritingSubmissionStatuses.Failed)
         {
             throw ApiException.Conflict(
                 "writing_grade_retry_not_eligible",
                 "Only a failed grading attempt can be retried. Submit a revision to try again with new content.");
         }
+        else if (submission.FailureRetryable == false)
+        {
+            // Task not ready / manual review / invalid letter: another run cannot help.
+            throw ApiException.Conflict(
+                "writing_grade_retry_not_eligible",
+                "This letter cannot be graded again as it is. Please try another task or contact support.");
+        }
 
-        // Reset the claim so the pipeline can re-claim; the letter, hashes,
-        // reservation business reference and any persisted provider result all
-        // survive, so this resumes the SAME logical grading attempt.
+        // Reset the claim and the failure state so the pipeline can re-claim;
+        // the letter, hashes, credit hold (CreditReference) and any persisted
+        // provider result all survive, so this resumes the SAME logical attempt
+        // at no charge. Due now, so the cron also picks it up if the detached
+        // run never starts.
         submission.Status = WritingSubmissionStatuses.Queued;
         submission.ClaimedAt = null;
         submission.ClaimOwner = null;
+        submission.AutoRetryCount = 0;
+        submission.NextAutoRetryAt = now;
+        submission.FailureCode = null;
+        submission.FailureRetryable = null;
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(

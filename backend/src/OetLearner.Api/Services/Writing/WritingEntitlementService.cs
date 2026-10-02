@@ -143,22 +143,11 @@ public sealed class WritingEntitlementService(
             Reason: $"{remaining} of {opts.FreeTierLimit} free writing attempts remaining this window.");
     }
 
+    // The grade hold derives the SAME reference (WritingCreditReferences), so a letter
+    // adopts the debit taken here instead of being charged again at grading.
     public async Task<string> BuildScenarioStartReferenceIdAsync(string? userId, Guid scenarioId, CancellationToken ct)
-    {
-        // Terminal = Graded: a submission stuck in queued/preflight/grading/
-        // failed is still the SAME resumable attempt (RetryGradeAsync resumes
-        // it without a new charge), so it must not advance the count. Mock
-        // submissions never touch this credit pool (WritingMockService bills
-        // its own mock allowance), so they are excluded too.
-        var completedCount = string.IsNullOrWhiteSpace(userId)
-            ? 0
-            : await db.WritingSubmissions.AsNoTracking()
-                .CountAsync(s => s.UserId == userId
-                    && s.ScenarioId == scenarioId
-                    && s.Mode != "mock"
-                    && s.Status == WritingSubmissionStatuses.Graded, ct);
-        return $"writing-v2:{userId}:{scenarioId:D}:{completedCount}";
-    }
+        => WritingCreditReferences.Start(
+            userId, scenarioId, await WritingCreditReferences.GradedCountAsync(db, userId, scenarioId, ct));
 
     public async Task<WritingStartAuthorization> AuthorizeStartAsync(string? userId, string referenceId, string? taskId, CancellationToken ct)
     {
@@ -176,6 +165,17 @@ public sealed class WritingEntitlementService(
         {
             await RecordStartAsync(userId, referenceId, taskId, "free_sample", charged: 0, ct);
             return new WritingStartAuthorization(true, "free_sample", false, null, null, ContentEntitlementService.FreeSampleFeedback);
+        }
+
+        // WAI-01: a refresh, resume or reopen of an attempt that is already paid
+        // for is free and needs no balance. Checked BEFORE CheckAsync, which
+        // would refuse the learner whose last credit paid for this very attempt.
+        if (!string.IsNullOrWhiteSpace(userId)
+            && aiPackageCreditService is not null
+            && await aiPackageCreditService.FindGradingDebitAsync(userId, referenceId, ct) is not null)
+        {
+            await RecordStartAsync(userId, referenceId, taskId, "ai_package", charged: 0, ct);
+            return new WritingStartAuthorization(true, "ai_package", false, null, null, null);
         }
 
         var entitlement = await CheckAsync(userId, ct);

@@ -310,8 +310,17 @@ public static class WritingV2ResponseMapper
             GradedAt: grade.GradedAt);
     }
 
-    public static WritingSubmissionResponse ToSubmissionResponse(WritingSubmission s)
-        => new(
+    /// <summary>
+    /// <c>CanRetry</c>: a failed run that Retry can help (legacy rows without a verdict count as
+    /// retryable), a grading claim past the lease, or a queued row nobody picked up within it.
+    /// <c>AutoRetrying</c>: the server re-queued a failed run by itself.
+    /// </summary>
+    public static WritingSubmissionResponse ToSubmissionResponse(WritingSubmission s, DateTimeOffset? now = null)
+    {
+        var at = now ?? DateTimeOffset.UtcNow;
+        var failed = s.Status == WritingSubmissionStatuses.Failed;
+        var autoRetrying = s.Status == WritingSubmissionStatuses.Queued && s.AutoRetryCount > 0;
+        return new(
             Id: s.Id,
             UserId: s.UserId,
             ScenarioId: s.ScenarioId,
@@ -326,7 +335,14 @@ public static class WritingV2ResponseMapper
             OriginalSubmissionId: s.OriginalSubmissionId,
             Status: s.Status,
             GradingTier: s.GradingTier,
-            InputSource: s.InputSource);
+            InputSource: s.InputSource,
+            FailureCode: failed || autoRetrying ? s.FailureCode : null,
+            CanRetry: (failed && s.FailureRetryable != false)
+                || WritingGradeRecovery.IsStaleGrading(s, at)
+                || WritingGradeRecovery.IsStaleQueued(s, at),
+            AutoRetrying: autoRetrying,
+            AttemptCount: s.GradeEpoch);
+    }
 
     public static WritingDraftV2Response ToResponse(WritingDraftV2View view)
         => new(

@@ -2305,6 +2305,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingCalibrationRel
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingModelAnswerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEvaluationPipeline,
     OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
+// WAI-03: Max-first grade chain budgets + auto re-queue, and the deploy-restart
+// requeue (API slots and the ai-worker both grade, so both register it).
+builder.Services.Configure<OetLearner.Api.Services.Writing.WritingGradeChainOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Writing.WritingGradeChainOptions.SectionName));
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.WritingGradeShutdownRequeue>();
+// WAI-05: QA-only per-learner grade fault switch (FeatureFlags rows; off by default).
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingQaFault>();
 // Writing AI subscription routing (owner directive 2026-09-29): quota gauge +
 // Claude-5x→Codex selector behind the six writing feature codes.
 builder.Services.AddSingleton<OetLearner.Api.Services.Writing.IWritingSubscriptionQuotaService,
@@ -3303,8 +3310,8 @@ if (app.Environment.IsDevelopment())
 
 // Writing AI subscription provider seeder — runs in all environments.
 // Idempotent: inserts the two subscription sidecar rows (writing-claude-sub /
-// writing-codex-sub) only when absent; existing rows are never overwritten so
-// admins can retune them via /admin/ai-providers. Non-fatal.
+// writing-codex-sub) when absent, keeps the Max row active (MAX-ALWAYS-ON) and
+// moves a Codex row off the old gpt-6-sol default. Non-fatal.
 {
     using var seedScope = app.Services.CreateScope();
     var writingAiSeedDb = seedScope.ServiceProvider

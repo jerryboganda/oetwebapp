@@ -392,22 +392,8 @@ public sealed class WritingOnboardingService(
         catch (JsonException) { return new(); }
     }
 
+    // One submission mapper (WritingV2ResponseMapper) so every surface gets the recovery fields.
     private static WritingSubmissionResponse ToSubmissionResponse(WritingSubmission s)
-        => new(
-            Id: s.Id,
-            UserId: s.UserId,
-            ScenarioId: s.ScenarioId,
-            Mode: s.Mode,
-            LetterContent: s.LetterContent,
-            ContentHash: s.LetterContentHash,
-            WordCount: s.WordCount,
-            TimeSpentSeconds: s.TimeSpentSeconds,
-            StartedAt: s.StartedAt,
-            SubmittedAt: s.SubmittedAt,
-            IsRevision: s.IsRevision,
-            OriginalSubmissionId: s.OriginalSubmissionId,
-            Status: s.Status,
-            GradingTier: s.GradingTier,
-            InputSource: s.InputSource);
+        => WritingV2ResponseMapper.ToSubmissionResponse(s);
 
 }

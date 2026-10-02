@@ -31440,6 +31440,9 @@ namespace OetLearner.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AutoRetryCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("CaseNoteHighlightsJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -31455,6 +31458,20 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreditReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool?>("FailureRetryable")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("GradeEpoch")
+                        .HasColumnType("integer");
 
                     b.Property<string>("GradeOperationId")
                         .HasMaxLength(64)
@@ -31477,6 +31494,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("IsRevision")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTimeOffset?>("LastFailureAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LetterContent")
                         .IsRequired()
                         .HasColumnType("text");
@@ -31490,6 +31510,9 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("NextAutoRetryAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("OriginalSubmissionId")
                         .HasColumnType("uuid");

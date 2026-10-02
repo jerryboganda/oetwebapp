@@ -90,6 +90,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
             ["Storage:LocalRootPath"] = _storageRoot,
             ["PasswordPolicy:BreachCheckEnabled"] = "false",
+            // WAI-03: HTTP tests read a finished failure as "failed", not an automatic re-queue.
+            ["Writing:GradeChain:MaxAutoRetries"] = "0",
             [$"{AuthTokenOptions.SectionName}:Issuer"] = "https://api.example.test",
             [$"{AuthTokenOptions.SectionName}:Audience"] = "oet-learner-web",
             [$"{AuthTokenOptions.SectionName}:AccessTokenSigningKey"] = "access-token-signing-key-12345678901234567890",
@@ -191,7 +193,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 ["Platform:FallbackEmailDomain"] = "example.test",
                 ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
                 ["Storage:LocalRootPath"] = _storageRoot,
-                ["PasswordPolicy:BreachCheckEnabled"] = "false"
+                ["PasswordPolicy:BreachCheckEnabled"] = "false",
+                // WAI-03: HTTP tests read a finished failure as "failed", not an automatic re-queue.
+                ["Writing:GradeChain:MaxAutoRetries"] = "0",
             });
         });
     }
@@ -1102,8 +1106,6 @@ public sealed class TestWritingSubscriptionSelector : OetLearner.Api.Services.Wr
 
     public Task<OetLearner.Api.Services.Writing.WritingSubscriptionDecision> DecideAsync(CancellationToken ct)
         => Task.FromResult(new OetLearner.Api.Services.Writing.WritingSubscriptionDecision(ProviderCode, "", "test", null, IsFallback: false));
-
-    public Task RecordClaudeQuotaSignalAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplicationFactory

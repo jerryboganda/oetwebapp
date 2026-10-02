@@ -19,10 +19,11 @@ namespace OetLearner.Api.Services.Seeding;
 // feature-route key-guard (`IsProviderUsableAsync`) treats the rows as usable
 // and the admin connectivity probe can run.
 //
-// Strictly additive — existing rows are never overwritten so admins can retune
-// via /admin/ai-providers. Routing stays OFF (IsActive=false) until the sidecars
-// are deployed + the admin enables them, so this seed is safe to merge before
-// the containers exist.
+// Additive, plus two self-heals on every boot (see SeedAsync): the Claude Max
+// row is kept active (owner rule MAX-ALWAYS-ON, 2 Oct 2026) and a Codex row still
+// on the old gpt-6-sol default moves to GPT-6.1 Sol. Anything else an admin tuned
+// via /admin/ai-providers is left alone. The Codex row is inserted inactive until
+// the admin enables it.
 
 /// <summary>Canonical Writing subscription provider registration values.</summary>
 public static class WritingSubscriptionProviderDefaults
@@ -35,7 +36,9 @@ public static class WritingSubscriptionProviderDefaults
     public const string CodexCode = "writing-codex-sub";
     public const string CodexName = "Writing Codex (subscription fallback)";
     public const string CodexBaseUrl = "http://oet-writing-codex:8080";
-    public const string CodexModel = "gpt-6-sol";
+    // Owner decision 2 Oct 2026: GPT-6.1 Sol High replaces gpt-6-sol.
+    public const string CodexModel = "gpt-6.1-sol";
+    public const string LegacyCodexModel = "gpt-6-sol";
 
     /// <summary>Hosts that must appear in OET_INTERNAL_AI_HOSTS for these rows'
     /// plain-HTTP internal base URLs to pass the SSRF guard.</summary>
@@ -80,7 +83,7 @@ public static class WritingSubscriptionProviderSeeder
                 CircuitBreakerThreshold = 5,
                 CircuitBreakerWindowSeconds = 60,
                 FailoverPriority = 1,
-                IsActive = false, // admin enables after sidecars deploy
+                IsActive = true, // MAX-ALWAYS-ON: the Max row is never off
             });
             inserted++;
         }
@@ -110,7 +113,29 @@ public static class WritingSubscriptionProviderSeeder
             inserted++;
         }
 
-        if (inserted > 0)
+        // Self-heal on every boot. Owner rule MAX-ALWAYS-ON: the Claude Max row is never
+        // left deactivated. And Level 3 moves to GPT-6.1 Sol: a Codex row still on the old
+        // default is retargeted; a model an admin chose deliberately is left alone.
+        var changed = false;
+        var max = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == WritingSubscriptionProviderDefaults.ClaudeCode, ct);
+        if (max is { IsActive: false })
+        {
+            max.IsActive = true;
+            changed = true;
+        }
+
+        var codex = await db.AiProviders.FirstOrDefaultAsync(
+            p => p.Code == WritingSubscriptionProviderDefaults.CodexCode
+                && p.DefaultModel == WritingSubscriptionProviderDefaults.LegacyCodexModel, ct);
+        if (codex is not null)
+        {
+            codex.DefaultModel = WritingSubscriptionProviderDefaults.CodexModel;
+            if (codex.AllowedModelsCsv == WritingSubscriptionProviderDefaults.LegacyCodexModel)
+                codex.AllowedModelsCsv = WritingSubscriptionProviderDefaults.CodexModel;
+            changed = true;
+        }
+
+        if (inserted > 0 || changed)
             await db.SaveChangesAsync(ct);
         return inserted;
     }

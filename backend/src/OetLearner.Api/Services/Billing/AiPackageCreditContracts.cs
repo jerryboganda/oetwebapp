@@ -98,6 +98,16 @@ public interface IAiPackageCreditService
     /// grading credits are available (used to gate multi-credit exams at start).
     /// </summary>
     Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, int quantity, CancellationToken ct);
+
+    /// <summary>
+    /// The grading debit already booked under <paramref name="referenceId"/>, or null.
+    /// Lets a Writing grade adopt the debit the start gate took when the task opened
+    /// instead of charging the letter twice (WAI-01). Default = none, so ledger fakes
+    /// keep their behaviour; the real service overrides it.
+    /// </summary>
+    Task<AiPackageCreditTransaction?> FindGradingDebitAsync(string userId, string referenceId, CancellationToken ct)
+        => Task.FromResult<AiPackageCreditTransaction?>(null);
+
     Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct);
     Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct);
     Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct);

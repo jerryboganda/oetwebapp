@@ -110,8 +110,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
     WritingCalibrationReleaseService? calibrationReleaseService = null,
     IAiCreditReservationService? creditReservations = null,
-    IJevWritingPilot? writingPilot = null) : IWritingSubmissionEvaluationPipeline
+    IJevWritingPilot? writingPilot = null,
+    Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null,
+    WritingQaFault? qaFault = null) : IWritingSubmissionEvaluationPipeline
 {
+    private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
+
     // NOTE: there is deliberately NO WritingModelAnswerService dependency on
     // this pipeline. The Model Answer is generated once per task in the admin
     // preparation path (WritingTaskModelAnswerService) and only REUSED at
@@ -332,13 +336,39 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         try
         {
+            // A new run gets new AI-operation slots (WritingGradeChain.ResourceVersion),
+            // so nothing a previous run left behind can be replayed into this one.
+            await BumpGradeEpochAsync(submission, ct);
             return await EvaluateClaimedAsync(submission, ct);
         }
         catch (Exception ex)
         {
-            await MarkFailedIfGradeMissingAsync(submission, ex, ct);
+            await RecordFailureAsync(submission, ex, ct);
             throw;
         }
+    }
+
+    private async Task BumpGradeEpochAsync(WritingSubmission submission, CancellationToken ct)
+    {
+        if (db.Database.IsInMemory())
+        {
+            // InMemory cannot translate ExecuteUpdate (same split as the claim).
+            submission.GradeEpoch++;
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        await db.WritingSubmissions
+            .Where(s => s.Id == submission.Id)
+            .ExecuteUpdateAsync(set => set.SetProperty(s => s.GradeEpoch, s => s.GradeEpoch + 1), ct);
+        var epoch = await db.WritingSubmissions.AsNoTracking()
+            .Where(s => s.Id == submission.Id)
+            .Select(s => s.GradeEpoch)
+            .FirstAsync(ct);
+        // Already persisted: sync the tracked instance without marking it modified.
+        var property = db.Entry(submission).Property(s => s.GradeEpoch);
+        property.CurrentValue = epoch;
+        property.OriginalValue = epoch;
     }
 
     /// <summary>
@@ -465,6 +495,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
 
         ClampCanonViolationFields(canon.Violations);
+        await DeleteStaleReportAsync(submission.Id, ct);
 
         // Candidate-facing grade letter MUST come from the canonical 0-500
         // scaled score, never a linear conversion of the raw /38 total (the
@@ -624,16 +655,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
     }
 
     /// <summary>
-    /// Stuck-proofing guard: any failure after a successful claim that leaves
-    /// no persisted grade transitions the row to <c>failed</c> and releases
-    /// any uncommitted credit reservation (best effort, never throwing) so
-    /// the attempt stays recoverable via retry-grade — and no credit is left
-    /// held forever — instead of wedging in <c>grading</c>. Rows that already
-    /// carry a grade, or already reached a terminal state, are left untouched.
-    /// Uses a set-based update (never the tracked instance) so a poisoned
-    /// entity that caused the failure cannot break the marking itself.
-    /// </summary>
-    /// <summary>
     /// Idempotently stages a pending tutor-review assignment for a submission
     /// the jev guard blocked or jev verify flagged (Phase-1 pilot). Stages
     /// only — the caller's surrounding SaveChanges persists it, mirroring
@@ -657,73 +678,121 @@ public sealed class WritingSubmissionEvaluationPipeline(
         });
     }
 
-    private async Task MarkFailedIfGradeMissingAsync(WritingSubmission submission, Exception ex, CancellationToken ct)
+    /// <summary>
+    /// The run state machine's failure edge (WAI-03). A run that ends without a
+    /// persisted grade never wedges in <c>grading</c>:
+    /// <list type="bullet">
+    ///   <item>worker shutdown (the caller's own cancellation) → <c>queued</c>, due now, count unchanged;</item>
+    ///   <item>retryable and automatic re-queues left → <c>queued</c> with a back-off (2/5/15/30 min);</item>
+    ///   <item>otherwise → <c>failed</c>, with <see cref="WritingSubmission.FailureRetryable"/> deciding Retry.</item>
+    /// </list>
+    /// The credit hold always stays on the letter (WAI-01). The write is set-based and
+    /// fenced on this run's claim owner, so a grader whose claim was reclaimed cannot
+    /// overwrite the new owner's state, and a graded row is never touched. Best effort:
+    /// never throws over the original error.
+    /// </summary>
+    private async Task RecordFailureAsync(WritingSubmission submission, Exception ex, CancellationToken ct)
     {
-        _ = ct;
         try
         {
-            var graded = await db.WritingGrades.AsNoTracking()
-                .AnyAsync(g => g.SubmissionId == submission.Id, CancellationToken.None);
-            if (graded) return;
-            logger.LogWarning(
-                ex,
-                "Writing grading failed for submission {SubmissionId} without a persisted grade; marking failed so it stays retryable.",
-                submission.Id);
-            if (!db.Database.IsInMemory())
+            if (await db.WritingGrades.AsNoTracking().AnyAsync(g => g.SubmissionId == submission.Id, CancellationToken.None))
             {
-                await db.WritingSubmissions
-                    .Where(s => s.Id == submission.Id)
-                    .ExecuteUpdateAsync(
-                        set => set.SetProperty(s => s.Status, WritingSubmissionStatuses.Failed),
-                        CancellationToken.None);
+                return;
+            }
+
+            var now = clock.GetUtcNow();
+            var owner = submission.ClaimOwner;
+            var autoRetries = submission.AutoRetryCount;
+            var code = submission.FailureCode;
+            var retryable = submission.FailureRetryable;
+            var lastFailureAt = submission.LastFailureAt;
+            string status;
+            DateTimeOffset? nextAt;
+            if (ex is OperationCanceledException && ct.IsCancellationRequested)
+            {
+                status = WritingSubmissionStatuses.Queued;
+                nextAt = now;
             }
             else
             {
-                var row = await db.WritingSubmissions
-                    .FirstOrDefaultAsync(s => s.Id == submission.Id, CancellationToken.None);
-                if (row is null || row.Status == WritingSubmissionStatuses.Failed) return;
-                row.Status = WritingSubmissionStatuses.Failed;
-                await db.SaveChangesAsync(CancellationToken.None);
+                var failure = WritingGradeRecovery.Classify(ex);
+                code = failure.Code;
+                retryable = failure.Retryable;
+                lastFailureAt = now;
+                // A QA-faulted learner is never re-queued: the harness proves the real
+                // failed row and its Retry (WAI-05).
+                if (failure.AutoRetry
+                    && autoRetries < _chainOptions.MaxAutoRetries
+                    && (qaFault is null || await qaFault.ReadAsync(submission.UserId, CancellationToken.None) is null))
+                {
+                    var backoff = _chainOptions.BackoffMinutes is { Length: > 0 } steps
+                        ? steps[Math.Min(autoRetries, steps.Length - 1)]
+                        : 2;
+                    status = WritingSubmissionStatuses.Queued;
+                    nextAt = now.AddMinutes(Math.Max(1, backoff));
+                    autoRetries++;
+                }
+                else
+                {
+                    status = WritingSubmissionStatuses.Failed;
+                    nextAt = null;
+                }
             }
 
-            // ExecuteUpdate bypasses change tracking: sync the in-hand
-            // instance too so same-scope readers never see a stale status.
-            submission.Status = WritingSubmissionStatuses.Failed;
+            logger.LogWarning(
+                ex,
+                "Writing grading run {Epoch} failed for submission {SubmissionId} ({FailureCode}); now {Status}.",
+                submission.GradeEpoch, submission.Id, code, status);
 
-            await ReleaseReservationForSubmissionAsync(submission, CancellationToken.None);
+            if (!db.Database.IsInMemory())
+            {
+                var written = await db.WritingSubmissions
+                    .Where(s => s.Id == submission.Id
+                        && s.ClaimOwner == owner
+                        && s.Status != WritingSubmissionStatuses.Graded)
+                    .ExecuteUpdateAsync(set => set
+                        .SetProperty(s => s.Status, status)
+                        .SetProperty(s => s.AutoRetryCount, autoRetries)
+                        .SetProperty(s => s.NextAutoRetryAt, nextAt)
+                        .SetProperty(s => s.LastFailureAt, lastFailureAt)
+                        .SetProperty(s => s.FailureCode, code)
+                        .SetProperty(s => s.FailureRetryable, retryable)
+                        .SetProperty(s => s.ClaimOwner, (string?)null)
+                        .SetProperty(s => s.ClaimedAt, (DateTimeOffset?)null),
+                        CancellationToken.None);
+                if (written == 0) return;
+                // Never let a later SaveChanges in this scope flush the stale tracked copy.
+                db.Entry(submission).State = EntityState.Detached;
+            }
+            else
+            {
+                // InMemory cannot translate ExecuteUpdate; one process, so no fence race.
+                var row = await db.WritingSubmissions.FirstOrDefaultAsync(s => s.Id == submission.Id, CancellationToken.None);
+                if (row is null || row.ClaimOwner != owner || row.Status == WritingSubmissionStatuses.Graded) return;
+                ApplyFailure(row);
+                await db.SaveChangesAsync(CancellationToken.None);
+                db.Entry(row).State = EntityState.Detached;
+            }
+
+            ApplyFailure(submission);
+
+            void ApplyFailure(WritingSubmission target)
+            {
+                target.Status = status;
+                target.AutoRetryCount = autoRetries;
+                target.NextAutoRetryAt = nextAt;
+                target.LastFailureAt = lastFailureAt;
+                target.FailureCode = code;
+                target.FailureRetryable = retryable;
+                target.ClaimOwner = null;
+                target.ClaimedAt = null;
+            }
         }
         catch (Exception markEx)
         {
             logger.LogWarning(
                 markEx,
-                "Failed to mark submission {SubmissionId} as failed after grading error.",
-                submission.Id);
-        }
-    }
-
-    /// <summary>
-    /// Best-effort release of this attempt's credit reservation when grading
-    /// never reached commit (rubric-phase failures release inside
-    /// <see cref="GradeWithReservationAsync"/>; this covers everything after:
-    /// canon, report build, persistence, side effects). Idempotent: already
-    /// committed or released reservations are no-ops.
-    /// </summary>
-    private async Task ReleaseReservationForSubmissionAsync(WritingSubmission submission, CancellationToken ct)
-    {
-        if (creditReservations is null) return;
-        try
-        {
-            var businessReference = $"writing-grade:{submission.Id:N}";
-            var existing = await db.AiCreditReservations.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
-            if (existing is null) return;
-            await creditReservations.ReleaseAsync(existing.Id, ct);
-        }
-        catch (Exception releaseEx)
-        {
-            logger.LogWarning(
-                releaseEx,
-                "Failed to release writing credit reservation for submission {SubmissionId}.",
+                "Failed to record the grading failure of submission {SubmissionId}.",
                 submission.Id);
         }
     }
@@ -777,13 +846,22 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// Answer is re-resolved from the task's live verified answer, never
     /// copied from the source snapshot.
     /// </summary>
+    /// <summary>
+    /// A9: <c>WritingAssessmentReportsV11</c> is unique on SubmissionId, and a run that
+    /// was preflight-blocked earlier left a placeholder report. A report without a grade
+    /// is only ever such a placeholder, so it is deleted (in its own SaveChanges, before
+    /// anything of this run is staged) and the real report can be inserted.
+    /// </summary>
+    private async Task DeleteStaleReportAsync(Guid submissionId, CancellationToken ct)
+    {
+        var stale = await db.WritingAssessmentReportsV11.FirstOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
+        if (stale is null) return;
+        db.WritingAssessmentReportsV11.Remove(stale);
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task CloneAssessmentReportAsync(Guid sourceSubmissionId, WritingSubmission submission, CancellationToken ct)
     {
-        // ponytail: a retried submission that already holds a (preflight-blocked)
-        // report keeps it — the unique SubmissionId index allows only one.
-        if (await db.WritingAssessmentReportsV11.AsNoTracking().AnyAsync(x => x.SubmissionId == submission.Id, ct))
-            return;
-
         // AsNoTracking yields detached copies: re-keying them and adding the
         // graph inserts a clone without touching the source rows.
         var report = await db.WritingAssessmentReportsV11.AsNoTracking()
@@ -1008,66 +1086,90 @@ public sealed class WritingSubmissionEvaluationPipeline(
         int? resourceVersion,
         CancellationToken ct)
     {
+        // A failure below never releases the hold (owner decision 2 Oct 2026):
+        // the credit stays on this letter and every retry reuses it for free.
         string? reservationId = null;
         var freeSample = false;
-        var businessReference = $"writing-grade:{submission.Id:N}";
         var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
-        try
+        if (creditReservations is not null
+            && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
         {
-            if (creditReservations is not null
-                && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
-            {
-                // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
-                // results on the learner's pinned scenario — the second is the
-                // "Revise & Resubmit" of the same letter, so revisions qualify
-                // too. The server decides: the scenario must be the claimed one
-                // and fewer than two results may exist. The use is bound to THIS
-                // submission id, so retry-grade re-enters idempotently and a
-                // failed grade never counts.
-                freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
-                    submission.UserId,
-                    FreeSamples.FreeSampleService.Writing,
-                    submission.ScenarioId.ToString("D"),
-                    FreeSampleUse.KindWritingSubmission,
-                    submission.Id.ToString("N"),
-                    ct);
-                var ticket = freeSample
-                    ? await creditReservations.ReserveFreeSampleAsync(
-                        submission.UserId, operationId, businessReference, ct)
-                    : await creditReservations.ReserveWritingAsync(
-                        submission.UserId, operationId, businessReference, ct);
-                reservationId = ticket.ReservationId;
-                submission.GradeOperationId = ticket.OperationId;
-            }
-
-            if (TryReadPersistedRubric(submission, out var persisted))
-            {
-                return (persisted, reservationId);
-            }
-
-            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct, freeSample);
-            submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
-                rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
-                rubric.EstimatedBand, rubric.EstimatedScaledScore,
-                rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
-                rubric.ConfidenceFlag, rubric.ModelUsed, rubric.AiFindings));
-            submission.GradeOperationId ??= operationId;
-            await db.SaveChangesAsync(ct);
-            return (rubric, reservationId);
+            // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
+            // results on the learner's pinned scenario — the second is the
+            // "Revise & Resubmit" of the same letter, so revisions qualify
+            // too. The server decides: the scenario must be the claimed one
+            // and fewer than two results may exist. The use is bound to THIS
+            // submission id, so retry-grade re-enters idempotently and a
+            // failed grade never counts.
+            freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                submission.UserId,
+                FreeSamples.FreeSampleService.Writing,
+                submission.ScenarioId.ToString("D"),
+                FreeSampleUse.KindWritingSubmission,
+                submission.Id.ToString("N"),
+                ct);
+            var businessReference = await ResolveCreditReferenceAsync(submission, freeSample, ct);
+            var ticket = freeSample
+                ? await creditReservations.ReserveFreeSampleAsync(
+                    submission.UserId, operationId, businessReference, ct)
+                : await creditReservations.ReserveWritingAsync(
+                    submission.UserId, operationId, businessReference, ct);
+            reservationId = ticket.ReservationId;
+            submission.GradeOperationId = ticket.OperationId;
         }
-        catch
+
+        if (TryReadPersistedRubric(submission, out var persisted))
         {
-            if (reservationId is not null && creditReservations is not null)
-            {
-                try { await creditReservations.ReleaseAsync(reservationId, CancellationToken.None); }
-                catch (Exception releaseEx)
-                {
-                    logger.LogWarning(releaseEx, "Failed to release writing credit reservation {ReservationId}", reservationId);
-                }
-            }
-
-            throw;
+            return (persisted, reservationId);
         }
+
+        // A credit-funded grade skips the plan feature list and token caps, as a
+        // free sample and a credit-funded Speaking grade already do: the learner
+        // paid with credits, so a default free/starter plan must not refuse it.
+        // The kill list, kill switch, platform budget and per-user disable still apply.
+        var rubric = await CallRubricAsync(
+            submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct,
+            freeSampleGrant: freeSample || reservationId is not null);
+        submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
+            rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
+            rubric.EstimatedBand, rubric.EstimatedScaledScore,
+            rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
+            rubric.ConfidenceFlag, rubric.ModelUsed, rubric.AiFindings));
+        submission.GradeOperationId ??= operationId;
+        await db.SaveChangesAsync(ct);
+        return (rubric, reservationId);
+    }
+
+    /// <summary>
+    /// The ledger reference this letter is paid under (WAI-01), fixed at its first
+    /// run so every automatic and manual retry reuses the same hold. A free sample
+    /// or a revision pays on its own reference; any other letter adopts the start
+    /// gate's reference — unless another letter already holds it (a new letter
+    /// written after the first one failed), which then pays on its own. Saved at
+    /// once so a later failure cannot lose it.
+    /// </summary>
+    private async Task<string> ResolveCreditReferenceAsync(WritingSubmission submission, bool freeSample, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(submission.CreditReference)) return submission.CreditReference;
+
+        var reference = WritingCreditReferences.Grade(submission.Id);
+        if (!freeSample && !submission.IsRevision)
+        {
+            var start = WritingCreditReferences.Start(
+                submission.UserId,
+                submission.ScenarioId,
+                await WritingCreditReferences.GradedCountAsync(db, submission.UserId, submission.ScenarioId, ct));
+            var held = await db.WritingSubmissions.AsNoTracking()
+                .AnyAsync(s => s.UserId == submission.UserId
+                    && s.ScenarioId == submission.ScenarioId
+                    && s.Id != submission.Id
+                    && s.CreditReference == start, ct);
+            if (!held) reference = start;
+        }
+
+        submission.CreditReference = reference;
+        await db.SaveChangesAsync(ct);
+        return reference;
     }
 
     private static bool TryReadPersistedRubric(WritingSubmission submission, out RubricResult rubric)
@@ -1153,6 +1255,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             .Select(x => x.g)
             .FirstOrDefaultAsync(ct);
         if (existing is null) return null;
+        await DeleteStaleReportAsync(submission.Id, ct);
         var materializedGrade = new WritingGrade
         {
             Id = Guid.NewGuid(),
@@ -1236,6 +1339,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         logger.LogInformation(
             "Writing blank submission {SubmissionId} scenario {ScenarioId}: deterministic zero grade, no provider call.",
             submission.Id, submission.ScenarioId);
+        await DeleteStaleReportAsync(submission.Id, ct);
 
         var now = clock.GetUtcNow();
         var grade = new WritingGrade
@@ -1354,57 +1458,50 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.ServiceUnavailable("writing_rubric_unavailable", "Writing grading prompt is misconfigured.", retryable: true);
         }
 
-        AiGatewayResult result;
-        // Owner directive 2026-09-29 (revised) — Writing grading failover chain:
-        //   L1 Claude subscription (dedicated Max 5x)
-        //     → retry the SAME provider once on any transient failure
-        //   L2 Claude API (pay-as-you-go Anthropic key)
-        //   L3 Codex subscription (gpt-6-sol)
-        // Every hop stays inside ONE coordinated AiOperation, so the learner's
-        // credit is debited exactly once and no duplicate grade is persisted.
-        // Both paths sit inside the one try so the refusal mapping below (402 /
-        // 409 / 503) covers the failover chain too, not just the single call.
+        var template = BuildRubricRequest(submission, scenario, caseNotesSnapshot, creditReservationId, prompt, freeSampleGrant);
+        // A row is only ever written to the failure state by RecordFailureAsync,
+        // after the whole run: no intermediate "failed" that a Retry could race.
         try
         {
             if (subscriptionSelector is not null)
             {
-                result = await GradeWithFailoverAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, freeSampleGrant, ct);
+                // Owner rule MAX-ALWAYS-ON: the run starts on Max; the chain fails over
+                // to the API and then Codex only inside this run.
+                var decision = await subscriptionSelector.DecideAsync(ct);
+                // WAI-05 QA-only fault switch: off unless an admin flagged this learner.
+                var fault = qaFault is null ? null : await qaFault.ReadAsync(submission.UserId, ct);
+                return await WritingGradeChain.RunAsync(
+                    aiGateway,
+                    template,
+                    decision,
+                    submission.GradeEpoch,
+                    result => ParseRubric(result) ?? throw Unreadable(submission, result),
+                    _chainOptions,
+                    clock,
+                    logger,
+                    injectFault: fault is { } active ? hop => active.ShouldFailHop(hop, submission.GradeEpoch) : null,
+                    ct);
             }
-            else
-            {
-                // Tests construct the pipeline without the selector — keep the
-                // historical single-call behaviour (feature-route default, no pin).
-                var decision = new WritingSubscriptionDecision("", "", "default_route", null, IsFallback: false);
-                result = await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
-            }
+
+            // Tests construct the pipeline without the selector: one call on the
+            // feature-route default, at the caller's resource version.
+            var single = await aiGateway.CompleteAsync(template with { ResourceVersion = resourceVersion }, ct);
+            return ParseRubric(single) ?? throw Unreadable(submission, single);
         }
         catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
         {
-            // No-charge-on-failure: the gateway throws before debiting, so no
-            // credit was consumed. Surface a clean, modal-ready signal instead
-            // of masking it as a generic service error (spec §9 — balance = 0).
+            // Refused before any provider call: no credit was consumed.
             logger.LogInformation(
-                "Writing grading blocked — AI grading credits exhausted for submission {SubmissionId} ({Code}).",
+                "Writing grading blocked — AI quota refused submission {SubmissionId} ({Code}).",
                 submission.Id, quotaEx.ErrorCode);
-            submission.Status = "failed";
-            await db.SaveChangesAsync(ct);
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
         catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
         {
-            // W3 — this exact grading action is already in flight or already
-            // completed elsewhere (a genuinely concurrent double-click/page-
-            // refresh race the app-level LetterContentHash reuse check above
-            // did not catch because both requests reached it before either
-            // committed). The control plane already guaranteed the SECOND
-            // call never reached Claude — no duplicate charge — so this is
-            // NOT a service failure: a short client-side retry will find the
-            // grade the winning request just persisted, either through this
-            // pipeline's own hash-reuse path above or via the normal "grade
-            // ready" read path. Distinct error code so the client can retry
-            // silently instead of showing a generic failure toast.
+            // Selector-less path only (the chain fails a duplicate over): the
+            // control plane guaranteed no second provider call.
             logger.LogInformation(
                 "Writing rubric call for submission {SubmissionId} resolved to an existing AI operation {OperationId} in state {State}; no second call was made.",
                 submission.Id, dupEx.OperationId, dupEx.State);
@@ -1414,187 +1511,64 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
         catch (OetLearner.Api.Services.Ai.AiBudgetExhaustedException budgetEx)
         {
-            // W3 — refused before any provider call; zero cost incurred.
-            // Distinct, honest error code rather than a generic failure — an
-            // admin must raise the platform budget, retrying won't help.
+            // Refused before any provider call; zero cost incurred.
             logger.LogWarning(
                 "Writing rubric call blocked for submission {SubmissionId}: platform AI budget exhausted ({Reason}).",
                 submission.Id, budgetEx.Reason);
-            submission.Status = "failed";
-            await db.SaveChangesAsync(ct);
             throw ApiException.ServiceUnavailable(
                 "ai_platform_budget_exhausted",
                 "AI grading is temporarily unavailable — the platform's AI budget has been reached. Please try again later.",
                 retryable: true);
         }
+        catch (Exception ex) when (ex is AiFeaturePolicyRefusedException or PromptNotGroundedException)
+        {
+            // A platform gate is closed; the server re-queues the letter by itself.
+            logger.LogWarning(ex, "Writing grading paused by a platform gate for submission {SubmissionId}", submission.Id);
+            throw ApiException.ServiceUnavailable(
+                "writing_grading_paused",
+                "Writing grading is paused for a moment. Your letter is saved and will be graded automatically.",
+                retryable: true);
+        }
         catch (OetLearner.Api.Services.Ai.AiOperationConflictException)
         {
-            // Stale operation id bound to an earlier request shape: bubble to
-            // GradeWithReservationAsync, which mints a fresh operation id and
-            // retries once. Must not be masked as a generic rubric failure.
+            // Selector-less path: GradeWithReservationAsync steps to a fresh
+            // resource version. The chain never lets a conflict escape.
             throw;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // worker shutdown: RecordFailureAsync re-queues the letter at once
+        }
+        catch (Exception ex) when (ex is not ApiException)
         {
             logger.LogWarning(ex, "Writing rubric AI call failed for submission {SubmissionId}", submission.Id);
             throw ApiException.ServiceUnavailable("writing_rubric_failed", "Writing grading service is temporarily unavailable. Please retry.", retryable: true);
         }
-
-        var rubric = ParseRubric(result);
-        if (rubric is null)
-        {
-            // The AI returned text we could not parse into a complete six-
-            // criterion scoring contract. Never fabricate a grade — fail loud
-            // and retryable so the learner can re-run rather than receive a
-            // fake "all 3s" score.
-            logger.LogWarning(
-                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId} ({Completion} outTokens={OutputTokens}); refusing to fabricate a grade.",
-                submission.Id, DescribeCompletion(result.Completion), result.Usage?.CompletionTokens);
-            submission.Status = "failed";
-            await db.SaveChangesAsync(ct);
-            throw ApiException.ServiceUnavailable(
-                "writing_rubric_failed",
-                "Writing grading returned an unreadable response. Please retry.",
-                retryable: true);
-        }
-
-        return rubric;
     }
 
-    /// <summary>
-    /// Owner directive 2026-09-29 (revised) — the Writing grading failover chain.
-    /// Walks the levels in order, retrying the primary subscription once before
-    /// escalating. Every attempt runs inside the SAME coordinated AiOperation, so
-    /// the learner is debited exactly once and only one grade row is persisted.
-    ///
-    ///   L1 Claude subscription (decision from the selector — auto/claude/codex)
-    ///     → on transient failure, retry the SAME provider once
-    ///   L2 Claude API (only when L1 was the Claude subscription; skipped when the
-    ///     subscription key isn't configured, and skipped for forced-codex)
-    ///   L3 Codex subscription (last resort)
-    ///
-    /// A genuine policy/quota/budget refusal (AiQuotaDenied, AiBudgetExhausted,
-    /// duplicate-in-flight) is NEVER treated as a failover trigger — those bubble
-    /// up unchanged so the caller's existing catch blocks keep their semantics.
-    /// </summary>
-    /// <summary>Steps the resource version when failover moves to a DIFFERENT provider.
-    /// The control-plane resource slot is keyed on (…, resourceVersion, promptVersion,
-    /// rulebookVersion) and rejects a second operation that reuses one slot with a
-    /// divergent payload. A different provider produces a different request hash, so
-    /// reusing the L1 version on L2/L3 makes the control plane throw
-    /// AiOperationConflictException (a non-failoverable 409 the candidate sees). Each
-    /// provider hop therefore gets its own slot; the credit reservation is keyed on the
-    /// business reference, so this is still ONE logical grading and ONE debit.</summary>
-    private static int? NextFailoverResourceVersion(int? resourceVersion)
-        => (resourceVersion ?? 1) + 1000;
-
-    private async Task<AiGatewayResult> GradeWithFailoverAsync(
-        WritingSubmission submission,
-        WritingScenario? scenario,
-        string caseNotesSnapshot,
-        string? creditReservationId,
-        int? resourceVersion,
-        AiGroundedPrompt prompt,
-        bool freeSampleGrant,
-        CancellationToken ct)
+    private WritingRubricUnreadableException Unreadable(WritingSubmission submission, AiGatewayResult result)
     {
-        var decision = await subscriptionSelector!.DecideAsync(ct);
-        var startedOnSubscription = decision.ProviderCode == WritingSubscriptionProviders.Claude;
-        Exception? lastError = null;
-
-        // ── Level 1: chosen provider (subscription in auto), with one retry ──
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            try
-            {
-                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, resourceVersion, prompt, decision, ct, freeSampleGrant);
-            }
-            catch (Exception ex) when (IsFailoverable(ex))
-            {
-                lastError = ex;
-                logger.LogWarning(ex,
-                    "Writing rubric primary attempt {Attempt} failed for submission {SubmissionId} via {Provider}.",
-                    attempt + 1, submission.Id, decision.ProviderCode);
-            }
-        }
-        // L1 exhausted (both attempts failed). If it was the Claude subscription,
-        // record the quota signal so auto mode holds the subscription off for the
-        // rest of the weekly window.
-        if (startedOnSubscription)
-            await subscriptionSelector.RecordClaudeQuotaSignalAsync(ct);
-
-        // ── Level 2: Claude API (pay-as-you-go) — only relevant when we started on the subscription ──
-        // Step the resource version: a different provider is a divergent payload on the
-        // slot, which the control plane rejects as a conflict. One logical grading, new slot.
-        if (startedOnSubscription && decision.ProviderCode != WritingSubscriptionProviders.ClaudeApi)
-        {
-            var apiResourceVersion = NextFailoverResourceVersion(resourceVersion);
-            try
-            {
-                var apiDecision = new WritingSubscriptionDecision(
-                    WritingSubscriptionProviders.ClaudeApi,
-                    WritingSubscriptionProviders.ClaudeModel,
-                    "failover_claude_api",
-                    decision.UtilizationPct,
-                    IsFallback: true);
-                return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, apiResourceVersion, prompt, apiDecision, ct, freeSampleGrant);
-            }
-            catch (Exception ex) when (IsFailoverable(ex))
-            {
-                lastError = ex;
-                logger.LogWarning(ex,
-                    "Writing rubric Claude API fallback failed for submission {SubmissionId}; escalating to Codex.",
-                    submission.Id);
-            }
-        }
-
-        // ── Level 3: Codex subscription (last resort) — fresh slot again ──
-        if (decision.ProviderCode != WritingSubscriptionProviders.Codex)
-        {
-            var codexResourceVersion = NextFailoverResourceVersion(NextFailoverResourceVersion(resourceVersion));
-            var codexDecision = new WritingSubscriptionDecision(
-                WritingSubscriptionProviders.Codex,
-                WritingSubscriptionProviders.CodexModel,
-                startedOnSubscription ? "failover_codex_after_api" : "failover_codex",
-                decision.UtilizationPct,
-                IsFallback: true);
-            return await CallRubricProviderAsync(submission, scenario, caseNotesSnapshot, creditReservationId, codexResourceVersion, prompt, codexDecision, ct, freeSampleGrant);
-        }
-
-        // We started on Codex (forced) and it already failed twice.
-        throw lastError ?? new InvalidOperationException("Writing grading failed on all providers.");
+        // Never fabricate a grade from an incomplete contract; the attempt fails
+        // over (chain) or the run fails retryably.
+        logger.LogWarning(
+            "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId} ({Completion} outTokens={OutputTokens}); refusing to fabricate a grade.",
+            submission.Id, DescribeCompletion(result.Completion), result.Usage?.CompletionTokens);
+        return new WritingRubricUnreadableException("Writing grading returned an unreadable response.");
     }
 
-    /// <summary>True when a provider failure justifies moving to the next failover
-    /// level — transient/network/rate-limit/5xx/timeout. Policy, quota, budget and
-    /// duplicate-in-flight refusals are NOT failoverable: they bubble up so the
-    /// existing catch blocks preserve their distinct, honest error codes.</summary>
-    private static bool IsFailoverable(Exception ex)
-        => ex is not (
-            OetLearner.Api.Services.AiManagement.AiQuotaDeniedException
-            or OetLearner.Api.Services.Ai.AiBudgetExhaustedException
-            or OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException
-            or OetLearner.Api.Services.Ai.AiOperationConflictException);
-
-    /// <summary>Executes one rubric call against the chosen subscription provider,
-    /// pinning Provider+Model so the feature route cannot re-route mid-failover.
-    /// Extracted so the failover retry reuses the exact same request shape.</summary>
-    private Task<AiGatewayResult> CallRubricProviderAsync(
+    /// <summary>The one rubric request shape every route receives; the chain changes only
+    /// Provider, Model and ResourceVersion per attempt.</summary>
+    private static AiGatewayRequest BuildRubricRequest(
         WritingSubmission submission,
         WritingScenario? scenario,
         string caseNotesSnapshot,
         string? creditReservationId,
-        int? resourceVersion,
         AiGroundedPrompt prompt,
-        WritingSubscriptionDecision decision,
-        CancellationToken ct,
-        bool freeSampleGrant = false)
-        => aiGateway.CompleteAsync(new AiGatewayRequest
+        bool freeSampleGrant)
+        => new()
         {
             Prompt = prompt,
             UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
-            Provider = decision.ProviderCode,
-            Model = decision.Model,
             Temperature = 0.2,
             // The grounded reply contract (findings + six criteria +
             // scores + advisory) dwarfs the provider default (1024
@@ -1603,10 +1577,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // (observed live: outTokens=6000, braces 13/11). Size generously
             // so output exhaustion can never fail a valid grading.
             MaxTokens = 16000,
-            // Retries after a resource-slot conflict step this version so
-            // the control plane treats the resume as a new slot rather
-            // than a divergent payload on an occupied one.
-            ResourceVersion = resourceVersion,
             FeatureCode = AiFeatureCodes.WritingGrade,
             PromptTemplateId = "writing.score.v1",
             UserId = submission.UserId,
@@ -1614,43 +1584,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 ? AiAssessmentContext.Mock
                 : AiAssessmentContext.Practice,
             CreditReservationId = creditReservationId,
-            // Server-derived (claim bound to this submission) — lets the
-            // gateway skip the plan feature list / token caps for the
-            // learner's one free sample only.
+            // Server-derived only (a verified free-sample claim or a credit hold).
             FreeSampleGrant = freeSampleGrant,
             ResourceId = submission.Id.ToString("N"),
             ResourceType = "writing_submission",
-        }, ct);
-
-    /// <summary>True when an exception from the primary subscription provider means
-    /// "the subscription is exhausted / the sidecar is unreachable" — the only
-    /// failures that justify a failover to the fallback. Quota text is normalised
-    /// to a 429 quota_exceeded by the sidecar; a sidecar outage surfaces as an
-    /// HttpRequestException/socket error. Everything else (parse failure, policy
-    /// refusal, budget) must NOT fail over.
-    ///
-    /// ponytail: heuristic substring match on provider error text — the sidecar
-    /// already normalises to 429/quota_exceeded, so this is a belt-and-braces net
-    /// for provider-layer messages. If false positives ever route a non-quota
-    /// error to Codex, tighten to a typed provider exception carrying the 429.
-    /// </summary>
-    private static bool IsSubscriptionQuotaSignal(Exception ex)
-    {
-        for (var e = ex; e is not null; e = e.InnerException)
-        {
-            if (e is HttpRequestException or System.Net.Sockets.SocketException or TaskCanceledException or TimeoutException)
-                return true;
-            var msg = e.Message;
-            if (string.IsNullOrEmpty(msg)) continue;
-            if (msg.Contains("quota_exceeded", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("rate_limit", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("429", StringComparison.Ordinal)
-                || msg.Contains("usage limit", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("too many requests", StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
-    }
+        };
 
     private static string BuildRubricInput(
         WritingSubmission submission,
