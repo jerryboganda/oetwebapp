@@ -2,9 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AiGlobalPolicy } from '@/lib/ai-management-api';
 
-const { mockFetchPolicy, mockUpdatePolicy, mockFetchSummary, mockFetchUsage, mockFetchTrend, mockFetchProviders } = vi.hoisted(() => ({
+const { mockFetchPolicy, mockUpdatePolicy, mockToggleKill, mockFetchSummary, mockFetchUsage, mockFetchTrend, mockFetchProviders } = vi.hoisted(() => ({
   mockFetchPolicy: vi.fn(),
   mockUpdatePolicy: vi.fn(),
+  mockToggleKill: vi.fn(),
   mockFetchSummary: vi.fn(),
   mockFetchUsage: vi.fn(),
   mockFetchTrend: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('@/lib/ai-management-api', async () => {
     ...actual,
     fetchAiGlobalPolicy: mockFetchPolicy,
     updateAiGlobalPolicy: mockUpdatePolicy,
+    toggleAiKillSwitch: mockToggleKill,
     fetchAiUsageSummary: mockFetchSummary,
     fetchAiUsage: mockFetchUsage,
     fetchAiUsageTrend: mockFetchTrend,
@@ -66,6 +68,9 @@ describe('AiUsagePage — platform spend-cap switch', () => {
     vi.clearAllMocks();
     mockFetchPolicy.mockResolvedValue(policy);
     mockUpdatePolicy.mockImplementation(async (body: AiGlobalPolicy) => body);
+    mockToggleKill.mockImplementation(async (enabled: boolean, scope: AiGlobalPolicy['killSwitchScope']) => ({
+      ...policy, killSwitchEnabled: enabled, killSwitchScope: scope,
+    }));
     mockFetchSummary.mockResolvedValue({ periodMonthKey: '2026-10', groupBy: 'feature', rows: [] });
     mockFetchUsage.mockResolvedValue({ page: 1, pageSize: 25, total: 0, rows: [] });
     mockFetchTrend.mockResolvedValue({ fromMonth: '2026-10', toMonth: '2026-10', rows: [] });
@@ -92,5 +97,15 @@ describe('AiUsagePage — platform spend-cap switch', () => {
 
     await waitFor(() => expect(mockUpdatePolicy).toHaveBeenCalledTimes(1));
     expect(mockUpdatePolicy).toHaveBeenCalledWith(expect.objectContaining({ enforceSpendCaps: true }));
+  });
+
+  it('engages the kill-switch with the scope the admin picked', async () => {
+    const { user } = await openBudgetTab();
+
+    await user.selectOptions(screen.getByLabelText('Scope'), 'AllCalls');
+    await user.click(screen.getByRole('button', { name: /Engage kill-switch/ }));
+
+    await waitFor(() => expect(mockToggleKill).toHaveBeenCalledWith(true, 'AllCalls', undefined));
+    expect(await screen.findByText('ENGAGED')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
@@ -446,6 +447,7 @@ public static class AiUsageAdminEndpoints
         group.MapPut("/global-policy", async (
             AiGlobalPolicyUpsertDto dto,
             LearnerDbContext db,
+            IMemoryCache cache,
             HttpContext http,
             CancellationToken ct) =>
         {
@@ -477,12 +479,14 @@ public static class AiUsageAdminEndpoints
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiGlobalPolicyUpdated", "global",
                 $"kill_switch={(row.KillSwitchEnabled ? "on" : "off")} enforce_spend_caps={(row.EnforceSpendCaps ? "on" : "off")}", ct);
+            cache.Remove(AiQuotaService.GlobalPolicyCacheKey);
             return Results.Ok(row);
         }).RequireRateLimiting("PerUserWrite");
 
         group.MapPost("/kill-switch", async (
             AiKillSwitchDto dto,
             LearnerDbContext db,
+            IMemoryCache cache,
             HttpContext http,
             CancellationToken ct) =>
         {
@@ -500,6 +504,7 @@ public static class AiUsageAdminEndpoints
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiKillSwitchToggled", "global",
                 $"enabled={dto.Enabled} scope={dto.Scope}", ct);
+            cache.Remove(AiQuotaService.GlobalPolicyCacheKey);
             return Results.Ok(row);
         }).RequireRateLimiting("PerUserWrite");
 

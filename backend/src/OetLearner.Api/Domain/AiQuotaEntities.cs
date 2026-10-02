@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
@@ -15,6 +16,7 @@ namespace OetLearner.Api.Domain;
 /// Enumerates the options for §3 "Period & reset policy". Values map 1:1 to
 /// <c>docs/AI-USAGE-POLICY.md</c> §3.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AiQuotaPeriod
 {
     Monthly = 0,
@@ -25,6 +27,7 @@ public enum AiQuotaPeriod
 }
 
 /// <summary>§3 RolloverPolicy.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AiQuotaRolloverPolicy
 {
     Expire = 0,
@@ -33,6 +36,7 @@ public enum AiQuotaRolloverPolicy
 }
 
 /// <summary>§4 OveragePolicy.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AiOveragePolicy
 {
     Deny = 0,
@@ -42,6 +46,7 @@ public enum AiOveragePolicy
 }
 
 /// <summary>§7 global kill-switch scope.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AiKillSwitchScope
 {
     /// <summary>Kill only platform-funded calls. BYOK continues.</summary>

@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing;
 using OetLearner.Api.Tests.Infrastructure;
@@ -36,6 +37,9 @@ public sealed class AiUsageAdminEndpointsTests
         on.EnsureSuccessStatusCode();
         Assert.True((await on.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("enforceSpendCaps").GetBoolean());
         Assert.True(await StoredSwitchAsync(factory));
+        // The quota service's 15 s policy cache is dropped on save: the very next read sees it.
+        var reread = await client.GetFromJsonAsync<JsonElement>("/v1/admin/ai/global-policy");
+        Assert.True(reread.GetProperty("enforceSpendCaps").GetBoolean());
 
         // A client that predates the switch (field absent) must not flip it.
         var legacy = await client.PutAsJsonAsync("/v1/admin/ai/global-policy", PolicyBody(enforceSpendCaps: null));
@@ -45,6 +49,33 @@ public sealed class AiUsageAdminEndpointsTests
         var off = await client.PutAsJsonAsync("/v1/admin/ai/global-policy", PolicyBody(enforceSpendCaps: false));
         off.EnsureSuccessStatusCode();
         Assert.False(await StoredSwitchAsync(factory));
+    }
+
+    [Fact]
+    public async Task KillSwitch_TakesEffectAtOnce_AndScopeTravelsAsItsName()
+    {
+        using var env = DevAuthEnv.Enable();
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateAiConfigAdminClient(factory);
+
+        var before = await client.GetFromJsonAsync<JsonElement>("/v1/admin/ai/global-policy");
+        Assert.False(before.GetProperty("killSwitchEnabled").GetBoolean());
+        Assert.Equal("PlatformKeysOnly", before.GetProperty("killSwitchScope").GetString());
+
+        // The admin page sends the enum by name.
+        var engage = await client.PostAsJsonAsync("/v1/admin/ai/kill-switch",
+            new { enabled = true, scope = "AllCalls", reason = "drill" });
+        engage.EnsureSuccessStatusCode();
+
+        var after = await client.GetFromJsonAsync<JsonElement>("/v1/admin/ai/global-policy");
+        Assert.True(after.GetProperty("killSwitchEnabled").GetBoolean());
+        Assert.Equal("AllCalls", after.GetProperty("killSwitchScope").GetString());
+
+        using var services = factory.Services.CreateScope();
+        var decision = await services.ServiceProvider.GetRequiredService<IAiQuotaService>()
+            .TryReserveAsync(null, AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        Assert.False(decision.Allowed);
+        Assert.Equal("kill_switch", decision.ErrorCode);
     }
 
     [Fact]

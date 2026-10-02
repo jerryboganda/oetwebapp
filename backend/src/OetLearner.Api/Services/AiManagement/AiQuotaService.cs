@@ -476,7 +476,9 @@ public sealed class AiQuotaService(
             KillSwitchScope: global.KillSwitchScope);
     }
 
-    private const string GlobalPolicyCacheKey = "ai:global-policy";
+    /// <summary>Admin writes to the singleton remove this key so a kill-switch or
+    /// spend-cap change applies at once instead of after the 15 s TTL.</summary>
+    internal const string GlobalPolicyCacheKey = "ai:global-policy";
 
     public async Task<AiGlobalPolicy> GetGlobalPolicyAsync(CancellationToken ct)
     {
