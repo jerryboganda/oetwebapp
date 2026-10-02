@@ -246,8 +246,7 @@ public sealed class SubscriptionService : ISubscriptionService
     public async Task<IEnumerable<SubscriptionInvoiceDto>> ListInvoicesAsync(
         string userId, CancellationToken ct = default)
     {
-        var user = await _db.ApplicationUserAccounts
-            .Where(u => u.Id == userId)
+        var user = await _db.AccountsForUser(userId)
             .AsNoTracking()
             .FirstOrDefaultAsync(ct);
 
@@ -267,8 +266,7 @@ public sealed class SubscriptionService : ISubscriptionService
 
     public async Task<string> CreatePortalSessionAsync(string userId, string returnUrl, CancellationToken ct = default)
     {
-        var user = await _db.ApplicationUserAccounts
-            .Where(u => u.Id == userId)
+        var user = await _db.AccountsForUser(userId)
             .AsNoTracking()
             .FirstOrDefaultAsync(ct);
 

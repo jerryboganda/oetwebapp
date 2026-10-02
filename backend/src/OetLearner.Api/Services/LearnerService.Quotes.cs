@@ -34,8 +34,7 @@ public partial class LearnerService
     private async Task<(string? AssignmentId, decimal Multiplier)> TryApplyPricingExperimentAsync(
         string userId, string targetType, string targetId, CancellationToken ct)
     {
-        var userRegion = await db.ApplicationUserAccounts
-            .Where(u => u.Id == userId)
+        var userRegion = await db.AccountsForUser(userId)
             .Select(u => u.PreferredRegion)
             .FirstOrDefaultAsync(ct);
 

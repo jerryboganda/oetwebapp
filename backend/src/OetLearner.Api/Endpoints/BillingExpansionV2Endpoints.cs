@@ -188,8 +188,7 @@ public static class BillingExpansionV2Endpoints
     private static async Task<Ok<List<BankAccountConfig>>> GetMyBankAccounts(HttpContext http, LearnerDbContext db, CancellationToken ct)
     {
         var userId = http.UserId();
-        var region = await db.ApplicationUserAccounts
-            .Where(u => u.Id == userId)
+        var region = await db.AccountsForUser(userId)
             .Select(u => u.PreferredRegion)
             .FirstOrDefaultAsync(ct) ?? "ROW";
         var rows = await db.BankAccountConfigs

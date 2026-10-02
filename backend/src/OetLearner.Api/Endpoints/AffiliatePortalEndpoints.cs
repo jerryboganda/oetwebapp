@@ -46,8 +46,7 @@ public static class AffiliatePortalEndpoints
         // explicit AffiliateOwnerUserId column. A learner's token subject is the
         // learner id (learner_…), not the account id (auth_…), so the account is
         // reached through LearnerUser.AuthAccountId; a staff subject is the account id.
-        var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == userId
-            || db.Users.Any(u => u.Id == userId && u.AuthAccountId == a.Id), ct);
+        var account = await db.AccountsForUser(userId).FirstOrDefaultAsync(ct);
         if (account is null) return TypedResults.NotFound();
 
         var affiliate = await db.Affiliates.FirstOrDefaultAsync(a => a.ContactEmail.ToLower() == account.Email.ToLower(), ct);

@@ -76,7 +76,7 @@ public static class TutorBookEndpoints
         if (subscription is null) return TypedResults.Forbid();
 
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-        var account = await db.ApplicationUserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var account = await db.AccountsForUser(userId).AsNoTracking().FirstOrDefaultAsync(ct);
         var buyerName = learner?.DisplayName ?? account?.Email ?? "OET Learner";
         var buyerEmail = learner?.Email ?? account?.Email ?? "learner@oetwithdrhesham.co.uk";
 

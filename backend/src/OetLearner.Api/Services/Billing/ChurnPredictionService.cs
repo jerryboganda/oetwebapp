@@ -50,7 +50,7 @@ public sealed class ChurnPredictionService : IChurnPredictionService
         var now = DateTimeOffset.UtcNow;
         var snapshotDate = DateOnly.FromDateTime(now.UtcDateTime);
 
-        var account = await _db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == userId, ct)
+        var account = await _db.AccountsForUser(userId).FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException($"User not found: {userId}");
 
         var subscription = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId, ct);

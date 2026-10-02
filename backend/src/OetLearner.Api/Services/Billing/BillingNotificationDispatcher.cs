@@ -140,8 +140,8 @@ public sealed class EmailBillingChannel : IBillingNotificationChannel
 
     public async Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
-        var email = await _db.ApplicationUserAccounts
-            .Where(u => u.Id == userId && u.DeletedAt == null)
+        var email = await _db.AccountsForUser(userId)
+            .Where(u => u.DeletedAt == null)
             .Select(u => u.Email)
             .FirstOrDefaultAsync(ct);
         if (string.IsNullOrWhiteSpace(email))
