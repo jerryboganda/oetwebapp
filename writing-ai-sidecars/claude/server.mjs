@@ -5,6 +5,7 @@
 // Wire contract consumed by the .NET AnthropicProvider:
 //   POST /v1/messages  →  Anthropic Messages response shape
 //   GET  /usage        →  quota snapshot for the subscription selector
+//   GET  /readyz       →  login (`claude auth status`) + queue state, for display only
 //
 // The CLI runs with every built-in tool removed (--tools ""), session persistence off
 // (--no-session-persistence) and auto-memory off (CLAUDE_CODE_DISABLE_AUTO_MEMORY=1), so a graded
@@ -14,12 +15,28 @@
 // caches) is outside those switches. The Codex sidecar is different: see codex/server.mjs.
 
 import { createSidecarServer } from '../shared/http.mjs';
-import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
+import { AuthExpiredError, Mutex, cliError, errorText, loginProbe, parseJsonLines, runCli } from '../shared/engine.mjs';
 
 const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-opus-5-5';
 const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'high').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
+
+/** `claude auth status` (see agent-console/src/auth/claude.ts): JSON on stdout, exit 0 signed in /
+ * 1 signed out, e.g. {"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max",...}. Only an
+ * explicit boolean loggedIn decides; anything else is unknown (null), never false. */
+export function parseClaudeAuthStatus({ stdout }) {
+  try {
+    const status = JSON.parse(stdout.slice(stdout.indexOf('{'), stdout.lastIndexOf('}') + 1));
+    if (typeof status?.loggedIn === 'boolean') {
+      const plan = typeof status.subscriptionType === 'string' && status.subscriptionType ? status.subscriptionType : null;
+      return { authOk: status.loggedIn, plan };
+    }
+  } catch { /* unreadable: unknown */ }
+  return { authOk: null, plan: null };
+}
+
+const login = loginProbe('claude', ['auth', 'status'], parseClaudeAuthStatus);
 
 // Validated live 2026-09-29 against claude-code 2.1.283: `-p` (print) requires
 // the prompt on STDIN (a positional prompt is rejected), and the result event is
@@ -77,7 +94,7 @@ function buildPrompt(body) {
   return parts.filter(Boolean).join('\n\n');
 }
 
-async function complete(body) {
+async function complete(body, { signal } = {}) {
   return mutex.run(async () => {
     const model = typeof body.model === 'string' && body.model ? body.model : MODEL;
     const prompt = buildPrompt(body);
@@ -106,27 +123,29 @@ async function complete(body) {
       const result = await runCli('claude', args, {
         timeoutMs: TIMEOUT_MS,
         input: prompt,
+        // Aborted when the backend gives up on the request: the CLI is killed, not left running.
+        signal,
         // cwd is always /tmp, so an auto-memory dir would be ONE store shared by every learner
         // and by Writing and Speaking alike.
         env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' },
       });
-      const combined = `${result.stdout}\n${result.stderr}`;
-      if (result.code !== 0 && looksLikeQuotaExceeded(combined)) {
-        throw new QuotaExceededError(`Claude subscription quota/rate limit: ${combined.slice(-400)}`);
-      }
-      if (result.code !== 0) {
-        throw new Error(`claude exited ${result.code}: ${combined.slice(-400)}`);
-      }
 
       const events = parseJsonLines(result.stdout);
       const final = events.find((e) => e && (e.type === 'result' || e.result)) || events[events.length - 1];
-      if (!final) throw new Error('claude returned no parseable result event');
-
-      if (final.is_error === true || final.subtype === 'error') {
-        const errText = final.result || final.error || combined;
-        if (looksLikeQuotaExceeded(String(errText))) throw new QuotaExceededError(String(errText).slice(-400));
-        throw new Error(`claude error: ${String(errText).slice(-400)}`);
+      const failed = final && (final.is_error === true || final.subtype === 'error') ? final : null;
+      if (result.code !== 0 || failed) {
+        // Error text only: stderr plus the CLI's error result (or its plain-text stdout when there
+        // is no JSON). A successful result's model text and usage numbers are never scanned.
+        const err = cliError(
+          'Claude',
+          result.code !== 0 ? `claude exited ${result.code}` : 'claude error',
+          errorText(result.stderr, failed?.result, failed?.error, final ? null : result.stdout),
+        );
+        if (err instanceof AuthExpiredError) login.failed();
+        throw err;
       }
+      if (!final) throw new Error('claude returned no parseable result event');
+      login.succeeded();
 
       const text = typeof final.result === 'string'
         ? final.result
@@ -159,7 +178,7 @@ async function complete(body) {
       // The effort the grade actually ran at (always the configured value now).
       effort: EFFORT,
     };
-  });
+  }, { signal });
 }
 
 async function usage() {
@@ -188,5 +207,7 @@ createSidecarServer({
   completionPath: '/v1/messages',
   onCompletion: complete,
   onUsage: usage,
+  lane: mutex,
+  login,
   port: Number(process.env.PORT || 8080),
 });

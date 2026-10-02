@@ -1,0 +1,162 @@
+# Tests the Writing AI sidecars with no AI calls, no image push and no deploy (compute only on
+# GitHub Actions, AGENTS.md). Job 1: node --test over every writing-ai-sidecars/**/*.test.mjs and a
+# parse of the sidecar YAML. Job 2: builds both images WITHOUT pushing and checks their CLIs with
+# --network none. writing-ai.yml is the workflow that pushes images and deploys, from main only.
+
+name: Writing AI sidecars (test)
+
+on:
+  push:
+    branches: ['wai/**', 'feat/writing-ai-launch-*', 'main']
+    paths:
+      - 'writing-ai-sidecars/**'
+      - 'docker-compose.writing-ai.yml'
+      - '.github/workflows/writing-ai.yml'
+      - '.github/workflows/writing-sidecars-test.yml'
+  pull_request:
+    paths:
+      - 'writing-ai-sidecars/**'
+      - 'docker-compose.writing-ai.yml'
+      - '.github/workflows/writing-ai.yml'
+      - '.github/workflows/writing-sidecars-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: writing-sidecars-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: node --test + YAML parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sidecar tests (no AI calls, no network)
+        run: node --test --test-timeout=60000 'writing-ai-sidecars/**/*.test.mjs'
+      - name: Parse the sidecar YAML
+        run: |
+          python3 - <<'PY'
+          import yaml
+          for path in ('docker-compose.writing-ai.yml', '.github/workflows/writing-ai.yml', '.github/workflows/writing-sidecars-test.yml'):
+              with open(path) as handle:
+                  yaml.safe_load(handle)
+              print('parsed', path)
+          PY
+      - name: Resolve the compose defaults
+        run: |
+          set -euo pipefail
+          WRITING_CLAUDE_IMAGE=ci WRITING_CODEX_IMAGE=ci \
+            docker compose -f docker-compose.writing-ai.yml config --format json > "$RUNNER_TEMP/compose.json"
+          python3 - "$RUNNER_TEMP/compose.json" <<'PY'
+          import json, sys
+          services = json.load(open(sys.argv[1]))['services']
+          lane = {'WRITING_CLI_TIMEOUT_MS': '300000', 'WRITING_QUEUE_MAX': '40', 'WRITING_QUEUE_WAIT_MS': '420000', 'WRITING_LANE_CONCURRENCY': '1'}
+          for name in ('writing-claude', 'writing-codex'):
+              env = services[name]['environment']
+              wrong = {key: env.get(key) for key, value in lane.items() if env.get(key) != value}
+              assert not wrong, (name, wrong)
+              # A dead login must never restart-loop the container: the healthcheck stays on /healthz.
+              assert '/healthz' in ' '.join(services[name]['healthcheck']['test']), name
+          assert services['writing-codex']['environment']['WRITING_CODEX_MODEL'] == 'gpt-6.1-sol'
+          print('compose defaults ok')
+          PY
+
+  images:
+    name: Build images (no push) + no-network CLI checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLAUDE_IMAGE: oet-writing-claude:ci
+      CODEX_IMAGE: oet-writing-codex:ci
+      AGENT_CONSOLE_IMAGE: ghcr.io/${{ github.repository }}-agent-console:latest
+      WRITING_CODEX_MODEL: gpt-6.1-sol
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Claude sidecar (load, never push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./writing-ai-sidecars
+          file: ./writing-ai-sidecars/claude/Dockerfile
+          push: false
+          load: true
+          provenance: false
+          build-args: |
+            AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
+          tags: ${{ env.CLAUDE_IMAGE }}
+      - name: Build Codex sidecar (load, never push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./writing-ai-sidecars
+          file: ./writing-ai-sidecars/codex/Dockerfile
+          push: false
+          load: true
+          provenance: false
+          build-args: |
+            AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
+          tags: ${{ env.CODEX_IMAGE }}
+      - name: Check built Codex CLI arguments without AI calls
+        run: >-
+          docker run --rm --network none --entrypoint codex "$CODEX_IMAGE"
+          exec --skip-git-repo-check --ignore-user-config --json --model "$WRITING_CODEX_MODEL"
+          -c 'model_reasoning_effort="high"' -c 'approval_policy="never"'
+          -c 'sandbox_mode="read-only"' - --help
+      # /home/agent is a writable named volume in production and must not exist in the image
+      # (agent-console/Dockerfile), so the checks below mount a tmpfs there. Codex also refuses to
+      # start unless CODEX_HOME (/home/agent/.codex, inside that volume) exists.
+      - name: Check claude auth status without network (signed out)
+        run: |
+          set -uo pipefail
+          code=0
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint claude "$CLAUDE_IMAGE" auth status 2>&1)" || code=$?
+          printf 'exit=%s\n%s\n' "$code" "$out"
+          if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
+            echo "::error::claude auth status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"
+            exit 1
+          fi
+          printf '%s' "$out" | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*false' \
+            || { echo '::error::claude auth status printed no "loggedIn": false'; exit 1; }
+      - name: Check codex login status without network (signed out)
+        run: |
+          set -uo pipefail
+          code=0
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --tmpfs /home/agent/.codex:mode=1777 --entrypoint codex "$CODEX_IMAGE" login status 2>&1)" || code=$?
+          printf 'exit=%s\n%s\n' "$code" "$out"
+          if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
+            echo "::error::codex login status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"
+            exit 1
+          fi
+          printf '%s' "$out" | grep -qi 'not logged in' \
+            || { echo "::error::codex login status did not say 'Not logged in'"; exit 1; }
+      - name: GET /readyz on both images (signed out, no network)
+        run: |
+          set -euo pipefail
+          for image in "$CLAUDE_IMAGE" "$CODEX_IMAGE"; do
+            id="$(docker run -d --network none --tmpfs /home/agent:mode=1777 --tmpfs /home/agent/.codex:mode=1777 "$image")"
+            out=''
+            for _ in $(seq 1 30); do
+              out="$(docker exec "$id" node -e "fetch('http://127.0.0.1:8080/readyz').then(async (r) => console.log(r.status, await r.text()), () => process.exit(1))" 2>/dev/null)" && break
+              sleep 1
+            done
+            docker logs "$id" 2>&1 | tail -n 20
+            docker rm -f "$id" >/dev/null
+            echo "$image /readyz -> $out"
+            # Signed out: the probe parsed the real CLI output, so the lane is NOT ready for that reason.
+            case "$out" in
+              '503 '*'"reason":"auth_expired"'*'"authOk":false'*) ;;
+              *) echo "::error::$image /readyz: want 503 auth_expired with authOk false, got: $out"; exit 1 ;;
+            esac
+          done
