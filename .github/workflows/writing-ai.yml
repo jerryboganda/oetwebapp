@@ -30,6 +30,9 @@ env:
   # Base image carrying the verified claude + codex CLIs. Pin to a known-good
   # agent-console tag; bump deliberately.
   AGENT_CONSOLE_IMAGE: ghcr.io/${{ github.repository }}-agent-console:latest
+  # Sidecar default Codex model (owner 2026-10-02: GPT-6.1 Sol High). The backend always sends the
+  # model; this is the fallback default, set in writing-ai.env by the deploy step below.
+  WRITING_CODEX_MODEL: gpt-6.1-sol
 
 jobs:
   build:
@@ -39,20 +42,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check seeded provider endpoint compatibility (no AI calls)
-        run: node --test writing-ai-sidecars/shared/http.test.mjs
+      - name: Sidecar tests (no AI calls, no network)
+        run: node --test --test-timeout=60000 'writing-ai-sidecars/**/*.test.mjs'
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Images (sha + latest) are pushed ONLY from main; any other ref builds, loads and checks them.
       - name: Build & push Claude sidecar
         uses: docker/build-push-action@v6
         with:
           context: ./writing-ai-sidecars
           file: ./writing-ai-sidecars/claude/Dockerfile
-          push: true
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
           provenance: false
           build-args: |
             AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
@@ -66,7 +71,8 @@ jobs:
         with:
           context: ./writing-ai-sidecars
           file: ./writing-ai-sidecars/codex/Dockerfile
-          push: true
+          push: ${{ github.ref == 'refs/heads/main' }}
+          load: ${{ github.ref != 'refs/heads/main' }}
           provenance: false
           build-args: |
             AGENT_CONSOLE_IMAGE=${{ env.AGENT_CONSOLE_IMAGE }}
@@ -78,9 +84,23 @@ jobs:
       - name: Check built Codex CLI arguments without AI calls
         run: >-
           docker run --rm --network none --entrypoint codex "$CODEX_IMAGE"
-          exec --skip-git-repo-check --ignore-user-config --json --model gpt-6-sol
+          exec --skip-git-repo-check --ignore-user-config --json --model "$WRITING_CODEX_MODEL"
           -c 'model_reasoning_effort="high"' -c 'approval_policy="never"'
           -c 'sandbox_mode="read-only"' - --help
+      # /home/agent is a writable named volume in production and must not exist in the image
+      # (agent-console/Dockerfile), so a tmpfs stands in for it. Same check as writing-sidecars-test.yml.
+      - name: Check claude auth status without network (signed out)
+        run: |
+          set -uo pipefail
+          code=0
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint claude "$CLAUDE_IMAGE" auth status 2>&1)" || code=$?
+          printf 'exit=%s\n%s\n' "$code" "$out"
+          if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
+            echo "::error::claude auth status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"
+            exit 1
+          fi
+          printf '%s' "$out" | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*false' \
+            || { echo '::error::claude auth status printed no "loggedIn": false'; exit 1; }
 
   deploy:
     needs: build
@@ -111,7 +131,7 @@ jobs:
           ssh "${ssh_opts[@]}" "$target" "umask 077; mkdir -p '$REMOTE_DIR/registry'; cat > '$REMOTE_COMPOSE'; chmod 600 '$REMOTE_COMPOSE'" < docker-compose.writing-ai.yml
           printf '%s\n' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$target" "docker --config '$REMOTE_DIR/registry' login ghcr.io -u '$GHCR_USER' --password-stdin"
           ssh "${ssh_opts[@]}" "$target" \
-            "WRITING_CLAUDE_IMAGE='$CLAUDE_IMAGE' WRITING_CODEX_IMAGE='$CODEX_IMAGE' WRITING_COMPOSE_FILE='$REMOTE_COMPOSE' DOCKER_CONFIG='$REMOTE_DIR/registry' bash -s" <<'DEPLOY'
+            "WRITING_CLAUDE_IMAGE='$CLAUDE_IMAGE' WRITING_CODEX_IMAGE='$CODEX_IMAGE' WRITING_CODEX_MODEL='$WRITING_CODEX_MODEL' WRITING_COMPOSE_FILE='$REMOTE_COMPOSE' DOCKER_CONFIG='$REMOTE_DIR/registry' bash -s" <<'DEPLOY'
           set -euo pipefail
           env_file="/opt/oetwebapp/.deploy/writing-ai.env"
           test -s "$env_file"
@@ -128,7 +148,7 @@ jobs:
           fi
           test "$(docker inspect --format '{{.Config.Image}}' oet-writing-claude)" = "$WRITING_CLAUDE_IMAGE"
           test "$(docker inspect --format '{{.Config.Image}}' oet-writing-codex)" = "$WRITING_CODEX_IMAGE"
-          for setting in "WRITING_CLAUDE_IMAGE=$WRITING_CLAUDE_IMAGE" "WRITING_CODEX_IMAGE=$WRITING_CODEX_IMAGE"; do
+          for setting in "WRITING_CLAUDE_IMAGE=$WRITING_CLAUDE_IMAGE" "WRITING_CODEX_IMAGE=$WRITING_CODEX_IMAGE" "WRITING_CODEX_MODEL=$WRITING_CODEX_MODEL"; do
             key="${setting%%=*}"
             if grep -q "^${key}=" "$env_file"; then
               sed -i "s#^${key}=.*#${setting}#" "$env_file"
