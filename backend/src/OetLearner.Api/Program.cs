@@ -2293,6 +2293,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingScenarioGener
     OetLearner.Api.Services.Writing.WritingScenarioGeneratorService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftServiceV2,
     OetLearner.Api.Services.Writing.WritingDraftServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingMyWorkService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCaseNoteHighlightService,
     OetLearner.Api.Services.Writing.WritingCaseNoteHighlightService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAssessmentPreflightService,

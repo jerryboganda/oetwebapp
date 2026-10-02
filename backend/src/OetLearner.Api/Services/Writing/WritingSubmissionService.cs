@@ -108,6 +108,7 @@ public sealed class WritingSubmissionService(
             OriginalSubmissionId: null,
             IdempotencyKey: request.IdempotencyKey), ct);
         var submissionId = submit.SubmissionId;
+        await WritingDraftServiceV2.ConsumeAsync(db, userId, request.ScenarioId, mode, submissionId, logger, ct);
         // Grade off the request path: the HTTP response returns immediately and
         // grading runs detached on a fresh scope, so a client timeout/abort can
         // never cancel a paid grade mid-flight. Only genuinely NEW submissions
@@ -345,6 +346,7 @@ public sealed class WritingSubmissionService(
             IsRevision: true,
             OriginalSubmissionId: originalSubmissionId), ct);
         var newId = reviseSubmit.SubmissionId;
+        await WritingDraftServiceV2.ConsumeAsync(db, userId, original.ScenarioId, "revision", newId, logger, ct);
         if (reviseSubmit.IsNew)
         {
             await RunOrDetachGradingAsync(newId, ct);

@@ -30034,6 +30034,9 @@ namespace OetLearner.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("AttemptStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
@@ -30049,7 +30052,22 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("Phase")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("ReadingSecondsRemaining")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ScenarioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("SubmissionId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("TimeSpentSeconds")
@@ -30060,7 +30078,14 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<int>("WordCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WritingSecondsRemaining")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
