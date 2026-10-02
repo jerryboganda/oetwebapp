@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { installFakeRecordingMedia } from '../fixtures/media';
 
 test.describe('Learner immersive completion workflows @learner', () => {
@@ -90,75 +89,67 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  // TODO(writing-v2): the legacy /writing/player surface this exercised was
-  // retired with the V1 hub. Re-author against the V2 mock/practice session flow
-  // (session-id URLs, reading-window overlay, WritingStimulus) before re-enabling.
-  test.skip('writing player autosaves, protects unsaved navigation, and submits successfully', async ({ page }, testInfo) => {
+  // Re-authored for the V2 practice session (the legacy /writing/player was
+  // retired). Hermetic: the Writing API is route-mocked, so it needs no seeded
+  // task. Types into the real Tiptap editor after skipping the reading window
+  // with the page clock, waits for "Saved", submits ONCE and lands on grading.
+  test('writing practice autosaves, survives a refresh, and submits once to grading', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }
 
-    testInfo.setTimeout(420000);
+    testInfo.setTimeout(180000);
     const diagnostics = observePage(page);
-    const content = [
-      'Dear Dr Patterson,',
-      'I am writing to refer Mrs Eleanor Vance following her recent admission after surgery.',
-      'She still requires wound monitoring, pain review, and clear escalation advice for community follow-up.',
-    ].join(' ');
+    page.on('dialog', (dialog) => dialog.accept());
+    const scenarioId = 'e2e-immersive-writing';
+    const content = 'Dear Dr Patterson, I am writing to refer Mrs Eleanor Vance for wound review after surgery.';
+    let draft: Record<string, unknown> | null = null;
+    let submissions = 0;
+    const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-    // mode=learning skips the OET 5-minute reading lock that would otherwise
-    // disable the editor for the entire test budget. Autosave/leave-protect
-    // behaviour is identical between learning and exam modes.
-    await page.goto('/writing/player?taskId=wt-001&mode=learning', { waitUntil: 'domcontentloaded' });
-    const writingEditor = page.getByLabel('Writing editor');
-    const editorReady = await expect(writingEditor)
-      .toBeVisible({ timeout: 15000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!editorReady) {
-      await page.reload({ waitUntil: 'domcontentloaded' });
-    }
-    await expect(writingEditor).toBeVisible({ timeout: 60000 });
-
-    await writingEditor.fill(content);
-    await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
-    await expect(page.getByText(/^Saved$/i)).toBeVisible({ timeout: 15000 });
-
-    const pendingContent = `${content} Please review the wound again tomorrow.`;
-    await writingEditor.fill(pendingContent);
-    await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
-
-    const leaveTrigger = page.getByRole('button', { name: /leave writing task/i });
-    await leaveTrigger.click();
-
-    const leaveDialog = page.getByRole('dialog', { name: /leave writing task\?/i });
-    await expect(leaveDialog).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(leaveDialog).toHaveCount(0);
-    await expect(leaveTrigger).toBeFocused();
-
-    const submitTrigger = page.getByRole('button', { name: /^submit$/i });
-
-    // Per Writing Module Spec v1.0: Submit fires immediately, no confirmation modal.
-    await submitTrigger.click();
-
-    // waitForURL is more robust than expect(toHaveURL) for navigation that
-    // is preceded by a multi-step backend submit (PATCH draft → POST submit
-    // → fetchWritingTask) which on cold path can extend close to 60s.
-    await page.waitForURL(/\/writing\/result\?id=/, { timeout: 120000, waitUntil: 'commit' });
-    await waitForSessionGuardToClear(page);
-    let resultPollAttempt = 0;
-    await expect(async () => {
-      resultPollAttempt += 1;
-      if (resultPollAttempt > 1) {
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await waitForSessionGuardToClear(page);
+    await page.route('**/v1/writing/attempt-events', (route) => route.fulfill(json({ accepted: 1 })));
+    await page.route(`**/v1/writing/highlights/${scenarioId}`, (route) => route.fulfill(json({ highlightsJson: '{}' })));
+    await page.route(`**/v1/writing/scenarios/${scenarioId}`, (route) => route.fulfill(json({
+      id: scenarioId, title: 'E2E referral', letterType: 'LT-RR', profession: 'medicine', subDiscipline: null,
+      topics: [], difficulty: 2, caseNotesStructured: [{ index: 1, text: 'Wound review.', relevance: 'relevant' }],
+      isDiagnostic: false, status: 'published', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z',
+      taskPromptMarkdown: 'Write a referral letter.', fixedInstructions: [], readingTimeSeconds: 300,
+      writingTimeSeconds: 2400, wordGuideMin: 180, wordGuideMax: 200, stimulusPdfMediaAssetId: null, stimulusPdfDownloadPath: null,
+    })));
+    await page.route(`**/v1/writing/scenarios/${scenarioId}/eligibility`, (route) => route.fulfill(json({ feedbackMessage: null })));
+    await page.route(`**/v1/writing/drafts/${scenarioId}/practice`, (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill(draft ? json(draft) : json({ code: 'not_found' }, 404));
       }
-      await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 30_000 });
-    }).toPass({ timeout: 240_000, intervals: [5_000, 30_000, 30_000, 30_000, 60_000] });
-    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 30000 });
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      const version = Number(draft?.version ?? 0) + 1;
+      draft = { ...draft, ...body, scenarioId, mode: 'practice', status: 'active', version, lastSavedAt: new Date().toISOString() };
+      return route.fulfill(json(draft));
+    });
+    await page.route('**/v1/writing/submissions', (route) => {
+      submissions += 1;
+      return route.fulfill(json({ id: 'e2e-immersive-sub', scenarioId, status: 'queued', letterContent: content }));
+    });
 
-    expectNoSevereClientIssues(diagnostics);
+    await page.clock.install();
+    await page.goto(`/writing/practice/session/${scenarioId}`, { waitUntil: 'domcontentloaded' });
+    const timer = page.getByTestId('writing-timer');
+    await expect(timer).toHaveAttribute('data-phase', 'reading', { timeout: 60000 });
+    await page.clock.fastForward('05:00');
+    await expect(timer).toHaveAttribute('data-phase', 'writing', { timeout: 15000 });
+
+    const writingEditor = page.locator('div.ProseMirror#practice-editor');
+    await writingEditor.click();
+    await writingEditor.pressSequentially(content, { delay: 15 });
+    await expect(page.getByTestId('writing-draft-status')).toHaveAttribute('data-state', 'saved', { timeout: 20000 });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(writingEditor).toHaveText(content, { timeout: 60000 });
+
+    await page.getByTestId('writing-submit').click();
+    await page.waitForURL(/\/writing\/submissions\/e2e-immersive-sub\/grading/, { timeout: 60000, waitUntil: 'commit' });
+    expect(submissions).toBe(1);
+
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

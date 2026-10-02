@@ -10,18 +10,24 @@ import {
 } from '@/components/domain/writing/PaperBookletSimulation';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
+import { Button } from '@/components/ui/button';
+import { useWritingDraftSync, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
+import { loadStoredSession } from '@/lib/auth-storage';
 import {
   beginWritingMockWriting,
   checkWritingScenarioEligibility,
   createWritingSubmission,
+  getWritingDraftV2,
   getWritingHighlights,
   getWritingMockSession,
   getWritingScenario,
   getWritingSubmission,
-  putWritingDraftV2,
   putWritingHighlights,
+  retryWritingGrade,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { clearDraftShadow, draftShadowKey, readDraftShadow, reconcileDraft } from '@/lib/writing/draft-sync';
+import { countLetterWords } from '@/lib/writing/letter-text';
 import { createSubmitIdempotencyKey, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
@@ -40,8 +46,14 @@ import {
   WRITING_PROFESSION_LABELS,
   type WritingMockSessionDto,
   type WritingScenarioDto,
+  type WritingSubmissionDto,
   type WritingTaskDto,
 } from '@/lib/writing/types';
+
+/** How long the page keeps watching a queued/grading letter before handing over to Past submissions. */
+const GRADING_POLL_LIMIT_MS = 60 * 60 * 1000;
+/** Failure codes that a Retry cannot fix. */
+const NOT_RETRYABLE = new Set(['task_not_ready', 'manual_review', 'letter_invalid']);
 
 /**
  * Build booklet content from the richest source available. The enriched
@@ -137,6 +149,8 @@ function scenarioFromTask(task: WritingTaskDto): WritingScenarioDto {
  */
 export default function WritingPaperSessionPage() {
   const t = useTranslations();
+  const tRef = useRef(t);
+  tRef.current = t;
   const params = useParams<{ id: string }>();
   const routeId = String(params?.id ?? '');
 
@@ -166,7 +180,16 @@ export default function WritingPaperSessionPage() {
   // editor + timer and drives the grading/progress overlay until the grade lands.
   const [grading, setGrading] = useState(false);
   const [gradingFailed, setGradingFailed] = useState(false);
+  // Latest polled submission: drives the delayed / failed / credits / manual states.
+  const [gradedSubmission, setGradedSubmission] = useState<WritingSubmissionDto | null>(null);
+  const [gradingTimedOut, setGradingTimedOut] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [pollRound, setPollRound] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Draft restore + sync: the answer stays locked until the saved letter is known.
+  const [userId] = useState(() => loadStoredSession()?.currentUser?.userId ?? 'anonymous');
+  const [baseline, setBaseline] = useState<DraftSyncBaseline | null>(null);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   // Case Notes highlights, lifted so they persist across the reading window and
   // the booklet writing view, and so the page can save/restore them per scenario.
@@ -237,6 +260,8 @@ export default function WritingPaperSessionPage() {
         } else if (mock.status === 'submitted' || mock.status === 'abandoned') {
           setPhase('completed');
           setSubmitted(mock.status === 'submitted');
+          // A refresh while the letter is grading keeps watching the grade.
+          if (mock.status === 'submitted' && mock.submissionId) setGrading(true);
         } else {
           setPhase('reading');
           setReadingDeadlineMs(Date.now() + mock.readingSecondsRemaining * 1000);
@@ -266,14 +291,67 @@ export default function WritingPaperSessionPage() {
         }
         // Addendum Rev8 §16: never surface a raw server message; the task
         // content is not shown when the start/eligibility check fails.
-        setError(toCandidateSafeWritingErrorMessage(err, t('writing.paper.error.load')));
+        setError(toCandidateSafeWritingErrorMessage(err, tRef.current('writing.paper.error.load')));
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [routeId, t]);
+  }, [routeId]);
+
+  // ── Draft restore + sync ──────────────────────────────────────────────────
+  // The saved letter (server + this device) is restored before the answer
+  // unlocks. For a mock session only a draft saved during THIS session counts
+  // (an older mock of the same task never pre-fills a fresh one). A failed load
+  // keeps the answer locked and retries — never "blank + overwrite".
+  const sessionStartedAt = session?.startedAt;
+  const sessionDone = session?.status === 'submitted' || session?.status === 'abandoned';
+  const [draftAttempt, setDraftAttempt] = useState(0);
+  useEffect(() => {
+    if (resolution === 'pending' || !scenarioId || sessionDone) return;
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    const started = resolution === 'mock' ? Date.parse(sessionStartedAt ?? '') : Number.NaN;
+    const isThisAttempt = (savedAt: number) => !Number.isFinite(started) || savedAt >= started;
+    void getWritingDraftV2(scenarioId, 'mock')
+      .then((draft) => {
+        if (cancelled) return;
+        const shadowKey = draftShadowKey(userId, scenarioId, 'mock');
+        const active =
+          draft && draft.status !== 'submitted' && isThisAttempt(Date.parse(draft.lastSavedAt)) ? draft : null;
+        let shadow = readDraftShadow(shadowKey);
+        if (shadow && (draft?.status === 'submitted' || !isThisAttempt(shadow.savedAt))) {
+          clearDraftShadow(shadowKey);
+          shadow = null;
+        }
+        const restored = reconcileDraft(active, shadow);
+        const words = restored.wordCount || countLetterWords(restored.text);
+        setText(restored.text);
+        setWordCount(words);
+        setError(null);
+        setBaseline({
+          text: restored.text,
+          wordCount: words,
+          // A fresh attempt has nothing to save until the learner types.
+          serverText: active ? restored.serverText : restored.source === 'device' ? null : '',
+          version: active ? restored.version : (draft?.version ?? 0),
+          conflict: restored.conflict,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(tRef.current('writing.paper.error.load'));
+        retryTimer = window.setTimeout(() => setDraftAttempt((n) => n + 1), 5000);
+      });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
+  }, [resolution, scenarioId, sessionDone, sessionStartedAt, userId, draftAttempt]);
+
+  const sync = useWritingDraftSync({ scenarioId: scenarioId ?? '', mode: 'mock', userId, baseline });
+  const { update: updateDraft, flush: flushDraft, discard: discardDraft } = sync;
 
   // ── beforeunload guard while actively writing (strict) ────────────────────
   useEffect(() => {
@@ -286,7 +364,13 @@ export default function WritingPaperSessionPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [phase, submitted]);
 
-  const resultsHref = `/writing/paper/session/${encodeURIComponent(routeId)}/results`;
+  // A mock session has its own results page; a direct launch is a regular submission.
+  const resultsHref =
+    resolution === 'mock' && session?.id
+      ? `/writing/mocks/session/${encodeURIComponent(session.id)}/results`
+      : submissionId
+        ? `/writing/submissions/${encodeURIComponent(submissionId)}/results`
+        : '/writing';
 
   // ── Case Notes highlights: load once per scenario, autosave (debounced) ────
   useEffect(() => {
@@ -317,25 +401,17 @@ export default function WritingPaperSessionPage() {
   }, [pdfHighlights, scenarioId, submitted]);
 
   // ── Autosave — page owns the network write (elapsed-time bookkeeping) ──────
-  const handleAutosave = useCallback(
-    (autoText: string, autoWords: number) => {
-      if (!scenarioId) return;
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-      void putWritingDraftV2(scenarioId, 'mock', {
-        content: autoText,
-        wordCount: autoWords,
-        timeSpentSeconds: elapsed,
-      }).catch(() => {
-        /* best-effort */
-      });
-    },
-    [scenarioId],
-  );
+  // The booklet's 5 s cadence just asks the sync engine to save now.
+  const handleAutosave = useCallback(() => flushDraft(), [flushDraft]);
 
-  const handleContentChange = useCallback((next: string, words: number) => {
-    setText(next);
-    setWordCount(words);
-  }, []);
+  const handleContentChange = useCallback(
+    (next: string, words: number) => {
+      setText(next);
+      setWordCount(words);
+      updateDraft(next, words);
+    },
+    [updateDraft],
+  );
 
   // ── Phase transition: reading → writing ───────────────────────────────────
   // Idempotent: the reading countdown's onZero AND the overlay's onAutoClose
@@ -404,6 +480,7 @@ export default function WritingPaperSessionPage() {
         }
         // Freeze in place — do NOT navigate away. The letter is now being
         // graded; show the grading state and poll until the result is ready.
+        discardDraft();
         setSubmitted(true);
         setGrading(true);
         setGradingFailed(false);
@@ -425,36 +502,43 @@ export default function WritingPaperSessionPage() {
         setSubmitting(false);
       }
     },
-    [submitted, submitting, resolution, session?.id, scenarioId, t],
+    [submitted, submitting, resolution, session?.id, scenarioId, t, discardDraft],
   );
 
+  const online = sync.online;
   const handleSubmit = useCallback(() => {
+    // A locally queued submit would not exist on the server: block it offline.
+    if (!online) {
+      setError(t('writing.practice.session.draft.offlineSubmit'));
+      return;
+    }
     void doSubmit(textRef.current, wordCountRef.current);
-  }, [doSubmit]);
+  }, [doSubmit, online, t]);
 
-  // ── Grading: poll the submission until the grade lands, then go to results ──
-  // The letter is accepted once; the backend grades it (Claude Max → Claude API →
-  // Codex). The candidate never re-submits or manually retries — this poll surfaces
-  // the result as soon as it is ready. A 409/429 during polling is transient
-  // (still grading), never an error to show.
+  // ── Grading: watch the submission until the grade lands, then go to results ──
+  // The letter is accepted once; the server grades it and retries by itself.
+  // The page watches for up to 60 minutes (queued/grading), then hands over to
+  // Past submissions. A failed grade offers Retry on the SAME record — never a
+  // new submission. A transient error while polling is not a failure.
+  const resultsHrefRef = useRef(resultsHref);
+  resultsHrefRef.current = resultsHref;
   useEffect(() => {
     if (!grading || !submissionId) return;
     let cancelled = false;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 75; // ~5 minutes at the 4s interval below
-
+    let timer: number | undefined;
+    const startedAt = Date.now();
     const tick = async () => {
-      attempts += 1;
       try {
         const sub = await getWritingSubmission(submissionId);
         if (cancelled) return;
+        setGradedSubmission(sub);
         const status = (sub as { status?: string } | null)?.status;
         if (status === 'graded' || status === 'completed') {
           setGrading(false);
-          window.location.assign(resultsHref);
+          window.location.assign(resultsHrefRef.current);
           return;
         }
-        if (status === 'failed') {
+        if (status === 'failed' || status === 'cancelled') {
           setGrading(false);
           setGradingFailed(true);
           return;
@@ -462,21 +546,40 @@ export default function WritingPaperSessionPage() {
       } catch {
         // transient network / 429 while grading — keep polling
       }
-      if (!cancelled && attempts < MAX_ATTEMPTS) {
-        window.setTimeout(tick, 4000);
-      } else if (!cancelled) {
-        // Grading is taking longer than expected — keep the honest state, not an error.
+      if (cancelled) return;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= GRADING_POLL_LIMIT_MS) {
         setGrading(false);
+        setGradingTimedOut(true);
         setGradingFailed(true);
+        return;
       }
+      timer = window.setTimeout(() => void tick(), elapsed < 2 * 60_000 ? 4000 : 15_000);
     };
-
-    const timer = window.setTimeout(tick, 2500);
+    timer = window.setTimeout(() => void tick(), 2500);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [grading, submissionId, resultsHref]);
+  }, [grading, submissionId, pollRound]);
+
+  const retryGrading = useCallback(async () => {
+    if (!submissionId || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await retryWritingGrade(submissionId);
+      setGradingFailed(false);
+      setGradingTimedOut(false);
+      setGradedSubmission(null);
+      setGrading(true);
+      setPollRound((n) => n + 1);
+    } catch (err) {
+      setRetryError(toCandidateSafeWritingErrorMessage(err, t('writing.paper.grading.retryFailed')));
+    } finally {
+      setRetrying(false);
+    }
+  }, [submissionId, retrying, t]);
 
   // Auto-submit + lock when the writing window expires.
   const expiredRef = useRef(false);
@@ -516,7 +619,8 @@ export default function WritingPaperSessionPage() {
         phase={phase}
         readingSecondsRemaining={readingSeconds}
         writingSecondsRemaining={writingSeconds}
-        loading={resolution === 'pending'}
+        loading={resolution === 'pending' || (!baseline && !submitted)}
+        initialText={baseline?.text}
         error={error}
         submitted={submitted}
         submitting={submitting}
@@ -547,39 +651,85 @@ export default function WritingPaperSessionPage() {
           frozen and the candidate watches a clear grading state until the result
           is ready. The poller navigates to results automatically. A genuine
           failure shows a candidate-friendly message with a way through. */}
-      {grading && (
+      {grading ? (
         <div
           role="status"
           aria-live="polite"
+          data-testid="writing-paper-grading"
+          data-state={gradedSubmission?.autoRetrying ? 'delayed' : 'grading'}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm"
         >
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden="true" />
           <p className="mt-6 max-w-md px-6 text-center text-lg font-medium">
-            Your letter has been submitted successfully and is now being graded.
+            {gradedSubmission?.autoRetrying
+              ? t('writing.paper.grading.delayedTitle')
+              : t('writing.paper.grading.submittedTitle')}
           </p>
-          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted-foreground">
-            This may take up to 5 minutes. Please do not close this page.
+          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">
+            {gradedSubmission?.autoRetrying
+              ? t('writing.paper.grading.delayedBody')
+              : t('writing.paper.grading.submittedBody')}
           </p>
         </div>
-      )}
+      ) : null}
 
-      {gradingFailed && !grading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
-          <p className="max-w-md px-6 text-center text-lg font-medium">
-            Grading did not complete.
-          </p>
-          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted-foreground">
-            Your letter is saved. You can view the result or try grading it again — no
-            extra credit is used.
-          </p>
-          <a
-            href={resultsHref}
-            className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
-          >
-            Check my result
-          </a>
+      {gradingFailed && !grading ? (
+        <div
+          role="alert"
+          data-testid="writing-grading-failed"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm"
+        >
+          {(() => {
+            const code = gradedSubmission?.failureCode ?? null;
+            const manual = (code !== null && NOT_RETRYABLE.has(code)) || gradedSubmission?.canRetry === false;
+            const credits = code === 'credits_insufficient';
+            const title = gradingTimedOut
+              ? t('writing.paper.grading.timedOutTitle')
+              : manual
+                ? t('writing.paper.grading.manualTitle')
+                : credits
+                  ? t('writing.paper.grading.creditsTitle')
+                  : t('writing.paper.grading.failedTitle');
+            const body = gradingTimedOut
+              ? t('writing.paper.grading.timedOutBody')
+              : manual
+                ? t('writing.paper.grading.manualBody')
+                : credits
+                  ? t('writing.paper.grading.creditsBody')
+                  : t('writing.paper.grading.failedBody');
+            return (
+              <>
+                <p className="max-w-md px-6 text-center text-lg font-medium">{title}</p>
+                <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">{body}</p>
+                {retryError ? <p className="mt-3 max-w-md px-6 text-center text-sm text-danger-strong">{retryError}</p> : null}
+                <div className="mt-6 flex flex-wrap justify-center gap-2 px-6">
+                  {credits ? (
+                    <Button asChild variant="outline">
+                      <a href="/ai-packages">{t('writing.paper.grading.buyCredits')}</a>
+                    </Button>
+                  ) : null}
+                  {!manual && submissionId ? (
+                    <Button
+                      data-testid="writing-grading-retry"
+                      loading={retrying}
+                      onClick={() => void retryGrading()}
+                    >
+                      {retrying ? t('writing.paper.grading.retrying') : t('writing.paper.grading.retry')}
+                    </Button>
+                  ) : null}
+                  {submissionId ? (
+                    <Button asChild variant="outline">
+                      <a href={`/writing/submissions/${encodeURIComponent(submissionId)}`}>
+                        {t('writing.paper.grading.viewLetter')}
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              </>
+            );
+          })()}
         </div>
-      )}
+      ) : null}
     </>
   );
 }
