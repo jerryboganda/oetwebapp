@@ -38,6 +38,7 @@ public sealed class AiBudgetServicePostgreSqlConcurrencyTests
             "SoftWarnPct" integer NOT NULL,
             "HardKillPct" integer NOT NULL,
             "CurrentSpendUsd" numeric NOT NULL,
+            "EnforceSpendCaps" boolean NOT NULL DEFAULT FALSE,
             "AllowByokOnScoringFeatures" boolean NOT NULL,
             "AllowByokOnNonScoringFeatures" boolean NOT NULL,
             "DefaultPlatformProviderId" character varying(64) NOT NULL,
@@ -174,25 +175,75 @@ public sealed class AiBudgetServicePostgreSqlConcurrencyTests
         await services.DisposeAsync();
     }
 
-    private static async Task SeedGlobalPolicyAsync(PostgreSqlTestDatabase database, decimal monthlyBudgetUsd)
+    /// <summary>Owner directive 2026-10-02: with the spend-cap switch OFF (the
+    /// default) the same $1.00 ceiling grants every caller, and every hold is
+    /// still booked and settles through Commit like any other.</summary>
+    [PostgreSqlFact]
+    public async Task SpendCapsOff_GrantsPastTheLimit_AndCommitStillBooksTheSpend()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await database.ExecuteAsync(GlobalPolicyDdl);
+        await database.ExecuteAsync(BudgetPeriodDdl);
+
+        const decimal limitUsd = 1.00m;
+        const decimal perCallUsd = 0.10m;
+        const int totalCallers = 15;
+
+        await SeedGlobalPolicyAsync(database, limitUsd, enforceSpendCaps: false);
+
+        var services = new ServiceCollection()
+            .AddDbContext<LearnerDbContext>(o => o.UseNpgsql(database.SchemaConnectionString, npgsql => npgsql.UseVector()))
+            .BuildServiceProvider();
+        var scopeFactory = services.GetRequiredService<IServiceScopeFactory>();
+        var budgetService = new AiBudgetService(scopeFactory, NullLogger<AiBudgetService>.Instance);
+
+        var reservations = await Task.WhenAll(
+            Enumerable.Range(0, totalCallers).Select(_ => budgetService.ReserveAsync("global", perCallUsd, default)));
+        Assert.All(reservations, r => Assert.True(r.Granted));
+
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var held = await db.AiBudgetPeriods.AsNoTracking().SingleAsync();
+            Assert.Equal(totalCallers * perCallUsd, held.ReservedUsd);
+            Assert.Equal(limitUsd, held.LimitUsd);
+        }
+
+        await Task.WhenAll(reservations.Select(r => budgetService.CommitAsync(r, perCallUsd, default)));
+
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var period = await db.AiBudgetPeriods.AsNoTracking().SingleAsync();
+            Assert.Equal(0m, period.ReservedUsd);
+            Assert.Equal(totalCallers * perCallUsd, period.CommittedUsd);
+            Assert.Equal(totalCallers * perCallUsd, (await db.AiGlobalPolicies.AsNoTracking().SingleAsync()).CurrentSpendUsd);
+        }
+
+        await services.DisposeAsync();
+    }
+
+    private static async Task SeedGlobalPolicyAsync(
+        PostgreSqlTestDatabase database, decimal monthlyBudgetUsd, bool enforceSpendCaps = true)
     {
         await using var cmd = database.Command(
             """
             INSERT INTO "AiGlobalPolicies" (
                 "Id", "KillSwitchEnabled", "KillSwitchScope", "DisabledFeaturesCsv",
-                "MonthlyBudgetUsd", "SoftWarnPct", "HardKillPct", "CurrentSpendUsd",
+                "MonthlyBudgetUsd", "SoftWarnPct", "HardKillPct", "CurrentSpendUsd", "EnforceSpendCaps",
                 "AllowByokOnScoringFeatures", "AllowByokOnNonScoringFeatures",
                 "DefaultPlatformProviderId", "ByokErrorCooldownHours", "ByokTransientRetryCount",
                 "AnomalyDetectionEnabled", "AnomalyMultiplierX", "RowVersion", "UpdatedAt"
             ) VALUES (
                 'global', false, 0, '',
-                @monthlyBudgetUsd, 80, 100, 0,
+                @monthlyBudgetUsd, 80, 100, 0, @enforceSpendCaps,
                 false, true,
                 'digitalocean-serverless', 24, 2,
                 true, 10, 0, now()
             );
             """);
         cmd.Parameters.AddWithValue("monthlyBudgetUsd", monthlyBudgetUsd);
+        cmd.Parameters.AddWithValue("enforceSpendCaps", enforceSpendCaps);
         await cmd.ExecuteNonQueryAsync();
     }
 }

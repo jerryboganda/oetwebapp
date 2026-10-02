@@ -127,6 +127,11 @@ export interface AiGlobalPolicy {
   softWarnPct: number;
   hardKillPct: number;
   currentSpendUsd: number;
+  /**
+   * Owner directive 2026-10-02: the platform USD caps refuse AI calls only
+   * while this is true. Default false — spend is still recorded.
+   */
+  enforceSpendCaps: boolean;
   allowByokOnScoringFeatures: boolean;
   allowByokOnNonScoringFeatures: boolean;
   defaultPlatformProviderId: string;
