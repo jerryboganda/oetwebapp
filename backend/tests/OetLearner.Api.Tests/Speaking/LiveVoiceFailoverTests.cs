@@ -1174,7 +1174,11 @@ public sealed class LiveVoiceFailoverTests
 
     // Pinned literally on purpose: the wording is a contract with the patient prompt.
     private const string ConversationSoFarHeader =
-        "CONVERSATION SO FAR: the live connection dropped and was restored. Everything below was ALREADY said aloud in this consultation. Continue seamlessly as the same patient: do not greet again, do not repeat anything already said, do not raise again a concern you already raised, and do not summarise. Wait for the candidate to speak next.";
+        "CONVERSATION SO FAR: the live connection was interrupted and restored. Everything below was ALREADY said aloud in this consultation. Continue seamlessly as the same patient: do not greet again, do not repeat anything already said, do not raise again a concern you already raised, and do not summarise.";
+    private const string PersonaReminder =
+        "END OF CONVERSATION SO FAR. You are still the patient: stay in role, never give medical advice or any disclaimer, use only the facts on your card, and in a teach-back repeat only what the doctor actually said.";
+    private const string WaitForCandidate = PersonaReminder + " Wait for the candidate to speak next.";
+    private const string AnswerLastLineFirst = PersonaReminder + " The candidate's last line above has NOT been answered yet: answer it first, in role, in one or two short sentences.";
     private const string EarlierTurnsOmitted = "(earlier turns omitted)";
 
     private static async Task<string> MintAsync(LiveVoiceRig rig, SeededLiveVoiceSession session, string provider)
@@ -1280,9 +1284,31 @@ public sealed class LiveVoiceFailoverTests
                 + "\nCandidate: Good morning, how can I help you today?"
                 + "\nPatient: Doctor, my knee hurts when I walk."
                 + "\nCandidate: How long has this been going on?"
-                + "\nPatient: About two weeks. It is worse at night.",
+                + "\nPatient: About two weeks. It is worse at night."
+                + "\n" + WaitForCandidate,
             minted[1]);
         Assert.DoesNotContain(EarlierTurnsOmitted, minted[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RecoveryMint_AnUnansweredLastCandidateLine_IsToBeAnsweredFirst()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var first = await MintOpenAiAsync(rig, session);
+        await SaveTurnsAsync(
+            rig,
+            session,
+            first.Provider,
+            first.ProviderSessionId,
+            ("Good morning, how can I help you today?", "Doctor, my knee hurts when I walk."),
+            ("When did it start?", string.Empty));
+
+        await MintGeminiAsync(rig, session);
+
+        var recovered = MintedInstructions(rig)[1];
+        Assert.EndsWith("' + NL + 'Candidate: When did it start?' + NL + '" + AnswerLastLineFirst, recovered, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wait for the candidate to speak next.", recovered, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1305,7 +1331,7 @@ public sealed class LiveVoiceFailoverTests
         var recovered = MintedInstructions(rig)[1];
         // The omitted line sits right after the header sentence; the oldest six turns are gone.
         Assert.Equal(
-            await BaseInstructionsAsync(rig, session) + "\n" + ConversationSoFarHeader + "\n" + EarlierTurnsOmitted + "\n" + newest,
+            await BaseInstructionsAsync(rig, session) + "\n" + ConversationSoFarHeader + "\n" + EarlierTurnsOmitted + "\n" + newest + "\n" + WaitForCandidate,
             recovered);
         Assert.DoesNotContain("c06-", recovered, StringComparison.Ordinal);
         Assert.Contains("c07-", recovered, StringComparison.Ordinal);
@@ -1420,7 +1446,8 @@ public sealed class LiveVoiceFailoverTests
                 + "\nCandidate: Hello doctor"
                 + "\nPatient: Good morning"
                 + "\nCandidate: Any pain?"
-                + "\nPatient: Still here",
+                + "\nPatient: Still here"
+                + "\n" + WaitForCandidate,
             MintedInstructions(rig)[1]);
     }
 

@@ -1155,7 +1155,8 @@ try {
       ? failoverObserved
         && failoverCallsOk({
           calls: providerCalls, primaryCall, secondaryCall, cards: panels.length,
-          recoveries: fault.kind === 'drop' || fault.kind === 'stall' ? (faultedPanel?.recoveries ?? 0) : 0,
+          // a stall the provider caused on its own is a recovery too: the panel's count decides, fault or not
+          recoveries: fault.kind === 'reload' ? 0 : (faultedPanel?.recoveries ?? 0),
           reloads: fault.kind === 'reload' && faultMetrics.firedAt ? 1 : 0,
         })
         && panels.every((p) => p?.provider === secondaryName && p.failedOver === true)

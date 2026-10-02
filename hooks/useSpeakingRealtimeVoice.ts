@@ -168,6 +168,8 @@ const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
 export const MAX_RECOVERIES = 2;
 /** The patient normally answers within ~3 s (slowest healthy replies seen ~19 s); the silent sessions of 30 Sep 2026 never answered. */
 export const STALL_MS = 20_000;
+/** Gemini only: an unanswered sentence first gets one end-of-audio nudge this long after it ended; a restore follows at STALL_MS. */
+export const GEMINI_NUDGE_MS = 8_000;
 const STALL_CHECK_MS = 1_000;
 /** A dropped WebRTC link that comes back by itself within this time is not a loss. */
 const PEER_DISCONNECT_GRACE_MS = 5_000;
@@ -634,6 +636,8 @@ export function useSpeakingRealtimeVoice(
   // real sentence; the candidate's speech bursts come from the microphone level (see createSpeechTracker).
   const lastPatientOutputAtRef = useRef(0);
   const candidateSpokeUntilRef = useRef<number | null>(null);
+  // The candidateSpokeUntilRef value the Gemini end-of-audio nudge was already sent for (one nudge per unanswered sentence).
+  const nudgedForRef = useRef<number | null>(null);
   const speechTrackerRef = useRef<SpeechTracker>(createSpeechTracker());
   const candidateSpansRef = useRef<SpeechSpan[]>([]);
   const assignedBurstStartRef = useRef(-1);
@@ -1012,6 +1016,12 @@ export function useSpeakingRealtimeVoice(
       return;
     }
 
+    // Gemini announces its own disconnect: restore now instead of waiting for the socket to die mid-sentence.
+    if (value.goAway || value.go_away) {
+      onLinkLostRef.current('closed');
+      return;
+    }
+
     const serverContent = (value.serverContent ?? value.server_content) as Record<string, unknown> | undefined;
     if (!serverContent) return;
     if (serverContent.interrupted === true) {
@@ -1324,6 +1334,11 @@ export function useSpeakingRealtimeVoice(
     recoveringRef.current = true;
     recoveryCountRef.current += 1;
     candidateSpokeUntilRef.current = null;
+    // Words spoken into a dead link are never transcribed. Left in place, the new session's first transcript
+    // would consume those bursts and start ~STALL_MS early (a 20-30 s segment, a timeline jump).
+    candidateSpansRef.current = [];
+    assignedBurstStartRef.current = -1;
+    nudgedForRef.current = null;
     setRecoveries(recoveryCountRef.current);
     setRecovering(true);
     const run = runRef.current;
@@ -1394,7 +1409,17 @@ export function useSpeakingRealtimeVoice(
     const timer = window.setInterval(() => {
       const spoke = candidateSpokeUntilRef.current;
       if (spoke === null || pinnedRef.current || stoppingRef.current || recoveringRef.current) return;
-      if (lastPatientOutputAtRef.current >= spoke || performance.now() - spoke < STALL_MS) return;
+      if (lastPatientOutputAtRef.current >= spoke) return;
+      const silentMs = performance.now() - spoke;
+      const socket = socketRef.current;
+      if (
+        silentMs >= GEMINI_NUDGE_MS && silentMs < STALL_MS && providerRef.current === 'gemini' && nudgedForRef.current !== spoke
+        && geminiReadyRef.current && socket?.readyState === WebSocket.OPEN
+      ) {
+        nudgedForRef.current = spoke;
+        socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+      }
+      if (silentMs < STALL_MS) return;
       candidateSpokeUntilRef.current = null; // one trigger per unanswered sentence
       onLinkLostRef.current('stall');
     }, STALL_CHECK_MS);
