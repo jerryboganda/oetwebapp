@@ -99,8 +99,19 @@ async function startSession(ctx, learner, options = {}) {
     browserName: options.browserName ?? 'chromium', device: options.device ?? null, deviceId: learner.deviceId,
     nativeShell: Boolean(options.nativeShell), storageState: options.storageState, seedClock: Boolean(options.seedClock), log,
   });
-  if (options.storageState) await session.page.goto(b.appUrl('/writing'), { waitUntil: 'domcontentloaded' });
-  else await b.signIn(session, { email: learner.email, password: ctx.password });
+  session.reSignedIn = false;
+  if (options.storageState) {
+    // A reopened browser keeps cookies + localStorage but not sessionStorage, where a sign-in without
+    // "remember me" keeps its session snapshot. If the app sends us to sign-in, sign in again on the SAME device
+    // (what a candidate does) and record it.
+    await session.page.goto(b.appUrl('/writing'), { waitUntil: 'domcontentloaded' });
+    const signedOut = await session.page.waitForURL((u) => u.pathname.startsWith(ROUTES.signIn), { timeout: 15_000 }).then(() => true, () => false);
+    for (let i = 0; i < 20 && !signedOut && !session.bearer(); i += 1) await sleep(500);
+    if (signedOut || !session.bearer()) {
+      session.reSignedIn = true;
+      await b.signIn(session, { email: learner.email, password: ctx.password });
+    }
+  } else await b.signIn(session, { email: learner.email, password: ctx.password });
   for (let i = 0; i < 40 && !session.bearer(); i += 1) await sleep(500);
   if (session.userId() && session.userId() !== learner.userId) throw new Error(`the browser is signed in as ${session.userId()}, not ${learner.userId}`);
   return session;
@@ -153,8 +164,11 @@ async function runTest(ctx, row, needs, fn) {
   for (let waited = 0; ctx.deploy.busy && waited < 40 * 60_000; waited += 30_000) await sleep(30_000);
   if (ctx.deploy.busy) return { ...row, status: 'NOT_RUN', notes: 'not started: a deploy ran for more than 40 minutes' };
   const epoch = ctx.deploy.epoch;
-  const t = { problems: [], partials: [], blocked: [], notes: [], saved: row.saved ?? '-', provider: row.provider ?? '-', fallback: row.fallback ?? '-' };
+  // t.track(session) names the page the test is on, for the failure diagnostics below.
+  const t = { problems: [], partials: [], blocked: [], notes: [], saved: row.saved ?? '-', provider: row.provider ?? '-', fallback: row.fallback ?? '-', page: null };
+  t.track = (session) => { t.page = session?.page ?? null; };
   const started = Date.now();
+  const name = slug([row.profession, row.category, row.task].join(' '));
   try {
     await fn(t);
   } catch (error) {
@@ -162,13 +176,18 @@ async function runTest(ctx, row, needs, fn) {
       t.blocked.push(error.message);
       for (const group of needs) if (!ctx.contractMissing[group] && error.message.includes(`live ${group} page`)) ctx.contractMissing[group] = error.message;
     } else if (error instanceof Blocked) t.blocked.push(error.message);
-    else t.problems.push(`error: ${String(error.message).slice(0, 300)}`);
+    else t.problems.push(`error: ${String(error.message).split('\n')[0].slice(0, 300)}`);
   }
   let status = verdictOf(t);
   if (ctx.deploy.epoch !== epoch || ctx.deploy.busy) status = 'VOID_DEPLOY';
+  let diagnostics = null;
+  if (status !== 'PASS' && t.page) {
+    const b = await import('./browser.mjs');
+    diagnostics = await b.pageDiagnostics(t.page, path.join(MEDIA, `failure-${name}.png`)).catch((e) => ({ error: e.message }));
+  }
   const notes = [...t.notes, ...t.problems, ...t.partials, ...t.blocked].join('; ') || 'all checks passed';
   const result = { ...row, saved: t.saved, provider: t.provider, fallback: t.fallback, status, notes };
-  writeJson(`tests/${slug([row.profession, row.category, row.task].join(" "))}.json`, { ...result, seconds: Math.round((Date.now() - started) / 1000) });
+  writeJson(`tests/${name}.json`, { ...result, seconds: Math.round((Date.now() - started) / 1000), diagnostics });
   log(`${status} ${row.profession} / ${row.category}: ${notes.slice(0, 400)}`);
   return result;
 }
@@ -185,27 +204,33 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
   const b = await import('./browser.mjs');
   let session = firstSession; // onFailed may hand back a NEW session (S6: a new device session after 2 min)
   let page = session.page;
+  t.track(session);
   const shot = path.join(MEDIA, slug(`${learner.key}-${task.scenarioId}`));
   let failedOnce = false;
   const outcome = await ctx.lane.run(async () => {
     await pace(ctx, learner);
     const submissionId = await b.submit(session);
     const fake = opts.clientFault ? await b.fakeFailedStatus(page, submissionId) : null;
-    if (!ctx.contractChecked?.grading) {
-      await b.requireContract(page, 'grading');
-      ctx.contractChecked = { ...ctx.contractChecked, grading: true };
+    // The step list renders only while the run is in progress; a run a fault flag fails at once shows the
+    // failure card instead, so the steps are judged on runs that are expected to grade.
+    if (!opts.expectFailure) {
+      if (!ctx.contractChecked?.grading) {
+        await b.requireContract(page, 'grading');
+        ctx.contractChecked = { ...ctx.contractChecked, grading: true };
+      }
+      const steps = await b.gradingSteps(page);
+      if (steps === null) t.partials.push('grading steps not captured (the page left the grading view first)');
+      else t.problems.push(...gradingStepsProblems(steps));
+      await page.locator(tid(TEST_IDS.gradingSteps)).first().screenshot({ path: `${shot}-grading.png` }).catch(() => undefined);
     }
-    const steps = await b.gradingSteps(page);
-    if (steps === null) t.partials.push('grading steps not captured (the page left the grading view first)');
-    else t.problems.push(...gradingStepsProblems(steps));
-    await page.locator(tid(TEST_IDS.gradingSteps)).first().screenshot({ path: `${shot}-grading.png` }).catch(() => undefined);
     let result = await b.waitGradeOutcome(session, submissionId);
     if (opts.clientFault) result = { ...result, status: 'failed' };
     if (result.status === 'failed') {
       failedOnce = true;
       if (!opts.expectFailure) t.problems.push('grading failed visibly (status failed) on the first run');
+      else await b.requireContract(page, 'gradingFailure', 60_000);
       const replaced = opts.onFailed ? await opts.onFailed(submissionId) : null;
-      if (replaced) { session = replaced; page = session.page; }
+      if (replaced) { session = replaced; page = session.page; t.track(session); }
       await pace(ctx, learner);
       const retry = page.locator(tid(TEST_IDS.gradingRetry)).first();
       const retryVisible = await retry.isVisible().catch(() => false);
@@ -290,6 +315,7 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
 /** Opens a task like a candidate and types the script (C0/C1 ledger snapshots around the task-open debit). */
 async function openAndType(ctx, session, learner, task, text, t, { readingWindow }) {
   const b = await import('./browser.mjs');
+  t.track(session);
   const c0 = ctx.inputs.verifyCredits ? await api.creditSnapshot(ctx.admin, learner.userId) : null;
   const usageBefore = new Set((await api.usageRows(ctx.admin, { userId: learner.userId })).map((r) => r.id));
   await b.openTaskFromLibrary(session, task);
@@ -367,6 +393,11 @@ async function acceptanceSuite(ctx, plan) {
     return;
   }
   const pickOf = (category) => medicine.picks.find((p) => p.category === category) ?? medicine.picks[0];
+  // A scenario block starts on a fresh sign-in so a broken page in one block cannot cascade into the next.
+  const freshSession = async (old) => {
+    await old?.close();
+    return startSession(ctx, learner);
+  };
   const learner = await provisionLearner(ctx, { key: 'medicine-acc', professionId: medicine.catalogId, letters: 3 });
   let session = await startSession(ctx, learner);
   if (ctx.inputs.verifyCredits) await verifyFunding(ctx, session, learner, 'paid');
@@ -383,7 +414,7 @@ async function acceptanceSuite(ctx, plan) {
   const chainStep = async (category, fn) => {
     const row = { ...base(category), task: `${task.letterType} ${task.scenarioId}` };
     if (chain?.broken) { add({ ...row, status: 'NOT_RUN', notes: `not run: ${chain.broken} did not complete` }); return; }
-    const result = await runTest(ctx, row, editorNeeds, fn);
+    const result = await runTest(ctx, row, editorNeeds, (t) => { t.track(session); return fn(t); });
     if (!['PASS', 'PARTIAL'].includes(result.status)) chain = { broken: category };
     add(result);
   };
@@ -420,6 +451,8 @@ async function acceptanceSuite(ctx, plan) {
     await session.close();
     await sleep(30_000);
     session = await startSession(ctx, learner, { storageState });
+    t.track(session);
+    if (session.reSignedIn) t.notes.push('closing the browser ended the sign-in (no "remember me": the session snapshot lives in sessionStorage); signed in again on the same device');
     await session.page.goto(b.appUrl(ROUTES.practice(task.scenarioId)), { waitUntil: 'domcontentloaded' });
     await expectText(t, 'after reopening');
     t.problems.push(...timerVerdict({ before, after: await timerNow(), window: windows.writing }).problems);
@@ -462,6 +495,7 @@ async function acceptanceSuite(ctx, plan) {
     await session.close();
     await sleep(30_000);
     session = await startSession(ctx, learner);
+    t.track(session);
     await session.page.goto(b.appUrl(ROUTES.postSubmissions), { waitUntil: 'domcontentloaded' });
     const row = session.page.locator(`${tid(TEST_IDS.postSubmissionRow)}[data-scenario-id="${task.scenarioId}"][data-state="draft"]`).first();
     await row.waitFor({ state: 'visible', timeout: 60_000 });
@@ -482,13 +516,14 @@ async function acceptanceSuite(ctx, plan) {
   const urgentScript = scriptFor(ctx.scripts, 'medicine', urgent.category);
   const s6 = { ...base('P0-3 S6 failed grade visible later in Post Submissions'), task: `${urgent.letterType} ${urgent.scenarioId}` };
   const s7 = { ...base('P0-3 S7 Retry on the Post Submissions row'), task: s6.task };
+  session = await freshSession(session);
   if (ctx.inputs.faultMode === 'none') {
     add({ ...s6, status: 'NOT_RUN', notes: 'fault_mode=none' });
     add({ ...s7, status: 'NOT_RUN', notes: 'fault_mode=none' });
   } else {
     const client = ctx.inputs.faultMode === 'client';
     const s6State = { ran: false, problems: [] };
-    const result = await runTest(ctx, s7, [...editorNeeds, 'grading'], async (t) => {
+    const result = await runTest(ctx, s7, [...editorNeeds, 'grading', 'gradingFailure'], async (t) => {
       const opened6 = await openAndType(ctx, session, learner, urgent, urgentScript.text, t, { readingWindow: ctx.inputs.readingWindow });
       const health = writingHealth(await api.readHealthInputs(ctx.admin));
       const flag = client ? null : await enableFlag(ctx, 'all', learner.userId);
@@ -534,7 +569,9 @@ async function acceptanceSuite(ctx, plan) {
   const dischargeScript = scriptFor(ctx.scripts, 'medicine', discharge.category);
   const rr = { ...base('P0-3 reading window resume (60 s, reload)'), task: `${discharge.letterType} ${discharge.scenarioId}` };
   let rrOpened = null;
-  add(await runTest(ctx, rr, editorNeeds, async (t) => {
+  session = await freshSession(session);
+  const rrResult = await runTest(ctx, rr, editorNeeds, async (t) => {
+    t.track(session);
     rrOpened = {
       c0: ctx.inputs.verifyCredits ? await api.creditSnapshot(ctx.admin, learner.userId) : null,
       usageBefore: new Set((await api.usageRows(ctx.admin, { userId: learner.userId })).map((r) => r.id)),
@@ -548,10 +585,12 @@ async function acceptanceSuite(ctx, plan) {
     const after = await b.readTimer(session.page);
     if (before.phase !== 'reading' || after.phase !== 'reading') t.problems.push(`phase ${before.phase} -> ${after.phase}, expected reading both times`);
     t.problems.push(...timerVerdict({ before: before.seconds, after: after.seconds, window: w.reading }).problems);
-  }));
+  });
+  add(rrResult);
   const f1 = { ...base('L1+L2 synthetic fault: L3 GPT-6.1 Sol serves, zero API spend'), task: rr.task };
-  add(await runTest(ctx, f1, editorNeeds, async (t) => {
-    if (!rrOpened?.c0 && ctx.inputs.verifyCredits) throw new Blocked('the reading-resume step did not open the task');
+  if (!['PASS', 'PARTIAL'].includes(rrResult.status)) add({ ...f1, status: 'NOT_RUN', notes: 'not run: the reading-resume step (which opens this task) did not complete' });
+  else add(await runTest(ctx, f1, editorNeeds, async (t) => {
+    t.track(session);
     await b.waitForWritingPhase(session, 'real');
     await b.typeText(session.page, dischargeScript.text);
     if (!(await b.waitDraftEquals(session, discharge.scenarioId, dischargeScript.text, 15_000)).ok) t.problems.push('the draft did not equal the typed text within 15 s');
@@ -595,9 +634,10 @@ async function freeSampleScenario(ctx, medicine, add, base) {
   if (!api.freeSamplesEnabled(ctx.found.flags)) { add({ ...row, status: 'BLOCKED', notes: 'free_samples_enabled is OFF (owner decision; the harness never flips it)' }); return; }
   if (ctx.inputs.faultMode === 'none') { add({ ...row, status: 'NOT_RUN', notes: 'fault_mode=none' }); return; }
   let session;
-  add(await runTest(ctx, row, ['editor', 'grading', 'results'], async (t) => {
+  add(await runTest(ctx, row, ['editor', 'gradingFailure', 'results'], async (t) => {
     const learner = await provisionLearner(ctx, { key: 'medicine-free', professionId: medicine.catalogId, letters: 0 });
     session = await startSession(ctx, learner);
+    t.track(session);
     const c0 = await api.creditSnapshot(ctx.admin, learner.userId);
     const refusal = creditPreflight(c0, null, { letters: 1, kind: 'free' });
     if (refusal.length) throw new Blocked(refusal.join('; '));
@@ -664,6 +704,7 @@ async function uiSuite(ctx, plan) {
     const row = { profession: 'Medicine (UI)', task: `${pick.letterType} ${pick.scenarioId}`, category: `UI ${d.device} (${d.name})` };
     ctx.tables.ui.push(await runTest(ctx, row, ['editor', 'grading', 'results', 'postSubmissions'], async (t) => {
       const session = await startSession(ctx, learner, { browserName: d.name, device: d.device, nativeShell: true, seedClock: ctx.inputs.readingWindow === 'seed' });
+      t.track(session);
       try {
         if (i === 0 && ctx.inputs.verifyCredits) await verifyFunding(ctx, session, learner, 'paid');
         const opened = await openAndType(ctx, session, learner, pick, '', t, { readingWindow: ctx.inputs.readingWindow });

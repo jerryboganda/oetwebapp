@@ -153,9 +153,36 @@ export async function presentTestIds(page, ids) {
   return present;
 }
 
-export async function requireContract(page, group) {
-  const gaps = contractGaps(group, await presentTestIds(page, CONTRACT_GROUPS[group]));
+/** Waits (shared deadline) for every id of the group to render; a page that renders late is not "missing". */
+export async function requireContract(page, group, ms = 30_000) {
+  const deadline = Date.now() + ms;
+  const present = [];
+  for (const id of CONTRACT_GROUPS[group]) {
+    const timeout = Math.max(1_000, deadline - Date.now());
+    if (await page.locator(tid(id)).first().waitFor({ state: 'attached', timeout }).then(() => true, () => false)) present.push(id);
+  }
+  const gaps = contractGaps(group, present);
   if (gaps.length) throw new ContractMissing(group, gaps);
+}
+
+/**
+ * Failure diagnostics: the page path, title and the first 300 characters of visible text, plus a screenshot of
+ * the top of the viewport. On pages that show letter, case-note or model-answer text only headings and
+ * alerts are kept.
+ */
+export async function pageDiagnostics(page, shotPath) {
+  if (!page || page.isClosed()) return { page: 'closed' };
+  const url = new URL(page.url());
+  const sensitive = /\/writing\/(practice\/session|paper\/session|submissions\/[^/]+\/(results|revise))/.test(url.pathname);
+  const text = await page.evaluate((onlyHeadings) => {
+    const raw = onlyHeadings
+      ? [...document.querySelectorAll('h1, h2, [role="alert"], [role="status"], [role="dialog"] h2')].map((e) => e.innerText).join(' | ')
+      : document.body.innerText;
+    return raw.replace(/\s+/g, ' ').trim().slice(0, 300);
+  }, sensitive).catch(() => null);
+  const width = page.viewportSize()?.width ?? 1366;
+  if (shotPath) await page.screenshot({ path: shotPath, clip: { x: 0, y: 0, width, height: 320 } }).catch(() => undefined);
+  return { path: url.pathname + url.search, title: await page.title().catch(() => null), text, textScope: sensitive ? 'headings and alerts only' : 'body' };
 }
 
 /** Library -> click the task's own link (as a candidate does) -> the eligibility answer (task-open debit). */

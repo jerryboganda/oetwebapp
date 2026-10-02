@@ -115,7 +115,9 @@ export const CORRECTIONS_PREVIEW = 5;
 export const LG_MIN_WIDTH = 1024;
 export const CONTRACT_GROUPS = {
   editor: [TEST_IDS.editor, TEST_IDS.timer, TEST_IDS.draftStatus, TEST_IDS.submit],
+  // The step list renders only while grading runs; a failed run shows the failure card + Retry instead.
   grading: [TEST_IDS.gradingSteps],
+  gradingFailure: [TEST_IDS.gradingFailed, TEST_IDS.gradingRetry],
   postSubmissions: [TEST_IDS.postSubmissionsList, TEST_IDS.postSubmissionRow],
   // corrections-preview / -view-all exist only above 5 errors, so they are checked per report, not here.
   results: [TEST_IDS.scorePanel, TEST_IDS.scoreStat, TEST_IDS.gradeValue, TEST_IDS.resultSection,
