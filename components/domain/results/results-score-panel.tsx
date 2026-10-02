@@ -68,16 +68,18 @@ export function ResultsScorePanel({
   className,
 }: ResultsScorePanelProps) {
   return (
-    <Card padding="lg" className={cn('@container overflow-hidden', className)}>
+    <Card padding="lg" data-testid="results-score-panel" className={cn('@container overflow-hidden', className)}>
       <div className={cn('grid gap-5', aside && '@3xl:grid-cols-[minmax(0,1fr)_16rem] @3xl:gap-x-8')}>
         <div className="flex min-w-0 items-center gap-4 sm:gap-5">
           <ResultGauge value={gaugeValue} color={gaugeColor}>
-            {gaugeCenter ?? (
-              <span className="text-2xl font-black text-navy dark:text-white">
-                <CountUp value={Math.round(gaugeValue)} />
-                <span className="text-sm">%</span>
-              </span>
-            )}
+            <div data-testid="grade-value" className="flex flex-col items-center">
+              {gaugeCenter ?? (
+                <span className="text-2xl font-black text-navy dark:text-white">
+                  <CountUp value={Math.round(gaugeValue)} />
+                  <span className="text-sm">%</span>
+                </span>
+              )}
+            </div>
             {gaugeLabel ? (
               <span className="mt-1 tile-label text-muted">{gaugeLabel}</span>
             ) : null}
@@ -102,7 +104,7 @@ export function ResultsScorePanel({
         {stats?.length ? (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-2">
             {stats.map((stat, index) => (
-              <div key={index} className={cn('min-w-0 rounded-xl border p-3', statToneClass[stat.tone ?? 'default'])}>
+              <div key={index} data-testid="results-score-stat" className={cn('min-w-0 rounded-xl border p-3', statToneClass[stat.tone ?? 'default'])}>
                 <div className="flex items-center gap-1.5">
                   {stat.icon ? <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{stat.icon}</span> : null}
                   <p className="tile-label min-w-0 opacity-80">{stat.label}</p>
