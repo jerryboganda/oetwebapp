@@ -65,6 +65,28 @@ describe('SessionManager', () => {
     expect(h.store.getSession(detail.id)?.resumeId).toBe(`resume-${detail.id}`);
   });
 
+  it.each(['claude', 'codex'] as const)('delivers Jev advice to %s without changing the recorded message or native settings', async (engine) => {
+    activateLease(h);
+    const session = await h.sessions.create({ engine, model: 'model-a', effort: 'high', mode: 'guarded' });
+    const text = 'Diagnose the grading exception without changing official marks.';
+    const jevAdvisory = {
+      status: 'ok', model: 'jev-1.13.0', requiresHumanReview: false,
+      taskKind: 'debug', taskConfidence: 1, riskLevel: 'elevated', riskConfidence: 1, reason: null,
+    };
+
+    await h.sessions.sendMessage(session.id, { text, jevAdvisory });
+    await vi.waitFor(() => expect(h.adapters[engine].turns).toHaveLength(1));
+    const turn = h.adapters[engine].turns[0]!;
+    expect(turn.text).toContain('Jev development advisory');
+    expect(turn.text).toContain('"taskKind":"debug"');
+    expect(turn.text).toContain('"riskLevel":"elevated"');
+    expect(turn.text.endsWith(text)).toBe(true);
+    expect(turn.opts).toEqual({ model: 'model-a', effort: 'high', mode: 'guarded' });
+    expect((await events(h, session.id)).find((event) => event.type === 'user_message')?.data.text).toBe(text);
+    turn.release();
+    await vi.waitFor(async () => expect(await types(h, session.id)).toContain('turn_complete'));
+  });
+
   it('rejects unknown models, unsupported efforts and signed-out engines', async () => {
     await expectHttp(h.sessions.create({ engine: 'claude', model: 'nope', mode: 'guarded' }), 400, 'unknown_model');
     await expectHttp(h.sessions.create({ engine: 'claude', model: 'model-b', effort: 'high', mode: 'guarded' }), 400, 'effort_not_supported');
