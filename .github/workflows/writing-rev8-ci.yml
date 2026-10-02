@@ -61,6 +61,16 @@ on:
         required: false
         default: ""
         type: string
+      diagnose_latest_failures:
+        description: "Read-only: rank why the latest Writing grades failed (no UUID needed): operations, usage, providers, circuits, budgets, policy, failed learners' credit ledger"
+        required: false
+        default: false
+        type: boolean
+      verify_api_model:
+        description: "Owner-authorised ONE ~$0.01 paid Anthropic test-model call (Level 2 model id proof); stops when the API has no credit"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -191,6 +201,30 @@ jobs:
           }))));
           NODE
 
+  production-latest-diagnostics:
+    name: Read-only Writing grading diagnostics (latest failures)
+    if: ${{ inputs.diagnose_latest_failures == true || inputs.verify_api_model == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/qa
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check diagnostics script syntax
+        run: node --check scripts/qa/writing-prod-diagnose.mjs
+      # One admin sign-in (it signs other admin sessions out). Read-only except
+      # the single owner-authorised test-model call when verify_api_model is set.
+      - name: Rank the latest Writing grade failures
+        env:
+          ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          DIAGNOSE_LATEST: ${{ inputs.diagnose_latest_failures }}
+          VERIFY_API_MODEL: ${{ inputs.verify_api_model }}
+        run: node scripts/qa/writing-prod-diagnose.mjs
+
   software-review:
     name: Jev typed software review (AI Gateway)
     if: ${{ inputs.review_json != '' }}
@@ -239,7 +273,7 @@ jobs:
 
   rulebooks:
     name: Canonical Writing rulebooks (build + --check)
-    if: ${{ inputs.verify_production_report != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -264,7 +298,7 @@ jobs:
 
   backend:
     name: Backend Writing/Rulebook tests (.NET)
-    if: ${{ inputs.verify_production_report != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # No Postgres service: [PostgreSqlFact] tests self-skip without
@@ -315,7 +349,7 @@ jobs:
 
   backend-build:
     name: Backend compile gate (whole solution)
-    if: ${{ inputs.verify_production_report != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -328,7 +362,7 @@ jobs:
 
   frontend:
     name: Frontend (tsc + scoped vitest + changed-file lint)
-    if: ${{ inputs.verify_production_report != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
