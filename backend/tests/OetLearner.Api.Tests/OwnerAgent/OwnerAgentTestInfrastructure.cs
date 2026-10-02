@@ -57,10 +57,13 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
-        builder.UseSetting("TypeSafe:DevelopmentTriageEnabled", JevDevelopmentEnabled.ToString());
         builder.ConfigureTestServices(services =>
         {
-            services.PostConfigure<TypeSafeOptions>(options => options.Enabled = JevDevelopmentEnabled);
+            services.PostConfigure<TypeSafeOptions>(options =>
+            {
+                options.Enabled = JevDevelopmentEnabled;
+                options.DevelopmentTriageEnabled = JevDevelopmentEnabled;
+            });
             services.RemoveAll<ITypeSafeJudgmentService>();
             services.AddSingleton<ITypeSafeJudgmentService>(Judgments);
 
