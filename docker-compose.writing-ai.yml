@@ -44,6 +44,15 @@ x-sidecar-hardening: &sidecar-hardening
       max-size: 20m
       max-file: "5"
 
+# Lane bounds, identical for both sidecars (writing-ai-sidecars/shared/engine.mjs). A full queue or a
+# 7-minute wait answers that one request 503 lane_busy; nothing ever switches a sidecar off.
+x-lane-env: &lane-env
+  WRITING_CLI_TIMEOUT_MS: ${WRITING_CLI_TIMEOUT_MS:-300000}
+  WRITING_QUEUE_MAX: ${WRITING_QUEUE_MAX:-40}
+  WRITING_QUEUE_WAIT_MS: ${WRITING_QUEUE_WAIT_MS:-420000}
+  # One CLI run at a time; raise only after a burst test shows no login/refresh errors.
+  WRITING_LANE_CONCURRENCY: ${WRITING_LANE_CONCURRENCY:-1}
+
 services:
   writing-claude:
     <<: *sidecar-hardening
@@ -51,6 +60,7 @@ services:
     container_name: oet-writing-claude
     hostname: oet-writing-claude
     environment:
+      <<: *lane-env
       NODE_ENV: production
       TZ: UTC
       PORT: "8080"
@@ -82,11 +92,12 @@ services:
     container_name: oet-writing-codex
     hostname: oet-writing-codex
     environment:
+      <<: *lane-env
       NODE_ENV: production
       TZ: UTC
       PORT: "8080"
       CODEX_HOME: /home/agent/.codex
-      WRITING_CODEX_MODEL: ${WRITING_CODEX_MODEL:-gpt-6-sol}
+      WRITING_CODEX_MODEL: ${WRITING_CODEX_MODEL:-gpt-6.1-sol}
       WRITING_CODEX_EFFORT: ${WRITING_CODEX_EFFORT:-high}
       WRITING_CODEX_WEEKLY_TOKEN_CAP: ${WRITING_CODEX_WEEKLY_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}

@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: 22
       - name: Sidecar tests (no AI calls, no network)
-        run: node --test 'writing-ai-sidecars/**/*.test.mjs'
+        run: node --test --test-timeout=60000 'writing-ai-sidecars/**/*.test.mjs'
       - name: Parse the sidecar YAML
         run: |
           python3 - <<'PY'
@@ -119,8 +119,8 @@ jobs:
       - name: Check claude auth status without network (signed out)
         run: |
           set -uo pipefail
-          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint claude "$CLAUDE_IMAGE" auth status 2>&1)"
-          code=$?
+          code=0
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint claude "$CLAUDE_IMAGE" auth status 2>&1)" || code=$?
           printf 'exit=%s\n%s\n' "$code" "$out"
           if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
             echo "::error::claude auth status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"
@@ -131,8 +131,8 @@ jobs:
       - name: Check codex login status without network (signed out)
         run: |
           set -uo pipefail
-          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint codex "$CODEX_IMAGE" login status 2>&1)"
-          code=$?
+          code=0
+          out="$(timeout 60 docker run --rm --network none --tmpfs /home/agent:mode=1777 --entrypoint codex "$CODEX_IMAGE" login status 2>&1)" || code=$?
           printf 'exit=%s\n%s\n' "$code" "$out"
           if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then
             echo "::error::codex login status exited $code (0 = signed in, 124 = hung); a fresh image must be signed out"

@@ -46,6 +46,8 @@ export async function startSidecar(url) {
   if (!server.listening) await once(server, 'listening');
   after(() => {
     server.close();
+    server.closeAllConnections(); // a failed test can leave a held request open
+
     mock.restoreAll();
     syncBuiltinESMExports();
   });

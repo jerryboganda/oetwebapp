@@ -53,7 +53,10 @@ async function start(t, options) {
     onUsage: async () => ({}),
     ...options,
   });
-  t.after(() => server.close());
+  t.after(() => {
+    server.close();
+    server.closeAllConnections();
+  });
   await once(server, 'listening');
   const { port } = server.address();
   return { base: `http://127.0.0.1:${port}`, port };

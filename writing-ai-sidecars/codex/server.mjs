@@ -4,18 +4,31 @@
 // Wire contract consumed by the .NET RegistryBackedProvider (OpenAiCompatible):
 //   POST /v1/chat/completions  →  OpenAI chat.completion shape
 //   GET  /usage                →  quota snapshot for the subscription selector
+//   GET  /readyz               →  login (`codex login status`) + queue state, for display only
 //
 // Uses `codex exec` (non-interactive headless mode) with a JSON event stream.
 // Tools are sandboxed off; the prompt travels on stdin. CLI session/rollout
 // persistence is unverified.
 
 import { createSidecarServer } from '../shared/http.mjs';
-import { Mutex, QuotaExceededError, looksLikeQuotaExceeded, parseJsonLines, runCli } from '../shared/engine.mjs';
+import { AuthExpiredError, Mutex, cliError, errorText, loginProbe, parseJsonLines, runCli } from '../shared/engine.mjs';
 
-const MODEL = process.env.WRITING_CODEX_MODEL || 'gpt-6-sol';
+// Owner 2026-10-02: GPT-6.1 Sol High. The backend always sends the model; this is only the default.
+const MODEL = process.env.WRITING_CODEX_MODEL || 'gpt-6.1-sol';
 const EFFORT = (process.env.WRITING_CODEX_EFFORT || 'high').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
+
+/** `codex login status` prints "Logged in using ChatGPT" (exit 0) or "Not logged in" (exit 1), a
+ * local auth-file read. Anything else is unknown (null), never false. */
+export function parseCodexLoginStatus({ code, stdout, stderr }) {
+  const text = `${stdout}\n${stderr}`;
+  if (/\bnot logged in\b/i.test(text)) return { authOk: false, plan: null };
+  if (code === 0 && /\blogged in\b/i.test(text)) return { authOk: true, plan: null };
+  return { authOk: null, plan: null };
+}
+
+const login = loginProbe('codex', ['login', 'status'], parseCodexLoginStatus);
 
 const state = {
   weekStartedAt: Date.now(),
@@ -39,7 +52,7 @@ function buildPrompt(body) {
   return parts.filter(Boolean).join('\n\n');
 }
 
-async function complete(body) {
+async function complete(body, { signal } = {}) {
   return mutex.run(async () => {
     const model = typeof body.model === 'string' && body.model ? body.model : MODEL;
     const prompt = buildPrompt(body);
@@ -61,21 +74,25 @@ async function complete(body) {
       '-',
     ];
 
-    let result;
-    try {
-      result = await runCli('codex', args, { timeoutMs: TIMEOUT_MS, cwd: '/tmp', input: prompt });
-    } catch (err) {
+    const result = await runCli('codex', args, { timeoutMs: TIMEOUT_MS, cwd: '/tmp', input: prompt, signal });
+    const events = parseJsonLines(result.stdout);
+    // Error text only, and only for a failed run: stderr plus `error` / `turn.failed` events. The
+    // agent's text and the usage numbers are never scanned: a clean grade can quote "429" or
+    // "You have reached ...", and a false quota error hard-opens the shared Codex circuit.
+    const errors = events
+      .filter((e) => e?.type === 'error' || e?.type === 'turn.failed')
+      .map((e) => e.message ?? e.error?.message ?? e.error ?? e);
+    if (result.code !== 0 || errors.length) {
+      const err = cliError(
+        'Codex',
+        result.code !== 0 ? `codex exited ${result.code}` : 'codex error',
+        errorText(result.stderr, ...errors),
+      );
+      if (err instanceof AuthExpiredError) login.failed();
       throw err;
     }
-    const combined = `${result.stdout}\n${result.stderr}`;
-    if (looksLikeQuotaExceeded(combined)) {
-      throw new QuotaExceededError(`Codex subscription quota/rate limit: ${combined.slice(-400)}`);
-    }
-    if (result.code !== 0) {
-      throw new Error(`codex exited ${result.code}: ${combined.slice(-400)}`);
-    }
+    login.succeeded();
 
-    const events = parseJsonLines(result.stdout);
     let text = '';
     let usage = null;
     for (const e of events) {
@@ -86,10 +103,6 @@ async function complete(body) {
         text += (text ? '\n' : '') + e.item.text;
       } else if (e.type === 'turn.completed' && e.usage) {
         usage = e.usage;
-      } else if (e.type === 'error') {
-        const msg = e.message || JSON.stringify(e);
-        if (looksLikeQuotaExceeded(msg)) throw new QuotaExceededError(String(msg).slice(-400));
-        throw new Error(`codex error: ${String(msg).slice(-400)}`);
       }
     }
     if (!text.trim()) {
@@ -121,7 +134,7 @@ async function complete(body) {
       ],
       usage: { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens },
     };
-  });
+  }, { signal });
 }
 
 async function usage() {
@@ -147,5 +160,7 @@ createSidecarServer({
   completionPath: '/v1/chat/completions',
   onCompletion: complete,
   onUsage: usage,
+  lane: mutex,
+  login,
   port: Number(process.env.PORT || 8080),
 });
