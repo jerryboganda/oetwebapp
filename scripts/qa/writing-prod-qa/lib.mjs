@@ -360,8 +360,10 @@ export function writingHealth({ writingProvider, circuits, now = Date.now() }) {
  * May the live suites start? failures = FAIL rows (the Max route is off or a retired marker is set: these are
  * defects, never repaired by the harness); blockers = BLOCKED rows; repairs = audited admin circuit resets the
  * harness may do when preflight_repair=true (L2/L3 circuits only), after which preflight is run again.
+ * @param {any} input { health, providers, requireL2Disabled?, repair?, writingProvider?, plannedLetters? }
  */
-export function preflightDecision({ health, providers, requireL2Disabled = false, repair = false, writingProvider = null, plannedLetters = 0 }) {
+export function preflightDecision(input) {
+  const { health, providers, requireL2Disabled = false, repair = false, writingProvider = null, plannedLetters = 0 } = input;
   const failures = [];
   const blockers = [];
   const warnings = [];
@@ -385,8 +387,12 @@ export function preflightDecision({ health, providers, requireL2Disabled = false
   };
 }
 
-/** Guard loop (every 45 s while letters are in flight). halt = stop starting tests; pause = a deploy is running. */
-export function guardDecision({ deployBusy, health, anthropicRows = [] }) {
+/**
+ * Guard loop (every 45 s while letters are in flight). halt = stop starting tests; pause = a deploy is running.
+ * @param {any} input { deployBusy, health, anthropicRows? }
+ */
+export function guardDecision(input) {
+  const { deployBusy, health, anthropicRows = [] } = input;
   const reasons = [];
   if (health.marker !== null) reasons.push(`quotaExceededUntil was set (${health.marker})`);
   if (health.failoverActive) reasons.push('failoverActive turned true');
@@ -505,8 +511,12 @@ export function freeSampleProblems({ afterFailure, afterRetry }) {
 
 // ---- Status + evidence table --------------------------------------------------------------------------------------
 
-/** blocked > problems (FAIL) > partials (not proven live) > PASS. */
-export function verdictOf({ problems = [], partials = [], blocked = [] }) {
+/**
+ * blocked > problems (FAIL) > partials (not proven live) > PASS.
+ * @param {any} input { problems?, partials?, blocked? } lists of reasons
+ */
+export function verdictOf(input) {
+  const { problems = [], partials = [], blocked = [] } = input;
   if (blocked.length) return 'BLOCKED';
   if (problems.length) return 'FAIL';
   return partials.length ? 'PARTIAL' : 'PASS';

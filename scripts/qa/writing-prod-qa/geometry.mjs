@@ -110,8 +110,13 @@ export function containmentProblems(sample, tol = 1) {
   return problems;
 }
 
-/** Any text box or control under an obstacle (bottom nav, floating handle). */
-export function overlapProblems({ obstacles, items }, names = null) {
+/**
+ * Any text box or control under an obstacle (bottom nav, floating handle); `names` limits the obstacles.
+ * @param {any} sample { obstacles, items }
+ * @param {any} [names]
+ */
+export function overlapProblems(sample, names = null) {
+  const { obstacles, items } = sample;
   const problems = [];
   for (const o of obstacles) {
     if (names && !names.includes(o.name)) continue;
