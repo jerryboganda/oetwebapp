@@ -4,155 +4,164 @@
   "statuses": ["pending", "in_progress", "blocked", "done"],
   "tasks": [
     {
-      "id": "AX-01",
-      "title": "Machine layer: scripts/agent/state.mjs + session-state.template.md + README.md",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
+      "id": "WAI-00",
+      "title": "Evidence-first diagnosis: production-diagnostics gains diagnose_latest_failures + verify_api_model (the one authorised paid check); record the root-cause table",
+      "status": "in_progress",
+      "owner": "writing-ai-launch",
       "blockedBy": [],
-      "verify": "pnpm run ax:self-test",
-      "evidence": ["36952304624"],
-      "files": [
-        "scripts/agent/state.mjs",
-        "scripts/agent/session-state.template.md",
-        "scripts/agent/README.md"
-      ]
-    },
-    {
-      "id": "AX-02",
-      "title": "Artifacts: SESSION_STATE.md, TASKS.json, VERIFICATION.md, docs/PROGRESS-ARCHIVE-2026.md",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-01"],
-      "verify": "pnpm run ax:check",
-      "evidence": ["local:ax:check"],
-      "files": [
-        "SESSION_STATE.md",
-        "TASKS.json",
-        "VERIFICATION.md",
-        "docs/PROGRESS-ARCHIVE-2026.md"
-      ]
-    },
-    {
-      "id": "AX-03",
-      "title": "Repoint every agent-state.local.md reference to SESSION_STATE.md / TASKS.json",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-02"],
-      "verify": "grep -rn agent-state.local .github .codex AGENTS.md PROGRESS.md docs",
-      "evidence": ["local:grep-reconciliation"],
-      "files": [
-        "AGENTS.md",
-        ".github/copilot-instructions.md",
-        ".github/instructions/agentic-workflow.instructions.md",
-        ".github/prompts/",
-        ".github/agents/",
-        ".codex/skills/"
-      ]
-    },
-    {
-      "id": "AX-04",
-      "title": "Compact PROGRESS.md and remove stale compute-rule contradictions (lessons-learned, PRD, docs index)",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-02"],
-      "verify": "pnpm run ax:check",
-      "evidence": ["local:ax:check"],
-      "files": [
-        "PROGRESS.md",
-        "PRD.md",
-        "docs/README.md",
-        "docs/dev/lessons-learned.md"
-      ]
-    },
-    {
-      "id": "AX-05",
-      "title": "Wire ax:* npm scripts, the local-only ship:gate warning hook and scripts/README.md",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-01"],
-      "verify": "node scripts/ship/pre-push-gate.mjs --self-test",
-      "evidence": ["local:ship-gate-self-test", "local:ship-gate-ci"],
-      "files": ["package.json", "scripts/ship/pre-push-gate.mjs", "scripts/README.md"]
-    },
-    {
-      "id": "AX-06",
-      "title": "Static verification + completeness sweep (self-tests, --ci unchanged, grep reconciliation)",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-03", "AX-04", "AX-05"],
-      "verify": "pnpm run ax:check && node scripts/ship/pre-push-gate.mjs --self-test",
-      "evidence": ["local:ax:check", "local:ship-gate-self-test", "local:ship-gate-ci"],
-      "files": []
-    },
-    {
-      "id": "AX-07",
-      "title": "Ship: public flip, commit, push, ship:watch, ax:record, ax:verify, private flip",
-      "status": "done",
-      "owner": "ax-session-state-ledger",
-      "blockedBy": ["AX-06"],
-      "verify": "deploy.yml",
-      "evidence": ["36946463004"],
-      "files": ["VERIFICATION.md"]
-    },
-    {
-      "id": "AX-08",
-      "title": "Hook adapter: scripts/agent/hook.mjs + hook-shim.mjs (SessionStart auto-load, bounded fail-open Stop gate)",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-07"],
-      "verify": "node scripts/agent/hook.mjs --self-test (ax-check.yml)",
-      "evidence": ["36950958768"],
-      "files": ["scripts/agent/hook.mjs", "scripts/agent/hook-shim.mjs"]
-    },
-    {
-      "id": "AX-09",
-      "title": "ax:verify confirms run ids typed into SESSION_STATE.md gate rows (gateRunEvidence, compareGateRuns)",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-07"],
-      "verify": "node scripts/agent/state.mjs --self-test (ax-check.yml)",
-      "evidence": ["36950958768"],
-      "files": ["scripts/agent/state.mjs"]
-    },
-    {
-      "id": "AX-10",
-      "title": "CI proof: ax-check.yml runs both self-tests on Linux and Windows (sparse checkout for the 260-char path)",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-08", "AX-09"],
-      "verify": "ax-check.yml",
-      "evidence": ["36950958768"],
-      "files": [".github/workflows/ax-check.yml"]
-    },
-    {
-      "id": "AX-11",
-      "title": "Wire the user-level hooks: launcher copy + ~/.claude/settings.json merge (backup kept) + synthetic-input smoke test",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-10"],
-      "verify": "local:hook-smoke",
+      "verify": "writing-rev8-ci.yml",
       "evidence": [],
-      "files": ["scripts/agent/README.md", "AGENTS.md"]
+      "files": [".github/workflows/writing-rev8-ci.yml", "SESSION_STATE.md"]
     },
     {
-      "id": "AX-13",
-      "title": "Fix the known loopholes: stricter evidence, CLAUDE.md ship-gate guard, VERIFICATION.md union merge, conflict-marker error, Windows long paths",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-11"],
-      "verify": "ax-check.yml",
-      "evidence": ["36952304624"],
-      "files": ["scripts/agent/state.mjs", "scripts/ship/pre-push-gate.mjs", ".gitattributes", ".github/workflows/ax-check.yml"]
+      "id": "WAI-01",
+      "title": "Credit invariant: charge once at task open, hold on failure, Retry costs 0, plan-gate bypass, real-ledger tests",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": [],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "backend/src/OetLearner.Api/Services/Writing/WritingEntitlementService.cs",
+        "backend/src/OetLearner.Api/Services/Ai/AiCreditReservationService.cs",
+        "backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs"
+      ]
     },
     {
-      "id": "AX-12",
-      "title": "Push to main (owner ordered it) and confirm Build & Deploy for that SHA",
-      "status": "done",
-      "owner": "ax-enforcement-hooks",
-      "blockedBy": ["AX-13"],
+      "id": "WAI-02",
+      "title": "Spend-cap switch (off), Max weekly auto-switch removed, Codex model -> gpt-6.1-sol (backend + admin UI + docs)",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": [],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "backend/src/OetLearner.Api/Domain/AiQuotaEntities.cs",
+        "backend/src/OetLearner.Api/Services/AiManagement/AiQuotaService.cs",
+        "backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs",
+        "app/admin/ai-usage/page.tsx"
+      ]
+    },
+    {
+      "id": "WAI-03",
+      "title": "Grade chain (epoch slots, per-attempt budgets, failover classes), failure codes, auto-resume cron, shutdown requeue, grading/paper page copy",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-01"],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "backend/src/OetLearner.Api/Services/Writing/WritingGradeChain.cs",
+        "backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs",
+        "backend/src/OetLearner.Api/Services/Writing/Crons/WritingCrons.cs",
+        "app/(learner)/writing/submissions/[id]/grading/page.tsx"
+      ]
+    },
+    {
+      "id": "WAI-04",
+      "title": "Sidecar hardening: abort-on-disconnect, queue bounds, readyz, typed auth error, Codex quota-detection fix, gpt-6.1-sol default, compose + writing-ai.yml tests",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": [],
+      "verify": "writing-ai.yml",
+      "evidence": [],
+      "files": ["writing-ai-sidecars/", "docker-compose.writing-ai.yml", ".github/workflows/writing-ai.yml"]
+    },
+    {
+      "id": "WAI-05",
+      "title": "QA-only per-learner fault switch (writing_grade_fault / writing_grade_fault_l1l2)",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-03"],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": ["backend/src/OetLearner.Api/Services/Writing/WritingQaFault.cs"]
+    },
+    {
+      "id": "WAI-06",
+      "title": "Draft backend (CAS, timers, consume), my-work API, free-sample failed state, attempt-scoped submit lock, failed-row reuse",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": [],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "backend/src/OetLearner.Api/Services/Writing/WritingDraftServiceV2.cs",
+        "backend/src/OetLearner.Api/Services/Writing/WritingMyWorkService.cs",
+        "backend/src/OetLearner.Api/Services/FreeSamples/FreeSampleService.cs"
+      ]
+    },
+    {
+      "id": "WAI-07",
+      "title": "Editor restore fix, draft sync engine, server-restored timer, Resume writing, offline-safe submit rules, revise/mock/paper adoption",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-06"],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "components/domain/writing/WritingEditorV2.tsx",
+        "hooks/use-writing-draft-sync.ts",
+        "app/(learner)/writing/practice/session/[scenarioId]/page.tsx"
+      ]
+    },
+    {
+      "id": "WAI-08",
+      "title": "Post Submissions UI (my-work list, Resume banner, Retry on list/detail, free-sample routing)",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-03", "WAI-06"],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "components/domain/writing/WritingMyWorkList.tsx",
+        "app/(learner)/submissions/page.tsx",
+        "components/domain/free-sample-launcher.tsx"
+      ]
+    },
+    {
+      "id": "WAI-09",
+      "title": "Report UI: Appeal removed, Preparing model answer, new section order + View all corrections, desktop guard, mobile overlay fix",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": [],
+      "verify": "writing-rev8-ci.yml",
+      "evidence": [],
+      "files": [
+        "app/(learner)/writing/submissions/[id]/results/page.tsx",
+        "components/shell/ShellControls.tsx",
+        "messages/en/writing.json"
+      ]
+    },
+    {
+      "id": "WAI-10",
+      "title": "Live QA harness on Actions (writing-prod-qa.yml): discover, matrix, acceptance, ui, evidence",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-05", "WAI-06", "WAI-07", "WAI-08", "WAI-09"],
+      "verify": "writing-prod-qa.yml",
+      "evidence": [],
+      "files": [".github/workflows/writing-prod-qa.yml", "scripts/qa/writing-prod-qa/"]
+    },
+    {
+      "id": "WAI-11",
+      "title": "Ship increments to main, watch deploys, run live QA, fix loop",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-10"],
       "verify": "deploy.yml",
-      "evidence": ["36953672231"],
+      "evidence": [],
       "files": []
+    },
+    {
+      "id": "WAI-12",
+      "title": "Evidence report (QA-2 table + 15 rows), docs, memory, owner notification",
+      "status": "pending",
+      "owner": "writing-ai-launch",
+      "blockedBy": ["WAI-11"],
+      "verify": "pnpm run ax:check",
+      "evidence": [],
+      "files": ["docs/ops/WRITING-AI-PROVIDERS.md", "docs/AI-USAGE-POLICY.md", "docs/qa/WRITING-PROD-QA.md", "PROGRESS.md"]
     }
   ]
 }
