@@ -96,8 +96,18 @@ export function FreeSampleLauncher({
       footer = note(t(RETRY_KEY[subtest]), 'cta');
       break;
     case 'in_progress':
-      href = option.lastResultRoute ?? option.route;
+      // Writing: the server routes the letter being graded to its grading page,
+      // while lastResultRoute is the PREVIOUS result. Speaking keeps its result page.
+      href = subtest === 'writing'
+        ? option.route ?? option.lastResultRoute
+        : option.lastResultRoute ?? option.route;
       footer = note(t('freeSample.inProgress'));
+      break;
+    case 'grading_failed':
+      // Retry grading of the SAME saved letter (server route). Never the start
+      // route: a fresh start could spend a second free use.
+      href = option.route;
+      footer = note(t('freeSample.writing.gradingFailed'), 'cta');
       break;
     case 'unavailable':
       footer = note(t('freeSample.unavailable'));

@@ -11,10 +11,13 @@ export type FreeSampleSubtest = 'writing' | 'speaking';
 
 /**
  * available = 0 successes · retry_available = 1 success, nothing in flight ·
- * in_progress = a use is being graded · completed = 2 successes ·
- * unavailable = claim pinned to another profession, or no eligible content.
+ * in_progress = a use is being graded (Writing route: its grading page) ·
+ * grading_failed = the latest use's grading failed and nothing newer exists
+ * (Writing route: that SAME letter's grading page, where Retry costs no free use) ·
+ * completed = 2 successes · unavailable = claim pinned to another profession,
+ * or no eligible content.
  */
-export type FreeSampleState = 'available' | 'retry_available' | 'in_progress' | 'completed' | 'unavailable';
+export type FreeSampleState = 'available' | 'retry_available' | 'in_progress' | 'grading_failed' | 'completed' | 'unavailable';
 
 export interface FreeSampleOption {
   /** Normalised profession id (lower-case, hyphenated). */

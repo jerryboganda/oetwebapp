@@ -3,6 +3,7 @@
   "freeSample.speaking.retryCta": "حاول مرة أخرى - تبقّت إعادة محاولة مجانية واحدة",
   "freeSample.writing.allowance": "تتضمن العيّنة المجانية تسليمًا واحدًا مُصحّحًا + مراجعة مجانية واحدة.",
   "freeSample.writing.retryCta": "راجِع وأعد التسليم - تبقّت مراجعة مجانية واحدة",
+  "freeSample.writing.gradingFailed": "رسالة العيّنة محفوظة لكن التصحيح لم يكتمل — أعد المحاولة",
   "freeSample.completed": "اكتملت العيّنة المجانية",
   "freeSample.unavailable": "العيّنة المجانية غير متاحة لمهنتك المسجّلة.",
   "freeSample.inProgress": "جارٍ معالجة نتيجتك",
