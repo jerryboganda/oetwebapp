@@ -449,6 +449,39 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.True(recorder.LastCostEstimateUsd > 0m);
     }
 
+    [Fact]
+    public async Task Service_RegistryKeyWithoutEnvironmentKey_RecordsGovernedSuccess()
+    {
+        var registry = new MutableKeyRegistry { Key = "registry-key" };
+        var recorder = new FakeRecorder();
+        var handler = new StubHandler((request, _) =>
+        {
+            Assert.Equal("registry-key", request.Headers.Authorization!.Parameter);
+            return Task.FromResult(JsonResponse(SuccessBody()));
+        });
+        using var services = new ServiceCollection()
+            .AddScoped<IAiProviderRegistry>(_ => registry)
+            .AddSingleton<IHttpClientFactory>(new SingleClientFactory(new HttpClient(handler)))
+            .AddSingleton<IOptions<TypeSafeOptions>>(Options.Create(new TypeSafeOptions { Enabled = true }))
+            .AddSingleton<ITypeSafeJudgmentClient, TypeSafeJudgmentClient>()
+            .AddSingleton<IDirectAiCallRecorder>(recorder)
+            .AddSingleton<TimeProvider>(TimeProvider.System)
+            .AddLogging()
+            .AddScoped<ITypeSafeJudgmentService, TypeSafeJudgmentService>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = services.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<ITypeSafeJudgmentService>()
+            .AskAsync(SampleRequest(), Call(), CancellationToken.None);
+
+        Assert.Equal(JevCallStatus.Ok, result.Status);
+        Assert.Equal(1, recorder.BeginCalls);
+        Assert.Equal(1, recorder.SuccessCalls);
+        Assert.Equal(1, recorder.CompleteCalls);
+        Assert.Equal(2, registry.Reads);
+        Assert.True(recorder.LastCostEstimateUsd > 0m);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static JevCallMetadata Call() => new()
