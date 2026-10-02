@@ -58,7 +58,9 @@ export function ShellControls() {
     <>
       <div
         ref={containerRef}
-        className="fixed right-0 top-[65%] z-[60] -translate-y-1/2 transition-all duration-300 ease-out"
+        // lg+ only: below lg the handle covered page content and sat beside the
+        // bottom nav, so Reload / Check for updates live in the TopNav mobile menu.
+        className="fixed right-0 top-[65%] z-[60] hidden -translate-y-1/2 transition-all duration-300 ease-out lg:block"
         style={{ paddingRight: 'env(safe-area-inset-right)' }}
       >
         {!isExpanded ? (
@@ -66,6 +68,7 @@ export function ShellControls() {
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
+            data-testid="shell-controls-handle"
             aria-expanded={false}
             aria-label="Open quick access menu"
             title="Quick access controls"

@@ -123,9 +123,9 @@ async function verifyProductionReport() {
       savedReportId = report.id;
       await page.getByTestId('ai-estimated-score').waitFor({ state: 'visible' });
       assert.equal((await page.getByTestId('ai-estimated-score').textContent()).trim(), `${report.estimatedPracticeScore}/500`);
-      await page.getByTestId('assessment-criteria-list').waitFor({ state: 'visible' });
+      // One concise per-criterion list (WAI-09 UI-3) replaced the v1.1 duplicate list.
+      await page.getByTestId('criteria-list').waitFor({ state: 'visible' });
       assert.equal(await page.getByTestId('criteria-list').locator(':scope > li').count(), 6);
-      assert.equal(await page.getByTestId('assessment-criteria-list').locator(':scope > article').count(), 6);
       assert.equal(blockedWrites.length, 0, 'A Writing mutation was attempted during read-only QA');
       console.log('QA_LIVE_BROWSER_REPORT', JSON.stringify({
         submissionId: reportSubmissionId, gradeId: savedGradeId, reportId: savedReportId,

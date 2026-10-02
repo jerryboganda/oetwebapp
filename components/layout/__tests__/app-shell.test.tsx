@@ -83,6 +83,19 @@ describe('AppShell', () => {
     expect(topNavSpy.mock.calls.some(([props]: [Record<string, unknown>]) => Array.isArray(props.sectionedItems) && (props.sectionedItems as unknown[]).length === 1)).toBe(true);
   });
 
+  // Launch handoff UI-2: the last content and any scrolled-to control clear the
+  // fixed mobile bottom nav (by 1rem) in both the learner and the staff shells.
+  it.each(['learner', 'admin'] as const)('pads the %s main content clear of the bottom nav', (role) => {
+    renderShellAt(`/${role}`, { requiredRole: role, workspaceRole: role });
+    const main = screen.getByRole('main');
+    expect(main).toHaveClass(
+      'pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)]',
+      'scroll-pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)]',
+      'lg:pb-6',
+      'lg:scroll-pb-6',
+    );
+  });
+
   describe('route entrance', () => {
     it.each([
       ['admin', '/admin/users'],

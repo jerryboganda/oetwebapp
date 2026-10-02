@@ -108,16 +108,6 @@ export const writingDisputeViolationSchema = z.object({
 export type WritingDisputeViolationValues = z.infer<typeof writingDisputeViolationSchema>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Appeal request
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const writingAppealRequestSchema = z.object({
-  reason: z.string().min(20, 'Briefly explain why you believe the grade is wrong (20+ chars)').max(2000),
-});
-
-export type WritingAppealRequestValues = z.infer<typeof writingAppealRequestSchema>;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Case-note drill response
 // ─────────────────────────────────────────────────────────────────────────────
 

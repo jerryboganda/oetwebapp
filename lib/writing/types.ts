@@ -138,7 +138,6 @@ export type WritingItemKind =
   | 'exemplar-review'
   | 'canon-refresher';
 export type WritingConfidenceFlag = 'high' | 'medium' | 'low';
-export type WritingAppealStatus = 'pending' | 'in-progress' | 'in_progress' | 'pending_manual' | 'resolved' | 'rejected';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Onboarding & profile
@@ -287,7 +286,7 @@ export interface WritingScenarioDto {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Submissions, grades, appeals
+// Submissions and grades
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface WritingSubmissionDto {
@@ -357,18 +356,6 @@ export interface WritingGradeDto {
     reason: string;
   };
   gradedAt: string;
-}
-
-export interface WritingScoreAppealDto {
-  id: string;
-  submissionId: string;
-  status: WritingAppealStatus;
-  originalRawTotal: number;
-  secondOpinionRawTotal: number | null;
-  finalRawTotal: number | null;
-  reasoning: string | null;
-  requestedAt: string;
-  resolvedAt: string | null;
 }
 
 export interface WritingDisputeViolationDto {

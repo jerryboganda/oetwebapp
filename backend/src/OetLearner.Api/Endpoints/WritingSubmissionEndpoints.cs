@@ -128,33 +128,6 @@ public static class WritingSubmissionEndpoints
         .RequireRateLimiting("AiScoring")
         .WithName("ReviseWritingSubmission");
 
-        group.MapPost("/{id:guid}/appeal", async (
-            Guid id,
-            WritingAppealRequest? request,
-            HttpContext http,
-            IWritingAppealService service,
-            CancellationToken ct) =>
-        {
-            var appeal = await service.RequestAppealAsync(http.WritingV2UserId(), id, request?.Reason, ct);
-            return appeal is null ? Results.NotFound() : Results.Accepted($"/v1/writing/submissions/{id}/appeal", appeal);
-        })
-        .RequireRateLimiting("PerUserWrite")
-        .WithName("AppealWritingSubmission");
-
-        // Read-only poll for the appeal UI (Writing V2 Score Appeal page).
-        // Returns the latest appeal row for this submission, or 404 if
-        // none exists. Polled by the appeal page after the POST returns.
-        group.MapGet("/{id:guid}/appeal", async (
-            Guid id,
-            HttpContext http,
-            IWritingAppealService service,
-            CancellationToken ct) =>
-        {
-            var appeal = await service.GetLatestAppealAsync(http.WritingV2UserId(), id, ct);
-            return appeal is null ? Results.NotFound() : Results.Ok(appeal);
-        })
-        .WithName("GetWritingSubmissionAppeal");
-
         group.MapPost("/{id:guid}/dispute-violation", async (
             Guid id,
             WritingDisputeViolationRequest request,

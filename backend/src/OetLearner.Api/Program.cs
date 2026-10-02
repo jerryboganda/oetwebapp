@@ -2273,8 +2273,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventS
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,
     OetLearner.Api.Services.Writing.WritingTutorReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingMarkingVoiceNoteService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAppealService,
-    OetLearner.Api.Services.Writing.WritingAppealService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAnalyticsServiceV2,
     OetLearner.Api.Services.Writing.WritingAnalyticsServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingMistakeService,

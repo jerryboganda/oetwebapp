@@ -394,7 +394,7 @@ public sealed class WritingCalibrationService(
         if (string.IsNullOrWhiteSpace(grade.BandLabel)) throw ApiException.Validation("writing_calibration_band_required", "BandLabel is required.");
     }
 
-    // Mirrors WritingAppealService.RawBandLabel — same thresholds.
+    // Mirrors WritingTutorReviewService.RawBandLabel — same thresholds.
     private static string RawBandLabel(int rawTotal)
     {
         if (rawTotal >= 38) return "A";

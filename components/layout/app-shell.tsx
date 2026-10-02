@@ -168,7 +168,10 @@ export function AppShell({
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
-          {/* Same enter-only contract as the staff shell: client navigations only
+          {/* The bottom padding / scroll-padding clear the fixed bottom nav by 1rem, so
+              the last content and scrolled-to controls are never under it
+              (globals.css adds the AI-assistant launcher's height when it shows).
+              Same enter-only contract as the staff shell: client navigations only
               (a hard load never animates, protecting LCP), never on exam/live routes. */}
           <motion.main
             id="main-content"
@@ -176,7 +179,7 @@ export function AppShell({
             key={pathname}
             layout="position"
             className={cn(
-              'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6',
+              'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)] scroll-pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)] lg:py-6 lg:pb-6 lg:scroll-pb-6',
               navigated && !isExamOrLiveRoute(pathname) && 'page-enter',
               className,
             )}
@@ -227,7 +230,7 @@ export function AppShell({
           key={pathname}
           layout="position"
           className={cn(
-            'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom))] lg:py-6 lg:pb-6',
+            'relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)] scroll-pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom)+1rem)] lg:py-6 lg:pb-6 lg:scroll-pb-6',
             navigated && !isExamOrLiveRoute(pathname) && 'page-enter',
             className,
           )}

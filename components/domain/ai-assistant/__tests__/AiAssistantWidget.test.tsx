@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AiAssistantWidget } from '../AiAssistantWidget';
@@ -56,5 +58,14 @@ describe('AiAssistantWidget', () => {
   it('renders for expert role', () => {
     render(<AiAssistantWidget role="expert" />);
     expect(screen.getByRole('button', { name: /toggle ai assistant/i })).toBeInTheDocument();
+  });
+
+  // Launch handoff UI-2: while the launcher floats over the page, globals.css
+  // pads #main-content by its height so the last content is never underneath.
+  it('marks the floating launcher for the main-content bottom padding rule', () => {
+    render(<AiAssistantWidget role="learner" />);
+    expect(screen.getByRole('button', { name: /toggle ai assistant/i })).toHaveAttribute('data-ai-assistant-fab');
+    const css = readFileSync(path.join(process.cwd(), 'app', 'globals.css'), 'utf8');
+    expect(css).toContain('html:has([data-ai-assistant-fab]) #main-content');
   });
 });
