@@ -101,6 +101,8 @@ public sealed class TypeSafeOptions
 
     public bool ResponseVerifyEnabled { get; set; } = false;
     public double ResponseConfidenceThreshold { get; set; } = 0.80;
+    public bool DevelopmentTriageEnabled { get; set; } = false;
+    public double DevelopmentConfidenceThreshold { get; set; } = 0.80;
 
     /// <summary>Guard: any single guard Noul at or above this blocks the
     /// submission from reaching the paid AI grade (flagged to a human).</summary>

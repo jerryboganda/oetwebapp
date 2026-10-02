@@ -18,6 +18,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.OwnerAgent;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -44,6 +45,9 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
 
     public OwnerAgentRecordingEmailSender Emails { get; } = new();
 
+    public bool JevDevelopmentEnabled { get; init; }
+    public RecordingJevJudgments Judgments { get; } = new();
+
     /// <summary>Env switch; set before the first request.</summary>
     public bool OwnerAgentEnabled { get; init; } = true;
 
@@ -55,6 +59,14 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
         base.ConfigureWebHost(builder);
         builder.ConfigureTestServices(services =>
         {
+            services.PostConfigure<TypeSafeOptions>(options =>
+            {
+                options.Enabled = JevDevelopmentEnabled;
+                options.DevelopmentTriageEnabled = JevDevelopmentEnabled;
+            });
+            services.RemoveAll<ITypeSafeJudgmentService>();
+            services.AddSingleton<ITypeSafeJudgmentService>(Judgments);
+
             services.PostConfigure<OwnerAgentOptions>(options =>
             {
                 options.Enabled = OwnerAgentEnabled;
@@ -73,6 +85,22 @@ public sealed class OwnerAgentWebApplicationFactory : TestWebApplicationFactory
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(Emails);
         });
+    }
+
+    public sealed class RecordingJevJudgments : ITypeSafeJudgmentService
+    {
+        public int Calls { get; private set; }
+        public JevJudgmentRequest? LastRequest { get; private set; }
+        public JevCallMetadata? LastMetadata { get; private set; }
+        public JevJudgmentResult Result { get; set; } = JevJudgmentResult.Unavailable("test_unavailable");
+
+        public Task<JevJudgmentResult> AskAsync(JevJudgmentRequest request, JevCallMetadata call, CancellationToken ct)
+        {
+            Calls++;
+            LastRequest = request;
+            LastMetadata = call;
+            return Task.FromResult(Result);
+        }
     }
 
     public async Task SetFeatureFlagAsync(bool enabled)

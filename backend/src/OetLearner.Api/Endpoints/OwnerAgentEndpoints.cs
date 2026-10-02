@@ -9,6 +9,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.OwnerAgent;
+using OetLearner.Api.Services.Ai.TypeSafe;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -472,7 +473,9 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentSendMessageRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentAuditService audit)
+        IOwnerAgentAuditService audit,
+        ITypeSafeJudgmentService judgments,
+        IOptions<TypeSafeOptions> typeSafeOptions)
     {
         var id = OwnerAgentIds.RequireUlid(sessionId, "sessionId");
         var text = OwnerAgentIds.OptionalText(request?.Text, "text", MaxMessageChars);
@@ -483,8 +486,23 @@ public static partial class OwnerAgentEndpoints
 
         var model = OwnerAgentIds.OptionalOpaque(request?.Model, "model");
         var effort = OwnerAgentIds.OptionalOpaque(request?.Effort, "effort");
+        JevDevelopmentAdvisory? jevAdvisory = null;
+        if (typeSafeOptions.Value.Enabled && typeSafeOptions.Value.DevelopmentTriageEnabled)
+        {
+            var session = await RelayAsync(client, http, HttpMethod.Get, OwnerAgentSidecarRoutes.Session(id), null);
+            if (session.Status is < 200 or >= 300)
+                return session.Result;
+
+            jevAdvisory = await JevWorkflowAdvisor.TriageDevelopmentAsync(
+                judgments, typeSafeOptions.Value, text, http.RequestAborted);
+            if (jevAdvisory?.Status == "unavailable")
+                throw ApiException.ServiceUnavailable("jev_unavailable", "Required Jev triage is unavailable. The message was not forwarded.");
+            if (jevAdvisory?.RequiresHumanReview == true)
+                throw ApiException.Conflict("jev_review_required", "Jev could not establish the task and impact. Clarify the request before continuing.");
+        }
+
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.SessionMessages(id),
-            new { text, model, effort });
+            new { text, model, effort, jevAdvisory });
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.MessageSent, id, new Dictionary<string, object?>
         {
             ["length"] = text.Length,
@@ -493,6 +511,10 @@ public static partial class OwnerAgentEndpoints
             ["effort"] = effort,
             ["turnId"] = ReadString(relay.Json, "turnId"),
             ["status"] = relay.Status,
+            ["jevStatus"] = jevAdvisory?.Status,
+            ["jevModel"] = jevAdvisory?.Model,
+            ["jevTask"] = jevAdvisory?.TaskKind,
+            ["jevRisk"] = jevAdvisory?.RiskLevel,
         }, http.RequestAborted);
         return relay.Result;
     }

@@ -11,6 +11,7 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiGatewayTurnAccountingTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/OwnerAgent/**'
       - 'scripts/ai/**'
       - '.github/workflows/jev-integration.yml'
   pull_request:
@@ -22,6 +23,7 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiGatewayTurnAccountingTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/OwnerAgent/**'
       - 'scripts/ai/**'
       - '.github/workflows/jev-integration.yml'
   workflow_dispatch:
@@ -48,4 +50,4 @@ jobs:
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
           --configuration Debug --nologo
           --logger "console;verbosity=normal"
-          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests"
+          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests|FullyQualifiedName~OwnerAgentRelayTests.Relay_NeverForwardsBrowserHeaders"

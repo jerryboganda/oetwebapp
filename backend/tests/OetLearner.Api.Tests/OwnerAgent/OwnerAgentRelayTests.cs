@@ -70,6 +70,26 @@ public sealed class OwnerAgentRelayTests
         Assert.Single(body.RootElement.EnumerateObject());
     }
 
+    [Fact]
+    public async Task Jev_Unavailable_PreventsOwnerMessageForwarding()
+    {
+        await using var factory = new OwnerAgentWebApplicationFactory { JevDevelopmentEnabled = true };
+        await factory.SetFeatureFlagAsync(true);
+        var owner = await factory.SeedOwnerAsync();
+        using var client = factory.CreateBearerClient(owner.AccessToken);
+        var ticket = await OwnerAgentWebApplicationFactory.UnlockAsync(client, owner);
+
+        using var request = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Post,
+            $"/v1/owner-agent/sessions/{FakeSidecarHandler.SessionId}/messages", ticket,
+            new { text = "Diagnose this grading exception", model = "owner-selected-model", effort = "high" });
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(1, factory.Judgments.Calls);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("jev_unavailable", await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+        Assert.DoesNotContain(factory.Sidecar.Requests, call => call.Method == "POST" && call.PathAndQuery.EndsWith("/messages", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("not-a-ulid")]
     [InlineData("01J9ZX7Q2V3M4N5P6R7S8T9V0")]
