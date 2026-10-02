@@ -43,8 +43,14 @@ jobs:
             node: 24
 
     steps:
-      - name: Check out repository
+      # Only scripts/agent is needed. A full checkout fails on Windows runners: one
+      # tracked Medicine-pack PDF path exceeds the 260-character limit (the Tauri
+      # jobs avoid it with core.longpaths; a sparse checkout never touches it).
+      - name: Check out scripts/agent
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/agent
 
       - name: Set up Node
         uses: actions/setup-node@v4
