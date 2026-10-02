@@ -3,7 +3,7 @@
 Session: writing-ai-launch
 Goal: Writing AI is ready for owner testing and candidate launch: every row of the 15-row pre-launch checklist PASS with GitHub Actions evidence (stable Max 5x grading with invisible failover, zero-loss drafts and submissions, report UI cleanup, 3 live typed letters per enabled profession)
 Mode: execute
-Updated: 2026-10-02T14:21:43Z
+Updated: 2026-10-02T14:44:10Z
 Branch: feat/writing-ai-launch-2026-10-02
 HEAD: 7de11071d
 
@@ -48,6 +48,7 @@ and the 36 verbatim QA scripts, is `C:\Users\Dr Faisal Maqsood PC\.claude\plans\
 - D-6 Credits: charge once at task open; failure holds the credit; Retry costs 0; no automatic refund — owner.
 - D-7 Shared Claude login with the Owner Agent Console is kept (Max allows concurrent sessions); mitigations only — owner.
 - D-8 Assumptions open to veto: fresh disposable QA learners per profession; "Practice this again" becomes a real new attempt (attempt-scoped submit lock); Post Submissions = the existing Past submissions card.
+- D-9 HARD RULE (owner, 2 Oct 2026, after Max was skipped for a week): the Claude Max subscription route (writing-claude-sub) is NEVER turned off, skipped or bypassed — no marker/cooldown/mode/threshold/readiness skip/open circuit/admin toggle; every grade starts on Max, failover only inside a grade after a real Max error. Enforced in code + tests + AGENTS.md + live QA (first hop = writing-claude-sub, marker null).
 
 ## Touched files
 
