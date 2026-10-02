@@ -18,7 +18,9 @@
 // truncated, and the bearer is never printed.
 //
 // Env: ADMIN_EMAIL, ADMIN_PASSWORD (required), DIAGNOSE_LATEST ('true'),
-// VERIFY_API_MODEL ('true'), OET_API_BASE (optional).
+// VERIFY_API_MODEL ('true'), PROBE_SUBSCRIPTION_PROVIDERS ('true': a 1-token test
+// of the Claude Max and Codex SUBSCRIPTION sidecars, $0, never the paid API),
+// OET_API_BASE (optional).
 
 const base = process.env.OET_API_BASE || 'https://api.oetwithdrhesham.co.uk';
 const diagnoseLatest = process.env.DIAGNOSE_LATEST === 'true';
@@ -155,6 +157,68 @@ for (const r of usageRows) {
 }
 log('USAGE_BY_PROVIDER_OUTCOME_LATEST_200', byProvider);
 
+// ── Error breakdown (which refusals/failures, and when) ─────────────────────
+const breakdown = new Map();
+for (const r of nonSuccess) {
+  const key = [r.providerId ?? 'none', r.outcome, r.errorCode ?? '', clean(r.policyTrace, 80)].join(' | ');
+  const entry = breakdown.get(key) ?? { n: 0, first: r.createdAt, last: r.createdAt, maxLatency: 0 };
+  entry.n += 1;
+  if (Date.parse(r.createdAt) < Date.parse(entry.first)) entry.first = r.createdAt;
+  if (Date.parse(r.createdAt) > Date.parse(entry.last)) entry.last = r.createdAt;
+  entry.maxLatency = Math.max(entry.maxLatency, r.latencyMs ?? 0);
+  breakdown.set(key, entry);
+}
+log('NON_SUCCESS_BREAKDOWN', [...breakdown.entries()]
+  .sort((a, b) => b[1].n - a[1].n)
+  .map(([key, v]) => ({ key, ...v })));
+
+// ── Level 1 (Claude Max) profile: does it usually work, and how long does it take? ──
+const l1Usage = await read(`/v1/admin/ai/usage?providerId=${L1}&pageSize=200`);
+const l1All = l1Usage.data?.rows ?? [];
+const l1Ok = l1All.filter((r) => r.outcome === 'Success');
+const percentile = (values, p) => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+};
+log('LEVEL1_CLAUDE_PROFILE', {
+  rows: l1All.length, successes: l1Ok.length, firstAt: l1All.at(-1)?.createdAt, lastAt: l1All[0]?.createdAt,
+  successLatencyMs: { p50: percentile(l1Ok.map((r) => r.latencyMs), 50), p90: percentile(l1Ok.map((r) => r.latencyMs), 90), max: percentile(l1Ok.map((r) => r.latencyMs), 100) },
+  promptTokensMedian: percentile(l1Ok.map((r) => r.promptTokens), 50),
+});
+log('LEVEL1_CLAUDE_FAILURES', l1All.filter((r) => r.outcome !== 'Success').slice(0, 20).map((r) => ({
+  at: r.createdAt, outcome: r.outcome, code: r.errorCode, latencyMs: r.latencyMs, message: clean(r.errorMessage, 220),
+})));
+const codexUsage = await read(`/v1/admin/ai/usage?providerId=${L3}&pageSize=200`);
+const codexAll = codexUsage.data?.rows ?? [];
+log('LEVEL3_CODEX_PROFILE', {
+  rows: codexAll.length, successes: codexAll.filter((r) => r.outcome === 'Success').length,
+  firstAt: codexAll.at(-1)?.createdAt, lastAt: codexAll[0]?.createdAt,
+  lastSuccessAt: codexAll.find((r) => r.outcome === 'Success')?.createdAt,
+  lastSuccessModel: codexAll.find((r) => r.outcome === 'Success')?.model,
+});
+
+// ── Profession catalogue (QA pre-flight: which professions are active) ──────
+const catalog = await read('/v1/professions/catalog');
+log('PROFESSION_CATALOG', (catalog.data?.professions ?? []).map((p) => ({ id: p.id, active: p.isActive })));
+
+// ── Optional no-cost probe of the two SUBSCRIPTION sidecars (never the paid API) ──
+if (process.env.PROBE_SUBSCRIPTION_PROVIDERS === 'true') {
+  for (const code of [L1, L3]) {
+    try {
+      const response = await fetch(`${base}/v1/admin/ai/providers/${code}/test`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(150000),
+      });
+      const body = await response.json().catch(() => ({}));
+      log(`PROBE_${code}`, { http: response.status, status: body.status, latencyMs: body.latencyMs, error: clean(body.errorMessage, 240) });
+    } catch (error) {
+      log(`PROBE_${code}`, { error: clean(error?.message) });
+    }
+  }
+}
+
 // ── Credit ledger of the failing learners ───────────────────────────────────
 const failingUsers = [];
 const seen = new Set();
@@ -224,7 +288,7 @@ signal('B2', 'Max allowance quota / rate limit', l1Rows.filter((r) => /quota|429
 signal('B3', 'Single serial lane / timeouts on Claude',
   l1Rows.filter((r) => r.outcome === 'Timeout' || r.latencyMs >= 285000 || /timed out|timeout|504|502/i.test(text(r))).length,
   'timeouts or ~300 s CLI-limit latencies on writing-claude-sub');
-signal('B4', 'Truncated / unparseable provider output', nonSuccess.filter((r) => /unreadable|parse|json|truncat|invalid/i.test(text(r))).length, 'unreadable rubric output');
+signal('B4', 'Truncated / unparseable provider output', nonSuccess.filter((r) => /unreadable|unparseable|could not parse|truncat|not valid json/i.test(text(r))).length, 'unreadable rubric output');
 signal('B5', 'Codex false-positive quota detection',
   nonSuccess.filter((r) => r.providerId === L3 && /quota|429|reached/i.test(text(r)) && r.latencyMs >= 20000).length,
   'writing-codex-sub failed with quota text after a long (real) run');

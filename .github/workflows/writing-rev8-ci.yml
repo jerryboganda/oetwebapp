@@ -71,6 +71,11 @@ on:
         required: false
         default: false
         type: boolean
+      probe_subscription_providers:
+        description: "With diagnose_latest_failures: a 1-token test of the Claude Max and Codex SUBSCRIPTION sidecars ($0; never the paid API)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -223,6 +228,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
           DIAGNOSE_LATEST: ${{ inputs.diagnose_latest_failures }}
           VERIFY_API_MODEL: ${{ inputs.verify_api_model }}
+          PROBE_SUBSCRIPTION_PROVIDERS: ${{ inputs.probe_subscription_providers }}
         run: node scripts/qa/writing-prod-diagnose.mjs
 
   software-review:
