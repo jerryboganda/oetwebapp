@@ -416,9 +416,13 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.True(ex.Retryable);
         Assert.Equal(503, ex.StatusCode);
         // Stuck-proofing invariant: a failure with no persisted grade MUST
-        // land in failed (never wedge in grading), otherwise neither re-POST
-        // (409 already-in-progress) nor retry-grade could ever resume it.
-        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        // leave grading (never wedge there). A retryable one is re-queued for
+        // an automatic retry (WAI-03) with its reason recorded.
+        var row = await _db.WritingSubmissions.AsNoTracking().SingleAsync(s => s.Id == submit.SubmissionId);
+        Assert.Equal("queued", row.Status);
+        Assert.Equal(WritingGradeFailureCodes.GradingDelayed, row.FailureCode);
+        Assert.Equal(1, row.AutoRetryCount);
+        Assert.NotNull(row.NextAutoRetryAt);
         Assert.Equal(1, credits.ReserveCalls);
         Assert.Equal(0, credits.ReleaseCalls);
         Assert.Equal(0, await _db.WritingGrades.CountAsync());
@@ -433,11 +437,12 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         var submit = await pipeline.SubmitAsync(
             SampleAttempt("matrix-resume-1", LetterA, scenarioId: ScenarioReadyId), default);
 
-        // First attempt: provider blows up mid-grade. No grade, failed row.
+        // First attempt: provider blows up mid-grade. No grade; the row is
+        // re-queued for the automatic retry (WAI-03), which the sweep runs.
         var ex = await Assert.ThrowsAsync<ApiException>(
             () => pipeline.EvaluateAsync(submit.SubmissionId, default));
         Assert.Equal("writing_rubric_failed", ex.Code);
-        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal("queued", (await _db.WritingSubmissions.AsNoTracking().SingleAsync(s => s.Id == submit.SubmissionId)).Status);
 
         // Resume grades the SAME attempt to completion: exactly one grade,
         // and the rubric request carries a sized token budget so finding-rich
@@ -652,7 +657,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
 
         Assert.Equal("writing_canon_failed", ex.Code);
         Assert.True(ex.Retryable);
-        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal("queued", (await _db.WritingSubmissions.AsNoTracking().SingleAsync(s => s.Id == submit.SubmissionId)).Status);
         Assert.Equal(1, credits.ReserveCalls);
         Assert.Equal(0, credits.ReleaseCalls);
         Assert.Equal(0, await _db.WritingGrades.CountAsync(g => g.SubmissionId == submit.SubmissionId));

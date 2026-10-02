@@ -65,35 +65,32 @@ public sealed class WritingReadinessCron(
     }
 }
 
-/// <summary>Every 5 minutes: drain queued+batched submissions through the V2
-/// evaluation pipeline. Uses express-tier path if batch endpoint isn't wired.</summary>
+/// <summary>Every minute: give stale claims back to the queue, then grade up to
+/// <see cref="WritingGradeRecovery.SweepBatchSize"/> due rows — batched rows,
+/// express rows whose detached grade never started, and automatic re-queues
+/// whose back-off has passed (WAI-03 auto-resume).</summary>
 public sealed class WritingBatchGradingCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
     IRuntimeSettingsProvider settingsProvider,
     ILogger<WritingBatchGradingCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
-    protected override TimeSpan Interval => TimeSpan.FromMinutes(5);
+    protected override TimeSpan Interval => TimeSpan.FromMinutes(1);
 
     protected override async Task RunOnceAsync(CancellationToken ct)
     {
         using var scope = ScopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var pipeline = scope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>();
-        // Express rows are graded on a detached task at submit time; a process
-        // kill between persist and task start would leave one queued forever,
-        // so also sweep express rows that sat unclaimed past a short grace.
-        var staleExpressCutoff = clock.GetUtcNow().AddMinutes(-2);
-        var ids = await db.WritingSubmissions.AsNoTracking()
-            .Where(s => s.Status == "queued"
-                && (s.GradingTier == "batched" || s.SubmittedAt < staleExpressCutoff))
-            .OrderBy(s => s.SubmittedAt)
-            .Select(s => s.Id)
-            .Take(25)
-            .ToListAsync(ct);
+        var now = clock.GetUtcNow();
+        var reclaimed = await WritingGradeRecovery.ReclaimStaleGradingAsync(db, now, ct);
+        if (reclaimed > 0) Logger.LogWarning("Reclaimed {Count} stale Writing grading claim(s).", reclaimed);
+
+        var ids = await WritingGradeRecovery.DueQueuedIdsAsync(db, now, WritingGradeRecovery.SweepBatchSize, ct);
         foreach (var id in ids)
         {
             try { await pipeline.EvaluateAsync(id, ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) { Logger.LogWarning(ex, "Batch grading failed for submission {Id}", id); }
         }
     }

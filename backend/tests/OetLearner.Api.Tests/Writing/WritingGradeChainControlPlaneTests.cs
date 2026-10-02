@@ -68,7 +68,7 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
     [Fact]
     public async Task A1_IndeterminateFirstAttempt_SecondAttemptRunsOnAFreshSlot_AndGrades()
     {
-        var core = new ScriptedCore(_ => throw new TaskCanceledException("client timeout", new TimeoutException()));
+        var core = new ScriptedCore((call, _) => call == 1 ? throw new TaskCanceledException("client timeout", new TimeoutException()) : CanonicalCompletion);
         var submissionId = await SeedQueuedSubmissionAsync();
 
         await Pipeline(core).EvaluateAsync(submissionId, default);
@@ -84,7 +84,7 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
     [Fact]
     public async Task A1b_UnreadableFirstAnswer_FailsOverInsideTheSameRun()
     {
-        var core = new ScriptedCore(_ => "I cannot grade this letter.");
+        var core = new ScriptedCore((call, _) => call == 1 ? "I cannot grade this letter." : CanonicalCompletion);
         var submissionId = await SeedQueuedSubmissionAsync();
 
         await Pipeline(core).EvaluateAsync(submissionId, default);
@@ -93,11 +93,95 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
         Assert.Equal(2, core.Calls);
     }
 
+    /// <summary>A1c — live 1 Oct 2026: one letter piled up 7 FailedTerminal operations across Retries
+    /// and the coordinator's bounded replay walk ran out. Each run now grades on its own epoch's
+    /// slots, so a run after a fully failed one starts clean on Max and grades.</summary>
+    [Fact]
+    public async Task A1c_ARunAfterAFullyFailedRun_StartsOnMaxOnFreshSlots_AndGrades()
+    {
+        var core = new ScriptedCore((call, _) => call <= 5 ? throw new InvalidOperationException("provider down") : CanonicalCompletion);
+        var pipeline = Pipeline(core);
+        var submissionId = await SeedQueuedSubmissionAsync();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => pipeline.EvaluateAsync(submissionId, default));
+        Assert.Equal(WritingSubmissionStatuses.Queued, await StatusAsync(submissionId));
+        await pipeline.EvaluateAsync(submissionId, default);
+
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(submissionId));
+        Assert.Equal(6, core.Calls);
+        var sixth = core.Requests[5];
+        Assert.Equal(WritingSubscriptionProviders.Claude, sixth.Provider);
+        Assert.Equal(WritingGradeChain.ResourceVersion(2, WritingGradeHop.ClaudeMax, 0), sixth.ResourceVersion);
+        Assert.Equal(5, await _db.AiOperations.AsNoTracking().CountAsync(o => o.State == AiOperationState.FailedTerminal));
+    }
+
+    /// <summary>A3 — a deploy killed the grader mid-run: its claim and a Queued operation are left
+    /// behind. The stale reclaim re-queues the letter and the next run grades it without waiting on
+    /// (or replaying) the ghost operation.</summary>
+    [Fact]
+    public async Task A3_AQueuedGhostOfAKilledRun_NeverBlocksTheNextRun()
+    {
+        var core = new ScriptedCore((_, _) => CanonicalCompletion);
+        var submissionId = await SeedQueuedSubmissionAsync();
+        var row = await _db.WritingSubmissions.SingleAsync(s => s.Id == submissionId);
+        row.Status = WritingSubmissionStatuses.Grading;
+        row.ClaimOwner = "killed-host:1:run";
+        row.ClaimedAt = DateTimeOffset.UtcNow - WritingGradeTimings.StaleClaimLease - TimeSpan.FromMinutes(1);
+        row.GradeEpoch = 1;
+        _db.AiOperations.Add(new AiOperation
+        {
+            Id = "ghost-op",
+            Module = "writing",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            UserId = "chain-learner",
+            ResourceId = submissionId.ToString("N"),
+            ResourceType = "writing_submission",
+            ResourceVersion = WritingGradeChain.ResourceVersion(1, WritingGradeHop.ClaudeMax, 0),
+            IdempotencyKey = "ghost-key",
+            State = AiOperationState.Queued,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+        });
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        Assert.Equal(1, await WritingGradeRecovery.ReclaimStaleGradingAsync(_db, DateTimeOffset.UtcNow, default));
+        await Pipeline(core).EvaluateAsync(submissionId, default);
+
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(submissionId));
+        Assert.Equal(1, core.Calls);
+        Assert.Equal(AiOperationState.Queued, (await _db.AiOperations.AsNoTracking().SingleAsync(o => o.Id == "ghost-op")).State);
+    }
+
+    /// <summary>A manual Retry is a new run: new epoch, new slots, starting on Max.</summary>
+    [Fact]
+    public async Task Retry_IsANewRun_OnANewEpoch_StartingOnMax()
+    {
+        var core = new ScriptedCore((call, _) => call <= 5 ? throw new InvalidOperationException("provider down") : CanonicalCompletion);
+        var pipeline = Pipeline(core, maxAutoRetries: 0);
+        var submissionId = await SeedQueuedSubmissionAsync();
+        await Assert.ThrowsAnyAsync<Exception>(() => pipeline.EvaluateAsync(submissionId, default));
+        Assert.Equal(WritingSubmissionStatuses.Failed, await StatusAsync(submissionId));
+
+        await new WritingSubmissionService(_db, pipeline, NullLogger<WritingSubmissionService>.Instance, new EmptyHighlightStore())
+            .RetryGradeAsync("chain-learner", submissionId, default);
+
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(submissionId));
+        Assert.Equal(WritingSubscriptionProviders.Claude, core.Requests[5].Provider);
+        Assert.Equal(WritingGradeChain.ResourceVersion(2, WritingGradeHop.ClaudeMax, 0), core.Requests[5].ResourceVersion);
+    }
+
+    private sealed class EmptyHighlightStore : IWritingCaseNoteHighlightService
+    {
+        public Task<string> GetAsync(string userId, Guid scenarioId, CancellationToken ct) => Task.FromResult("{}");
+        public Task<string> SaveAsync(string userId, Guid scenarioId, string highlightsJson, CancellationToken ct) => Task.FromResult(highlightsJson);
+    }
+
     // ── Harness ────────────────────────────────────────────────────────────────
 
     /// <summary>The production gateway stack; the operation store has its own context, as in
     /// production (one scope per control-plane write).</summary>
-    private WritingSubmissionEvaluationPipeline Pipeline(ScriptedCore core)
+    private WritingSubmissionEvaluationPipeline Pipeline(ScriptedCore core, int maxAutoRetries = 4)
     {
         var coordinator = new AiExecutionCoordinator(
             new AiOperationStore(new LearnerDbContext(_options)),
@@ -113,8 +197,9 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
             TimeProvider.System,
             TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
-            subscriptionSelector: new MaxSelector(),
-            assessmentPreflight: new PassThroughPreflight());
+            subscriptionSelector: new WritingSubscriptionSelector(),
+            assessmentPreflight: new PassThroughPreflight(),
+            gradeChainOptions: Microsoft.Extensions.Options.Options.Create(new WritingGradeChainOptions { MaxAutoRetries = maxAutoRetries }));
     }
 
     private async Task<Guid> SeedQueuedSubmissionAsync()
@@ -143,9 +228,8 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
     private async Task<string> StatusAsync(Guid id)
         => (await _db.WritingSubmissions.AsNoTracking().SingleAsync(s => s.Id == id)).Status;
 
-    /// <summary>The provider core: the FIRST call follows the script (a completion, or an
-    /// exception), every later call grades.</summary>
-    private sealed class ScriptedCore(Func<AiGatewayRequest, string> first) : IAiGatewayCoreExecutor
+    /// <summary>The provider core: call N (1-based) answers what the script returns, or throws.</summary>
+    private sealed class ScriptedCore(Func<int, AiGatewayRequest, string> script) : IAiGatewayCoreExecutor
     {
         public int Calls { get; private set; }
         public List<AiGatewayRequest> Requests { get; } = new();
@@ -161,7 +245,7 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
         {
             Calls++;
             Requests.Add(request);
-            var completion = Calls == 1 ? first(request) : CanonicalCompletion;
+            var completion = script(Calls, request);
             return Task.FromResult(new AiGatewayResult
             {
                 Completion = completion,
@@ -171,16 +255,6 @@ public sealed class WritingGradeChainControlPlaneTests : IAsyncDisposable
                 UsagePersisted = true,
             });
         }
-    }
-
-    private sealed class MaxSelector : IWritingSubscriptionSelector
-    {
-        public Task<WritingSubscriptionDecision> DecideAsync(CancellationToken ct)
-            => Task.FromResult(new WritingSubscriptionDecision(
-                WritingSubscriptionProviders.Claude, WritingSubscriptionProviders.ClaudeModel, "test", null, false));
-
-        // Present only so this file also compiles against the pre-WAI-03 interface (red-first run).
-        public Task RecordClaudeQuotaSignalAsync(CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class PassThroughPreflight : IWritingAssessmentPreflightService

@@ -134,12 +134,14 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         // Four credits so the unfixed grade-time reservation could be funded too: the assertion is
         // about the NUMBER of ledger rows, not about running out.
         await GrantWritingCreditsAsync(4);
-        var pipeline = Pipeline(new ScriptedGateway(failFirst: 1));
+        // No automatic re-queue here: the learner presses Retry on a failed letter.
+        var pipeline = Pipeline(new ScriptedGateway(failFirst: 1), new WritingGradeChainOptions { MaxAutoRetries = 0 });
 
         Assert.True((await OpenTaskAsync()).Allowed);
         var submissionId = await SubmitAsync(pipeline);
 
         await Assert.ThrowsAsync<ApiException>(() => pipeline.EvaluateAsync(submissionId, default));
+        Assert.Equal(WritingSubmissionStatuses.Failed, await StatusAsync(submissionId));
         Assert.Equal(AiCreditReservationState.Reserved, (await HoldAsync(submissionId)).State);
         await Service(pipeline).RetryGradeAsync(UserId, submissionId, default);
 
@@ -147,6 +149,30 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         Assert.Single(await LedgerRowsAsync(AiPackageCreditReason.GradingDeduct));
         Assert.Empty(await LedgerRowsAsync(AiPackageCreditReason.RefundOnFailure));
         Assert.Equal(AiCreditReservationState.Committed, (await HoldAsync(submissionId)).State);
+        Assert.Equal(2, await WritingCreditsLeftAsync());
+    }
+
+    /// <summary>T-C3 (auto-requeue): the failed run is re-queued with its hold kept, and the sweep's
+    /// next run grades it — still one debit, no refund.</summary>
+    [Fact]
+    public async Task TC3_AutoRequeue_KeepsTheHold_AndTheNextRunGradesOnTheSameDebit()
+    {
+        await GrantWritingCreditsAsync(4);
+        var pipeline = Pipeline(new ScriptedGateway(failFirst: 1));
+        await OpenTaskAsync();
+        var submissionId = await SubmitAsync(pipeline);
+
+        await Assert.ThrowsAsync<ApiException>(() => pipeline.EvaluateAsync(submissionId, default));
+        var requeued = await SubmissionAsync(submissionId);
+        Assert.Equal(WritingSubmissionStatuses.Queued, requeued.Status);
+        Assert.Equal(1, requeued.AutoRetryCount);
+        Assert.Equal(AiCreditReservationState.Reserved, (await HoldAsync(submissionId)).State);
+
+        await pipeline.EvaluateAsync(submissionId, default);
+
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(submissionId));
+        Assert.Single(await LedgerRowsAsync(AiPackageCreditReason.GradingDeduct));
+        Assert.Empty(await LedgerRowsAsync(AiPackageCreditReason.RefundOnFailure));
         Assert.Equal(2, await WritingCreditsLeftAsync());
     }
 
@@ -384,7 +410,7 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
 
     // ── Harness ────────────────────────────────────────────────────────────────
 
-    private WritingSubmissionEvaluationPipeline Pipeline(IAiGatewayService gateway)
+    private WritingSubmissionEvaluationPipeline Pipeline(IAiGatewayService gateway, WritingGradeChainOptions? chain = null)
         => new(
             _db,
             gateway,
@@ -395,7 +421,8 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
             TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
             assessmentPreflight: new PassThroughPreflight(),
-            creditReservations: _reservations);
+            creditReservations: _reservations,
+            gradeChainOptions: Microsoft.Extensions.Options.Options.Create(chain ?? new WritingGradeChainOptions()));
 
     private WritingSubmissionService Service(IWritingSubmissionEvaluationPipeline pipeline)
         => new(_db, pipeline, NullLogger<WritingSubmissionService>.Instance, new EmptyHighlightStore());

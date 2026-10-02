@@ -126,8 +126,9 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
 
         // Crucially: NO fabricated "all 3s" grade is persisted.
         Assert.False(await _db.WritingGrades.AnyAsync(g => g.SubmissionId == submissionId));
+        // Retryable: re-queued for the automatic retry (WAI-03), never wedged in grading.
         var submission = await _db.WritingSubmissions.AsNoTracking().FirstAsync(s => s.Id == submissionId);
-        Assert.Equal("failed", submission.Status);
+        Assert.Equal("queued", submission.Status);
     }
 
     [Fact]
