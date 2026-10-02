@@ -89,13 +89,10 @@ public sealed class WritingMaxAlwaysOnTests : IAsyncDisposable
     public void Source_NeverWritesTheSkipMaxMarker_NorReintroducesSkipMaxRouting()
     {
         var apiRoot = Path.Combine(FindRepoRoot(), "backend", "src", "OetLearner.Api");
-        var markerWrite = new Regex(@"WritingAiClaudeQuotaExceededUntil\s*=(?!=)", RegexOptions.CultureInvariant);
+        var markerWrite = new Regex(@"WritingAiClaudeQuotaExceededUntil\s*=(?!=)\s*(?<value>[^;,}\r\n]*)", RegexOptions.CultureInvariant);
         var removedApis = new Regex(@"RecordClaudeQuotaSignal|RecordClaudeCooldown|GetClaudeReadiness", RegexOptions.CultureInvariant);
-        string[] allowMarkerWrite =
-        [
-            Path.Combine("Domain", "RuntimeSettingsRow.cs"),
-            Path.Combine("Endpoints", "AiUsageAdminEndpoints.cs"), // admin "clear marker" button
-        ];
+        // The admin endpoint may only CLEAR the retired marker (its "clear marker" button), never set it.
+        var clearOnly = Path.Combine("Endpoints", "AiUsageAdminEndpoints.cs");
         var violations = new List<string>();
 
         foreach (var path in Directory.EnumerateFiles(apiRoot, "*.cs", SearchOption.AllDirectories))
@@ -104,8 +101,12 @@ public sealed class WritingMaxAlwaysOnTests : IAsyncDisposable
             if (relative.StartsWith("bin", StringComparison.Ordinal) || relative.StartsWith("obj", StringComparison.Ordinal)) continue;
             var source = File.ReadAllText(path);
             var migration = relative.StartsWith(Path.Combine("Data", "Migrations"), StringComparison.Ordinal);
-            if (!migration && !allowMarkerWrite.Contains(relative) && markerWrite.IsMatch(source))
-                violations.Add($"{relative}: writes WritingAiClaudeQuotaExceededUntil");
+            foreach (Match write in markerWrite.Matches(source))
+            {
+                if (migration) continue;
+                if (relative == clearOnly && write.Groups["value"].Value.Trim() == "null") continue;
+                violations.Add($"{relative}: writes WritingAiClaudeQuotaExceededUntil = {write.Groups["value"].Value.Trim()}");
+            }
             if (removedApis.Match(source) is { Success: true } removed)
                 violations.Add($"{relative}: {removed.Value}");
         }

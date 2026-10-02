@@ -1,7 +1,7 @@
 # Writing AI Provider Architecture — Runbook
 
 **Status:** authoritative operations runbook for the final Writing AI provider setup.
-**Owner directive:** 2026-09-29 (revised) — Writing grading uses a 3-level automatic failover chain: **Claude Opus 5.5 (high) on the dedicated Max 5x subscription** (primary, retried once on any transient failure) → **Claude Opus 5.5 via the Anthropic API** (pay-as-you-go key) → **Codex subscription** (`gpt-6-sol`, high). No further benchmark spend.
+**Owner rule MAX-ALWAYS-ON (2 Oct 2026, supersedes the 29 Sep chain):** every Writing grading run starts on **Claude Opus 5.5 (high) on the dedicated Max 5x subscription**. Nothing persisted or computed (a mode, a utilisation threshold, a quota marker, a circuit, a readiness probe) can switch Max off or skip it. Only inside one run, after Max actually returned an error, does grading fail over to **Claude Opus 5.5 via the Anthropic API** and then **Codex GPT-6.1 Sol** (`gpt-6.1-sol`, high). Nothing carries over to the next run.
 **Owner directive 2026-09-30:** Speaking grading (`speaking.grade`) now also runs on the Claude sidecar, with the previous route as automatic fallback — see [§9](#9-speaking-grading-on-the-same-sidecar). Writing and Speaking share **one serial lane** on this sidecar.
 
 ---
@@ -9,23 +9,22 @@
 ## 0. TL;DR
 
 ```
-writing.grade (+ coach / rewrite / ask / appeal / model-answer pregen)
+writing.grade — one grading RUN (first grade, automatic re-queue or manual Retry)
         │
-        ▼
-WritingSubscriptionSelector  (auto | claude | codex; warn 80% / failover 90%)
-        │
-        ▼  failover chain (one AiOperation, one credit debit, one grade)
-  L1 oet-writing-claude :8080   (claude CLI, Max 5x subscription)
-     └─ retry once on transient failure
-  L2 anthropic API row           (pay-as-you-go Anthropic key)
-  L3 oet-writing-codex :8080    (codex CLI, ChatGPT subscription)
+        ▼  WritingSubscriptionSelector → always Max (reason max_always_first)
+  L1 oet-writing-claude :8080   claude CLI, Max 5x           ×2 attempts, 420 s each
+  L2 anthropic API row          pay-as-you-go Anthropic key   ×1 attempt,  150 s
+  L3 oet-writing-codex :8080    codex CLI, gpt-6.1-sol        ×2 attempts, 420 s each
+        (run deadline 1200 s; under 20 s left = stop; one AiOperation per attempt and hop)
 ```
 
 The two sidecars are registered as ordinary `AiProvider` rows (plus the existing
 `anthropic` API row for level 2), so routing, usage logging, budgets, and the
-admin AI board all work unchanged. Failover happens **inside one coordinated
-`AiOperation`**, so a candidate is never double-graded or double-charged when
-Claude hits its limit.
+admin AI board all work unchanged. Every attempt is its own `AiOperation` on its own
+resource slot (`ResourceVersion = 100000 + epoch·256 + hop·64 + attempt·16`), so a dead or
+duplicated operation is never replayed into the next attempt or the next run. The learner is
+charged once per letter whatever the number of attempts, and the unique grade index allows one
+grade per letter.
 
 ---
 
@@ -58,8 +57,8 @@ Claude hits its limit.
    WRITING_EGRESS_PROXY=http://oet-agent-egress:3128
    WRITING_CLAUDE_MODEL=claude-opus-5-5
    WRITING_CLAUDE_EFFORT=high
-   WRITING_CLAUDE_WEEKLY_TOKEN_CAP=0   # set a conservative cap once baseline usage is known
-   WRITING_CODEX_MODEL=gpt-6-sol
+   WRITING_CLAUDE_WEEKLY_TOKEN_CAP=0   # admin usage estimate only; never switches providers
+   WRITING_CODEX_MODEL=gpt-6.1-sol
    WRITING_CODEX_EFFORT=high
    ```
 3. **Pull + up** on the VPS:
@@ -114,9 +113,10 @@ Claude hits its limit.
   `POST /v1/ai/complete` with a `provider`) or by a feature route set on purpose.
 - **Network:** the sidecars are on `oet_agent_ctl`; `oet-api-blue`/`green` **and `oet-ai-worker`**
   join it (the worker executes queued grades). See `OWNER-AGENT-CONSOLE.md`.
-- **Feature routes** for the six writing codes are seeded to
-  primary `writing-claude-sub` / fallback `writing-codex-sub`. The selector
-  (§5) consults quota + mode before each call.
+- **Seeder self-heal (every boot):** `writing-claude-sub` is kept active (MAX-ALWAYS-ON), and a
+  `writing-codex-sub` row still on the old `gpt-6-sol` default is moved to `gpt-6.1-sol` (a model an
+  admin chose deliberately is left alone). The grade pins provider and model per hop; feature routes
+  do not steer `writing.grade`.
 
 ---
 
@@ -124,38 +124,71 @@ Claude hits its limit.
 
 `/admin/writing-ai` (requires `AdminAiConfig`):
 
-- **Mode selector:** `auto` (Claude→Codex) · `claude` (force) · `codex` (force).
-- **Thresholds:** warn % (default 80), failover % (default 90).
-- **KPIs:** letters graded today · this week · Claude weekly utilisation + reset
-  time · estimated allowance remaining · current primary provider/model ·
-  fallback-routed count · Codex tokens + estimated API-equivalent cost.
-- **Banners:** warning at ≥ warn %, failover-active at ≥ failover %, sidecar-down.
+- **Max is always on.** `PUT /v1/admin/ai/writing-provider` accepts only `auto`/`claude`; `codex`
+  (or anything else) is refused with `400 max_subscription_always_on`. The `writing-claude-sub` row
+  cannot be deactivated or deleted (`409 max_subscription_always_on`); its other fields stay editable.
+  A stored mode, warn/failover percentage or legacy quota marker is inert: routing never reads it.
+  Migration `20270104090000` cleared the live marker and turned a stored `codex` mode back to `auto`.
+- **KPIs (information only):** letters graded today and this week, the Claude weekly usage estimate
+  and reset time, API and Codex calls. The weekly estimate never switches providers.
 
 ---
 
 ## 5. Failover semantics
 
-- **Per-request chain (auto mode):** the selector picks the primary. The pipeline
-  then walks **L1 Claude subscription → (retry once) → L2 Claude API → L3 Codex**,
-  escalating only on transient/provider errors (timeout, network, 5xx, rate-limit,
-  quota). Policy/quota/budget/duplicate refusals bubble up unchanged.
-- **Weekly cap (proactive):** when Claude 5x weekly utilisation reaches the
-  failover threshold (default 90%) **or** a quota signal is recorded, new requests
-  start at **L2 (Claude API)** until the weekly window resets and utilisation drops
-  below the warn threshold (hysteresis).
-- A candidate submission **never fails** solely because the subscription is
-  exhausted — it transparently escalates within the same operation.
-- Every call records provider, model, outcome, and `FailoverTrace` /
-  `failoverReason` in `AiUsageRecord`, so the admin can see exactly which level
-  produced each grade and why it fell back.
+- **Every run, same plan:** Max ×2 → Anthropic API ×1 → Codex ×2. Each attempt gets
+  `min(its budget, what is left of the 1200 s run)` on a linked token (an expired attempt is
+  recorded Cancelled, i.e. replayable) and parses the reply inside the attempt (an unreadable reply
+  fails over too). Budgets: `Writing__GradeChain__L1AttemptSeconds` 420, `L2AttemptSeconds` 150,
+  `L3AttemptSeconds` 420, `ChainDeadlineSeconds` 1200.
+- **What fails over:** every provider-side failure, including a duplicate, conflicting or in-flight
+  operation slot, a timeout and an unreadable answer. A typed quota, auth or invalid-request answer
+  only skips the SAME route's second attempt (the next route still runs). Never failed over: the
+  learner's AI quota refusal, the platform budget (only while spend caps are on), the feature
+  policy, an ungrounded prompt, the mock ban, and the caller's own cancellation.
+- **No sticky state:** nothing a run sees is written for the next run. The provider circuit never
+  opens for `writing-claude-sub` (`AiCircuitBreakerStore.IsAlwaysOn`); the API and Codex rows keep
+  their circuits.
+- **Auto-resume:** a run that ends without a grade never wedges in `grading`:
+  - a retryable failure with re-queues left goes back to `queued` after 2 / 5 / 15 / 30 min
+    (`Writing__GradeChain__MaxAutoRetries` 4, `BackoffMinutes`); the page says "Your letter is
+    saved. This is taking longer than usual." and the credit hold stays on the letter;
+  - re-queues spent, a credits refusal, or a non-retryable outcome → `failed`; Retry is offered
+    unless it cannot help;
+  - worker shutdown → `queued` at once without spending a re-queue; `WritingGradeShutdownRequeue`
+    (API slots and `oet-ai-worker`) also re-queues this process's own claims on stop;
+  - a hard kill → the batch cron (every minute, 5 rows) reclaims a `grading` claim older than the
+    25-minute lease (`WritingGradeTimings.StaleClaimLease`), and Retry is offered on it.
+
+  Failure writes are fenced on the run's claim owner. `MaxAutoRetries=0` restores the old
+  "fail at once" behaviour without code.
+- **Candidate-safe failure codes** (`WritingSubmission.FailureCode`, never a provider name):
+  `grading_delayed` (every route failed, or canon/DB errors — re-queued), `credits_insufficient`
+  (plan or credit refusal — failed, Retry after a top-up), `service_paused` (platform gate, budget,
+  policy — re-queued), `task_not_ready` / `manual_review` / `letter_invalid` (failed, no Retry).
+  The submission DTO adds `failureCode`, `canRetry`, `autoRetrying` and `attemptCount`.
+- **Spend caps:** platform USD caps refuse a call only while `AiGlobalPolicy.EnforceSpendCaps` is on
+  (off by default since 2026-10-02; `docs/AI-USAGE-POLICY.md` §7). The kill switch, per-feature
+  kill list, per-user disable, learner credits and plan token caps still apply; a credit-funded
+  Writing grade is sent with `FreeSampleGrant=true`, so the plan feature list and token counters do
+  not refuse it.
+- **QA-only fault switch (WAI-05, off by default, no seed):** Admin › Feature Flags rows
+  `writing_grade_fault:{userId}` (every hop fails) or `writing_grade_fault_l1l2:{userId}` (Max and
+  the API fail, Codex serves for real). `RolloutPercentage` 1-5 = the first N runs of each
+  submission fail (0 ⇒ 1, capped at 5); a faulted hop throws before any provider call (no usage
+  row, no circuit effect); while a flag is active that learner's failures are not re-queued, so the
+  real `failed` row and its Retry are proven (run N+1 grades). A flag that is absent, disabled,
+  unreadable or not updated for 24 h is off (fails closed). Code: `WritingQaFault`.
+- Every call records provider, model, outcome and failure class in `AiUsageRecord`.
 
 ---
 
 ## 6. Safety / billing guarantees
 
-- Failover runs **inside one coordinated `AiOperation`** → no duplicate grade row,
-  and the learner's AI credit is debited **exactly once** (the budget reservation
-  spans the whole call, not each provider attempt).
+- One `AiOperation` per attempt and hop (never one for the whole chain). The unique grade index
+  allows one grade per letter, and the learner's credit is debited **exactly once**, at task open
+  (a revision, or a letter submitted without opening the task, pays once at its first grade). A
+  failed run keeps the hold; Retry costs nothing; nothing is refunded automatically.
 - Subscription sidecars are metered at **$0.00** in the provider rows; the admin
   panel additionally shows an **estimated API-equivalent cost** (informational).
 - Sidecars spawn one CLI process per request; the per-engine mutex serialises calls
@@ -180,7 +213,8 @@ Claude hits its limit.
 | Claude sidecar 502s / empty | `docker logs oet-writing-claude`; probe `docker exec -u 10002 oet-writing-claude claude -p "OK"`; re-run §2.4 if auth lapsed |
 | Codex sidecar 502s | `docker logs oet-writing-codex`; `docker exec -u 10002 oet-writing-codex codex login status`; re-login if needed |
 | Backend "BaseUrl must use https://", or "Platform API key missing for ... writing-claude-sub / writing-codex-sub" | `OET_INTERNAL_AI_HOSTS` missing the sidecar hostnames (§3). The seeded marker key is only honoured for a row whose host is on that list, so a missing host now shows up as a missing key |
-| All writing failing over constantly | Claude weekly cap exhausted — check `/admin/writing-ai` utilisation; raise `WRITING_CLAUDE_WEEKLY_TOKEN_CAP` only if the real allowance is larger |
+| Many grades served by the API or Codex | Max is erroring inside each run (it is still tried first every time): `docker logs oet-writing-claude`, `GET /readyz` (display only: `ready`, `reason`, `queueDepth`, `authOk`, `plan`; routing never reads it) and `/usage` rows with `class=quota_exhausted` / `auth` |
+| Requests answered `503 lane_busy` | Sidecar lane full: `WRITING_QUEUE_MAX` (40) already waiting, or a request waited `WRITING_QUEUE_WAIT_MS` (420000). That attempt fails over; the sidecar is never switched off. CLI timeout `WRITING_CLI_TIMEOUT_MS` 300000, lane width `WRITING_LANE_CONCURRENCY` 1 |
 | OAuth refresh contention | Two Claude processes sharing `oet_agent_home` — ensure only ONE claude sidecar + the console use it, never a second copy |
 | Speaking grades all fall back to the API route | Gateway log line `AI provider call failed: ... provider=writing-claude-sub ... class=...` says why (§9); check the row is active, `OET_INTERNAL_AI_HOSTS` on **both** the API slots and `oet-ai-worker`, and `docker exec oet-ai-worker curl -sS -m 5 http://oet-writing-claude:8080/healthz` |
 | `docker logs oet-writing-claude` empty on a 502 | Older sidecar image. Current images log one line per failure: `[writing-ai:claude] POST /v1/messages -> 502 engine_error in <ms>` (status + code + duration only, never CLI output). A duration near 300000 ms is the CLI timeout |
@@ -222,15 +256,10 @@ speaking.grade
   Quota/budget/policy refusals, every other duplicate or conflicting operation (for example an
   in-window `Completed` twin) and caller cancellation are **not** failed over. If both levels
   fail the learner sees the same generic `409 speaking_ai_unavailable` as before, and can retry.
-- **Not steered by the Writing selector, but sharing its circuit.** Speaking pins
-  `writing-claude-sub` directly in `SpeakingGradeChain`; it bypasses `WritingSubscriptionSelector`,
-  so the Writing mode (`auto` / `claude` / `codex`) and the weekly-utilisation bands do not move
-  Speaking: forcing Writing to `codex` leaves Speaking on the Claude lane (revert with the env key
-  below). The provider circuit breaker is keyed per provider row, so Speaking and Writing share the
-  `writing-claude-sub` circuit: `class=quota_exhausted` or `class=auth` from either opens it for
-  both, and a burst of Speaking failures can push Writing to L2 (and the reverse). Speaking
-  grades also count toward the sidecar's weekly usage counter, which drives Writing's 80% / 90%
-  bands.
+- **Not steered by the Writing selector.** Speaking pins `writing-claude-sub` directly in
+  `SpeakingGradeChain`. The `writing-claude-sub` provider circuit never opens (MAX-ALWAYS-ON), so
+  neither Speaking nor Writing failures can switch the other off. Speaking grades count toward the
+  sidecar's weekly usage estimate, which is information only.
 - **Requirements (all three, or every grade silently falls back to L2):** the
   `writing-claude-sub` row is **active**; `OET_INTERNAL_AI_HOSTS` lists `oet-writing-claude`
   on the API slots **and `oet-ai-worker`**; `oet-ai-worker` is on `oet_agent_ctl`
@@ -242,8 +271,8 @@ speaking.grade
   mock is two serial grades. Measure real Speaking latency before relying on it at volume.
 - **Timeouts:** the CLI is killed after **300 s** per attempt (`WRITING_CLI_TIMEOUT_MS`,
   default 300000, not exposed through `docker-compose.writing-ai.yml`); that clock starts only
-  when the request reaches the front of the sidecar's queue. Queue wait is unbounded inside the
-  sidecar, and the .NET client for this row (Anthropic dialect) keeps the 30-minute
+  when the request reaches the front of the sidecar's queue. Queue wait is bounded by
+  `WRITING_QUEUE_WAIT_MS` (420000; then `503 lane_busy`), and the .NET client for this row (Anthropic dialect) keeps the 30-minute
   `AiRegistryClient` default (only OpenAI-compatible rows, such as the Codex sidecar, get 300 s).
   The gateway retries 5xx and rate-limit failures up to 3 times (a quota-exhausted 429 is
   quarantined, no retry), so one hung grade can hold the lane for up to ~15 minutes. To keep
@@ -276,8 +305,8 @@ speaking.grade
 - **Diagnostics:** every failed provider call writes one structured API log line
   (`AI provider call failed: feature=... provider=... http=... class=... type=... code=...
   requestId=... providerError=...`, provider text redacted and capped at 300 characters; only
-  ever in that log line). `class=quota_exhausted` or `class=auth` open the provider circuit at
-  once (`GET /v1/admin/ai/circuits`, reset with
+  ever in that log line). `class=quota_exhausted` or `class=auth` open a provider circuit at
+  once (never the `writing-claude-sub` one) (`GET /v1/admin/ai/circuits`, reset with
   `POST /v1/admin/ai/circuits/{key}/reset?kind=provider`). The sidecar itself logs status,
   error code and duration per failure.
 - **Revert:** set `SPEAKING_GRADING_PINNED_PROVIDER=` (empty) in `/opt/oetwebapp/.env.production`

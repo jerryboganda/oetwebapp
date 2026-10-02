@@ -210,10 +210,16 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
     {
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(resourceId)
             || !IsSupported(subtest)
-            || resourceKind is not (FreeSampleUse.KindLegacyAttempt or FreeSampleUse.KindSpeakingSession or FreeSampleUse.KindWritingSubmission)
-            || !await IsEnabledAsync(ct))
+            || resourceKind is not (FreeSampleUse.KindLegacyAttempt or FreeSampleUse.KindSpeakingSession or FreeSampleUse.KindWritingSubmission))
         {
             return false;
+        }
+        if (!await IsEnabledAsync(ct))
+        {
+            // Switching the programme off never re-bills a resource that already took
+            // a free use: its Retry stays free (read-only, same slot rules). No new
+            // claim or use is ever minted while the programme is off.
+            return await IsFreeAttemptAsync(userId, subtest, resourceId, ct);
         }
         var content = await ResolveContentAsync(subtest, contentRef, ct);
         if (content is null) return false;
