@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles, AlertTriangle, TrendingUp, BarChart3 } from 'lucide-react';
+import { Sparkles, TrendingUp, BarChart3 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { CountUp } from '@/components/ui/count-up';
@@ -14,18 +13,10 @@ import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import {
   fetchLearnerAiUsage,
-  fetchMyChurnRisk,
   fetchMyForecast,
   type LearnerUsageSummaryDto,
-  type ChurnRiskSnapshotDto,
   type UsageForecastSnapshotDto,
 } from '@/lib/api';
-
-function riskBadgeVariant(band: string) {
-  if (band === 'high') return 'danger' as const;
-  if (band === 'medium') return 'warning' as const;
-  return 'success' as const;
-}
 
 // ponytail: CountUp prints digits without grouping, so 1,000+ stays locale-formatted text; a CountUp format prop would cover both.
 function countValue(value: number, suffix = '') {
@@ -42,19 +33,19 @@ export default function LearnerAiUsagePage() {
 
   const [summary, setSummary] = useState<LearnerUsageSummaryDto | null>(null);
   const [forecast, setForecast] = useState<UsageForecastSnapshotDto | null>(null);
-  const [churn, setChurn] = useState<ChurnRiskSnapshotDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Churn risk is an internal retention signal (admin AI analytics); its
+  // endpoint scores and stores a snapshot that drives win-back actions, so a
+  // learner's visit must never call it.
   const load = useCallback(async () => {
     try {
-      const [s, f, c] = await Promise.all([
+      const [s, f] = await Promise.all([
         fetchLearnerAiUsage(monthAgo, today),
         fetchMyForecast(30),
-        fetchMyChurnRisk(),
       ]);
       setSummary(s);
       setForecast(f);
-      setChurn(c);
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load AI usage.');
     }
@@ -136,24 +127,8 @@ export default function LearnerAiUsagePage() {
             </MotionSection>
           )}
 
-          {/* Churn risk (only show if medium/high) */}
-          {churn && churn.riskBand !== 'low' && (
-            <MotionSection delayIndex={1} className="space-y-4">
-              <LearnerSurfaceSectionHeader
-                icon={AlertTriangle}
-                title="Account health"
-                action={<Badge variant={riskBadgeVariant(churn.riskBand)} className="self-start capitalize sm:self-auto">{churn.riskBand}</Badge>}
-              />
-              <Card>
-                <p className="text-sm text-muted">
-                  Risk score <span className="tabular-nums">{(churn.riskScore * 100).toFixed(0)}%</span>. {churn.recommendedAction ? `Recommended: ${churn.recommendedAction.replace(/_/g, ' ')}.` : ''}
-                </p>
-              </Card>
-            </MotionSection>
-          )}
-
           {/* Per-feature breakdown */}
-          <MotionSection delayIndex={2} className="space-y-4">
+          <MotionSection delayIndex={1} className="space-y-4">
             <LearnerSurfaceSectionHeader title="By feature" />
             {summary.byFeature.length === 0 ? (
               <EmptyState icon={<Sparkles className="h-8 w-8" />} title="No AI calls yet in this window." />
@@ -180,7 +155,7 @@ export default function LearnerAiUsagePage() {
           </MotionSection>
 
           {/* Daily sparkline (text) */}
-          <MotionSection delayIndex={3} className="space-y-4">
+          <MotionSection delayIndex={2} className="space-y-4">
             <LearnerSurfaceSectionHeader title="Daily activity" />
             {summary.daily.length === 0 ? (
               <EmptyState icon={<BarChart3 className="h-8 w-8" />} title="No AI calls yet in this window." />
