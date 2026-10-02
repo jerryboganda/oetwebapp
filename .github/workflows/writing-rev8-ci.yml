@@ -76,6 +76,11 @@ on:
         required: false
         default: false
         type: boolean
+      clear_max_marker:
+        description: "RULE MAX-ALWAYS-ON: clear the legacy 7-day Claude Max exhaustion marker so Max is tried first again (admin write, no AI call)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -208,7 +213,7 @@ jobs:
 
   production-latest-diagnostics:
     name: Read-only Writing grading diagnostics (latest failures)
-    if: ${{ inputs.diagnose_latest_failures == true || inputs.verify_api_model == true }}
+    if: ${{ inputs.diagnose_latest_failures == true || inputs.verify_api_model == true || inputs.clear_max_marker == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -229,6 +234,7 @@ jobs:
           DIAGNOSE_LATEST: ${{ inputs.diagnose_latest_failures }}
           VERIFY_API_MODEL: ${{ inputs.verify_api_model }}
           PROBE_SUBSCRIPTION_PROVIDERS: ${{ inputs.probe_subscription_providers }}
+          CLEAR_MAX_MARKER: ${{ inputs.clear_max_marker }}
         run: node scripts/qa/writing-prod-diagnose.mjs
 
   software-review:
@@ -279,7 +285,7 @@ jobs:
 
   rulebooks:
     name: Canonical Writing rulebooks (build + --check)
-    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true && inputs.clear_max_marker != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -304,7 +310,7 @@ jobs:
 
   backend:
     name: Backend Writing/Rulebook tests (.NET)
-    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true && inputs.clear_max_marker != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # No Postgres service: [PostgreSqlFact] tests self-skip without
@@ -355,7 +361,7 @@ jobs:
 
   backend-build:
     name: Backend compile gate (whole solution)
-    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true && inputs.clear_max_marker != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -368,7 +374,7 @@ jobs:
 
   frontend:
     name: Frontend (tsc + scoped vitest + changed-file lint)
-    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true }}
+    if: ${{ inputs.verify_production_report != true && inputs.diagnose_latest_failures != true && inputs.verify_api_model != true && inputs.clear_max_marker != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

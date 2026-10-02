@@ -73,6 +73,25 @@ async function read(path) {
 await signIn();
 console.log('Signed in as the CI admin (read-only run).');
 
+// RULE MAX-ALWAYS-ON (owner, 2 Oct 2026): restore the Claude Max route NOW by clearing the legacy
+// 7-day "Max is exhausted" marker that the old pipeline wrote. The one write this script can make
+// besides the authorised model check; explicit opt-in only.
+if (process.env.CLEAR_MAX_MARKER === 'true') {
+  const before = await read('/v1/admin/ai/writing-provider');
+  log('MAX_MARKER_BEFORE', { quotaExceededUntil: before.data?.quotaExceededUntil, failoverActive: before.data?.failoverActive, mode: before.data?.mode });
+  const response = await fetch(`${base}/v1/admin/ai/writing-provider`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clearQuotaMarker: true }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const after = await read('/v1/admin/ai/writing-provider');
+  log('MAX_MARKER_CLEARED', {
+    http: response.status, quotaExceededUntil: after.data?.quotaExceededUntil, failoverActive: after.data?.failoverActive, mode: after.data?.mode,
+  });
+  if (!response.ok || after.data?.quotaExceededUntil) process.exitCode = 1;
+}
+
 const [ops, usage, providers, writingProvider, circuits, budgets, policy, usageSummary, flags] = await Promise.all([
   read('/v1/admin/ai/operations?featureCode=writing.grade&pageSize=200'),
   read('/v1/admin/ai/usage?featureCode=writing.grade&pageSize=200'),
