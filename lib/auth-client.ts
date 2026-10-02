@@ -608,7 +608,23 @@ export async function registerLearner(
     saveStoredSession(session, 'local');
   }
   clearPendingMfaChallenge();
+  await reportAffiliateSignup(session.accessToken);
   return session;
+}
+
+/**
+ * proxy.ts keeps a `?ref=` / `?agent=` code as `oet_affiliate` (first click wins).
+ * A signup reports it once so the affiliate is credited. Best effort: the account
+ * already exists, so a failed call never fails the registration.
+ */
+async function reportAffiliateSignup(accessToken: string): Promise<void> {
+  const affiliateCode = readCookie('oet_affiliate');
+  if (!affiliateCode) return;
+  try {
+    await postJson<void>('/v1/affiliates/track', { affiliateCode }, accessToken);
+  } catch {
+    // Attribution only; never block the new learner.
+  }
 }
 
 export async function fetchSignupCatalog(): Promise<SignupCatalog> {
