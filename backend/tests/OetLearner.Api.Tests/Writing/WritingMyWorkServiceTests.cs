@@ -68,8 +68,10 @@ public sealed class WritingMyWorkServiceTests
         Assert.Equal(("failed", true, "grading"), (byKey[$"submission:{staleGrading}"].State, byKey[$"submission:{staleGrading}"].CanRetry, byKey[$"submission:{staleGrading}"].RawStatus));
         Assert.Equal(("grading", false), (byKey[$"submission:{freshGrading}"].State, byKey[$"submission:{freshGrading}"].CanRetry));
         Assert.Equal(Action("wait", $"/writing/submissions/{freshGrading}/grading"), byKey[$"submission:{freshGrading}"].Actions[0]);
-        // Queued is always live grading, however old.
-        Assert.Equal(("grading", false, "queued"), (byKey[$"submission:{queued}"].State, byKey[$"submission:{queued}"].CanRetry, byKey[$"submission:{queued}"].RawStatus));
+        // Queued reads as live grading, and offers Retry once nothing picked it up within the
+        // 25-minute lease (shared rule, WritingGradeRecovery.IsStaleQueued): this one is 10 h old.
+        Assert.Equal(("grading", true, "queued"), (byKey[$"submission:{queued}"].State, byKey[$"submission:{queued}"].CanRetry, byKey[$"submission:{queued}"].RawStatus));
+        Assert.Equal(Action("retry", $"/writing/submissions/{queued}/grading"), byKey[$"submission:{queued}"].Actions[0]);
 
         // No letter text anywhere in the payload.
         Assert.DoesNotContain("SECRET LETTER", JsonSerializer.Serialize(result));
