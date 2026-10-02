@@ -280,6 +280,8 @@
   "writing.practice.session.loadError.backToLibrary": "العودة إلى مكتبة تدريبات الكتابة",
   "writing.practice.session.loadError.unavailable": "مهمة الكتابة هذه غير متاحة حاليًا. يُرجى اختيار مهمة أخرى من مكتبة تدريبات الكتابة.",
   "writing.practice.session.loadError.incomplete": "يجري تحديث مهمة الكتابة هذه ولا يمكن فتحها بعد. لم يُخصم منك أي رصيد. يُرجى اختيار مهمة أخرى.",
+  "writing.practice.session.timeUp.pending": "انتهى الوقت — سنرسل رسالتك فور عودة اتصالك بالإنترنت.",
+  "writing.practice.session.timeUp.submitNow": "أرسل الآن",
   "writing.submissions.detail.pageTitle": "إرسال الكتابة",
   "writing.submissions.detail.title": "الإرسال",
   "writing.submissions.detail.openResults": "افتح النتائج",

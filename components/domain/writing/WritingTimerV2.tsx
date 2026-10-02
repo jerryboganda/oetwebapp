@@ -134,6 +134,9 @@ export function WritingTimerV2({
   return (
     <div
       className={cn('flex items-center gap-3 select-none', className)}
+      data-testid="writing-timer"
+      data-phase={phase}
+      data-seconds-remaining={Math.max(0, Math.floor(seconds))}
       role="timer"
       aria-live="polite"
       aria-atomic="true"

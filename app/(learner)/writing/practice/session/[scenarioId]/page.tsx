@@ -47,6 +47,21 @@ function positiveOr(value: number | null | undefined, fallback: number): number 
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+/** Waits between time-up auto-submit attempts; the last value repeats. */
+const AUTO_SUBMIT_RETRY_MS = [5_000, 15_000, 30_000, 60_000];
+
+/**
+ * A submit failure worth retrying with the SAME idempotency key: no connection,
+ * timeout, throttling, a server error, or grading already running for this
+ * attempt (the retry collapses onto it). Credits and validation refusals are final.
+ */
+function isRetryableSubmitError(err: unknown): boolean {
+  const { status, code } = (err ?? {}) as { status?: number; code?: string };
+  if (status === 402 || code === 'ai_credits_insufficient') return false;
+  if (code === 'writing_rubric_already_in_progress') return true;
+  return status === undefined || status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
 export default function WritingPracticeSessionPage() {
   const t = useTranslations();
   const params = useParams<{ scenarioId: string }>();
@@ -67,10 +82,17 @@ export default function WritingPracticeSessionPage() {
   const [loadError, setLoadError] = useState<{ cause: unknown } | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const startedAtRef = useRef<number>(Date.now());
+  // The letter text the server is known to hold — set ONLY after a successful save.
   const lastAutosaveContent = useRef<string>('');
-  // Latest content for auto-submit (timer expiry reads the current letter).
+  const autosaveInFlightRef = useRef(false);
+  // Latest content for autosave + auto-submit (read through refs so typing
+  // never restarts their timers).
   const contentRef = useRef('');
   contentRef.current = content;
+  const wordCountRef = useRef(0);
+  wordCountRef.current = wordCount;
+  const scenarioRef = useRef<WritingScenarioDto | null>(null);
+  scenarioRef.current = scenario;
 
   // ── Strict 45-minute exam clock ─────────────────────────────────────────────
   // 5 min forced reading (pad LOCKED) → 40 min writing → hard auto-submit. The
@@ -152,18 +174,23 @@ export default function WritingPracticeSessionPage() {
         showCreditFeedback(eligibility?.feedbackMessage);
         return Promise.all([
           getWritingScenario(scenarioId),
-          getWritingDraftV2(scenarioId, mode).catch(() => null),
+          // Strict: only a 404 means "no draft". A 5xx or a dropped connection
+          // rejects into the Retry state — never "blank editor + overwrite".
+          getWritingDraftV2(scenarioId, mode),
           // Saved Case Notes highlights persist per (user, scenario) across attempts.
           getWritingHighlights(scenarioId).catch(() => null),
         ]);
       })
       .then(([sc, draft, hl]) => {
         if (cancelled) return;
+        // Same batch as the draft below: the editor mounts on `scenario`, so it
+        // is created with the restored text (it reads `initialContent` once).
         setScenario(sc);
         if (draft?.content) {
           setInitialContent(draft.content);
           setContent(draft.content);
           setWordCount(draft.wordCount);
+          lastAutosaveContent.current = draft.content;
         }
         if (hl?.highlightsJson) {
           const parsed = parseHighlights(hl.highlightsJson);
@@ -205,22 +232,33 @@ export default function WritingPracticeSessionPage() {
   };
 
   // ── Autosave (writing phase only) ────────────────────────────────────────────
+  // The interval reads the letter through refs, so continuous typing can no
+  // longer postpone it forever; one save at a time; text counts as saved only
+  // once the server has it (a failed save is retried on the next tick).
   useEffect(() => {
     if (phase !== 'writing' || !scenarioId) return;
     const timer = window.setInterval(() => {
-      if (content === lastAutosaveContent.current) return;
-      lastAutosaveContent.current = content;
+      const text = contentRef.current;
+      if (autosaveInFlightRef.current || text === lastAutosaveContent.current) return;
+      autosaveInFlightRef.current = true;
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
       void putWritingDraftV2(scenarioId, mode, {
-        content,
-        wordCount,
+        content: text,
+        wordCount: wordCountRef.current,
         timeSpentSeconds: elapsed,
-      }).catch(() => {
-        /* best-effort */
-      });
+      })
+        .then(() => {
+          lastAutosaveContent.current = text;
+        })
+        .catch(() => {
+          /* not marked saved — the next tick retries */
+        })
+        .finally(() => {
+          autosaveInFlightRef.current = false;
+        });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [phase, scenarioId, content, wordCount, mode]);
+  }, [phase, scenarioId, mode]);
 
   // ── Highlight autosave (reading + writing) ───────────────────────────────────
   // Persists Case Notes marks per (user, scenario) the moment they change, so
@@ -239,6 +277,8 @@ export default function WritingPracticeSessionPage() {
     return () => window.clearTimeout(timer);
   }, [pdfHighlights, scenarioId, phase]);
 
+  // Time-up auto-submit progress: `waiting` = a retryable failure, next try scheduled.
+  const [timeUp, setTimeUp] = useState<'idle' | 'sending' | 'waiting' | 'stopped'>('idle');
   const canSubmit = phase === 'writing' && !submitting;
 
   const helperText = t('writing.practice.session.helper.ready');
@@ -247,90 +287,100 @@ export default function WritingPracticeSessionPage() {
   // already-in-flight grading attempt is waited on rather than hammered.
   const retriedAfterThrottleRef = useRef(false);
 
-  // Shared submit path. `auto` = true when fired by the writing-timer expiry.
-  // One key is minted per submit action and reused across the initial send
-  // and the single 429/409 retry below, so one logical Submit can never open
-  // two paid grading workflows. Same-attempt collapsing (identical or
-  // near-identical resends) is owned server-side by the SubmitGrading seam.
-  const finalizeSubmit = useCallback(
-    async (auto: boolean) => {
-      if (submitting || !scenario) return;
-      setSubmitting(true);
-      setError(null);
-      const idempotencyKey = createSubmitIdempotencyKey();
-
-      const attemptOnce = async () => {
-        const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-        return createWritingSubmission({
-          scenarioId: scenario.id,
-          mode,
-          letterContent: contentRef.current,
-          wordCount,
-          timeSpentSeconds: elapsed,
-          inputSource: 'editor',
-          caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
-          idempotencyKey,
-        });
-      };
-
-      // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
-      // a dedicated modal with a direct path to the AI Credits storefront rather
-      // than a generic inline error. The draft autosaves, so nothing is lost.
-      // All other failures render candidate-safe copy (never internal codes).
-      const handleFailure = (err: unknown) => {
-        const code = (err as { code?: string }).code;
-        const status = (err as { status?: number }).status;
-        if (code === 'ai_credits_insufficient' || status === 402) {
-          setNoCreditsOpen(true);
-        } else if (!auto) {
-          setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.session.error.submit')));
-        }
-        setSubmitting(false);
-      };
-
-      try {
-        const submission = await attemptOnce();
-        // Clear the clock so a future retake of this scenario starts fresh.
-        if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
-        router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
-      } catch (err) {
-        // One Submit must never surface "Too many requests" as its normal
-        // outcome: a 429 (rate limiter tripped by a double-tap race) or a 409
-        // (grading already in flight for this attempt) waits briefly and
-        // retries ONCE with the same idempotency key, which the server
-        // collapses onto the single in-flight submission. Anything else, or a
-        // second failure, surfaces normally — the draft autosaves, so no work
-        // is lost.
-        const code = (err as { code?: string }).code;
-        const status = (err as { status?: number }).status;
-        const throttleRetryable =
-          code === 'rate_limited' ||
-          status === 429 ||
-          code === 'writing_rubric_already_in_progress' ||
-          status === 409;
-        if (throttleRetryable && !auto && !retriedAfterThrottleRef.current) {
-          retriedAfterThrottleRef.current = true;
-          await new Promise((resolve) => setTimeout(resolve, 2500));
-          try {
-            const submission = await attemptOnce();
-            if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
-            router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
-            return;
-          } catch (retryErr) {
-            handleFailure(retryErr);
-            return;
-          }
-        }
-        handleFailure(err);
-      }
+  // One send of the CURRENT letter. Callers mint one idempotency key per
+  // logical submit and reuse it for every retry of it, so one Submit can never
+  // open two paid grading workflows (the server collapses same-key resends).
+  const sendLetter = useCallback(
+    (idempotencyKey: string) => {
+      const current = scenarioRef.current;
+      if (!current) return Promise.reject(new Error('Scenario not loaded'));
+      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
+      return createWritingSubmission({
+        scenarioId: current.id,
+        mode,
+        letterContent: contentRef.current,
+        wordCount: wordCountRef.current,
+        timeSpentSeconds: elapsed,
+        inputSource: 'editor',
+        caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
+        idempotencyKey,
+      });
     },
-    [submitting, scenario, wordCount, mode, router, clockKey, t],
+    [mode],
   );
 
-  const onSubmit = useCallback(() => {
+  const openGrading = useCallback(
+    (submissionId: string) => {
+      // Clear the clock so a future retake of this scenario starts fresh.
+      if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
+      router.push(`/writing/submissions/${encodeURIComponent(submissionId)}/grading`);
+    },
+    [clockKey, router],
+  );
+
+  // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
+  // a dedicated modal with a direct path to the AI Credits storefront rather
+  // than a generic inline error. The draft autosaves, so nothing is lost.
+  // All other failures render candidate-safe copy (never internal codes).
+  const showSubmitFailure = useCallback(
+    (err: unknown) => {
+      const { code, status } = (err ?? {}) as { code?: string; status?: number };
+      if (code === 'ai_credits_insufficient' || status === 402) {
+        setNoCreditsOpen(true);
+      } else {
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.session.error.submit')));
+      }
+    },
+    [t],
+  );
+
+  const submitManually = useCallback(async () => {
     if (!canSubmit) return;
-    void finalizeSubmit(false);
-  }, [canSubmit, finalizeSubmit]);
+    setSubmitting(true);
+    setError(null);
+    const idempotencyKey = createSubmitIdempotencyKey();
+    try {
+      openGrading((await sendLetter(idempotencyKey)).id);
+    } catch (err) {
+      // One Submit must never surface "Too many requests" as its normal
+      // outcome: a 429 (rate limiter tripped by a double-tap race) or a 409
+      // (grading already in flight for this attempt) waits briefly and
+      // retries ONCE with the same idempotency key, which the server
+      // collapses onto the single in-flight submission. Anything else, or a
+      // second failure, surfaces normally — the draft autosaves, so no work
+      // is lost.
+      const { code, status } = (err ?? {}) as { code?: string; status?: number };
+      const throttleRetryable =
+        code === 'rate_limited' ||
+        status === 429 ||
+        code === 'writing_rubric_already_in_progress' ||
+        status === 409;
+      if (throttleRetryable && !retriedAfterThrottleRef.current) {
+        retriedAfterThrottleRef.current = true;
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        try {
+          openGrading((await sendLetter(idempotencyKey)).id);
+          return;
+        } catch (retryErr) {
+          showSubmitFailure(retryErr);
+          setSubmitting(false);
+          return;
+        }
+      }
+      showSubmitFailure(err);
+      setSubmitting(false);
+    }
+  }, [canSubmit, sendLetter, openGrading, showSubmitFailure]);
+
+  const onSubmit = useCallback(() => {
+    void submitManually();
+  }, [submitManually]);
+
+  // The time-up loop below runs once per expiry; it reads the latest submit
+  // helpers through this ref instead of restarting whenever they change.
+  const submitPathRef = useRef({ sendLetter, openGrading, showSubmitFailure });
+  submitPathRef.current = { sendLetter, openGrading, showSubmitFailure };
+  const submitNowRef = useRef<() => void>(() => {});
 
   // ── Phase transitions ───────────────────────────────────────────────────────
   const beganWritingRef = useRef(false);
@@ -351,12 +401,53 @@ export default function WritingPracticeSessionPage() {
     { onZero: () => setPhase('completed') },
   );
 
-  // Hard auto-submit when the 40-minute writing window expires.
+  // Hard auto-submit when the 40-minute writing window expires: ONE logical
+  // submit (one idempotency key) retried after 5/15/30/60 s and the moment the
+  // connection returns, until it lands. A retryable failure never loops hot; a
+  // credits/validation refusal stops and is shown.
   useEffect(() => {
-    if (phase === 'completed' && !submitting) {
-      void finalizeSubmit(true);
-    }
-  }, [phase, submitting, finalizeSubmit]);
+    if (phase !== 'completed') return;
+    let finished = false;
+    let sending = false;
+    let attempt = 0;
+    let retryTimer: number | undefined;
+    const idempotencyKey = createSubmitIdempotencyKey();
+    const send = async () => {
+      if (finished || sending) return;
+      window.clearTimeout(retryTimer);
+      sending = true;
+      setTimeUp('sending');
+      try {
+        const submission = await submitPathRef.current.sendLetter(idempotencyKey);
+        if (finished) return;
+        finished = true;
+        submitPathRef.current.openGrading(submission.id);
+      } catch (err) {
+        if (finished) return;
+        if (isRetryableSubmitError(err)) {
+          setTimeUp('waiting');
+          const delay = AUTO_SUBMIT_RETRY_MS[Math.min(attempt, AUTO_SUBMIT_RETRY_MS.length - 1)];
+          attempt += 1;
+          retryTimer = window.setTimeout(() => void send(), delay);
+        } else {
+          finished = true;
+          setTimeUp('stopped');
+          submitPathRef.current.showSubmitFailure(err);
+        }
+      } finally {
+        sending = false;
+      }
+    };
+    submitNowRef.current = () => void send();
+    const onOnline = () => void send();
+    window.addEventListener('online', onOnline);
+    void send();
+    return () => {
+      finished = true;
+      window.clearTimeout(retryTimer);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [phase]);
 
   const readingActive = phase === 'reading';
 
@@ -454,6 +545,20 @@ export default function WritingPracticeSessionPage() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+        {timeUp === 'waiting' ? (
+          <InlineAlert
+            variant="warning"
+            data-testid="writing-time-up"
+            action={
+              <Button size="sm" onClick={() => submitNowRef.current()}>
+                {t('writing.practice.session.timeUp.submitNow')}
+              </Button>
+            }
+          >
+            {t('writing.practice.session.timeUp.pending')}
+          </InlineAlert>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Case Notes PDF (with yellow highlighter) or text fallback. */}
           <section
@@ -478,18 +583,24 @@ export default function WritingPracticeSessionPage() {
             aria-label={t('writing.practice.session.editorLabel')}
             className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
           >
-            <WritingEditorV2
-              mode={mode}
-              initialContent={initialContent}
-              disabled={phase !== 'writing'}
-              blockPaste
-              onChange={(text, words) => {
-                setContent(text);
-                setWordCount(words);
-              }}
-              placeholder={t('writing.practice.session.editorPlaceholder')}
-              inputId="practice-editor"
-            />
+            {/* Mounted only once the draft is known: the editor reads
+                `initialContent` once, so an early mount would start blank. */}
+            {scenario ? (
+              <WritingEditorV2
+                mode={mode}
+                initialContent={initialContent}
+                disabled={phase !== 'writing'}
+                blockPaste
+                onChange={(text, words) => {
+                  setContent(text);
+                  setWordCount(words);
+                }}
+                placeholder={t('writing.practice.session.editorPlaceholder')}
+                inputId="practice-editor"
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted">{t('writing.practice.session.scenarioLoading')}</p>
+            )}
           </section>
         </div>
 
@@ -497,7 +608,7 @@ export default function WritingPracticeSessionPage() {
           canSubmit={canSubmit}
           submitLabel={t('writing.practice.session.submit')}
           onSubmit={onSubmit}
-          loading={submitting}
+          loading={submitting || timeUp === 'sending'}
           helperText={helperText}
         />
       </div>

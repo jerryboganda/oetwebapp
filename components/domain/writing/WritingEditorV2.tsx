@@ -2,11 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { letterTextToDoc } from '@/lib/writing/letter-text';
 import type { WritingEditorMode } from '@/lib/writing/types';
 import type {
   AnnotationDecoration,
   AnnotationDecorationType,
 } from './tiptap-annotations';
+
+/**
+ * StarterKit minus every block and mark that changes what `getText()` returns
+ * or eats typed characters through Markdown-style input rules ("- ", "1. ",
+ * "# ", "> ", "**", "---"). The letter is plain text: paragraphs (Enter) and
+ * line breaks (Shift+Enter) only.
+ */
+const PLAIN_LETTER_STARTER_KIT = {
+  heading: false,
+  bulletList: false,
+  orderedList: false,
+  listItem: false,
+  blockquote: false,
+  codeBlock: false,
+  horizontalRule: false,
+  bold: false,
+  italic: false,
+  strike: false,
+  code: false,
+};
 
 export interface WritingEditorAnnotation {
   charStart: number;
@@ -42,9 +63,13 @@ function toDecorations(annotations: WritingEditorAnnotation[]): AnnotationDecora
 }
 
 export interface WritingEditorV2Props {
+  /** Read once, when the editor mounts: mount only after the text to restore is known (remount with a new `key` to replace it). */
   initialContent?: string;
   mode: WritingEditorMode;
+  /** Fired on every edit by the learner (never on mount). */
   onChange?: (content: string, wordCount: number) => void;
+  /** Fired when the writing surface loses focus (a natural moment to save). */
+  onBlur?: () => void;
   onSubmit?: (content: string) => void;
   spellCheck?: boolean;
   annotations?: WritingEditorAnnotation[];
@@ -110,7 +135,9 @@ interface AnnotationsModule {
  *   - All changes go through `onChange(content, wordCount)`. The
  *     component is uncontrolled internally; do NOT push state changes
  *     back through `initialContent` after mount or you will fight the
- *     editor.
+ *     editor. Text typed into the textarea before the swap is handed to
+ *     Tiptap, and `initialContent` becomes a real document (paragraphs and
+ *     line breaks) via `letterTextToDoc`, the inverse of `getText()`.
  *
  * Diagnostic mode: when `mode === 'diagnostic'` and `disabled === true`
  * (parent signals reading-window lock), the surface is read-only.
@@ -119,6 +146,7 @@ export function WritingEditorV2({
   initialContent = '',
   mode,
   onChange,
+  onBlur,
   onSubmit,
   spellCheck,
   annotations = [],
@@ -200,13 +228,6 @@ export function WritingEditorV2({
     };
   }, []);
 
-  // Fallback textarea — fires onChange immediately.
-  useEffect(() => {
-    if (tiptap) return;
-    currentValueRef.current = fallbackValue;
-    onChange?.(fallbackValue, countWords(fallbackValue));
-  }, [fallbackValue, tiptap, onChange]);
-
   // Submit via Ctrl/Cmd+Enter
   useEffect(() => {
     if (disabled || !onSubmit) return;
@@ -241,6 +262,7 @@ export function WritingEditorV2({
 
       <div
         className="flex-1 relative"
+        data-testid="writing-editor"
         // Capture-phase guards so paste/drop is blocked before ProseMirror
         // (or the textarea) processes it. No-ops unless `blockPaste` is set.
         onPasteCapture={blockPaste ? handleBlockedPaste : undefined}
@@ -250,7 +272,9 @@ export function WritingEditorV2({
         {tiptap ? (
           <TiptapEditor
             tiptap={tiptap}
-            initialContent={initialContent}
+            // Tiptap reads its content once, at creation — hand over whatever
+            // the learner already typed into the textarea before the swap.
+            initialContent={fallbackValue}
             disabled={disabled}
             spellCheck={effectiveSpellCheck}
             placeholder={placeholder}
@@ -261,6 +285,7 @@ export function WritingEditorV2({
               setFallbackValue(content);
               onChange?.(content, wordCount);
             }}
+            onBlur={onBlur}
           />
         ) : (
           <textarea
@@ -291,9 +316,12 @@ export function WritingEditorV2({
             disabled={disabled}
             readOnly={disabled}
             onChange={(e) => {
-              currentValueRef.current = e.target.value;
-              setFallbackValue(e.target.value);
+              const next = e.target.value;
+              currentValueRef.current = next;
+              setFallbackValue(next);
+              onChange?.(next, countWords(next));
             }}
+            onBlur={onBlur}
             onPaste={blockPaste ? handleBlockedPaste : undefined}
             onDrop={blockPaste ? handleBlockedDrop : undefined}
             onDragOver={blockPaste ? handleDragOver : undefined}
@@ -323,6 +351,7 @@ function TiptapEditor({
   inputId,
   annotations,
   onChange,
+  onBlur,
 }: {
   tiptap: {
     react: TiptapModule;
@@ -336,6 +365,7 @@ function TiptapEditor({
   inputId?: string;
   annotations: WritingEditorAnnotation[];
   onChange: (content: string, wordCount: number) => void;
+  onBlur?: () => void;
 }) {
   const { useEditor, EditorContent } = tiptap.react;
   const StarterKit = tiptap.starterKit;
@@ -362,11 +392,13 @@ function TiptapEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] } }),
+      StarterKit.configure(PLAIN_LETTER_STARTER_KIT),
       AnnotationsExtension.configure({ annotations: decorations }),
     ],
-    content: initialContent,
+    content: letterTextToDoc(initialContent),
     editable: !disabled,
+    enableInputRules: false,
+    enablePasteRules: false,
     editorProps: {
       attributes: {
         id: inputId ?? 'writing-editor-v2',
@@ -380,6 +412,7 @@ function TiptapEditor({
       const text = editorInstance.getText();
       onChange(text, countWords(text));
     },
+    onBlur: () => onBlur?.(),
   }) as {
     getText(): string;
     setEditable(v: boolean): void;
@@ -405,7 +438,7 @@ function TiptapEditor({
     try {
       editor.setOptions({
         extensions: [
-          StarterKit.configure({ heading: { levels: [2, 3] } }),
+          StarterKit.configure(PLAIN_LETTER_STARTER_KIT),
           AnnotationsExtension.configure({ annotations: decorations }),
         ],
       });

@@ -280,6 +280,8 @@
   "writing.practice.session.loadError.backToLibrary": "Back to Writing practice",
   "writing.practice.session.loadError.unavailable": "This writing task is not available right now. Please choose another task from the Writing practice library.",
   "writing.practice.session.loadError.incomplete": "This writing task is being updated and cannot be opened yet. You have not been charged. Please choose another task.",
+  "writing.practice.session.timeUp.pending": "Time is up — we'll submit your letter as soon as you're online.",
+  "writing.practice.session.timeUp.submitNow": "Submit now",
   "writing.submissions.detail.pageTitle": "Writing Submission",
   "writing.submissions.detail.title": "Submission",
   "writing.submissions.detail.openResults": "Open results",

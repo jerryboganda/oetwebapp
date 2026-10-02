@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api/client';
 
 /**
@@ -62,9 +62,16 @@ vi.mock('@/components/domain/writing/WritingStimulus', () => ({
 vi.mock('@/components/domain/writing/WritingReadingWindowOverlay', () => ({
   WritingReadingWindowOverlay: () => null,
 }));
-vi.mock('@/components/domain/writing/WritingEditorV2', () => ({
-  WritingEditorV2: () => null,
-}));
+// Like the real editor, the stub reads `initialContent` ONCE, at mount.
+vi.mock('@/components/domain/writing/WritingEditorV2', async () => {
+  const { useState } = await import('react');
+  return {
+    WritingEditorV2: ({ initialContent = '' }: { initialContent?: string }) => {
+      const [mounted] = useState(initialContent);
+      return <div data-testid="editor-stub">{mounted}</div>;
+    },
+  };
+});
 
 import WritingPracticeSessionPage from './page';
 
@@ -137,6 +144,82 @@ describe('Writing practice session — load failures (Addendum Rev8 §16)', () =
     expect(dialog).toHaveTextContent('Writing practice requires an active subscription.');
     expect(screen.queryByText('writing.practice.session.loadError.title')).not.toBeInTheDocument();
     expect(getWritingScenario).not.toHaveBeenCalled();
+  });
+
+  it('never treats a failed draft load as an empty draft (no editor, no save)', async () => {
+    checkWritingScenarioEligibility.mockResolvedValue({ feedbackMessage: null });
+    getWritingDraftV2.mockRejectedValue(new ApiError(503, 'unavailable', 'Service unavailable', true));
+
+    render(<WritingPracticeSessionPage />);
+
+    expect(await screen.findByText('writing.practice.session.loadError.title')).toBeInTheDocument();
+    expect(screen.queryByTestId('editor-stub')).not.toBeInTheDocument();
+    expect(putWritingDraftV2).not.toHaveBeenCalled();
+  });
+
+  it('mounts the editor with a draft that arrives late', async () => {
+    checkWritingScenarioEligibility.mockResolvedValue({ feedbackMessage: null });
+    getWritingDraftV2.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ content: 'Dear Dr Green,\n\nSaved text', wordCount: 5 }), 50)),
+    );
+
+    render(<WritingPracticeSessionPage />);
+
+    const editor = await screen.findByTestId('editor-stub');
+    expect(editor.textContent).toBe('Dear Dr Green,\n\nSaved text');
+  });
+
+  describe('time-up auto-submit', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function expireTheWritingWindow() {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const now = Date.now();
+      sessionStorage.setItem(
+        'writing-practice-clock:scenario-1',
+        JSON.stringify({ reading: now - 60_000, writing: now - 1_000 }),
+      );
+      checkWritingScenarioEligibility.mockResolvedValue({ feedbackMessage: null });
+    }
+
+    it('retries a network failure with backoff (same key) and on "Submit now", never in a hot loop', async () => {
+      expireTheWritingWindow();
+      createWritingSubmission.mockRejectedValue(new ApiError(0, 'network_error', 'Unable to connect.', true));
+
+      render(<WritingPracticeSessionPage />);
+
+      expect(await screen.findByTestId('writing-time-up')).toHaveTextContent('writing.practice.session.timeUp.pending');
+      expect(createWritingSubmission).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(createWritingSubmission).toHaveBeenCalledTimes(2);
+      const keys = createWritingSubmission.mock.calls.map(([payload]) => payload.idempotencyKey);
+      expect(new Set(keys).size).toBe(1);
+
+      createWritingSubmission.mockResolvedValueOnce({ id: 'sub-1' });
+      fireEvent.click(await screen.findByRole('button', { name: 'writing.practice.session.timeUp.submitNow' }));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/writing/submissions/sub-1/grading'));
+      expect(createWritingSubmission).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops on a credits refusal instead of retrying', async () => {
+      expireTheWritingWindow();
+      createWritingSubmission.mockRejectedValue(new ApiError(402, 'ai_credits_insufficient', 'No credits.', false));
+
+      render(<WritingPracticeSessionPage />);
+
+      expect(await screen.findByRole('dialog', { name: 'No AI credits remaining' })).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(createWritingSubmission).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('writing-time-up')).not.toBeInTheDocument();
+    });
   });
 
   it('explains an incomplete task in candidate-safe copy', async () => {

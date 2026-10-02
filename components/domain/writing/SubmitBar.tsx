@@ -71,6 +71,7 @@ export function SubmitBar({
             type="button"
             variant="primary"
             size="md"
+            data-testid="writing-submit"
             disabled={!canSubmit || loading}
             loading={loading}
             onClick={onSubmit}
