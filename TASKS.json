@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-01",
+  "updated": "2026-10-02",
   "statuses": ["pending", "in_progress", "blocked", "done"],
   "tasks": [
     {
@@ -87,12 +87,62 @@
     {
       "id": "AX-07",
       "title": "Ship: public flip, commit, push, ship:watch, ax:record, ax:verify, private flip",
-      "status": "in_progress",
+      "status": "done",
       "owner": "ax-session-state-ledger",
       "blockedBy": ["AX-06"],
       "verify": "deploy.yml",
-      "evidence": [],
+      "evidence": ["36946463004"],
       "files": ["VERIFICATION.md"]
+    },
+    {
+      "id": "AX-08",
+      "title": "Hook adapter: scripts/agent/hook.mjs + hook-shim.mjs (SessionStart auto-load, bounded fail-open Stop gate)",
+      "status": "done",
+      "owner": "ax-enforcement-hooks",
+      "blockedBy": ["AX-07"],
+      "verify": "node scripts/agent/hook.mjs --self-test (ax-check.yml)",
+      "evidence": ["36950958768"],
+      "files": ["scripts/agent/hook.mjs", "scripts/agent/hook-shim.mjs"]
+    },
+    {
+      "id": "AX-09",
+      "title": "ax:verify confirms run ids typed into SESSION_STATE.md gate rows (gateRunEvidence, compareGateRuns)",
+      "status": "done",
+      "owner": "ax-enforcement-hooks",
+      "blockedBy": ["AX-07"],
+      "verify": "node scripts/agent/state.mjs --self-test (ax-check.yml)",
+      "evidence": ["36950958768"],
+      "files": ["scripts/agent/state.mjs"]
+    },
+    {
+      "id": "AX-10",
+      "title": "CI proof: ax-check.yml runs both self-tests on Linux and Windows (sparse checkout for the 260-char path)",
+      "status": "done",
+      "owner": "ax-enforcement-hooks",
+      "blockedBy": ["AX-08", "AX-09"],
+      "verify": "ax-check.yml",
+      "evidence": ["36950958768"],
+      "files": [".github/workflows/ax-check.yml"]
+    },
+    {
+      "id": "AX-11",
+      "title": "Wire the user-level hooks: launcher copy + ~/.claude/settings.json merge (backup kept) + synthetic-input smoke test",
+      "status": "done",
+      "owner": "ax-enforcement-hooks",
+      "blockedBy": ["AX-10"],
+      "verify": "local:hook-smoke",
+      "evidence": ["local:hook-smoke"],
+      "files": ["scripts/agent/README.md", "AGENTS.md"]
+    },
+    {
+      "id": "AX-12",
+      "title": "Merge to main (owner go required) and confirm Build & Deploy for the merge SHA",
+      "status": "pending",
+      "owner": "ax-enforcement-hooks",
+      "blockedBy": ["AX-11"],
+      "verify": "deploy.yml",
+      "evidence": [],
+      "files": []
     }
   ]
 }
