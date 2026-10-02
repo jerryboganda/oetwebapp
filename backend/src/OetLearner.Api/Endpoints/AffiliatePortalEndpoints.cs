@@ -43,8 +43,10 @@ public static class AffiliatePortalEndpoints
 
         // Strategy: resolve affiliate by matching ContactEmail to the user's
         // ApplicationUserAccount email. Production may swap this for an
-        // explicit AffiliateOwnerUserId column.
-        var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == userId, ct);
+        // explicit AffiliateOwnerUserId column. A learner's token subject is the
+        // learner id (learner_…), not the account id (auth_…), so the account is
+        // reached through LearnerUser.AuthAccountId; a staff subject is the account id.
+        var account = await db.AccountsForUser(userId).FirstOrDefaultAsync(ct);
         if (account is null) return TypedResults.NotFound();
 
         var affiliate = await db.Affiliates.FirstOrDefaultAsync(a => a.ContactEmail.ToLower() == account.Email.ToLower(), ct);

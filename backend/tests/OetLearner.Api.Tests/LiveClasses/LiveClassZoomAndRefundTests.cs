@@ -339,6 +339,53 @@ public sealed class LiveClassZoomAndRefundTests
         Assert.Equal("published-class", item.Slug);
         Assert.Single(item.Sessions);
         Assert.Equal("session-1", item.Sessions[0].Id);
+        Assert.False(item.Sessions[0].RecordingReady);
+    }
+
+    [Theory]
+    [InlineData(LiveClassEnrollmentStatus.Attended, LiveClassRecordingStatus.Ready, true, 1, true)]
+    [InlineData(LiveClassEnrollmentStatus.Attended, LiveClassRecordingStatus.Processing, true, 1, false)]
+    [InlineData(LiveClassEnrollmentStatus.Attended, LiveClassRecordingStatus.Ready, false, 1, false)]
+    [InlineData(LiveClassEnrollmentStatus.Attended, LiveClassRecordingStatus.Ready, true, -1, false)]
+    [InlineData(LiveClassEnrollmentStatus.NoShow, LiveClassRecordingStatus.Ready, true, 1, false)]
+    public async Task PastClassesOfferOnlyRecordingsTheLearnerCanOpen(
+        LiveClassEnrollmentStatus enrollmentStatus,
+        LiveClassRecordingStatus recordingStatus,
+        bool hasVideo,
+        int expiresInDays,
+        bool expectedReady)
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var liveClass = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        var session = CreateSession("session-1", liveClass.Id, now.AddHours(-2), now.AddHours(-1));
+        session.LiveClass = liveClass;
+        liveClass.Sessions.Add(session);
+        db.LiveClasses.Add(liveClass);
+        db.LiveClassEnrollments.Add(new LiveClassEnrollment
+        {
+            Id = "enrollment-1",
+            ClassSessionId = session.Id,
+            UserId = "learner-1",
+            EnrolledAt = now.AddDays(-1),
+            IdempotencyKey = "past-recording-ready-test",
+            Status = enrollmentStatus,
+        });
+        db.LiveClassRecordings.Add(new LiveClassRecording
+        {
+            Id = "recording-1",
+            ClassSessionId = session.Id,
+            Status = recordingStatus,
+            S3VideoKey = hasVideo ? "live-class-recordings/2026/06/session-1/video.mp4" : null,
+            RecordedAt = now.AddHours(-1),
+            ExpiresAt = now.AddDays(expiresInDays),
+        });
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        var classes = await service.ListLearnerEnrollmentsAsync("learner-1", upcoming: false, CancellationToken.None);
+
+        Assert.Equal(expectedReady, Assert.Single(Assert.Single(classes).Sessions).RecordingReady);
     }
 
     [Fact]

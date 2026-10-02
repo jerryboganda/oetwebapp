@@ -80,8 +80,7 @@ export default function MyPastClassesPage() {
             const session = lastCompletedSession(item);
             if (!session) return null;
 
-            const hasRecording = session.status === 'Completed';
-            const recordingReady = hasRecording; // recording availability comes from the recording endpoint
+            const recordingReady = session.recordingReady === true;
 
             return (
               <MotionItem key={`${item.id}-${session.id}`} delayIndex={Math.min(index, 5)}>
@@ -112,7 +111,7 @@ export default function MyPastClassesPage() {
                       ) : (
                         <Button type="button" variant="ghost" size="sm" disabled>
                           <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                          Recording pending
+                          No recording yet
                         </Button>
                       )}
                     </div>

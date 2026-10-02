@@ -98,10 +98,6 @@ export interface ChurnRiskSnapshotDto {
   computedAt: string;
 }
 
-export function fetchMyChurnRisk(): Promise<ChurnRiskSnapshotDto> {
-  return apiClient.get('/v1/ai-usage/me/churn-risk');
-}
-
 export function fetchAdminChurnList(band?: string, limit?: number): Promise<ChurnRiskSnapshotDto[]> {
   const q = new URLSearchParams();
   if (band) q.set('band', band);

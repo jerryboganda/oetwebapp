@@ -56,8 +56,8 @@ public sealed class StripeService : IStripeService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-        var user = await db.ApplicationUserAccounts
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var user = await db.AccountsForUser(userId)
+            .FirstOrDefaultAsync(ct);
 
         if (user is null)
             throw new InvalidOperationException($"User {userId} not found.");

@@ -15,6 +15,8 @@ export interface LiveClassSessionSummary {
   isEnrolled: boolean;
   isJoinAvailable: boolean;
   creditCost: number;
+  /** Past-classes list: this learner can open a Ready recording now. */
+  recordingReady?: boolean;
   /** Only present on admin endpoints */
   zoomMeetingId?: number | null;
   /** Only present on admin endpoints */

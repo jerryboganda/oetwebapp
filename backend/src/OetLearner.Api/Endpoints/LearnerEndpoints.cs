@@ -367,8 +367,8 @@ public static class LearnerEndpoints
             IPaymentGatewayCatalog catalog,
             CancellationToken ct) =>
         {
-            var account = await db.ApplicationUserAccounts.AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == http.UserId(), ct);
+            var account = await db.AccountsForUser(http.UserId()).AsNoTracking()
+                .FirstOrDefaultAsync(ct);
             var detection = regionDetector.Detect(
                 http, account?.Country, account?.PreferredRegion, account?.PreferredCurrency);
             var region = string.Equals(detection.Region, BillingRegions.Egypt, StringComparison.OrdinalIgnoreCase)

@@ -45,8 +45,7 @@ public static class BillingRegionEndpoints
         CancellationToken ct)
     {
         var userId = http.UserId();
-        var account = await db.ApplicationUserAccounts
-            .Where(u => u.Id == userId)
+        var account = await db.AccountsForUser(userId)
             .Select(u => new { u.Country, u.PreferredCurrency, u.PreferredRegion })
             .FirstOrDefaultAsync(ct);
 
@@ -82,7 +81,7 @@ public static class BillingRegionEndpoints
         }
 
         var userId = http.UserId();
-        var account = await db.ApplicationUserAccounts.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var account = await db.AccountsForUser(userId).FirstOrDefaultAsync(ct);
         if (account is null)
         {
             return new ApiErrorResult(400, "billing_profile_user_not_found", "User not found.");

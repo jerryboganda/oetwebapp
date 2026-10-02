@@ -235,6 +235,53 @@ describe('auth-client', () => {
     expect(loadStoredSession()).toBeNull();
   });
 
+  describe('affiliate attribution on signup', () => {
+    const registerInput = {
+      email: 'learner@oet-prep.dev', password: 'Password123!', firstName: 'Learner', lastName: 'Local',
+      mobileNumber: '+923001234567', examTypeId: 'oet', professionId: 'nursing', countryTarget: 'Australia',
+      targetExamDate: '2030-01-01', agreeToTerms: true, agreeToPrivacy: true, marketingOptIn: false,
+    };
+    const sessionResponse = () => new Response(JSON.stringify(createSession()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+    afterEach(() => {
+      document.cookie = 'oet_affiliate=; path=/; max-age=0';
+    });
+
+    it("reports the proxy's ?ref= cookie with the new learner's token", async () => {
+      document.cookie = 'oet_affiliate=AGENT_01; path=/';
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(sessionResponse())
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const { registerLearner } = await import('@/lib/auth-client');
+      await registerLearner(registerInput);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      const [url, init] = vi.mocked(global.fetch).mock.calls[1] ?? [];
+      expect(String(url)).toContain('/v1/affiliates/track');
+      expect(JSON.parse(String(init?.body))).toEqual({ affiliateCode: 'AGENT_01' });
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer access-token-1');
+    });
+
+    it('never fails the registration when tracking fails, and skips it without a cookie', async () => {
+      document.cookie = 'oet_affiliate=AGENT_01; path=/';
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(sessionResponse())
+        .mockResolvedValueOnce(new Response('{}', { status: 500 }));
+
+      const { registerLearner } = await import('@/lib/auth-client');
+      await expect(registerLearner(registerInput)).resolves.toMatchObject({ accessToken: 'access-token-1' });
+
+      document.cookie = 'oet_affiliate=; path=/; max-age=0';
+      vi.mocked(global.fetch).mockClear().mockResolvedValueOnce(sessionResponse());
+      await registerLearner(registerInput);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('submits the reset token and new password to complete a password reset', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
 
