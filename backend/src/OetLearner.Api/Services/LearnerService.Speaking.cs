@@ -54,6 +54,20 @@ public partial class LearnerService
             .GroupBy(x => x.AttemptId)
             .ToDictionary(group => group.Key, group => group.First());
         var phrasingRoute = latestEvaluation is null ? "/speaking/selection" : $"/speaking/phrasing/{latestEvaluation.Id}";
+        // The latest-evaluation card is a convenience: an evaluation whose task is gone (or locked to another profession)
+        // must not take the whole hub down. A missing task row made GET /v1/speaking/home a 500 in the CI stack.
+        object? latestEvaluationSummary = null;
+        if (latestEvaluation is not null)
+        {
+            try
+            {
+                latestEvaluationSummary = await GetSpeakingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken);
+            }
+            catch (ApiException ex) when (ex.StatusCode == 404)
+            {
+                // Left out: the learner still gets the hub, the tasks and the past attempts.
+            }
+        }
         return new
         {
             recommendedRolePlay = tasks.FirstOrDefault(),
@@ -103,7 +117,7 @@ public partial class LearnerService
                 new { id = "private-speaking", title = "Private Speaking Sessions", description = "Book human-led speaking support when you need live coaching.", route = "/private-speaking" }
             },
             featuredTasks = tasks.Take(3),
-            latestEvaluation = latestEvaluation is null ? null : await GetSpeakingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
+            latestEvaluation = latestEvaluationSummary,
             tips = new[]
             {
                 "Use the mic check before longer speaking sessions.",
@@ -592,12 +606,17 @@ public partial class LearnerService
         };
     }
 
+    // An evaluation can outlive its task (a content row removed, or never seeded): that is a "not found", never a 500.
+    private async Task<ContentItem> LoadSpeakingTaskOfAttemptAsync(Attempt attempt, CancellationToken cancellationToken)
+        => await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken)
+            ?? throw ApiException.NotFound("speaking_task_not_found", "The role play for this result is no longer available.");
+
     public async Task<object> GetSpeakingEvaluationSummaryAsync(string userId, string evaluationId, CancellationToken cancellationToken)
     {
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
-        var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var content = await LoadSpeakingTaskOfAttemptAsync(attempt, cancellationToken);
         var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
         await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
@@ -743,7 +762,7 @@ public partial class LearnerService
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         await RequireAttemptContentOwnProfessionAsync(userId, attempt.ContentId, cancellationToken);
-        var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var content = await LoadSpeakingTaskOfAttemptAsync(attempt, cancellationToken);
         var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
             ? SpeakingContentStructure.PracticeDisclaimer
             : evaluation.LearnerDisclaimer;
