@@ -24,7 +24,13 @@ export function useDeadlineCountdown(
       ? 0
       : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000));
 
-  const [remaining, setRemaining] = useState<number>(compute);
+  // Remember which deadline the stored value belongs to: when a deadline is
+  // first set (e.g. a restored clock), the render that receives it must not
+  // show the previous value (0) until the effect ticks — a strict timer would
+  // flash 00:00 and beep.
+  const [state, setState] = useState(() => ({ deadlineMs, remaining: compute() }));
+  const remaining = state.deadlineMs === deadlineMs ? state.remaining : compute();
+  const setRemaining = (next: number) => setState({ deadlineMs, remaining: next });
 
   // Stable ref for the latest onZero callback — avoids resetting the guard
   // or thrashing effects when the caller passes a new function identity.

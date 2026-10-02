@@ -43,12 +43,32 @@ function storage(): Storage | null {
   }
 }
 
+const isOptional = (value: unknown, type: 'string' | 'number') => value === undefined || typeof value === type;
+const isSecondsOrNull = (value: unknown) =>
+  value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value));
+
+/** The stored value has exactly the shape this module writes (anything else is treated as no copy). */
+function isDraftShadow(value: unknown): value is DraftShadow {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.savedAt === 'number' && Number.isFinite(v.savedAt)
+    && isOptional(v.text, 'string')
+    && isOptional(v.sentText, 'string')
+    && isOptional(v.wordCount, 'number')
+    && (v.baseVersion === null || (typeof v.baseVersion === 'number' && Number.isInteger(v.baseVersion)))
+    && (v.phase === undefined || v.phase === null || v.phase === 'reading' || v.phase === 'writing')
+    && isSecondsOrNull(v.readingSecondsRemaining)
+    && isSecondsOrNull(v.writingSecondsRemaining)
+  );
+}
+
 export function readDraftShadow(key: string): DraftShadow | null {
   try {
     const raw = storage()?.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as DraftShadow;
-    return parsed && typeof parsed === 'object' && typeof parsed.savedAt === 'number' ? parsed : null;
+    const parsed: unknown = JSON.parse(raw);
+    return isDraftShadow(parsed) ? parsed : null;
   } catch {
     return null;
   }

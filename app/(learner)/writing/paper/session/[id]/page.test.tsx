@@ -107,6 +107,26 @@ async function advance(ms: number) {
   });
 }
 
+describe('Paper session direct-launch clock', () => {
+  it('saves the remaining reading/writing seconds with the draft heartbeat', async () => {
+    api.putWritingDraftV2.mockResolvedValue({ content: '', wordCount: 0, version: 1 });
+    render(<WritingPaperSessionPage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'stub-submit' })).toBeEnabled());
+
+    await advance(10_000);
+
+    expect(api.putWritingDraftV2).toHaveBeenCalledWith(
+      'scenario-1',
+      'mock',
+      expect.objectContaining({ phase: 'reading', writingSecondsRemaining: 2400 }),
+      undefined,
+    );
+    const reading = api.putWritingDraftV2.mock.calls[0][2].readingSecondsRemaining as number;
+    expect(reading).toBeGreaterThan(280);
+    expect(reading).toBeLessThanOrEqual(300);
+  });
+});
+
 describe('Paper session grading watch', () => {
   it('keeps watching past the old 5-minute cut-off and opens the submission results when graded', async () => {
     api.getWritingSubmission.mockResolvedValue({ id: 'sub-1', status: 'grading' });

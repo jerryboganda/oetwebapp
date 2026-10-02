@@ -61,6 +61,31 @@ describe('draft shadow storage', () => {
     expect(readDraftShadow(key)).toBeNull();
   });
 
+  it.each([
+    ['truncated JSON', '{"text":"Dear Dr Gr'],
+    ['null', 'null'],
+    ['an array', '[{"savedAt":1}]'],
+    ['a number', '42'],
+    ['text of the wrong type', JSON.stringify({ text: 12, baseVersion: 1, savedAt: 1 })],
+    ['wordCount of the wrong type', JSON.stringify({ text: 'a', wordCount: '1', baseVersion: 1, savedAt: 1 })],
+    ['sentText of the wrong type', JSON.stringify({ sentText: ['a'], baseVersion: 1, savedAt: 1 })],
+    ['a missing baseVersion', JSON.stringify({ text: 'a', savedAt: 1 })],
+    ['a fractional baseVersion', JSON.stringify({ text: 'a', baseVersion: 1.5, savedAt: 1 })],
+    ['an unknown phase', JSON.stringify({ baseVersion: 1, phase: 'grading', savedAt: 1 })],
+    ['seconds as a string', JSON.stringify({ baseVersion: 1, writingSecondsRemaining: '900', savedAt: 1 })],
+    ['a missing savedAt', JSON.stringify({ text: 'a', baseVersion: 1 })],
+  ])('treats a corrupt copy (%s) as no copy', (_label, raw) => {
+    const key = draftShadowKey('u1', 's1', 'practice');
+    localStorage.setItem(key, raw);
+    expect(readDraftShadow(key)).toBeNull();
+  });
+
+  it('accepts a timers-only copy written after a sync', () => {
+    const key = draftShadowKey('u1', 's1', 'practice');
+    localStorage.setItem(key, JSON.stringify({ baseVersion: null, phase: null, readingSecondsRemaining: null, writingSecondsRemaining: null, savedAt: 1 }));
+    expect(readDraftShadow(key)).toMatchObject({ baseVersion: null, savedAt: 1 });
+  });
+
   it('sweeps copies older than 30 days and unreadable ones, and nothing else', () => {
     const now = Date.UTC(2026, 9, 2);
     writeDraftShadow('oet:writing-draft:v1:u:old:practice', shadow({ savedAt: now - 31 * 86_400_000 }));

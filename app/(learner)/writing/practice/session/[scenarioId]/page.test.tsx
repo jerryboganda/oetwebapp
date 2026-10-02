@@ -16,11 +16,13 @@ const {
   getWritingDraftV2,
   getWritingHighlights,
   getWritingScenario,
+  getWritingSubmission,
   putWritingDraftV2,
   putWritingHighlights,
   mockPush,
   mockReplace,
 } = vi.hoisted(() => ({
+  getWritingSubmission: vi.fn(),
   checkWritingScenarioEligibility: vi.fn(),
   createWritingSubmission: vi.fn(),
   getWritingDraftV2: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock('@/lib/writing/api', () => ({
   getWritingDraftV2,
   getWritingHighlights,
   getWritingScenario,
+  getWritingSubmission,
   putWritingDraftV2,
   putWritingHighlights,
 }));
@@ -233,9 +236,12 @@ describe('Writing practice session — draft-first load', () => {
     expect(editor.value).toBe('Dear Dr Green,\n\nSaved text');
     expect(checkWritingScenarioEligibility).not.toHaveBeenCalled();
     const timer = screen.getByTestId('writing-timer');
+    await waitFor(() => {
+      const seconds = Number(timer.getAttribute('data-seconds-remaining'));
+      expect(seconds).toBeGreaterThanOrEqual(1230);
+      expect(seconds).toBeLessThanOrEqual(1234);
+    });
     expect(timer).toHaveAttribute('data-phase', 'writing');
-    expect(Number(timer.getAttribute('data-seconds-remaining'))).toBeGreaterThanOrEqual(1230);
-    expect(Number(timer.getAttribute('data-seconds-remaining'))).toBeLessThanOrEqual(1234);
     expect(screen.getByTestId('writing-resume-banner')).toBeInTheDocument();
     expect(screen.getByTestId('writing-draft-status')).toHaveAttribute('data-state', 'saved');
     // The restored text is already on the server: nothing to save.
@@ -259,7 +265,7 @@ describe('Writing practice session — draft-first load', () => {
       }),
       undefined,
     );
-    expect(screen.getByTestId('writing-timer')).toHaveAttribute('data-phase', 'reading');
+    await waitFor(() => expect(screen.getByTestId('writing-timer')).toHaveAttribute('data-phase', 'reading'));
     expect(screen.queryByTestId('writing-resume-banner')).not.toBeInTheDocument();
   });
 
@@ -273,6 +279,35 @@ describe('Writing practice session — draft-first load', () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/writing/submissions/sub-9/grading'));
     expect(checkWritingScenarioEligibility).not.toHaveBeenCalled();
     expect(putWritingDraftV2).not.toHaveBeenCalled();
+    // Still grading: no need to look the submission up.
+    expect(getWritingSubmission).not.toHaveBeenCalled();
+  });
+
+  it('sends a failed letter that can still be retried to the grading page', async () => {
+    getWritingDraftV2.mockResolvedValue(
+      activeDraft({ status: 'submitted', submissionId: 'sub-9', submissionStatus: 'failed' }),
+    );
+    getWritingSubmission.mockResolvedValue({ id: 'sub-9', status: 'failed', canRetry: true, failureCode: 'grading_delayed' });
+
+    render(<WritingPracticeSessionPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/writing/submissions/sub-9/grading'));
+    expect(getWritingSubmission).toHaveBeenCalledWith('sub-9');
+    expect(checkWritingScenarioEligibility).not.toHaveBeenCalled();
+  });
+
+  it('a FINAL failure (no Retry) opens a new attempt instead of looping to the grading page', async () => {
+    getWritingDraftV2.mockResolvedValue(
+      activeDraft({ status: 'submitted', submissionId: 'sub-9', submissionStatus: 'failed', version: 7 }),
+    );
+    getWritingSubmission.mockResolvedValue({ id: 'sub-9', status: 'failed', canRetry: false, failureCode: 'manual_review' });
+
+    render(<WritingPracticeSessionPage />);
+
+    await waitFor(() => expect(putWritingDraftV2).toHaveBeenCalled());
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(checkWritingScenarioEligibility).toHaveBeenCalledTimes(1);
+    expect(putWritingDraftV2.mock.calls[0][2]).toMatchObject({ content: '', expectedVersion: 7, phase: 'reading' });
   });
 
   it('"Practice this again" after a graded attempt starts a new attempt on top of the submitted version', async () => {
@@ -308,7 +343,11 @@ describe('Writing practice session — draft-first load', () => {
     const editor = (await screen.findByTestId('editor-stub')) as HTMLTextAreaElement;
     expect(editor.value).toBe('Dear Dr Green,\n\nTyped offline');
     // Timers take the smaller remaining time.
-    expect(Number(screen.getByTestId('writing-timer').getAttribute('data-seconds-remaining'))).toBeLessThanOrEqual(900);
+    await waitFor(() => {
+      const seconds = Number(screen.getByTestId('writing-timer').getAttribute('data-seconds-remaining'));
+      expect(seconds).toBeGreaterThanOrEqual(890);
+      expect(seconds).toBeLessThanOrEqual(900);
+    });
     await waitFor(() =>
       expect(putWritingDraftV2).toHaveBeenCalledWith(
         'scenario-1',

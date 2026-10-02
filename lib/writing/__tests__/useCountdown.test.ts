@@ -20,6 +20,23 @@ describe('useDeadlineCountdown', () => {
     expect(result.current).toBe(10);
   });
 
+  it('shows a newly set deadline in the same render (no stale 0 when a clock is restored)', () => {
+    const now = 1_000_000;
+    vi.setSystemTime(now);
+    const seen: number[] = [];
+    const { rerender } = renderHook(({ deadline }: { deadline: number | null }) => {
+      const value = useDeadlineCountdown(deadline);
+      seen.push(value);
+      return value;
+    }, { initialProps: { deadline: null as number | null } });
+
+    seen.length = 0;
+    rerender({ deadline: now + 1_234_000 });
+
+    expect(seen[0]).toBe(1234);
+    expect(seen.every((value) => value === 1234)).toBe(true);
+  });
+
   it('counts down as the interval fires', () => {
     const now = 1_000_000;
     vi.setSystemTime(now);

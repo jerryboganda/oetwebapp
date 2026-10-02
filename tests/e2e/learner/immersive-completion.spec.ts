@@ -103,7 +103,14 @@ test.describe('Learner immersive completion workflows @learner', () => {
     page.on('dialog', (dialog) => dialog.accept());
     const scenarioId = 'e2e-immersive-writing';
     const content = 'Dear Dr Patterson, I am writing to refer Mrs Eleanor Vance for wound review after surgery.';
-    let draft: Record<string, unknown> | null = null;
+    // An attempt that was opened earlier and is still in its reading window: a
+    // resumed draft keeps the hermetic run free of 4xx noise (a 404 "no draft"
+    // would be a real 4xx response) while still exercising the reading clock.
+    let draft: Record<string, unknown> = {
+      userId: 'learner', scenarioId, mode: 'practice', content: '', wordCount: 0, timeSpentSeconds: 0,
+      lastSavedAt: new Date().toISOString(), version: 1, status: 'active', submissionId: null, submissionStatus: null,
+      phase: 'reading', readingSecondsRemaining: 300, writingSecondsRemaining: 2400,
+    };
     let submissions = 0;
     const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -119,10 +126,10 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await page.route(`**/v1/writing/scenarios/${scenarioId}/eligibility`, (route) => route.fulfill(json({ feedbackMessage: null })));
     await page.route(`**/v1/writing/drafts/${scenarioId}/practice`, (route) => {
       if (route.request().method() === 'GET') {
-        return route.fulfill(draft ? json(draft) : json({ code: 'not_found' }, 404));
+        return route.fulfill(json(draft));
       }
       const body = route.request().postDataJSON() as Record<string, unknown>;
-      const version = Number(draft?.version ?? 0) + 1;
+      const version = Number(draft.version ?? 0) + 1;
       draft = { ...draft, ...body, scenarioId, mode: 'practice', status: 'active', version, lastSavedAt: new Date().toISOString() };
       return route.fulfill(json(draft));
     });
@@ -145,6 +152,11 @@ test.describe('Learner immersive completion workflows @learner', () => {
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(writingEditor).toHaveText(content, { timeout: 60000 });
+
+    // Every request of the session page (draft, autosave, reload, restore) is
+    // checked here; the grading page that opens next talks to the real backend
+    // about a mocked submission id, which is outside this flow.
+    expectNoSevereClientIssues(diagnostics);
 
     await page.getByTestId('writing-submit').click();
     await page.waitForURL(/\/writing\/submissions\/e2e-immersive-sub\/grading/, { timeout: 60000, waitUntil: 'commit' });
