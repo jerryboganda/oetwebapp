@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -157,7 +158,7 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
     expect(screen.getByText(/no credit used/i)).toBeInTheDocument();
 
     // Saved score/grade + all six criteria still render.
-    expect(screen.getByText(/writing\.submissions\.results\.criteria\.heading/i)).toBeInTheDocument();
+    expect(screen.getByText('writing.submissions.results.criteria.perCriterion')).toBeInTheDocument();
     expect(screen.getByText('Clear purpose.')).toBeInTheDocument();
     expect(screen.getByText('Tighten the opening.')).toBeInTheDocument();
 
@@ -335,8 +336,9 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
     expect(screen.getByText('33/38')).toBeInTheDocument();
     expect(screen.queryByText('writing.submissions.results.estimatedBand')).not.toBeInTheDocument();
 
-    // All six criteria render with score/max.
-    const criteria = within(screen.getByTestId('assessment-criteria-list')).getAllByRole('article');
+    // All six criteria render with score/max in ONE list (the v1.1 duplicate list is gone).
+    expect(screen.queryByTestId('assessment-criteria-list')).not.toBeInTheDocument();
+    const criteria = within(screen.getByTestId('criteria-list')).getAllByRole('listitem');
     expect(criteria).toHaveLength(6);
     const expected: Array<[string, string]> = [
       ['C1 Purpose', '3/3'],
@@ -347,10 +349,15 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
       ['C6 Language Accuracy', '6/7'],
     ];
     expected.forEach(([name, score], index) => {
-      expect(within(criteria[index]).getByRole('heading', { name })).toBeInTheDocument();
+      expect(within(criteria[index]).getByText(name)).toBeInTheDocument();
       expect(within(criteria[index]).getByText(score)).toBeInTheDocument();
     });
-    expect(within(screen.getByTestId('criteria-list')).getAllByRole('listitem')).toHaveLength(6);
+    // Boilerplate strength/limitation lines are dropped; the next step stays.
+    expect(screen.queryByText('purpose strength.')).not.toBeInTheDocument();
+    expect(screen.queryByText('purpose limitation.')).not.toBeInTheDocument();
+    expect(within(criteria[0]).getByText('purpose action.')).toBeInTheDocument();
+    // A visible report with no errors says so honestly.
+    expect(screen.getByText('writing.submissions.results.corrections.empty')).toBeInTheDocument();
   });
 
   it("highlights the grader's per-criterion quote of the candidate's own wording", async () => {
@@ -366,5 +373,163 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
     const quote = await screen.findByText('“the patient have chest pain”');
     expect(quote.tagName).toBe('MARK');
     expect(screen.getByText(/Subject-verb agreement error\./)).toBeInTheDocument();
+  });
+});
+
+// Launch handoff UI-3 (2 Oct 2026): a simplified report in a fixed order with
+// no depth lost — every correction stays reachable behind "View all corrections".
+describe('Writing results page — simplified report order (launch handoff UI-3)', () => {
+  const error = (n: number, criterion: string, severity: string) => ({
+    id: `err-${n}`,
+    location: null,
+    candidateWording: `wording ${n}`,
+    correction: `correction ${n}`,
+    category: 'language',
+    ruleSource: `R12.${n}`,
+    whyItMatters: `why ${n}`,
+    severity,
+    confidence: 'high',
+    primaryCriterionCode: criterion,
+    secondaryCriterionCodes: [],
+    startOffset: n,
+    endOffset: n + 4,
+  });
+  // Server order: severity-first.
+  const ERRORS = [
+    error(1, 'content', 'critical'),
+    error(2, 'language', 'major'),
+    error(3, 'content', 'major'),
+    error(4, 'language', 'minor'),
+    error(5, 'purpose', 'minor'),
+    error(6, 'language', 'minor'),
+    error(7, 'content', 'minor'),
+  ];
+  const REPORT = {
+    ...ASSESSMENT_V11,
+    errors: ERRORS,
+    topPriorities: [
+      'AI.content: Include the discharge plan.',
+      'R05.2: Use passive voice for medications.',
+      'AI:OWN-W-030: Avoid contractions.',
+      'no_contractions: A fourth priority is never shown.',
+    ],
+  };
+  const CANON = {
+    id: 'cv-1',
+    submissionId: 'sub-1',
+    ruleId: 'R06.1',
+    ruleText: 'Use the full name in the Re: line.',
+    severity: 'medium',
+    snippet: 'Re: patient',
+    lineNumber: 3,
+    charStart: 0,
+    charEnd: 11,
+    suggestedFix: null,
+    disputed: false,
+    disputeResolution: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
+    getWritingSubmission.mockResolvedValue(SUBMISSION);
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, canonViolations: [CANON] });
+    getWritingAssessmentV11.mockResolvedValue(REPORT);
+    getTutorReview.mockResolvedValue({ id: 'r-1', freeTextFeedback: 'Tutor note.' });
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it('renders score → priorities → model answer → criteria → corrections → reference → next actions', async () => {
+    renderPage();
+    await screen.findByTestId('grounded-model-answer');
+
+    expect(screen.getAllByTestId('result-section').map((s) => s.getAttribute('data-section'))).toEqual([
+      'score', 'priorities', 'model-answer', 'criteria', 'corrections', 'reference', 'next-actions',
+    ]);
+    // The model answer is visible by default, never tucked in a collapsed block.
+    expect(screen.getByTestId('grounded-model-answer').closest('details')).toBeNull();
+    // Reference material is collapsed.
+    const letter = screen.getByText(/I am writing to refer this patient/);
+    expect(letter.closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText('Tutor note.').closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('shows the v1.1 report\'s first three priorities without their internal rule labels', async () => {
+    renderPage();
+    const section = await screen.findByRole('heading', { name: 'writing.submissions.results.priorities.heading' });
+    const items = within(section.closest('section')!).getAllByRole('listitem');
+
+    expect(items.map((li) => li.textContent)).toEqual([
+      '#1Include the discharge plan.',
+      '#2Use passive voice for medications.',
+      '#3Avoid contractions.',
+    ]);
+    expect(screen.queryByText(/fourth priority/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the grade\'s priorities and leaves a plain lead-in intact', async () => {
+    getWritingAssessmentV11.mockResolvedValue(null);
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, topThreePriorities: ['Purpose: state it first.', 'AI: Tighten the close.'] });
+    renderPage();
+
+    expect(await screen.findByText('Purpose: state it first.')).toBeInTheDocument();
+    expect(screen.getByText('Tighten the close.')).toBeInTheDocument();
+  });
+
+  it('summarises each criterion: correction count, most severe evidence and next step', async () => {
+    renderPage();
+    const items = within(await screen.findByTestId('criteria-list')).getAllByRole('listitem');
+
+    // C2 Content: errors 1, 3, 7 — error 1 (critical) is the top evidence.
+    expect(within(items[1]).getByText('writing.submissions.results.criteria.findings')).toBeInTheDocument();
+    expect(within(items[1]).getByText('“wording 1”')).toBeInTheDocument();
+    expect(within(items[1]).getByText('correction 1')).toBeInTheDocument();
+    expect(within(items[1]).getByText('content action.')).toBeInTheDocument();
+    // C3 has no findings: no evidence line.
+    expect(within(items[2]).queryByText(/wording/)).not.toBeInTheDocument();
+  });
+
+  it('previews the five most severe corrections and "View all corrections" shows every one', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const preview = await screen.findByTestId('corrections-preview');
+    expect(within(preview).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(preview).getByText('critical')).toHaveClass('text-danger-strong');
+
+    const toggle = screen.getByTestId('corrections-view-all');
+    expect(toggle).toHaveTextContent('writing.submissions.results.corrections.viewAll');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+
+    const full = screen.getByTestId('corrections-full-list');
+    expect(within(full).getAllByRole('listitem')).toHaveLength(ERRORS.length);
+    expect(screen.queryByTestId('corrections-preview')).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveTextContent('writing.submissions.results.corrections.showFewer');
+
+    await user.click(toggle);
+    expect(within(screen.getByTestId('corrections-preview')).getAllByRole('listitem')).toHaveLength(5);
+  });
+
+  it('lists five or fewer corrections in full with no toggle', async () => {
+    getWritingAssessmentV11.mockResolvedValue({ ...REPORT, errors: ERRORS.slice(0, 3) });
+    renderPage();
+
+    const full = await screen.findByTestId('corrections-full-list');
+    expect(within(full).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.queryByTestId('corrections-view-all')).not.toBeInTheDocument();
+  });
+
+  it('keeps the legacy rule checks, still disputable, as a collapsed group inside corrections', async () => {
+    renderPage();
+    await screen.findByTestId('corrections-preview');
+
+    const corrections = screen.getAllByTestId('result-section').find((s) => s.getAttribute('data-section') === 'corrections')!;
+    const ruleChecks = within(corrections).getByText('writing.submissions.results.canon.heading').closest('details');
+    expect(ruleChecks).not.toBeNull();
+    expect(ruleChecks).not.toHaveAttribute('open');
+    expect(within(ruleChecks!).getByRole('button', { name: /mark this detection as incorrect/i, hidden: true })).toBeInTheDocument();
   });
 });
