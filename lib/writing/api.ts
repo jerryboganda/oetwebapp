@@ -115,6 +115,7 @@
  */
 
 import { apiClient } from '../api';
+import { maybe } from '../api/client';
 import type {
   WritingProfileDto,
   WritingProfileBudgetDto,
@@ -128,6 +129,8 @@ import type {
   WritingDisputeViolationDto,
   WritingCaseNotesDto,
   WritingDraftV2Dto,
+  WritingDraftV2UpsertPayload,
+  WritingMyWorkDto,
   WritingDrillDto,
   WritingDrillResponseDto,
   WritingDrillAttemptResultDto,
@@ -431,16 +434,41 @@ export const disputeWritingCanonViolation = (submissionId: string, payload: Writ
 // Drafts V2
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const putWritingDraftV2 = (scenarioId: string, mode: WritingEditorMode, payload: { content: string; wordCount: number; timeSpentSeconds: number }) =>
+/**
+ * Saves the draft. `expectedVersion` makes the write a compare-and-set (409
+ * `draft_version_conflict` on a mismatch; omit it for the legacy unconditional
+ * write). `init.keepalive` lets a pagehide/unmount flush outlive the page.
+ */
+export const putWritingDraftV2 = (
+  scenarioId: string,
+  mode: WritingEditorMode,
+  payload: WritingDraftV2UpsertPayload,
+  init?: { keepalive?: boolean },
+) =>
   apiClient.put<WritingDraftV2Dto>(
     path('/v1/writing/drafts/{scenarioId}/{mode}', { scenarioId, mode }),
     payload,
+    init,
   );
 
+/**
+ * Loads the draft. ONLY a 404 means "no draft" (resolves null); every other
+ * failure rejects, so a 5xx or a dropped connection can never be mistaken for
+ * an empty draft and then overwritten by the next autosave.
+ */
 export const getWritingDraftV2 = (scenarioId: string, mode: WritingEditorMode) =>
-  apiClient.get<WritingDraftV2Dto | null>(
-    path('/v1/writing/drafts/{scenarioId}/{mode}', { scenarioId, mode }),
+  maybe(
+    apiClient.get<WritingDraftV2Dto>(
+      path('/v1/writing/drafts/{scenarioId}/{mode}', { scenarioId, mode }),
+    ),
   );
+
+/**
+ * Post Submissions: the learner's unconsumed drafts and their submissions in
+ * one list (draft / grading / failed / graded), newest activity first.
+ */
+export const getWritingMyWork = (query: { limit?: number; before?: string } = {}) =>
+  apiClient.get<WritingMyWorkDto>(`/v1/writing/my-work${qs(query)}`);
 
 export const deleteWritingDraftV2 = (scenarioId: string, mode: WritingEditorMode) =>
   apiClient.delete<void>(

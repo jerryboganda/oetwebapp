@@ -85,6 +85,20 @@ export type WritingSubmissionStatus =
   | 'graded'
   | 'failed'
   | 'cancelled';
+/**
+ * Candidate-safe reason a grading run did not finish. Never names a provider.
+ * `grading_delayed` = every route was busy (the server keeps retrying by
+ * itself); `credits_insufficient` = plan/credit refusal (retry after a top-up);
+ * `service_paused` = a platform gate is closed (the server keeps retrying);
+ * `task_not_ready` / `manual_review` / `letter_invalid` = not retryable.
+ */
+export type WritingGradeFailureCode =
+  | 'grading_delayed'
+  | 'credits_insufficient'
+  | 'service_paused'
+  | 'task_not_ready'
+  | 'manual_review'
+  | 'letter_invalid';
 export type WritingGradingTier = 'express' | 'batched';
 export type WritingInputSource = 'editor' | 'paper-ocr' | 'voice-draft';
 export type WritingCoachHintCategory = 'style' | 'structure' | 'length' | 'encouragement';
@@ -292,6 +306,14 @@ export interface WritingSubmissionDto {
   status: WritingSubmissionStatus;
   gradingTier: WritingGradingTier;
   inputSource: WritingInputSource;
+  /** Candidate-safe failure reason (set while `queued` for an auto-retry, or on `failed`). Absent from an old API. */
+  failureCode?: WritingGradeFailureCode | null;
+  /** True when Retry grading may be pressed on THIS submission (failed, or stuck past the lease). Absent from an old API. */
+  canRetry?: boolean;
+  /** True while the server is retrying a failed grade by itself (the row reads `queued`). */
+  autoRetrying?: boolean;
+  /** Number of grading runs this submission has had. */
+  attemptCount?: number;
 }
 
 /**
@@ -359,6 +381,9 @@ export interface WritingDisputeViolationDto {
 // Drafts (V2 table)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export type WritingDraftStatus = 'active' | 'submitted';
+export type WritingDraftPhase = 'reading' | 'writing';
+
 export interface WritingDraftV2Dto {
   userId: string;
   scenarioId: string;
@@ -367,6 +392,78 @@ export interface WritingDraftV2Dto {
   wordCount: number;
   timeSpentSeconds: number;
   lastSavedAt: string;
+  /** Stable attempt id of this draft row. Absent from an old API. */
+  draftId?: string;
+  /** Optimistic-concurrency token; send it back as `expectedVersion`. Absent from an old API. */
+  version?: number;
+  status?: WritingDraftStatus;
+  /** Submission that consumed this draft (null while `active`). */
+  submissionId?: string | null;
+  /** Status of that submission, so the page can route to /grading without a second call. */
+  submissionStatus?: WritingSubmissionStatus | null;
+  /** Exam-clock phase at the last save. Null on legacy drafts that never stored a clock. */
+  phase?: WritingDraftPhase | null;
+  /** Pause-while-away timer: seconds left in each window at the last save. */
+  readingSecondsRemaining?: number | null;
+  writingSecondsRemaining?: number | null;
+  /** When the current attempt started (scopes the submit lock to this attempt). */
+  attemptStartedAt?: string | null;
+}
+
+export interface WritingDraftV2UpsertPayload {
+  content: string;
+  wordCount: number;
+  timeSpentSeconds: number;
+  /** 0 = the client expects no row yet; omitted = legacy unconditional write. A mismatch returns 409 `draft_version_conflict`. */
+  expectedVersion?: number | null;
+  phase?: WritingDraftPhase | null;
+  readingSecondsRemaining?: number | null;
+  writingSecondsRemaining?: number | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My work (Post Submissions): drafts + submissions in one list
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WritingMyWorkState = 'draft' | 'grading' | 'failed' | 'graded';
+export type WritingMyWorkActionKind = 'resume' | 'wait' | 'retry' | 'open_result' | 'view_letter';
+
+export interface WritingMyWorkActionDto {
+  kind: WritingMyWorkActionKind;
+  /** App route the action opens (for `retry` the list calls retry-grade and then opens this route). */
+  href: string;
+}
+
+export interface WritingMyWorkItemDto {
+  /** Stable list key: `draft:{draftId}` or `submission:{submissionId}`. */
+  key: string;
+  kind: 'draft' | 'submission';
+  state: WritingMyWorkState;
+  /** Raw row status: `active` for a draft, otherwise the submission status. */
+  rawStatus: string;
+  scenarioId: string;
+  title: string;
+  letterType: string | null;
+  mode: string;
+  isRevision: boolean;
+  isFreeSample: boolean;
+  draftId: string | null;
+  submissionId: string | null;
+  wordCount: number;
+  phase: WritingDraftPhase | null;
+  readingSecondsRemaining: number | null;
+  writingSecondsRemaining: number | null;
+  /** ISO time of the last save (drafts) or submit (submissions); the list is ordered by it, newest first. */
+  lastActivityAt: string;
+  canRetry: boolean;
+  autoRetrying: boolean;
+  actions: WritingMyWorkActionDto[];
+}
+
+export interface WritingMyWorkDto {
+  items: WritingMyWorkItemDto[];
+  /** Keyset paging: pass the last item's `lastActivityAt` as `before` to fetch the next page. */
+  hasMore: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
