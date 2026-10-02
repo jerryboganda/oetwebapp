@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import childProcess from 'node:child_process';
-import { EventEmitter, once } from 'node:events';
+import { once } from 'node:events';
 import http from 'node:http';
-import { syncBuiltinESMExports } from 'node:module';
-import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { AuthExpiredError, LaneBusyError, QuotaExceededError } from './engine.mjs';
 import { createSidecarServer } from './http.mjs';
 
 for (const completionPath of ['/v1/chat/completions', '/v1/messages']) {
@@ -46,55 +45,89 @@ for (const completionPath of ['/v1/chat/completions', '/v1/messages']) {
   }
 }
 
-test('Codex sends large grading prompts through stdin', async (context) => {
-  const prompt = 'clinical case-note fixture\n'.repeat(12000);
-  assert.ok(Buffer.byteLength(prompt) > 131072);
-  let received = '';
-  let calls = 0;
-  let server;
-  const originalCreateServer = http.createServer;
-  const previousPort = process.env.PORT;
-  process.env.PORT = '0';
-  context.after(() => {
-    server?.close();
-    if (previousPort === undefined) delete process.env.PORT;
-    else process.env.PORT = previousPort;
-    context.mock.restoreAll();
-    syncBuiltinESMExports();
+async function start(t, options) {
+  const server = createSidecarServer({
+    engineName: 'test',
+    completionPath: '/v1/messages',
+    port: 0,
+    onUsage: async () => ({}),
+    ...options,
   });
-  context.mock.method(http, 'createServer', (...args) => {
-    server = originalCreateServer(...args);
-    return server;
+  t.after(() => server.close());
+  await once(server, 'listening');
+  const { port } = server.address();
+  return { base: `http://127.0.0.1:${port}`, port };
+}
+
+test('GET /readyz is 200 while the login is good or unknown, 503 when it is dead or the queue is full', async (t) => {
+  const lane = { full: false, queueDepth: 2 };
+  let login = { authOk: true, plan: 'max' };
+  const { base } = await start(t, { lane, login: { status: async () => login }, onCompletion: async () => ({}) });
+  const readyz = async () => {
+    const response = await fetch(`${base}/readyz`);
+    return [response.status, await response.json()];
+  };
+
+  assert.deepEqual(await readyz(), [200, { ready: true, reason: null, queueDepth: 2, authOk: true, plan: 'max' }]);
+  login = { authOk: null, plan: null };
+  assert.deepEqual(await readyz(), [200, { ready: true, reason: null, queueDepth: 2, authOk: null, plan: null }]);
+  Object.assign(lane, { full: true, queueDepth: 40 });
+  assert.deepEqual(await readyz(), [503, { ready: false, reason: 'lane_full', queueDepth: 40, authOk: null, plan: null }]);
+  login = { authOk: false, plan: 'max' };
+  assert.deepEqual(await readyz(), [503, { ready: false, reason: 'auth_expired', queueDepth: 40, authOk: false, plan: 'max' }]);
+});
+
+test('typed engine failures map to the statuses the backend error parser classifies', async (t) => {
+  let failure;
+  const { base } = await start(t, { onCompletion: async () => { throw failure; } });
+  const post = async () => {
+    const response = await fetch(`${base}/v1/messages`, { method: 'POST', body: '{}' });
+    return [response.status, response.headers.get('retry-after'), await response.json()];
+  };
+
+  failure = new LaneBusyError('lane queue full (40 waiting)');
+  assert.deepEqual(await post(), [503, '30', {
+    error: { code: 'lane_busy', message: 'lane queue full (40 waiting)', type: 'overloaded_error' },
+  }]);
+  failure = new AuthExpiredError('Claude login expired or invalid: Please run /login');
+  assert.deepEqual(await post(), [401, null, {
+    error: { code: 'auth_expired', message: 'Claude login expired or invalid: Please run /login', type: 'authentication_error' },
+  }]);
+  failure = new QuotaExceededError('Claude subscription quota/rate limit: limit reached');
+  assert.deepEqual(await post(), [429, null, {
+    error: { code: 'quota_exceeded', message: 'Claude subscription quota/rate limit: limit reached', type: 'rate_limit_error' },
+  }]);
+  failure = new Error('claude exited 1: boom');
+  assert.deepEqual(await post(), [502, null, { error: { code: 'engine_error', message: 'claude exited 1: boom' } }]);
+});
+
+test('the completion signal aborts when the client disconnects, never after a normal response', { timeout: 10_000 }, async (t) => {
+  const signals = [];
+  let entered;
+  const inCompletion = new Promise((resolve) => { entered = resolve; });
+  const { base, port } = await start(t, {
+    onCompletion: (body, { signal }) => {
+      signals.push(signal);
+      if (!body.hang) return Promise.resolve({ ok: true });
+      entered();
+      return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    },
   });
-  context.mock.method(childProcess, 'spawn', (command, args, options) => {
-    calls += 1;
-    assert.equal(command, 'codex');
-    assert.ok(args.at(-1) === '-', 'Codex must read the prompt from stdin');
-    assert.equal(options.stdio[0], 'pipe');
-    assert.ok(args.includes('sandbox_mode="read-only"'));
-    const child = new EventEmitter();
-    child.stdout = new PassThrough();
-    child.stderr = new PassThrough();
-    child.stdin = new PassThrough();
-    child.stdin.on('data', chunk => { received += chunk.toString(); });
-    child.stdin.on('finish', () => {
-      child.stdout.end(JSON.stringify({
-        type: 'item.completed', item: { type: 'agent_message', text: 'offline completion fixture' },
-      }) + '\n');
-      child.emit('close', 0);
-    });
-    return child;
+
+  const answered = await fetch(`${base}/v1/messages`, { method: 'POST', body: '{}' });
+  assert.deepEqual(await answered.json(), { ok: true });
+  await delay(50);
+  assert.equal(signals[0].aborted, false);
+
+  const request = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/v1/messages' });
+  request.on('error', () => { /* the socket is destroyed on purpose */ });
+  request.end(JSON.stringify({ hang: true }));
+  await inCompletion;
+  assert.equal(signals[1].aborted, false);
+  request.destroy();
+  await new Promise((resolve) => {
+    if (signals[1].aborted) resolve();
+    else signals[1].addEventListener('abort', resolve, { once: true });
   });
-  syncBuiltinESMExports();
-  await import('../codex/server.mjs');
-  if (!server.listening) await once(server, 'listening');
-  const response = await fetch(`http://127.0.0.1:${server.address().port}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
-  });
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).choices[0].message.content, 'offline completion fixture');
-  assert.equal(received, prompt);
-  assert.equal(calls, 1);
+  assert.equal(signals[1].reason.name, 'AbortError');
 });
