@@ -3,7 +3,7 @@ import { signInApi } from '../fixtures/api-auth';
 import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
 /**
- * Writing V2 — onboarding wizard smoke (4-step wizard then diagnostic redirect).
+ * Writing V2 — onboarding wizard smoke (4-step wizard then Writing hub).
  * Tags: @writing-v2 @smoke
  *
  * Walks the learner from /writing/welcome through the 4 profile-setup steps,
@@ -19,7 +19,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, '');
 
 test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
-  test('welcome → profession → goals → focus → confirm → diagnostic', async ({
+  test('welcome → profession → goals → focus → confirm → Writing hub', async ({
     page,
     request,
   }, testInfo) => {
@@ -91,12 +91,12 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
 
     // Step 4 — Confirm. Click Save and continue; this calls
     // POST /v1/writing/profile + POST /v1/writing/onboarding/complete and then
-    // redirects to /writing/diagnostic.
+    // redirects to the Writing hub.
     await expect(
       page.getByRole('heading', { name: /review and confirm/i }),
     ).toBeVisible();
     await page.getByRole('button', { name: /save and continue/i }).click();
-    await page.waitForURL(/\/writing\/diagnostic\b/, { timeout: 45_000 });
+    await page.waitForURL(/\/writing\/?(?:\?.*)?$/, { timeout: 45_000 });
 
     // Verify the profile landed via API. The V2 GET endpoint lives under the
     // v2/ sub-prefix (the bare /v1/writing/profile slot is taken by the
