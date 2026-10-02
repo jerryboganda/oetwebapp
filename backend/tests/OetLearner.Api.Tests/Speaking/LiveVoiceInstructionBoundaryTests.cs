@@ -117,6 +117,7 @@ public sealed class LiveVoiceInstructionBoundaryTests
         Assert.Equal("AUDIO", setup.GetProperty("generationConfig").GetProperty("responseModalities")[0].GetString());
         Assert.Equal("persona", setup.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString());
         Assert.True(setup.TryGetProperty("inputAudioTranscription", out _));
+        Assert.True(setup.TryGetProperty("realtimeInputConfig", out _));
         Assert.True(setup.TryGetProperty("outputAudioTranscription", out _));
         Assert.False(setup.TryGetProperty("responseModalities", out _));
         Assert.DoesNotContain("liveConnectConstraints", json, StringComparison.Ordinal);

@@ -98,7 +98,7 @@ describe('results copy by input kind', () => {
 
   it('explains that a live conversation has no audio to play back', () => {
     expect(LIVE_TRANSCRIPT_NOTE).toBe(
-      'No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked.',
+      'Live conversations cannot be played back here. This transcript is what was marked.',
     );
     expect(LIVE_TRANSCRIPT_NOTE).not.toMatch(/processing|being graded|analysing|check again/i);
   });

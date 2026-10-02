@@ -28,7 +28,7 @@ export function commonInputKind(kinds: ReadonlyArray<Kind>): Kind {
 
 /** Info note above a live conversation's transcript: there is no audio to play. */
 export const LIVE_TRANSCRIPT_NOTE =
-  'No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked.';
+  'Live conversations cannot be played back here. This transcript is what was marked.';
 
 /** Body of the "Submission received" banner. `onLabel` is the already-formatted date, if known. */
 export function submissionReceivedCopy(kind: Kind, onLabel?: string | null): string {

@@ -106,12 +106,12 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
     expect(screen.getByRole('heading', { name: 'Transcript and source audio' })).toBeInTheDocument();
   });
 
-  it('says no audio recording is stored for a live conversation, and never promises source audio', async () => {
+  it('says live conversations have no playback, and never promises source audio', async () => {
     render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} inputKind="live_voice" />);
     await openTranscriptTab();
 
     expect(screen.getByRole('heading', { name: 'Transcript of your live conversation' })).toBeInTheDocument();
-    expect(screen.getByText(/No audio recording is stored for live conversations, so there is nothing to play back\./)).toBeInTheDocument();
+    expect(screen.getByText(/Live conversations cannot be played back here\./)).toBeInTheDocument();
     expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Audio playback is available/)).not.toBeInTheDocument();
   });
@@ -122,7 +122,7 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
 
     expect(screen.getByRole('heading', { name: 'Transcript' })).toBeInTheDocument();
     expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/only for evidence linked to a recording\. No audio recording is stored for live conversations\./)).toBeInTheDocument();
+    expect(screen.getByText(/only for evidence linked to a recording\. Live conversations have no playback here\./)).toBeInTheDocument();
   });
 
   it('does not blame audio in the technical-review notice of a live conversation', () => {

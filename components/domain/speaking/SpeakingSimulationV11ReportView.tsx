@@ -379,12 +379,12 @@ export function SpeakingSimulationV11ReportView({
   const transcriptCopy = inputKind === 'live_voice'
     ? {
       heading: 'Transcript of your live conversation',
-      note: 'No audio recording is stored for live conversations, so there is nothing to play back. This is the transcript that was marked.',
+      note: 'Live conversations cannot be played back here. This is the transcript that was marked.',
     }
     : inputKind === null
       ? {
         heading: 'Transcript',
-        note: 'Audio playback is available only for evidence linked to a recording. No audio recording is stored for live conversations.',
+        note: 'Audio playback is available only for evidence linked to a recording. Live conversations have no playback here.',
       }
       : {
         heading: 'Transcript and source audio',

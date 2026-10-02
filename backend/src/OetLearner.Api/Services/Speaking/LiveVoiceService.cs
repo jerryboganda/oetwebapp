@@ -1178,6 +1178,16 @@ public sealed class LiveVoiceService(
         inputAudioTranscription = new { },
         outputAudioTranscription = new { },
         sessionResumption = new { },
+        // 2 Oct 2026 prod E2E: Gemini sometimes never closed the candidate's turn, stayed silent, and the client's
+        // 20 s stall recovery restarted the session (patient answers lost). Explicit end-of-speech detection.
+        realtimeInputConfig = new
+        {
+            automaticActivityDetection = new
+            {
+                endOfSpeechSensitivity = "END_SENSITIVITY_HIGH",
+                silenceDurationMs = 800,
+            },
+        },
     };
 
     internal static string BuildInstructions(
