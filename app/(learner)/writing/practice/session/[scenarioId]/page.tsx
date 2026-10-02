@@ -13,6 +13,7 @@ import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
+import { DraftConflictNotice, DraftSaveStatus } from '@/components/domain/writing/DraftSaveStatus';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
@@ -22,14 +23,27 @@ import {
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
 import {
+  useWritingDraftSync,
+  type DraftClockSnapshot,
+  type DraftSyncBaseline,
+} from '@/hooks/use-writing-draft-sync';
+import { loadStoredSession } from '@/lib/auth-storage';
+import {
   checkWritingScenarioEligibility,
   createWritingSubmission,
   getWritingDraftV2,
   getWritingHighlights,
   getWritingScenario,
-  putWritingDraftV2,
   putWritingHighlights,
 } from '@/lib/writing/api';
+import {
+  clearDraftShadow,
+  draftShadowKey,
+  readDraftShadow,
+  reconcileDraft,
+  type ReconciledDraft,
+} from '@/lib/writing/draft-sync';
+import { countLetterWords } from '@/lib/writing/letter-text';
 import { createSubmitIdempotencyKey, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
@@ -38,6 +52,7 @@ import { WRITING_READING_WINDOW_SECONDS, WRITING_WINDOW_SECONDS } from '@/lib/wr
 import type {
   WritingEditorMode,
   WritingScenarioDto,
+  WritingSubmissionStatus,
 } from '@/lib/writing/types';
 
 type ScenarioMode = Extract<WritingEditorMode, 'practice' | 'coached'>;
@@ -49,6 +64,10 @@ function positiveOr(value: number | null | undefined, fallback: number): number 
 
 /** Waits between time-up auto-submit attempts; the last value repeats. */
 const AUTO_SUBMIT_RETRY_MS = [5_000, 15_000, 30_000, 60_000];
+/** The server is told the remaining time at least this often while the page is open. */
+const CLOCK_HEARTBEAT_MS = 10_000;
+/** A submitted attempt whose grade is still running (or failed) belongs on the grading page. */
+const GRADING_STATUSES: ReadonlySet<WritingSubmissionStatus> = new Set(['queued', 'preflight', 'grading', 'failed']);
 
 /**
  * A submit failure worth retrying with the SAME idempotency key: no connection,
@@ -62,17 +81,51 @@ function isRetryableSubmitError(err: unknown): boolean {
   return status === undefined || status === 0 || status === 408 || status === 429 || status >= 500;
 }
 
+function formatClock(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(safe / 60).toString().padStart(2, '0')}:${(safe % 60).toString().padStart(2, '0')}`;
+}
+
+/**
+ * Pause-while-away clock: the seconds LEFT at the last save, clamped to the
+ * task's windows. A letter saved before clocks were stored resumes with one
+ * fresh writing window; a brand-new attempt starts with the reading window.
+ */
+function startingClock(restored: ReconciledDraft, resumed: boolean, readingWindow: number, writingWindow: number) {
+  const clamp = (value: number | null, max: number) => Math.min(max, Math.max(0, Math.round(value ?? max)));
+  if (!restored.phase) {
+    return resumed
+      ? { phase: 'writing' as const, reading: 0, writing: writingWindow }
+      : { phase: 'reading' as const, reading: readingWindow, writing: writingWindow };
+  }
+  return {
+    phase: restored.phase,
+    reading: restored.phase === 'reading' ? clamp(restored.readingSecondsRemaining, readingWindow) : 0,
+    writing: clamp(restored.writingSecondsRemaining, writingWindow),
+  };
+}
+
 export default function WritingPracticeSessionPage() {
   const t = useTranslations();
   const params = useParams<{ scenarioId: string }>();
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const scenarioId = String(params?.scenarioId ?? '');
+  // Scopes this device's draft copy to the signed-in account.
+  const [userId] = useState(() => loadStoredSession()?.currentUser?.userId ?? 'anonymous');
 
   const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
   const mode: ScenarioMode = 'practice';
   const [content, setContent] = useState('');
-  const [initialContent, setInitialContent] = useState('');
+  // What the editor mounts with (it reads it once); a new key remounts it with new text.
+  const [editorText, setEditorText] = useState('');
+  const [editorKey, setEditorKey] = useState(0);
   const [wordCount, setWordCount] = useState(0);
+  const [baseline, setBaseline] = useState<DraftSyncBaseline | null>(null);
+  const [resumed, setResumed] = useState<{ words: number; seconds: number } | null>(null);
+  // Text replaced by "Use the other version", so the learner can take it back.
+  const [previousText, setPreviousText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
@@ -81,12 +134,7 @@ export default function WritingPracticeSessionPage() {
   // permanent "Loading scenario…" with an empty task. Bumping `loadAttempt` re-runs it.
   const [loadError, setLoadError] = useState<{ cause: unknown } | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const startedAtRef = useRef<number>(Date.now());
-  // The letter text the server is known to hold — set ONLY after a successful save.
-  const lastAutosaveContent = useRef<string>('');
-  const autosaveInFlightRef = useRef(false);
-  // Latest content for autosave + auto-submit (read through refs so typing
-  // never restarts their timers).
+  // Latest content for auto-submit (read through refs so typing never restarts timers).
   const contentRef = useRef('');
   contentRef.current = content;
   const wordCountRef = useRef(0);
@@ -94,13 +142,21 @@ export default function WritingPracticeSessionPage() {
   const scenarioRef = useRef<WritingScenarioDto | null>(null);
   scenarioRef.current = scenario;
 
-  // ── Strict 45-minute exam clock ─────────────────────────────────────────────
+  // ── Strict 45-minute exam clock, paused while away ─────────────────────────
   // 5 min forced reading (pad LOCKED) → 40 min writing → hard auto-submit. The
-  // deadlines are persisted per-scenario in sessionStorage so a refresh resumes
-  // the same clock instead of granting extra time.
+  // seconds left are saved with the draft (and on this device), so closing the
+  // page — even the browser — pauses the clock and reopening resumes it.
   const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
   const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
   const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const readingDeadlineRef = useRef(readingDeadlineMs);
+  readingDeadlineRef.current = readingDeadlineMs;
+  const writingDeadlineRef = useRef(writingDeadlineMs);
+  writingDeadlineRef.current = writingDeadlineMs;
+  // Writing seconds still owed when the reading window ends.
+  const writingRemainingRef = useRef(WRITING_WINDOW_SECONDS);
   // Yellow highlights, lifted here so they persist from the reading window into
   // the writing view (both render the same Case Notes PDF).
   const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
@@ -111,107 +167,129 @@ export default function WritingPracticeSessionPage() {
   // empty map so a scenario with no saved marks doesn't trigger a no-op save.
   const lastSavedHighlightsRef = useRef<string>(serializeHighlights({}));
 
-  const clockKey = `writing-practice-clock:${scenarioId}`;
-
   // Per-task timing and word guide from the authored task, exam defaults otherwise.
   const windowSeconds = positiveOr(scenario?.readingTimeSeconds, WRITING_READING_WINDOW_SECONDS);
   const writingWindowSeconds = positiveOr(scenario?.writingTimeSeconds, WRITING_WINDOW_SECONDS);
+  const writingWindowRef = useRef(writingWindowSeconds);
+  writingWindowRef.current = writingWindowSeconds;
   const wordGuideMin = positiveOr(scenario?.wordGuideMin, 180);
   const wordGuideMax = positiveOr(scenario?.wordGuideMax, 220);
   const wordTarget = wordGuideMax >= wordGuideMin ? { min: wordGuideMin, max: wordGuideMax } : { min: 180, max: 220 };
 
-  // Resolve/initialise the exam clock once the scenario has loaded.
-  useEffect(() => {
-    if (typeof window === 'undefined' || !scenarioId || !scenario) return;
-
-    const readingSecs = windowSeconds;
-    let readingDeadline: number;
-    let writingDeadline: number;
-
-    const stored = sessionStorage.getItem(clockKey);
-    let parsed: { reading: number; writing: number } | null = null;
-    if (stored) {
-      try {
-        parsed = JSON.parse(stored) as { reading: number; writing: number };
-      } catch {
-        parsed = null;
-      }
+  /** The clock as it stands right now, for every draft save. */
+  const getClock = useCallback((): DraftClockSnapshot => {
+    const now = Date.now();
+    const left = (deadline: number | null) => (deadline == null ? 0 : Math.max(0, Math.ceil((deadline - now) / 1000)));
+    if (phaseRef.current === 'reading') {
+      return {
+        phase: 'reading',
+        readingSecondsRemaining: left(readingDeadlineRef.current),
+        writingSecondsRemaining: writingRemainingRef.current,
+        timeSpentSeconds: 0,
+      };
     }
+    const writing = phaseRef.current === 'writing' ? left(writingDeadlineRef.current) : 0;
+    return {
+      phase: 'writing',
+      readingSecondsRemaining: 0,
+      writingSecondsRemaining: writing,
+      timeSpentSeconds: Math.max(0, writingWindowRef.current - writing),
+    };
+  }, []);
 
-    if (parsed && Number.isFinite(parsed.reading) && Number.isFinite(parsed.writing)) {
-      readingDeadline = parsed.reading;
-      writingDeadline = parsed.writing;
-    } else {
-      readingDeadline = Date.now() + readingSecs * 1000;
-      writingDeadline = readingDeadline + writingWindowSeconds * 1000;
-      sessionStorage.setItem(
-        clockKey,
-        JSON.stringify({ reading: readingDeadline, writing: writingDeadline }),
-      );
-    }
+  const [submitted, setSubmitted] = useState(false);
+  const sync = useWritingDraftSync({
+    scenarioId,
+    mode,
+    userId,
+    baseline,
+    getClock,
+    heartbeatMs: submitted || phase === 'completed' ? null : CLOCK_HEARTBEAT_MS,
+  });
+  const { flush: flushDraft, update: updateDraft } = sync;
 
-    setReadingDeadlineMs(readingDeadline);
-    setWritingDeadlineMs(writingDeadline);
-
-    if (Date.now() < readingDeadline) {
-      setPhase('reading');
-    } else {
-      setPhase('writing');
-      startedAtRef.current = readingDeadline;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioId, scenario?.id]);
-
-  // ── Scenario + draft load ───────────────────────────────────────────────────
-  // Eligibility is checked FIRST, before any task content is fetched — a
-  // learner without enough AI grading credits never sees the case notes or
-  // starts the reading/writing clock.
+  // ── Load: draft first, then (only for a new attempt) eligibility ───────────
+  // 1. Strict draft GET: only a 404 means "no draft" — a 5xx or a dropped
+  //    connection is the Retry state, never "blank editor + overwrite".
+  // 2. Submitted and still grading (or failed) → the grading page.
+  // 3. An active draft RESUMES without the eligibility call (the attempt was
+  //    paid at task open). No draft, or a graded one ("Practice this again"),
+  //    starts a new attempt: eligibility first — a learner without credits
+  //    never sees the case notes — then the first save anchors the clock.
   useEffect(() => {
     if (!scenarioId) return;
     let cancelled = false;
-    void checkWritingScenarioEligibility(scenarioId)
-      .then((eligibility) => {
-        showCreditFeedback(eligibility?.feedbackMessage);
-        return Promise.all([
-          getWritingScenario(scenarioId),
-          // Strict: only a 404 means "no draft". A 5xx or a dropped connection
-          // rejects into the Retry state — never "blank editor + overwrite".
-          getWritingDraftV2(scenarioId, mode),
-          // Saved Case Notes highlights persist per (user, scenario) across attempts.
-          getWritingHighlights(scenarioId).catch(() => null),
-        ]);
-      })
-      .then(([sc, draft, hl]) => {
-        if (cancelled) return;
-        // Same batch as the draft below: the editor mounts on `scenario`, so it
-        // is created with the restored text (it reads `initialContent` once).
-        setScenario(sc);
-        if (draft?.content) {
-          setInitialContent(draft.content);
-          setContent(draft.content);
-          setWordCount(draft.wordCount);
-          lastAutosaveContent.current = draft.content;
-        }
-        if (hl?.highlightsJson) {
-          const parsed = parseHighlights(hl.highlightsJson);
-          setPdfHighlights(parsed);
-          // Record what's already on the server so the autosave effect doesn't
-          // immediately echo the just-loaded marks back.
-          lastSavedHighlightsRef.current = serializeHighlights(parsed);
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (isInsufficientCreditsError(err)) {
-          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+    const shadowKey = draftShadowKey(userId, scenarioId, mode);
+    const load = async () => {
+      const draft = await getWritingDraftV2(scenarioId, mode);
+      if (cancelled) return;
+      if (draft?.status === 'submitted') {
+        clearDraftShadow(shadowKey);
+        if (draft.submissionId && draft.submissionStatus && GRADING_STATUSES.has(draft.submissionStatus)) {
+          routerRef.current.replace(`/writing/submissions/${encodeURIComponent(draft.submissionId)}/grading`);
           return;
         }
-        setLoadError({ cause: err });
+      }
+      const active = draft && draft.status !== 'submitted' ? draft : null;
+      if (!active) {
+        const eligibility = await checkWritingScenarioEligibility(scenarioId);
+        if (cancelled) return;
+        showCreditFeedback(eligibility?.feedbackMessage);
+      }
+      const [sc, hl] = await Promise.all([
+        getWritingScenario(scenarioId),
+        // Saved Case Notes highlights persist per (user, scenario) across attempts.
+        getWritingHighlights(scenarioId).catch(() => null),
+      ]);
+      if (cancelled) return;
+
+      const restored = reconcileDraft(active, readDraftShadow(shadowKey));
+      const isResume = Boolean(active) || restored.source === 'device';
+      const clock = startingClock(
+        restored,
+        isResume,
+        positiveOr(sc.readingTimeSeconds, WRITING_READING_WINDOW_SECONDS),
+        positiveOr(sc.writingTimeSeconds, WRITING_WINDOW_SECONDS),
+      );
+      const words = restored.wordCount || countLetterWords(restored.text);
+      const now = Date.now();
+      writingRemainingRef.current = clock.writing;
+      setScenario(sc);
+      setEditorText(restored.text);
+      setContent(restored.text);
+      setWordCount(words);
+      setPhase(clock.phase);
+      if (clock.phase === 'reading') setReadingDeadlineMs(now + clock.reading * 1000);
+      else setWritingDeadlineMs(now + clock.writing * 1000);
+      setResumed(isResume ? { words, seconds: clock.phase === 'reading' ? clock.reading : clock.writing } : null);
+      setBaseline({
+        text: restored.text,
+        wordCount: words,
+        serverText: restored.serverText,
+        // "Practice this again" writes the new attempt on top of the submitted row's version.
+        version: !active && draft ? (draft.version ?? null) : restored.version,
+        conflict: restored.conflict,
       });
+      if (hl?.highlightsJson) {
+        const parsed = parseHighlights(hl.highlightsJson);
+        setPdfHighlights(parsed);
+        // Record what's already on the server so the autosave effect doesn't
+        // immediately echo the just-loaded marks back.
+        lastSavedHighlightsRef.current = serializeHighlights(parsed);
+      }
+    };
+    void load().catch((err) => {
+      if (cancelled) return;
+      if (isInsufficientCreditsError(err)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+        return;
+      }
+      setLoadError({ cause: err });
+    });
     return () => {
       cancelled = true;
     };
-  }, [scenarioId, mode, loadAttempt]);
+  }, [scenarioId, mode, loadAttempt, userId]);
 
   // Retry re-runs eligibility too: it is idempotent on the attempt's
   // reference id, so a retry never charges a second credit.
@@ -231,34 +309,33 @@ export default function WritingPracticeSessionPage() {
     return toCandidateSafeWritingErrorMessage(cause, t('writing.practice.session.error.load'));
   };
 
-  // ── Autosave (writing phase only) ────────────────────────────────────────────
-  // The interval reads the letter through refs, so continuous typing can no
-  // longer postpone it forever; one save at a time; text counts as saved only
-  // once the server has it (a failed save is retried on the next tick).
-  useEffect(() => {
-    if (phase !== 'writing' || !scenarioId) return;
-    const timer = window.setInterval(() => {
-      const text = contentRef.current;
-      if (autosaveInFlightRef.current || text === lastAutosaveContent.current) return;
-      autosaveInFlightRef.current = true;
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-      void putWritingDraftV2(scenarioId, mode, {
-        content: text,
-        wordCount: wordCountRef.current,
-        timeSpentSeconds: elapsed,
-      })
-        .then(() => {
-          lastAutosaveContent.current = text;
-        })
-        .catch(() => {
-          /* not marked saved — the next tick retries */
-        })
-        .finally(() => {
-          autosaveInFlightRef.current = false;
-        });
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [phase, scenarioId, mode]);
+  const handleEditorChange = useCallback(
+    (text: string, words: number) => {
+      setContent(text);
+      setWordCount(words);
+      updateDraft(text, words);
+    },
+    [updateDraft],
+  );
+
+  const replaceEditorText = (text: string) => {
+    setEditorText(text);
+    setEditorKey((key) => key + 1);
+    setContent(text);
+    setWordCount(countLetterWords(text));
+  };
+
+  const switchToOtherVersion = () => {
+    setPreviousText(contentRef.current);
+    replaceEditorText(sync.takeServer());
+  };
+
+  const restorePreviousText = () => {
+    if (previousText === null) return;
+    replaceEditorText(previousText);
+    updateDraft(previousText, countLetterWords(previousText));
+    setPreviousText(null);
+  };
 
   // ── Highlight autosave (reading + writing) ───────────────────────────────────
   // Persists Case Notes marks per (user, scenario) the moment they change, so
@@ -279,9 +356,13 @@ export default function WritingPracticeSessionPage() {
 
   // Time-up auto-submit progress: `waiting` = a retryable failure, next try scheduled.
   const [timeUp, setTimeUp] = useState<'idle' | 'sending' | 'waiting' | 'stopped'>('idle');
-  const canSubmit = phase === 'writing' && !submitting;
+  // Submitting while offline is blocked: a locally queued submit would not
+  // exist on the server (Past submissions, another device).
+  const canSubmit = phase === 'writing' && !submitting && sync.online;
 
-  const helperText = t('writing.practice.session.helper.ready');
+  const helperText = sync.online
+    ? t('writing.practice.session.helper.ready')
+    : t('writing.practice.session.draft.offlineSubmit');
 
   // Set once a 429/409 single-retry has been spent for this mount, so an
   // already-in-flight grading attempt is waited on rather than hammered.
@@ -294,28 +375,29 @@ export default function WritingPracticeSessionPage() {
     (idempotencyKey: string) => {
       const current = scenarioRef.current;
       if (!current) return Promise.reject(new Error('Scenario not loaded'));
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
       return createWritingSubmission({
         scenarioId: current.id,
         mode,
         letterContent: contentRef.current,
         wordCount: wordCountRef.current,
-        timeSpentSeconds: elapsed,
+        timeSpentSeconds: getClock().timeSpentSeconds,
         inputSource: 'editor',
         caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
         idempotencyKey,
       });
     },
-    [mode],
+    [mode, getClock],
   );
 
+  const discardDraft = sync.discard;
   const openGrading = useCallback(
     (submissionId: string) => {
-      // Clear the clock so a future retake of this scenario starts fresh.
-      if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
+      // The server consumed the draft; drop this device's copy and stop syncing.
+      setSubmitted(true);
+      discardDraft();
       router.push(`/writing/submissions/${encodeURIComponent(submissionId)}/grading`);
     },
-    [clockKey, router],
+    [discardDraft, router],
   );
 
   // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
@@ -387,9 +469,14 @@ export default function WritingPracticeSessionPage() {
   const handleReadingEnd = useCallback(() => {
     if (beganWritingRef.current) return;
     beganWritingRef.current = true;
-    startedAtRef.current = Date.now();
+    const deadline = Date.now() + writingRemainingRef.current * 1000;
+    // Refs first, so the save below already records the writing phase.
+    phaseRef.current = 'writing';
+    writingDeadlineRef.current = deadline;
+    setWritingDeadlineMs(deadline);
     setPhase('writing');
-  }, []);
+    flushDraft();
+  }, [flushDraft]);
 
   // Deadline-anchored countdowns; each gated to its active phase.
   const readingSeconds = useDeadlineCountdown(
@@ -532,7 +619,8 @@ export default function WritingPracticeSessionPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {baseline ? <DraftSaveStatus state={sync.state} /> : null}
             <WordCounter count={wordCount} target={wordTarget} ariaLabelPrefix="Letter length" />
             <WritingTimerV2
               phase={phase}
@@ -542,6 +630,24 @@ export default function WritingPracticeSessionPage() {
             />
           </div>
         </header>
+
+        {resumed ? (
+          <InlineAlert variant="info" live="polite" dismissible onDismiss={() => setResumed(null)} data-testid="writing-resume-banner">
+            {t('writing.practice.session.resume.banner', {
+              words: resumed.words,
+              time: formatClock(resumed.seconds),
+            })}
+          </InlineAlert>
+        ) : null}
+
+        <DraftConflictNotice
+          conflict={sync.conflict !== null}
+          previousText={previousText}
+          onKeepThis={sync.keepLocal}
+          onUseOther={switchToOtherVersion}
+          onRestorePrevious={restorePreviousText}
+          onDismissPrevious={() => setPreviousText(null)}
+        />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -585,16 +691,15 @@ export default function WritingPracticeSessionPage() {
           >
             {/* Mounted only once the draft is known: the editor reads
                 `initialContent` once, so an early mount would start blank. */}
-            {scenario ? (
+            {baseline ? (
               <WritingEditorV2
+                key={editorKey}
                 mode={mode}
-                initialContent={initialContent}
-                disabled={phase !== 'writing'}
+                initialContent={editorText}
+                disabled={phase !== 'writing' || submitted}
                 blockPaste
-                onChange={(text, words) => {
-                  setContent(text);
-                  setWordCount(words);
-                }}
+                onChange={handleEditorChange}
+                onBlur={() => flushDraft()}
                 placeholder={t('writing.practice.session.editorPlaceholder')}
                 inputId="practice-editor"
               />

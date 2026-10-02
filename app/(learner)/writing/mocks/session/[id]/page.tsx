@@ -15,15 +15,20 @@ import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
+import { DraftConflictNotice, DraftSaveStatus } from '@/components/domain/writing/DraftSaveStatus';
+import { useWritingDraftSync, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
+import { loadStoredSession } from '@/lib/auth-storage';
 import {
   beginWritingMockWriting,
+  getWritingDraftV2,
   getWritingHighlights,
   getWritingMockSession,
   getWritingScenario,
-  putWritingDraftV2,
   putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { clearDraftShadow, draftShadowKey, readDraftShadow, reconcileDraft } from '@/lib/writing/draft-sync';
+import { countLetterWords } from '@/lib/writing/letter-text';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
 import { WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
@@ -66,6 +71,16 @@ function WritingMockSessionInner() {
   const [frozenLetter, setFrozenLetter] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef('');
+  const [userId] = useState(() => loadStoredSession()?.currentUser?.userId ?? 'anonymous');
+  // The letter is restored before the editor mounts (it reads its text once).
+  const [baseline, setBaseline] = useState<DraftSyncBaseline | null>(null);
+  const [editorText, setEditorText] = useState('');
+  const [editorKey, setEditorKey] = useState(0);
+  const [previousText, setPreviousText] = useState<string | null>(null);
+  const [draftLoadFailed, setDraftLoadFailed] = useState(false);
+  const [draftAttempt, setDraftAttempt] = useState(0);
+  const sync = useWritingDraftSync({ scenarioId: session?.scenarioId ?? '', mode: 'mock', userId, baseline });
+  const { update: updateDraft, discard: discardDraft } = sync;
   // Last highlights JSON persisted to the server (avoids redundant autosaves).
   const lastSavedHighlightsRef = useRef<string>(serializeHighlights({}));
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
@@ -151,20 +166,61 @@ function WritingMockSessionInner() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [phase]);
 
-  // Autosave every 5s during writing.
+  // Restore this session's draft (server + this device). A draft saved before
+  // the session started belongs to an earlier mock of the same task and is
+  // never restored into a fresh strict mock. A failed load is a Retry state.
+  const loadedSessionId = session?.id;
+  const sessionScenarioId = session?.scenarioId;
+  const sessionStartedAt = session?.startedAt;
   useEffect(() => {
-    if (phase !== 'writing' || !scenario?.id) return;
-    const timer = window.setInterval(() => {
-      if (content === lastAutosaveContent.current) return;
-      lastAutosaveContent.current = content;
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-      void putWritingDraftV2(scenario.id, 'mock', { content, wordCount, timeSpentSeconds: elapsed }).catch(() => {
-        /* best-effort */
+    if (!loadedSessionId || !sessionScenarioId) return;
+    let cancelled = false;
+    const started = Date.parse(sessionStartedAt ?? '');
+    const isThisSession = (savedAt: number) => !Number.isFinite(started) || savedAt >= started;
+    void getWritingDraftV2(sessionScenarioId, 'mock')
+      .then((draft) => {
+        if (cancelled) return;
+        const shadowKey = draftShadowKey(userId, sessionScenarioId, 'mock');
+        const active =
+          draft && draft.status !== 'submitted' && isThisSession(Date.parse(draft.lastSavedAt)) ? draft : null;
+        let shadow = readDraftShadow(shadowKey);
+        if (shadow && (draft?.status === 'submitted' || !isThisSession(shadow.savedAt))) {
+          clearDraftShadow(shadowKey);
+          shadow = null;
+        }
+        const restored = reconcileDraft(active, shadow);
+        const words = restored.wordCount || countLetterWords(restored.text);
+        setEditorText(restored.text);
+        setContent(restored.text);
+        setWordCount(words);
+        setBaseline({
+          text: restored.text,
+          wordCount: words,
+          // A fresh session has nothing to save until the learner types.
+          serverText: active ? restored.serverText : restored.source === 'device' ? null : '',
+          version: active ? restored.version : (draft?.version ?? 0),
+          conflict: restored.conflict,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setDraftLoadFailed(true);
       });
-      emitEvent('auto_saved', { wordCount });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedSessionId, sessionScenarioId, sessionStartedAt, userId, draftAttempt]);
+
+  // `auto_saved` invigilation telemetry every 5 s while the letter changes
+  // (the draft itself is saved by the sync engine).
+  useEffect(() => {
+    if (phase !== 'writing') return;
+    const timer = window.setInterval(() => {
+      if (contentRef.current === lastAutosaveContent.current) return;
+      lastAutosaveContent.current = contentRef.current;
+      emitEvent('auto_saved', { wordCount: countLetterWords(contentRef.current) });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [phase, scenario?.id, content, wordCount, emitEvent]);
+  }, [phase, emitEvent]);
 
   // Highlight autosave (reading + writing) — persists Case Notes marks per
   // (user, scenario) so they survive refresh and pre-load on future attempts.
@@ -219,6 +275,7 @@ function WritingMockSessionInner() {
     (text: string, words: number) => {
       setContent(text);
       setWordCount(words);
+      updateDraft(text, words);
       if (phase !== 'writing') return;
       const now = Date.now();
       if (now - lastTypedEventAt.current >= 10_000) {
@@ -226,14 +283,23 @@ function WritingMockSessionInner() {
         emitEvent('response_typed', { wordCount: words });
       }
     },
-    [phase, emitEvent],
+    [phase, emitEvent, updateDraft],
   );
 
-  const canSubmit = phase === 'writing' && !submitting;
+  const replaceEditorText = (text: string) => {
+    setEditorText(text);
+    setEditorKey((key) => key + 1);
+    setContent(text);
+    setWordCount(countLetterWords(text));
+  };
+
+  // Offline submit is blocked: a locally queued submit would not reach the server.
+  const canSubmit = phase === 'writing' && !submitting && sync.online;
   const helperText = useMemo(() => {
     if (phase !== 'writing') return t('writing.mocks.session.helper.notStarted');
+    if (!sync.online) return t('writing.practice.session.draft.offlineSubmit');
     return t('writing.mocks.session.helper.ready');
-  }, [phase, t]);
+  }, [phase, t, sync.online]);
 
   // Shared submit path. `auto` = true when fired by the writing-timer expiry.
   const finalizeSubmit = useCallback(
@@ -246,6 +312,7 @@ function WritingMockSessionInner() {
         const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
         const letter = contentRef.current;
         await submitWritingMock(sessionId, { letterContent: letter, wordCount, timeSpentSeconds: elapsed });
+        discardDraft();
         // Do NOT navigate: freeze the letter and lock the UI (spec §10/§15).
         setFrozenLetter(letter);
         setLocked(true);
@@ -257,7 +324,7 @@ function WritingMockSessionInner() {
         setSubmitting(false);
       }
     },
-    [submitting, locked, sessionId, wordCount, emitEvent, t],
+    [submitting, locked, sessionId, wordCount, emitEvent, t, discardDraft],
   );
 
   const submit = useCallback(() => {
@@ -357,6 +424,7 @@ function WritingMockSessionInner() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {baseline && !locked ? <DraftSaveStatus state={sync.state} /> : null}
             <WordCounter count={wordCount} target={{ min: 180, max: 220 }} ariaLabelPrefix="Letter length" />
             <WritingTimerV2
               phase={phase}
@@ -368,6 +436,23 @@ function WritingMockSessionInner() {
         </header>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        <DraftConflictNotice
+          conflict={sync.conflict !== null}
+          previousText={previousText}
+          onKeepThis={sync.keepLocal}
+          onUseOther={() => {
+            setPreviousText(contentRef.current);
+            replaceEditorText(sync.takeServer());
+          }}
+          onRestorePrevious={() => {
+            if (previousText === null) return;
+            replaceEditorText(previousText);
+            updateDraft(previousText, countLetterWords(previousText));
+            setPreviousText(null);
+          }}
+          onDismissPrevious={() => setPreviousText(null)}
+        />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <section
@@ -415,10 +500,31 @@ function WritingMockSessionInner() {
                   </Link>
                 </Button>
               </div>
+            ) : draftLoadFailed && !baseline ? (
+              <InlineAlert
+                variant="error"
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setDraftLoadFailed(false);
+                      setDraftAttempt((n) => n + 1);
+                    }}
+                  >
+                    {t('writing.practice.session.loadError.retry')}
+                  </Button>
+                }
+              >
+                {t('writing.mocks.session.error.load')}
+              </InlineAlert>
+            ) : !baseline ? (
+              <p className="p-4 text-sm text-muted">{t('writing.mocks.session.scenarioLoading')}</p>
             ) : (
               <WritingEditorV2
+                key={editorKey}
                 mode="mock"
-                initialContent=""
+                initialContent={editorText}
+                onBlur={() => sync.flush()}
                 disabled={phase !== 'writing'}
                 blockPaste={strict}
                 // Strict mock forces spell-check off; the relaxed practice

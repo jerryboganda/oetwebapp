@@ -84,6 +84,8 @@ export interface PaperBookletSimulationProps {
   submitting?: boolean;
   /** Where the locked post-submit booklet links the learner. */
   resultsHref: string;
+  /** Restored letter text. Applied until the learner first types (the page keeps the answer locked until it is known). */
+  initialText?: string;
   onContentChange: (text: string, wordCount: number) => void;
   onSubmit: () => void;
   /**
@@ -149,6 +151,7 @@ export function PaperBookletSimulation({
   submitted = false,
   submitting = false,
   resultsHref,
+  initialText,
   onContentChange,
   onSubmit,
   onAutosave,
@@ -156,8 +159,12 @@ export function PaperBookletSimulation({
   onHighlightsChange,
 }: PaperBookletSimulationProps) {
   const t = useTranslations();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const typedRef = useRef(false);
+  useEffect(() => {
+    if (!typedRef.current && initialText !== undefined) setText(initialText);
+  }, [initialText]);
 
   const wordCount = useMemo(() => countWords(text), [text]);
   const locked = phase !== 'writing' || submitted;
@@ -257,6 +264,7 @@ export function PaperBookletSimulation({
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       if (locked) return;
       const next = e.target.value;
+      typedRef.current = true;
       setText(next);
       onContentChange(next, countWords(next));
     },

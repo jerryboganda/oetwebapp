@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { ApiError } from '@/lib/api';
 import type { ReadingAttemptStarted, ReadingAttemptStatus, ReadingLearnerStructureDto, ReadingPartCode, ReadingQuestionLearnerDto } from '@/lib/reading-authoring-api';
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
+export { type SaveState, isNetworkInterruption } from '@/lib/save-state';
 
 export type PendingReadingAnswer = {
   attemptId: string;
@@ -10,11 +10,6 @@ export type PendingReadingAnswer = {
   baseValueJson: string | null;
   inFlight: boolean;
 };
-
-export function isNetworkInterruption(error: unknown): boolean {
-  return (error instanceof ApiError && error.status === 0)
-    || (typeof navigator !== 'undefined' && !navigator.onLine);
-}
 
 /**
  * Server rejections that mean "that section had already closed", not "the save

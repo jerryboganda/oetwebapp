@@ -14,26 +14,35 @@ beforeAll(() => {
   document.elementFromPoint = () => null;
 });
 
-/** Tiptap stores its instance on the ProseMirror element ("for tests"). */
-async function mountedEditor(): Promise<{ dom: HTMLElement; editor: Editor }> {
-  return waitFor(
-    () => {
-      const dom = screen.getByTestId('writing-editor').querySelector<HTMLElement>('.ProseMirror');
-      const editor = (dom as unknown as { editor?: Editor } | null)?.editor;
-      if (!dom || !editor || editor.isDestroyed) {
-        throw new Error(`No live Tiptap editor inside writing-editor yet:\n${document.body.innerHTML.slice(0, 4000)}`);
-      }
-      return { dom, editor };
-    },
-    { timeout: 10_000 },
-  );
+/**
+ * The live editor inside the writing-editor wrapper (Tiptap stores its instance
+ * on the ProseMirror element "for tests"). Looked up afresh for every step:
+ * @tiptap/react may re-create the instance after its first render, and a
+ * re-created editor starts from the latest text, which this suite relies on.
+ */
+function liveEditor(): { dom: HTMLElement; editor: Editor } {
+  const dom = screen.getByTestId('writing-editor').querySelector<HTMLElement>('.ProseMirror');
+  const editor = (dom as unknown as { editor?: Editor } | null)?.editor;
+  if (!dom || !editor || editor.isDestroyed) {
+    throw new Error(`No live Tiptap editor inside writing-editor:\n${document.body.innerHTML.slice(0, 4000)}`);
+  }
+  return { dom, editor };
+}
+
+async function mountedEditor() {
+  await waitFor(liveEditor, { timeout: 10_000 });
+  // Let any post-mount re-creation settle before the test interacts.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  return liveEditor();
 }
 
 /** Types like a key press does in ProseMirror: input rules get the first say, else the text is inserted. */
-function typeInto(editor: Editor, text: string) {
+function typeInto(text: string) {
   act(() => {
     for (const char of text) {
-      const { view } = editor;
+      const { view } = liveEditor().editor;
       const { from, to } = view.state.selection;
       const insert = () => view.state.tr.insertText(char, from, to);
       const handled = view.someProp('handleTextInput', (handler) =>
@@ -53,7 +62,6 @@ describe('WritingEditorV2 (real Tiptap)', () => {
     const { dom, editor } = await mountedEditor();
 
     expect(dom.id).toBe('practice-editor');
-    expect(screen.getByTestId('writing-editor')).toContainElement(dom);
     expect(dom.querySelectorAll('p')).toHaveLength(3);
     expect(dom.querySelector('p:nth-of-type(2) br')).not.toBeNull();
     expect(editor.getText()).toBe(letter);
@@ -84,10 +92,10 @@ describe('WritingEditorV2 (real Tiptap)', () => {
 
     for (const line of ['- Paracetamol 1 g', '1. Review in clinic', '# Plan', '> Noted', '**urgent**', '---']) {
       act(() => {
-        editor.commands.clearContent();
+        liveEditor().editor.commands.clearContent();
       });
-      typeInto(editor, line);
-      expect(editor.getText()).toBe(line);
+      typeInto(line);
+      expect(liveEditor().editor.getText()).toBe(line);
       expect(onChange).toHaveBeenLastCalledWith(line, line.split(' ').length);
     }
   });
@@ -99,19 +107,20 @@ describe('WritingEditorV2 (real Tiptap)', () => {
     const { rerender } = render(
       <WritingEditorV2 mode="practice" initialContent="Dear Dr Green," onChange={first} onBlur={onBlur} />,
     );
-    const { dom, editor } = await mountedEditor();
+    await mountedEditor();
     rerender(<WritingEditorV2 mode="practice" initialContent="Dear Dr Green," onChange={second} onBlur={onBlur} />);
 
     expect(first).not.toHaveBeenCalled();
     expect(second).not.toHaveBeenCalled();
 
     act(() => {
+      const { editor } = liveEditor();
       editor.commands.setTextSelection(editor.state.doc.content.size - 1);
     });
-    typeInto(editor, ' Hi');
+    typeInto(' Hi');
     expect(second).toHaveBeenLastCalledWith('Dear Dr Green, Hi', 4);
 
-    fireEvent.blur(dom);
+    fireEvent.blur(liveEditor().dom);
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
 });
