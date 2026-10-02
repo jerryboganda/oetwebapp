@@ -139,6 +139,47 @@ describe('FreeSampleLauncher', () => {
       expect(await screen.findByTestId('free-card')).toHaveAttribute('href', '/writing/submissions/sub-9/revise');
     });
 
+    it('in_progress: follows the server route (the letter being graded), never the previous result', async () => {
+      mockList.mockResolvedValue([{
+        ...WRITING_AVAILABLE,
+        state: 'in_progress',
+        route: '/writing/submissions/sub-2/grading',
+        successfulCount: 1,
+        remaining: 1,
+        lastResultRoute: '/writing/submissions/sub-1/results',
+        lastSubmissionId: 'sub-1',
+      }]);
+      render(<FreeSampleLauncher {...WRITING_PROPS} />);
+
+      const card = await screen.findByTestId('free-card');
+      expect(card).toHaveAttribute('href', '/writing/submissions/sub-2/grading');
+      expect(card).toHaveTextContent('Your result is being processed');
+    });
+
+    it('grading_failed: says the letter is saved and links to Retry on the SAME letter, never a fresh free start', async () => {
+      mockList.mockResolvedValue([{
+        ...WRITING_AVAILABLE,
+        state: 'grading_failed',
+        route: '/writing/submissions/sub-3/grading',
+      }]);
+      render(<FreeSampleLauncher {...WRITING_PROPS} />);
+
+      const card = await screen.findByTestId('free-card');
+      expect(card).toHaveAttribute('href', '/writing/submissions/sub-3/grading');
+      expect(screen.getByTestId('free-card-status')).toHaveTextContent(
+        "Your sample letter is saved but grading didn't finish — retry",
+      );
+    });
+
+    it('grading_failed without a server route stays inert rather than falling back to the start route', async () => {
+      mockList.mockResolvedValue([{ ...WRITING_AVAILABLE, state: 'grading_failed', route: null }]);
+      render(<FreeSampleLauncher {...WRITING_PROPS} />);
+
+      const card = await screen.findByTestId('free-card');
+      expect(card).toBeDisabled();
+      expect(card).not.toHaveAttribute('href');
+    });
+
     it('completed: inert card reading "Free sample completed"', async () => {
       mockList.mockResolvedValue([{
         ...WRITING_AVAILABLE,

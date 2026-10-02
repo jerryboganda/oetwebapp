@@ -29,6 +29,7 @@ import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { WritingMyWorkList } from '@/components/domain/writing/WritingMyWorkList';
 import { cn } from '@/lib/utils';
 
 // Sub-test identity (DESIGN.md §2 skill tokens), never a status colour.
@@ -110,6 +111,8 @@ function SubmissionHistoryInner() {
   const [attempts, setAttempts] = useState<LearnerAttemptHistoryItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Writing view only: drafts + V2 submissions (my-work). null = not loaded yet or failed.
+  const [myWorkCount, setMyWorkCount] = useState<number | null>(null);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'submissions' });
@@ -159,6 +162,9 @@ function SubmissionHistoryInner() {
           { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
         ]}
       />
+
+      {/* Post Submissions: Writing drafts and submitted letters, with Resume / Retry. */}
+      {writingOnly ? <WritingMyWorkList onCountChange={setMyWorkCount} /> : null}
 
       {/* Unified attempt activity — Reading / Listening / Writing / Speaking
           plus full mocks: exact item title/ID, subtest, start time, status,
@@ -258,8 +264,9 @@ function SubmissionHistoryInner() {
       ) : null}
 
       {/* A Speaking-only learner has a Full Speaking Mock under "Attempt activity" but no Past Evidence
-          card (those rows have no Evaluation), so wait for the attempt list before saying history is empty. */}
-      {!loading && !error && visibleSubmissions.length === 0 && (writingOnly || (attempts !== null && visibleAttempts?.length === 0)) ? (
+          card (those rows have no Evaluation), so wait for the attempt list before saying history is empty.
+          The Writing view is empty only once my-work has loaded with no draft or letter in it. */}
+      {!loading && !error && visibleSubmissions.length === 0 && (writingOnly ? myWorkCount === 0 : (attempts !== null && visibleAttempts?.length === 0)) ? (
         <EmptyState
           icon={<History className="h-8 w-8" />}
           title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}

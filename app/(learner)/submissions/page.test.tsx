@@ -1,9 +1,11 @@
 import { screen, within } from '@testing-library/react';
-const { mockFetchSubmissions, mockFetchMyAttemptHistory, mockTrack } = vi.hoisted(() => ({
+const { mockFetchSubmissions, mockFetchMyAttemptHistory, mockTrack, mockGetWritingMyWork, mockRetryWritingGrade } = vi.hoisted(() => ({
   mockFetchSubmissions: vi.fn(),
   mockFetchMyAttemptHistory: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
+  mockGetWritingMyWork: vi.fn(),
+  mockRetryWritingGrade: vi.fn(),
 }));
 
 
@@ -24,9 +26,41 @@ vi.mock('@/lib/api', () => ({
   fetchMyAttemptHistory: mockFetchMyAttemptHistory,
 }));
 
+vi.mock('@/lib/writing/api', () => ({
+  getWritingMyWork: mockGetWritingMyWork,
+  retryWritingGrade: mockRetryWritingGrade,
+}));
+
 import SubmissionHistoryPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 import type { LearnerAttemptHistoryItem } from '@/lib/api';
+import type { WritingMyWorkItemDto } from '@/lib/writing/types';
+
+const WRITING_VIEW = { searchParams: new URLSearchParams('subtest=writing') };
+
+// An unsubmitted V2 draft: the only thing some learners have in Writing.
+const activeDraft: WritingMyWorkItemDto = {
+  key: 'draft:d-1',
+  kind: 'draft',
+  state: 'draft',
+  rawStatus: 'active',
+  scenarioId: 'scn-2',
+  title: 'Referral to a physiotherapist',
+  letterType: 'LT-RR',
+  mode: 'practice',
+  isRevision: false,
+  isFreeSample: false,
+  draftId: 'd-1',
+  submissionId: null,
+  wordCount: 96,
+  phase: 'writing',
+  readingSecondsRemaining: 0,
+  writingSecondsRemaining: 1500,
+  lastActivityAt: '2026-10-02T10:00:00Z',
+  canRetry: false,
+  autoRetrying: false,
+  actions: [{ kind: 'resume', href: '/writing/practice/session/scn-2' }],
+};
 
 // What the server sends for a Speaking mock: ONE row for the whole exam (the exam id), not one per card.
 const scoredMock: LearnerAttemptHistoryItem = {
@@ -47,6 +81,7 @@ describe('Submission history page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchMyAttemptHistory.mockResolvedValue([]);
+    mockGetWritingMyWork.mockResolvedValue({ items: [], hasMore: false });
     mockFetchSubmissions.mockResolvedValue([
       {
         id: 'sub-1',
@@ -208,5 +243,72 @@ describe('Submission history page', () => {
     renderWithRouter(<SubmissionHistoryPage />);
 
     expect(await screen.findByText('No submissions yet')).toBeInTheDocument();
+  });
+
+  describe('Writing view: Post Submissions (my-work)', () => {
+    it('lists Writing drafts and submitted letters inside the Writing view, above the legacy sections', async () => {
+      mockFetchSubmissions.mockResolvedValue([
+        {
+          id: 'sub-w1',
+          subTest: 'Writing',
+          attemptDate: '2026-03-26',
+          taskName: 'Legacy referral letter',
+          scoreEstimate: 'Pending',
+          reviewStatus: 'not_requested',
+          canRequestReview: false,
+          actions: { reopenFeedbackRoute: '/submissions/sub-w1', compareRoute: null, requestReviewRoute: null },
+        },
+      ]);
+      mockGetWritingMyWork.mockResolvedValue({ items: [activeDraft], hasMore: false });
+
+      renderWithRouter(<SubmissionHistoryPage />, WRITING_VIEW);
+
+      const row = await screen.findByTestId('post-submission-row');
+      expect(mockGetWritingMyWork).toHaveBeenCalledTimes(1);
+      expect(row).toHaveAttribute('data-state', 'draft');
+      expect(row).toHaveTextContent('Referral to a physiotherapist');
+      expect(within(row).getByTestId('post-submission-resume')).toHaveAttribute('href', '/writing/practice/session/scn-2');
+      // The legacy evidence list keeps rendering beneath it, unchanged.
+      const legacy = await screen.findByText('Legacy referral letter');
+      expect(row.compareDocumentPosition(legacy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('is not empty for an account whose only Writing work is an unsubmitted draft', async () => {
+      mockFetchSubmissions.mockResolvedValue([]);
+      mockGetWritingMyWork.mockResolvedValue({ items: [activeDraft], hasMore: false });
+
+      renderWithRouter(<SubmissionHistoryPage />, WRITING_VIEW);
+
+      expect(await screen.findByTestId('post-submission-row')).toBeInTheDocument();
+      expect(screen.queryByText('No Writing submissions yet')).not.toBeInTheDocument();
+    });
+
+    it('says the Writing view is empty only once my-work has loaded with nothing in it', async () => {
+      mockFetchSubmissions.mockResolvedValue([]);
+
+      renderWithRouter(<SubmissionHistoryPage />, WRITING_VIEW);
+
+      expect(await screen.findByText('No Writing submissions yet')).toBeInTheDocument();
+      expect(screen.queryByTestId('post-submissions-list')).not.toBeInTheDocument();
+    });
+
+    it('shows a failed my-work request as an error with Try again, never as "no submissions"', async () => {
+      mockFetchSubmissions.mockResolvedValue([]);
+      mockGetWritingMyWork.mockRejectedValue(new Error('offline'));
+
+      renderWithRouter(<SubmissionHistoryPage />, WRITING_VIEW);
+
+      expect(await screen.findByText('writing.myWork.error.load')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'writing.myWork.tryAgain' })).toBeInTheDocument();
+      expect(screen.queryByText('No Writing submissions yet')).not.toBeInTheDocument();
+    });
+
+    it('never asks for my-work in the global (all-subtest) history view', async () => {
+      renderWithRouter(<SubmissionHistoryPage />);
+
+      await screen.findByText('Consultation: Asthma Management Review');
+      expect(mockGetWritingMyWork).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('post-submissions-list')).not.toBeInTheDocument();
+    });
   });
 });

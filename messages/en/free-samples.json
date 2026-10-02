@@ -3,6 +3,7 @@
   "freeSample.speaking.retryCta": "Try Again - 1 Free Retry Remaining",
   "freeSample.writing.allowance": "Free sample includes one graded submission + one free revision.",
   "freeSample.writing.retryCta": "Revise & Resubmit - 1 Free Revision Remaining",
+  "freeSample.writing.gradingFailed": "Your sample letter is saved but grading didn't finish — retry",
   "freeSample.completed": "Free sample completed",
   "freeSample.unavailable": "Free sample unavailable for your registered profession.",
   "freeSample.inProgress": "Your result is being processed",
