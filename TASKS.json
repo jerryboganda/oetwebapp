@@ -147,11 +147,11 @@
     {
       "id": "AX-12",
       "title": "Push to main (owner ordered it) and confirm Build & Deploy for that SHA",
-      "status": "in_progress",
+      "status": "done",
       "owner": "ax-enforcement-hooks",
       "blockedBy": ["AX-13"],
       "verify": "deploy.yml",
-      "evidence": [],
+      "evidence": ["36953672231"],
       "files": []
     }
   ]

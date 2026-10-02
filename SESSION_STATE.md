@@ -2,10 +2,10 @@
 
 Session: ax-enforcement-hooks
 Goal: Make the AX ledger enforce itself: auto-load at session start, a bounded Stop gate, run ids in gate rows checked against GitHub, and CI proof on Linux and Windows
-Mode: execute
-Updated: 2026-10-02T02:00:46Z
+Mode: done
+Updated: 2026-10-02T02:34:06Z
 Branch: main
-HEAD: ef5fe35bc
+HEAD: 333e92aa5
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -39,7 +39,7 @@ The owner then ordered it shipped and the known loopholes fixed: bare workflow n
 - [x] AC-3 Only the feature branch was pushed; remote `main` was not touched.
 - [x] AC-4 The launcher is installed and wired in user-level settings (backup kept); the installed command behaves correctly on synthetic hook input.
 - [x] AC-5 Evidence loopholes closed, CLAUDE.md guard added, ledger merge hazards reduced (same run).
-- [ ] AC-6 Pushed to main; Build & Deploy for that SHA is green with live health.
+- [x] AC-6 Pushed to main as 333e92aa5; Build & Deploy 36953672231 green; LIVE_SHA_OK on slot blue with web, API and agent-gateway images at that SHA.
 
 ## Decisions (do not revisit)
 
@@ -94,7 +94,7 @@ The owner then ordered it shipped and the known loopholes fixed: bare workflow n
 | --- | --- | --- | --- |
 | ax-self-tests | ax-check.yml (linux node 22, windows node 22 and 24) | 36952304624 | PASS |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| deploy | deploy.yml | NOT RUN | NOT RUN |
+| deploy | deploy.yml | 36953672231 | PASS |
 
 ## Blockers
 
@@ -102,6 +102,4 @@ The owner then ordered it shipped and the known loopholes fixed: bare workflow n
 
 ## Next action
 
-1. Rebase onto origin/main, push to `main` in a quiet window (no Build & Deploy in flight), then `powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1 -Sha <merge sha>` (add
-   `-SkipPublic -SkipPrivateFlip` only while another session shares the public window), followed by
-   `pnpm run ax:record` and `pnpm run ax:verify`.
+1. None for this run. Open items for a future run: none of the six reported loopholes remain; if the Windows long-path file is ever renamed, `ax-check.yml` can drop its sparse checkout.
