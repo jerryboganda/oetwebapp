@@ -163,6 +163,8 @@ Listening Part A Claude call are direct) but each writes exactly one
 | `jev.writing.criteria` | `typesafe-jev` | Jev advisory per-criterion Writing signals (parallel Scores in one call), combined with code-owned weights. Display-only radar — never a grade input. Non-scoring, platform-only. |
 | `jev.companion.rerank` | `typesafe-jev` | Jev rerank of companion hybrid-retrieval candidates (one Score per candidate, downstream of the entitlement prefilter). Ordering-only, advisory — never a filter of record, never a grading path; rerank outage keeps the original hybrid ordering. Non-scoring, platform-only. |
 | `jev.conversation.turn` | `typesafe-jev` | Jev advisory judgment of the learner's latest AI-patient role-play turn (stays-in-role / clinically-appropriate / unsafe Nouls, one parallel call). Informational only — never gates, scores, or ends a session. Non-scoring, platform-only. |
+| `jev.response.verify` | `typesafe-jev` | Jev advisory review of a gateway response (evidence relation, addresses-task, unsafe-recommendation; `JevWorkflowAdvisor`). Advisory only — never changes a grade or the gateway verdict; switches `TypeSafe:Enabled` + `ResponseVerifyEnabled`. Non-scoring, platform-only. |
+| `jev.development.triage` | `typesafe-jev` | Jev typed triage for internal development/review tooling (AdminBatch class). Never on a learner path. Non-scoring, platform-only. |
 
 **TypeSafe SystemOne (Jev):** judgments only — the model returns typed
 Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves
@@ -223,6 +225,16 @@ described in this section. Not affected by the switch: the kill switch, the
 per-feature kill list, per-user AI disable, plan token caps, learner credits and
 the per-learner caps listed below. The Claude Max weekly usage estimate on
 `/admin/writing-ai` is information only and never switches Writing providers.
+
+**Claude Max is always on (owner hard rule MAX-ALWAYS-ON, 2026-10-02).** The
+Writing subscription route (`writing-claude-sub`) is tried first on every grade
+and can never be switched off or bypassed by an admin toggle, mode, marker,
+threshold or circuit. The admin API refuses it with `max_subscription_always_on`:
+`PUT /v1/admin/ai/writing-provider` accepts only `auto`/`claude` (a weekly
+threshold or quota marker is stored but inert), and the `writing-claude-sub`
+provider row cannot be deactivated or deleted (its other fields stay editable).
+The Anthropic API and Codex are used only inside a single grade after Max
+actually errors.
 
 **Admin-side AI carries no day or class-month ceilings (owner directive,
 2026-09-23).** `AdminBatch`-class calls — `admin.*` content drafts,

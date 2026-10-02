@@ -272,10 +272,10 @@ public static class AiUsageAdminEndpoints
             var warnPct = row.WritingAiWarnPct
                 ?? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.DefaultWarnPct;
             var util = snapshot.UtilizationPct;
-            // Owner directive 2026-10-02: the weekly estimate is information
-            // only and never switches providers; only a recorded Claude quota
-            // refusal means failover is active.
-            var failoverActive = row.WritingAiClaudeQuotaExceededUntil is { } u && u > now;
+            // Owner hard rule MAX-ALWAYS-ON (2026-10-02): no marker, mode or
+            // threshold ever routes around Claude Max, so there is no failover
+            // state to report. The field stays for older clients.
+            const bool failoverActive = false;
 
             return Results.Ok(new
             {
@@ -295,9 +295,8 @@ public static class AiUsageAdminEndpoints
                 failoverActive,
                 currentPrimary = new
                 {
-                    // When the subscription is over its weekly cap, new requests start
-                    // at L2 (the Claude API), not Codex — Codex is the last resort.
-                    provider = failoverActive ? claudeApi : claude,
+                    // Claude Max is always tried first (MAX-ALWAYS-ON).
+                    provider = claude,
                     model = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.ClaudeModel,
                 },
                 gradedToday,
@@ -323,6 +322,8 @@ public static class AiUsageAdminEndpoints
         });
 
         // Update mode + thresholds. Partial: null leaves a field unchanged.
+        // MAX-ALWAYS-ON: only auto/claude are accepted (both mean "Max first");
+        // thresholds and the quota marker are still stored but inert.
         group.MapPut("/writing-provider", async Task<IResult> (
             WritingAiProviderUpdateRequest request,
             LearnerDbContext db,
@@ -333,8 +334,8 @@ public static class AiUsageAdminEndpoints
             if (request.Mode is not null)
             {
                 var m = request.Mode.Trim().ToLowerInvariant();
-                if (m is not ("auto" or "claude" or "codex"))
-                    return Results.BadRequest(new { error = "invalid_mode", message = "mode must be auto | claude | codex." });
+                if (m is not ("auto" or "claude"))
+                    return MaxAlwaysOn(400);
             }
             if (request.WarnPct is double w && (w <= 0 || w > 100))
                 return Results.BadRequest(new { error = "invalid_warn_pct", message = "warnPct must be in (0,100]." });
@@ -629,6 +630,7 @@ public static class AiUsageAdminEndpoints
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
+            if (!dto.IsActive && IsMaxSubscriptionRow(row)) return MaxAlwaysOn(409);
             row.Name = dto.Name?.Trim() ?? row.Name;
             row.Dialect = dto.Dialect;
             row.Category = dto.Category;
@@ -680,6 +682,7 @@ public static class AiUsageAdminEndpoints
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
+            if (IsMaxSubscriptionRow(row)) return MaxAlwaysOn(409);
             row.IsActive = false;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await SaveWithAuditAsync(db, http, "AiProviderDeactivated", row.Id, row.Code, ct);
@@ -1391,6 +1394,15 @@ public static class AiUsageAdminEndpoints
         });
         await db.SaveChangesAsync(ct);
     }
+
+    /// <summary>Owner hard rule MAX-ALWAYS-ON (2026-10-02): the Claude Max
+    /// subscription row can never be switched off or bypassed from admin.</summary>
+    private static bool IsMaxSubscriptionRow(AiProvider row)
+        => string.Equals(row.Code, OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Claude, StringComparison.OrdinalIgnoreCase);
+
+    private static ApiErrorResult MaxAlwaysOn(int statusCode)
+        => new(statusCode, "max_subscription_always_on",
+            "The Claude Max subscription route (writing-claude-sub) is always on by owner rule; it cannot be switched off, forced to Codex or bypassed.");
 
     private static bool RequiresDefaultModel(bool isActive, AiProviderCategory category, AiProviderDialect dialect)
         => isActive

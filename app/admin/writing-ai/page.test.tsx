@@ -1,9 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import type { WritingAiProviderStatus } from '@/lib/ai-management-api';
 
-const { mockFetchProvider, mockUpdateProvider } = vi.hoisted(() => ({
+const { mockFetchProvider } = vi.hoisted(() => ({
   mockFetchProvider: vi.fn(),
-  mockUpdateProvider: vi.fn(),
 }));
 
 vi.mock('@/lib/ai-management-api', async () => {
@@ -11,7 +10,6 @@ vi.mock('@/lib/ai-management-api', async () => {
   return {
     ...actual,
     fetchWritingAiProvider: mockFetchProvider,
-    updateWritingAiProvider: mockUpdateProvider,
   };
 });
 
@@ -47,17 +45,20 @@ function providerStatus(overrides: Partial<WritingAiProviderStatus> = {}): Writi
   };
 }
 
-describe('WritingAiProviderPage', () => {
+describe('WritingAiProviderPage — Claude Max always on', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('labels the provider modes with the current chain', async () => {
+  it('states the hard rule and offers no provider control', async () => {
     mockFetchProvider.mockResolvedValue(providerStatus());
     render(<WritingAiProviderPage />);
 
-    expect(await screen.findByRole('option', { name: 'Automatic — Claude Max primary, Codex fallback' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'GPT-6.1 Sol (Codex) — force fallback' })).toBeInTheDocument();
+    expect(await screen.findByText(/Claude Max subscription — always tried first \(hard rule\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /apply|clear/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/force fallback/i)).not.toBeInTheDocument();
   });
 
   it('treats a high weekly usage estimate as information only', async () => {
@@ -65,20 +66,17 @@ describe('WritingAiProviderPage', () => {
     render(<WritingAiProviderPage />);
 
     expect(await screen.findByText('High weekly usage estimate.')).toBeInTheDocument();
-    expect(screen.queryByText('Failover active.')).not.toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/fails? ?over at/i);
+    expect(document.body.textContent).not.toMatch(/fails? ?over at|failover active/i);
   });
 
-  it('shows the failover banner only for a recorded quota refusal', async () => {
+  it('never shows a failover banner, even if an older server reports one', async () => {
     mockFetchProvider.mockResolvedValue(providerStatus({
       failoverActive: true,
       quotaExceededUntil: '2026-10-05T00:00:00Z',
-      currentPrimary: { provider: 'anthropic', model: 'claude-opus-5-5' },
     }));
     render(<WritingAiProviderPage />);
 
-    expect(await screen.findByText('Failover active.')).toBeInTheDocument();
-    expect(screen.getByText(/Claude Max reported a quota or rate-limit refusal/)).toBeInTheDocument();
-    expect(screen.queryByText('High weekly usage estimate.')).not.toBeInTheDocument();
+    expect(await screen.findByText('Provider chain')).toBeInTheDocument();
+    expect(screen.queryByText(/failover active/i)).not.toBeInTheDocument();
   });
 });
