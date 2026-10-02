@@ -36,21 +36,6 @@ on:
         required: false
         default: ""
         type: string
-      qa_source_submission:
-        description: "Owned source submission UUID for live QA; the original submission is not changed"
-        required: false
-        default: ""
-        type: string
-      qa_retry_submission:
-        description: "Owner-authorized existing failed QA UUID to resume once; no new letter"
-        required: false
-        default: ""
-        type: string
-      verify_subscription_grading:
-        description: "Owner-authorized one-assessment live QA; temporarily use Codex subscription and restore provider mode"
-        required: false
-        default: false
-        type: boolean
       verify_production_report:
         description: "Read-only real browser check against the live site; no submission, model call, or credit debit"
         required: false
@@ -117,25 +102,10 @@ jobs:
           cp scripts/qa/writing-grading-live.mjs "$RUNNER_TEMP/writing-browser/check.mjs"
           node "$RUNNER_TEMP/writing-browser/check.mjs"
 
-  production-grading-qa:
-    name: Authorized subscription-only Writing QA
-    if: ${{ inputs.verify_subscription_grading == true && inputs.verify_production_report != true }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Verify persisted grade report and idempotent retry
-        env:
-          ADMIN_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_ADMIN_PASSWORD }}
-          QA_EMAIL: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_EMAIL }}
-          QA_PASSWORD: ${{ secrets.OET_WRITING_INCIDENT_LEARNER_PASSWORD }}
-          TARGET_SUBMISSION_ID: ${{ inputs.qa_source_submission }}
-          RETRY_SUBMISSION_ID: ${{ inputs.qa_retry_submission }}
-        run: node scripts/qa/writing-grading-live.mjs
+  # RULE MAX-ALWAYS-ON (owner, 2 Oct 2026): the former `production-grading-qa` job flipped the Writing
+  # provider mode to Codex ("subscription-only QA"). Forcing any provider over Max is forbidden and the
+  # admin API now refuses it (400 max_subscription_always_on), so the job and its inputs were removed.
+  # The live proof of the failover levels is the fault-flag runs of writing-prod-qa.yml.
 
   production-diagnostics:
     name: Read-only Writing failure diagnostics
