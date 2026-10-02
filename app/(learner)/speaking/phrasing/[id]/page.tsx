@@ -1,35 +1,33 @@
 'use client';
 
 import { LearnerNavActions } from "@/components/layout/learner-dashboard-shell";
+import { LearnerPageHero } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, cardClassName } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
 import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ProgressBar } from '@/components/ui/progress';
+import { PageSkeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchPhrasingData } from '@/lib/api';
 import type { PhrasingSegment } from '@/lib/mock-data';
-import { getCelebrateMotion, getMicroHover, getMicroTap, getProgressFillTransition, prefersReducedMotion } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import {
-    AlertCircle, ChevronLeft, ChevronRight, Loader2, MessageSquare, Mic, Play, RotateCcw, Volume2, Zap
+    AlertCircle, ChevronLeft, ChevronRight, MessageSquare, Volume2, Zap
 } from 'lucide-react';
-import { motion, useReducedMotionConfig } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
 function BetterPhrasingContent() {
-  const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
-  const microHover = getMicroHover(reducedMotion);
-  const microTap = getMicroTap(reducedMotion);
-  const progressTransition = getProgressFillTransition(reducedMotion);
-  const celebrateMotion = getCelebrateMotion(reducedMotion);
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id;
   const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   // --- Data State ---
-  const [, setTitle] = useState('');
+  const [title, setTitle] = useState('');
   const [segments, setSegments] = useState<PhrasingSegment[]>([]);
   const [disclaimer, setDisclaimer] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
@@ -37,9 +35,6 @@ function BetterPhrasingContent() {
 
   // --- UI State ---
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [hasRecorded, setHasRecorded] = useState(false);
-  const [playbackActive, setPlaybackActive] = useState(false);
 
   useEffect(() => {
     fetchPhrasingData(id)
@@ -59,7 +54,6 @@ function BetterPhrasingContent() {
   const handleNext = () => {
     if (currentIndex < segments.length - 1) {
       setCurrentIndex(prev => prev + 1);
-      setHasRecorded(false);
     } else {
       router.push(`/speaking/results/${id}`);
     }
@@ -68,175 +62,113 @@ function BetterPhrasingContent() {
   const handlePrev = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
-      setHasRecorded(false);
-    }
-  };
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      setHasRecorded(true);
-    } else {
-      setIsRecording(true);
     }
   };
 
   if (loading) {
     return (
       <>
-        <div className="max-w-3xl mx-auto p-6 space-y-6">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
-        </div>
+        <LearnerSkeleton variant="hero" />
+        <LearnerSkeleton variant="card-grid" />
       </>
     );
   }
 
   if (error || segments.length === 0) {
-    return (
-      <>
-        <InlineAlert variant="error">Could not load phrasing data. Please try again.</InlineAlert>
-      </>
-    );
+    return <ErrorState message="Could not load phrasing data. Please try again." />;
   }
 
   return (
     <>
       <LearnerNavActions>
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-muted">
+          <span className="text-xs font-bold tabular-nums text-muted">
             Segment {currentIndex + 1} of {segments.length}
           </span>
-          <div className="w-32 h-2 bg-background-light rounded-full overflow-hidden hidden md:block">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={progressTransition}
-              className="h-full bg-primary"
-            />
-          </div>
+          <ProgressBar value={progress} ariaLabel="Phrasing review progress" className="hidden w-32 md:block" />
         </div>
       </LearnerNavActions>
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {disclaimer ? (
-            <InlineAlert variant="info">{disclaimer}</InlineAlert>
-          ) : null}
-          <MotionFadeSwitch activeKey={currentSegment.id} className="space-y-6">
-              {/* Original Phrase Card */}
-              <Card className="p-8">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-background-light flex items-center justify-center">
-                    <MessageSquare className="w-4 h-4 text-muted" />
-                  </div>
-                  <h2 className="eyebrow text-muted">Your Original Phrase</h2>
-                </div>
-                <p className="text-xl font-medium text-navy italic leading-relaxed">
-                  &quot;{currentSegment.originalPhrase}&quot;
-                </p>
 
-                <div className="mt-8 pt-8 border-t border-border">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" aria-hidden />
-                    <div>
-                      <h3 className="eyebrow text-warning-strong mb-1">Issue Explanation</h3>
-                      <p className="text-sm text-muted leading-relaxed">{currentSegment.issueExplanation}</p>
-                    </div>
-                  </div>
-                </div>
-              </Card>
+      <LearnerPageHero
+        eyebrow="Phrasing review"
+        icon={MessageSquare}
+        accent="speaking"
+        title={title}
+      />
 
-              {/* Stronger Alternative Card */}
-              <section className="bg-navy dark:bg-surface dark:border dark:border-border rounded-surface p-8 text-white shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10" aria-hidden>
-                  <Zap className="w-32 h-32" />
-                </div>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-6">
-                    <Zap className="w-5 h-5 text-primary shrink-0" aria-hidden />
-                    <h2 className="eyebrow text-primary">Stronger Alternative</h2>
-                  </div>
-                  <p className="text-2xl font-black mb-8 leading-tight tracking-tight">
-                    {currentSegment.strongerAlternative}
-                  </p>
-                  <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Volume2 className="w-4 h-4 text-primary" />
-                      <h3 className="eyebrow text-white/60">Drill Prompt</h3>
-                    </div>
-                    <p className="text-sm text-white/80 leading-relaxed">{currentSegment.drillPrompt}</p>
-                  </div>
-                </div>
-              </section>
+      {disclaimer ? (
+        <InlineAlert variant="info">{disclaimer}</InlineAlert>
+      ) : null}
 
-              {/* Repeat Drill Interaction */}
-              <Card className="p-8 flex flex-col items-center text-center">
-                <h3 className="text-sm font-bold text-navy uppercase tracking-widest mb-6">Practice Improved Phrasing</h3>
-                <div className="flex items-center gap-8 mb-8">
-                  <motion.button
-                    whileHover={microHover}
-                    whileTap={microTap}
-                    onClick={toggleRecording}
-                    aria-label={isRecording ? 'Stop recording' : 'Start recording your drill'}
-                    aria-pressed={isRecording}
-                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-lg ${isRecording ? 'bg-danger motion-safe:animate-pulse' : 'bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100'}`}
-                  >
-                    <Mic className={`w-8 h-8 text-white ${isRecording ? 'motion-safe:animate-pulse' : ''}`} aria-hidden />
-                  </motion.button>
-                  {hasRecorded && (
-                    <motion.button
-                      {...celebrateMotion}
-                      onClick={() => setPlaybackActive(!playbackActive)}
-                      aria-label={playbackActive ? 'Restart playback' : 'Play your recording'}
-                      className="w-14 h-14 rounded-full bg-background-light text-muted flex items-center justify-center hover:bg-border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200"
-                    >
-                      {playbackActive ? <RotateCcw className="w-6 h-6" aria-hidden /> : <Play className="w-6 h-6 fill-current ml-1" aria-hidden />}
-                    </motion.button>
-                  )}
-                </div>
-                <p className="eyebrow text-muted">
-                  {isRecording ? 'Recording your drill...' : hasRecorded ? 'Drill complete! Review or move to next.' : 'Tap to start repeat drill'}
-                </p>
-              </Card>
-          </MotionFadeSwitch>
-        </div>
-      </div>
-
-      {/* Footer Controls */}
-      <footer className="bg-surface border-t border-border p-6 z-20 shrink-0">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Button variant="ghost" onClick={handlePrev} disabled={currentIndex === 0}>
-            <ChevronLeft className="w-5 h-5" /> Previous
-          </Button>
-
-          <div className="flex items-center gap-2">
-            {segments.map((_, i) => (
-              <div
-                key={i}
-                className={`w-2 h-2 rounded-full transition-[width,background-color] duration-300 ${i === currentIndex ? 'bg-primary w-6' : 'bg-border'}`}
-              />
-            ))}
+      <MotionFadeSwitch activeKey={currentSegment.id} className="space-y-6">
+        {/* Original Phrase Card */}
+        <Card padding="lg">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-background-light">
+              <MessageSquare className="h-4 w-4 text-muted" aria-hidden="true" />
+            </span>
+            <h2 className="eyebrow text-muted">Your Original Phrase</h2>
           </div>
+          <p className="text-xl font-medium italic leading-relaxed text-navy">
+            &quot;{currentSegment.originalPhrase}&quot;
+          </p>
 
-          <Button variant="ghost" onClick={handleNext}>
-            {currentIndex === segments.length - 1 ? 'Finish Review' : 'Next Segment'} <ChevronRight className="w-5 h-5" />
-          </Button>
+          <div className="mt-8 border-t border-border pt-8">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
+              <div>
+                <h3 className="eyebrow mb-1 text-warning-strong">Issue Explanation</h3>
+                <p className="text-sm leading-relaxed text-muted">{currentSegment.issueExplanation}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Stronger Alternative Card: a tinted surface, not a second dark hero. */}
+        <section className={cn(cardClassName({ padding: 'lg' }), 'border-primary/30 bg-primary/5')}>
+          <div className="mb-6 flex items-center gap-3">
+            <Zap className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+            <h2 className="eyebrow text-primary">Stronger Alternative</h2>
+          </div>
+          <p className="mb-8 text-2xl font-bold leading-tight tracking-tight text-navy">
+            {currentSegment.strongerAlternative}
+          </p>
+          <div className="border-t border-primary/20 pt-6">
+            <div className="mb-3 flex items-center gap-3">
+              <Volume2 className="h-4 w-4 text-primary" aria-hidden="true" />
+              <h3 className="eyebrow text-muted">Drill Prompt</h3>
+            </div>
+            <p className="text-sm leading-relaxed text-navy/80">{currentSegment.drillPrompt}</p>
+          </div>
+        </section>
+      </MotionFadeSwitch>
+
+      {/* Segment controls */}
+      <nav aria-label="Phrasing segments" className={cn(cardClassName({ padding: 'md' }), 'flex items-center justify-between gap-3')}>
+        <Button variant="ghost" onClick={handlePrev} disabled={currentIndex === 0}>
+          <ChevronLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" /> Previous
+        </Button>
+
+        <div className="hidden items-center gap-2 sm:flex" aria-hidden="true">
+          {segments.map((_, i) => (
+            <span
+              key={i}
+              className={`h-2 rounded-full transition-colors duration-300 ${i === currentIndex ? 'w-6 bg-primary' : 'w-2 bg-border'}`}
+            />
+          ))}
         </div>
-      </footer>
+
+        <Button variant="ghost" onClick={handleNext}>
+          {currentIndex === segments.length - 1 ? 'Finish Review' : 'Next Segment'} <ChevronRight className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
+        </Button>
+      </nav>
     </>
   );
 }
 
 export default function BetterPhrasingView() {
   return (
-    <Suspense fallback={
-      <>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        </div>
-      </>
-    }>
+    <Suspense fallback={<PageSkeleton />}>
       <BetterPhrasingContent />
     </Suspense>
   );

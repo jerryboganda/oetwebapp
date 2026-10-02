@@ -1,23 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
-import { ClipboardList, MessageCircleQuestion, Sparkles } from 'lucide-react';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { BookOpen, ClipboardList, MessageCircleQuestion, Sparkles } from 'lucide-react';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
-import { LearnerSurfaceCard } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { FREE_SPEAKING_SAMPLE_COPY } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
 import {
   speakingCategoryFilterOptions,
   type SpeakingPrimaryCategory,
 } from '@/lib/speaking/category-taxonomy';
+import { CRITERION_LABEL, type SpeakingCriterionCode } from '@/lib/api/speaking-assessments';
 import {
   listLearnerRolePlayCards,
   type LearnerRolePlayCardSummary,
@@ -26,6 +28,52 @@ import {
   SPEAKING_ASSESSMENT_CRITERIA_HREF,
   SPEAKING_INTRO_QUESTIONS_HREF,
 } from '@/lib/speaking-candidate-resources';
+
+const REFERENCE_CARDS: LearnerSurfaceCardModel[] = [
+  {
+    kind: 'navigation',
+    sourceType: 'frontend_navigation',
+    accent: 'speaking',
+    eyebrow: 'Reference',
+    eyebrowIcon: ClipboardList,
+    title: 'Speaking Assessment Criteria',
+    description: 'The 9 criteria your role-plays are assessed against, with 4 linguistic bands and 5 clinical indicators. Same for all professions.',
+    metaItems: [
+      { icon: ClipboardList, label: '9 sections' },
+      { icon: ClipboardList, label: 'Language + clinical' },
+    ],
+    primaryAction: {
+      label: 'Open Assessment Criteria',
+      href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
+    },
+  },
+  {
+    kind: 'navigation',
+    sourceType: 'frontend_navigation',
+    accent: 'speaking',
+    eyebrow: 'Reference',
+    eyebrowIcon: MessageCircleQuestion,
+    title: 'Speaking Intro Questions',
+    description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+    metaItems: [
+      { icon: MessageCircleQuestion, label: '12 questions' },
+      { icon: MessageCircleQuestion, label: 'All professions' },
+    ],
+    primaryAction: {
+      label: 'Open Intro Questions',
+      href: SPEAKING_INTRO_QUESTIONS_HREF,
+    },
+  },
+];
+
+function professionLabel(professionId: string) {
+  return WRITING_PROFESSION_LABELS[professionId as keyof typeof WRITING_PROFESSION_LABELS] ?? professionId;
+}
+
+/** Cards carry criterion codes (`informationGiving`); learners read the criterion's name. */
+function criterionLabel(code: string) {
+  return CRITERION_LABEL[code as SpeakingCriterionCode] ?? code;
+}
 
 // The candidate-visible card taxonomy is the only learner filter. Profession
 // is never a learner filter (owner, 23 Sep 2026): the server scopes the
@@ -79,11 +127,7 @@ export default function SpeakingTaskSelection() {
       // The count is server-derived from the same filters that populate the
       // list — display it verbatim, never compute it on the client.
       setTotalCount(response.totalCount);
-      const professionLabel = response.appliedProfessionId
-        ? (WRITING_PROFESSION_LABELS[response.appliedProfessionId as keyof typeof WRITING_PROFESSION_LABELS]
-          ?? response.appliedProfessionId)
-        : null;
-      setAppliedProfessionLabel(professionLabel);
+      setAppliedProfessionLabel(response.appliedProfessionId ? professionLabel(response.appliedProfessionId) : null);
     } catch {
       if (requestId !== requestIdRef.current) return;
       setError('Could not load speaking cards. Please try again.');
@@ -119,65 +163,33 @@ export default function SpeakingTaskSelection() {
 
   return (
     <>
-      <div className="space-y-6">
-        <MotionSection>
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-navy sm:text-xl">Prepare for your OET Speaking</h2>
-            <p className="text-sm text-muted sm:text-sm">
-              Review the assessment criteria and the common introductory questions used across professions.
-            </p>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <LearnerSurfaceCard
-              card={{
-                kind: 'navigation',
-                sourceType: 'frontend_navigation',
-                accent: 'primary',
-                eyebrow: 'Reference',
-                eyebrowIcon: ClipboardList,
-                title: 'Speaking Assessment Criteria',
-                description: 'The 9 criteria your role-plays are assessed against, with 4 linguistic bands and 5 clinical indicators. Same for all professions.',
-                metaItems: [
-                  { icon: ClipboardList, label: '9 sections' },
-                  { icon: ClipboardList, label: 'Language + clinical' },
-                ],
-                primaryAction: {
-                  label: 'Open Assessment Criteria',
-                  href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
-                },
-              }}
-            />
-            <LearnerSurfaceCard
-              card={{
-                kind: 'navigation',
-                sourceType: 'frontend_navigation',
-                accent: 'primary',
-                eyebrow: 'Reference',
-                eyebrowIcon: MessageCircleQuestion,
-                title: 'Speaking Intro Questions',
-                description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
-                metaItems: [
-                  { icon: MessageCircleQuestion, label: '12 questions' },
-                  { icon: MessageCircleQuestion, label: 'All professions' },
-                ],
-                primaryAction: {
-                  label: 'Open Intro Questions',
-                  href: SPEAKING_INTRO_QUESTIONS_HREF,
-                },
-              }}
-            />
-          </div>
-        </MotionSection>
+      <LearnerPageHero
+        eyebrow="Practice Library"
+        icon={BookOpen}
+        accent="speaking"
+        title="Prepare for your OET Speaking"
+        description="Review the assessment criteria and the common introductory questions used across professions."
+      />
 
-        <FreeSampleLauncher
-          subtest="speaking"
-          icon={Sparkles}
-          testId="speaking-library-free-sample"
-          title="Free Speaking Mock"
-          description={FREE_SPEAKING_SAMPLE_COPY}
-          className=""
-        />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {REFERENCE_CARDS.map((card, index) => (
+          <MotionItem key={card.title} delayIndex={index} className="h-full">
+            <LearnerSurfaceCard card={card} />
+          </MotionItem>
+        ))}
+      </div>
 
+      <FreeSampleLauncher
+        subtest="speaking"
+        icon={Sparkles}
+        testId="speaking-library-free-sample"
+        title="Free Speaking Mock"
+        description={FREE_SPEAKING_SAMPLE_COPY}
+        className=""
+      />
+
+      {/* The picker and its Apply step read as one control. */}
+      <div className="space-y-3">
         <FilterBar
           groups={FILTER_GROUPS}
           selected={draft}
@@ -194,69 +206,70 @@ export default function SpeakingTaskSelection() {
             </Button>
           )}
         </div>
+      </div>
 
-        {error ? (
-          // Retryable error state ONLY — never rendered alongside the empty
-          // or loading state below (that contradictory double-render was
-          // the bug: an error banner PLUS "No cards available").
-          <InlineAlert
-            variant="error"
-            action={(
-              <Button type="button" variant="outline" size="sm" onClick={() => fetchCards(applied)}>
-                Retry
-              </Button>
-            )}
-          >
-            {error}
-          </InlineAlert>
-        ) : loading ? (
+      {error ? (
+        // Retryable error state ONLY — never rendered alongside the empty
+        // or loading state below (that contradictory double-render was
+        // the bug: an error banner PLUS "No cards available").
+        <InlineAlert
+          variant="error"
+          action={(
+            <Button type="button" variant="outline" size="sm" onClick={() => fetchCards(applied)}>
+              Retry
+            </Button>
+          )}
+        >
+          {error}
+        </InlineAlert>
+      ) : loading ? (
+        <div className="grid grid-cols-1 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : cards.length === 0 ? (
+        <EmptyState
+          icon={<BookOpen className="h-8 w-8" />}
+          title={appliedTotal > 0 ? 'No cards available for these filters' : 'No speaking cards available'}
+          description={
+            appliedTotal > 0
+              ? 'No published cards match this card type yet. Clear the filters to browse everything.'
+              : 'Speaking role plays will appear here once they are published.'
+          }
+          action={appliedTotal > 0 ? { label: 'Clear all filters', onClick: handleClear } : undefined}
+        />
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-muted" data-testid="speaking-available-count" aria-live="polite">
+            <span className="font-bold tabular-nums text-navy">{totalCount ?? cards.length}</span>
+            {' '}available Speaking card{(totalCount ?? cards.length) === 1 ? '' : 's'}
+            {appliedProfessionLabel ? ` for ${appliedProfessionLabel}` : ''}
+            {single(applied, 'category') ? ` · ${single(applied, 'category')}` : ''}.
+            {' '}Each card uses 2 AI credits.
+          </p>
           <div className="grid grid-cols-1 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : cards.length === 0 ? (
-          <EmptyState
-            title={appliedTotal > 0 ? 'No cards available for these filters' : 'No speaking cards available'}
-            description={
-              appliedTotal > 0
-                ? 'No published cards match this card type yet. Clear the filters to browse everything.'
-                : 'Speaking role plays will appear here once they are published.'
-            }
-            action={appliedTotal > 0 ? { label: 'Clear all filters', onClick: handleClear } : undefined}
-          />
-        ) : (
-          <>
-            <p className="text-sm text-muted" data-testid="speaking-available-count" aria-live="polite">
-              <span className="font-bold text-navy">{totalCount ?? cards.length}</span>
-              {' '}available Speaking card{(totalCount ?? cards.length) === 1 ? '' : 's'}
-              {appliedProfessionLabel ? ` for ${appliedProfessionLabel}` : ''}
-              {single(applied, 'category') ? ` · ${single(applied, 'category')}` : ''}.
-              {' '}Each card uses 2 AI credits.
-            </p>
-            <div className="grid grid-cols-1 gap-4">
-              {cards.map((card, i) => (
-                <MotionItem
-                  key={card.cardId}
-                  delayIndex={i}
-                >
+            {cards.map((card, i) => {
+              const focus = (card.criteriaFocus ?? []).map(criterionLabel).join(', ');
+              return (
+                <MotionItem key={card.cardId} delayIndex={Math.min(i, 5)}>
                   <TaskCard
                     id={card.cardId}
                     title={card.scenarioTitle}
                     subtest="Speaking"
-                    profession={card.professionId}
-                    description={`Focus: ${(card.criteriaFocus ?? []).join(', ') || 'speaking control'} · ${card.primaryCategory ?? 'Other Cards'} · Uses 2 AI credits`}
+                    profession={professionLabel(card.professionId)}
+                    description={[focus ? `Focus: ${focus}` : null, card.primaryCategory ?? 'Other Cards', 'Uses 2 AI credits'].filter(Boolean).join(' · ')}
                     onStart={() => {
                       analytics.track('task_started', { taskId: card.cardId, subtest: 'speaking' });
                       window.location.href = `/speaking/roleplay/${encodeURIComponent(card.cardId)}`;
                     }}
                   />
                 </MotionItem>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 }

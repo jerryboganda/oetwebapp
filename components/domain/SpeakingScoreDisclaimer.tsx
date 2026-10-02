@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 const FALLBACK_TEXT =
   'Estimated score, not an official OET result. Use this as a practice indicator only.';
@@ -44,16 +45,14 @@ export function SpeakingScoreDisclaimer({ className }: SpeakingScoreDisclaimerPr
     };
   }, []);
 
+  // Same shape as InlineAlert, so it sits flush with the method note above it.
   return (
     <div
       role="note"
       aria-label="Speaking score disclaimer"
-      className={
-        'flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-navy ' +
-        (className ?? '')
-      }
+      className={cn('flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-4 text-sm text-navy shadow-sm', className)}
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
+      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
       <p className="leading-relaxed">{text}</p>
     </div>
   );

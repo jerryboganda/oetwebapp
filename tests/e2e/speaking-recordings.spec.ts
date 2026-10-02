@@ -19,7 +19,8 @@ test.describe('Speaking learner recordings list @learner @speaking', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ rows: [] }),
+        // The real shape: GET /v1/speaking/recordings/mine answers { recordings: [...] }.
+        body: JSON.stringify({ recordings: [] }),
       });
     });
 

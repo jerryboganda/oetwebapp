@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, Lock, Stethoscope } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import { ApiError, setActiveProfession } from '@/lib/api';
@@ -81,56 +85,56 @@ export default function SelectSpeakingProfessionPage() {
   if (locked) {
     return (
       <>
-        <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-          <header className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-navy">Your profession is locked</h1>
-            <p className="text-sm text-muted">
-              Your access was granted for a specific profession — the courses, videos and materials you can open are
-              tied to it, so it can no longer be changed from here once a package is on your account.
-            </p>
-          </header>
+        <LearnerPageHero
+          eyebrow="Speaking"
+          icon={Lock}
+          accent="speaking"
+          title="Your profession is locked"
+          description="Your access was granted for a specific profession — the courses, videos and materials you can open are tied to it, so it can no longer be changed from here once a package is on your account."
+        />
 
-          <Card className="space-y-3 p-4">
-            <p className="text-sm text-navy">
-              Our team can move you to a different profession and re-point your access. Message us with the profession
-              you need and we will sort it out.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild>
-                <a href={professionChangeHref} target="_blank" rel="noopener noreferrer">
-                  Request a change on WhatsApp
-                </a>
-              </Button>
-              <Button variant="outline" onClick={() => router.push('/dashboard')}>
-                Back to dashboard
-              </Button>
-            </div>
-          </Card>
-        </div>
+        <Card padding="md" className="space-y-3">
+          <p className="text-sm text-navy">
+            Our team can move you to a different profession and re-point your access. Message us with the profession
+            you need and we will sort it out.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild>
+              <a href={professionChangeHref} target="_blank" rel="noopener noreferrer">
+                Request a change on WhatsApp
+              </a>
+            </Button>
+            <Button variant="outline" onClick={() => router.push('/dashboard')}>
+              Back to dashboard
+            </Button>
+          </div>
+        </Card>
       </>
     );
   }
 
   return (
     <>
-      <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-navy">Choose your healthcare profession</h1>
-          <p className="text-sm text-muted">
-            OET Speaking is profession-specific. Pick the profession you will sit the exam in so we can show role-play
-            scenarios that match your real workplace.
-          </p>
-        </header>
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Stethoscope}
+        accent="speaking"
+        title="Choose your healthcare profession"
+        description="OET Speaking is profession-specific. Pick the profession you will sit the exam in so we can show role-play scenarios that match your real workplace."
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <Card className="space-y-3 p-4">
+      {!professionsLoading && options.length === 0 ? (
+        <EmptyState icon={<Stethoscope className="h-8 w-8" />} title="No professions available." description="Please contact support." />
+      ) : (
+        <Card padding="md">
           {professionsLoading ? (
-            <p className="text-sm text-muted">Loading professions…</p>
-          ) : options.length === 0 ? (
-            <p className="text-sm text-muted">No professions available. Please contact support.</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-busy="true" aria-label="Loading professions…">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11 rounded-control" />)}
+            </div>
           ) : (
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {options.map((option) => {
                 const isActive = selected === option.value;
                 return (
@@ -139,13 +143,14 @@ export default function SelectSpeakingProfessionPage() {
                       type="button"
                       aria-pressed={isActive}
                       onClick={() => setSelected(option.value)}
-                      className={`min-h-11 w-full rounded-lg border px-3 py-2 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-control border px-3 py-2 text-start text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isActive
-                          ? 'border-primary bg-primary/10 text-primary'
+                          ? 'border-primary bg-primary/10 font-semibold text-primary'
                           : 'border-border text-navy hover:border-primary/40 hover:bg-background-light'
                       }`}
                     >
                       {option.label}
+                      {isActive ? <Check className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
                     </button>
                   </li>
                 );
@@ -153,15 +158,15 @@ export default function SelectSpeakingProfessionPage() {
             </ul>
           )}
         </Card>
+      )}
 
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={() => router.push('/dashboard')} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={!selected || saving}>
-            {saving ? 'Saving…' : 'Save and continue'}
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => router.push('/dashboard')} disabled={saving}>
+          Cancel
+        </Button>
+        <Button onClick={handleConfirm} disabled={!selected || saving}>
+          {saving ? 'Saving…' : 'Save and continue'}
+        </Button>
       </div>
     </>
   );

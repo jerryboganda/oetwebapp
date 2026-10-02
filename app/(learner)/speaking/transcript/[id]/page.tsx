@@ -1,10 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { ErrorState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, RulebookFindingsPanel } from '@/components/domain';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
@@ -13,6 +17,7 @@ import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, fetchTranscript } from '@/lib/api';
 import type { MarkerType, SpeakingTranscriptReview, TranscriptMarker } from '@/lib/mock-data';
 import { auditSpeakingTranscript, inferSpeakingCardType } from '@/lib/rulebook';
+import { cn } from '@/lib/utils';
 
 const markerLabel: Record<MarkerType, string> = {
   pronunciation: 'Pronunciation',
@@ -25,7 +30,6 @@ const markerLabel: Record<MarkerType, string> = {
 
 export default function SpeakingTranscriptPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const resultId = params?.id;
 
   const [review, setReview] = useState<SpeakingTranscriptReview | null>(null);
@@ -99,190 +103,200 @@ export default function SpeakingTranscriptPage() {
     setCurrentTime(time);
   }, []);
 
-  if (loading) {
-    return (
-      <>
-        <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Skeleton className="h-[70vh] rounded-2xl" />
-          <Skeleton className="h-[70vh] rounded-2xl" />
-        </div>
-      </>
-    );
-  }
-
-  if (!review) {
-    return (
-      <>
-        <div className="mx-auto max-w-3xl px-4 py-8">
-          <InlineAlert variant="error">{error ?? 'Transcript review is unavailable.'}</InlineAlert>
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
-      <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {review.disclaimer ? <InlineAlert variant="info">{review.disclaimer}</InlineAlert> : null}
+      {/* The page heading renders in every state, so loading and failure keep their h1. */}
+      <LearnerPageHero
+        eyebrow="Speaking Evidence"
+        icon={Quote}
+        accent="speaking"
+        title="Review speaking evidence with the real transcript and waveform"
+        description="Review your transcript, waveform, and playback together to see exactly where to focus."
+        highlights={review ? [
+          { icon: Headphones, label: 'Audio', value: review.audioAvailable ? 'Available' : 'Transcript only' },
+          { icon: Volume2, label: 'Duration', value: `${Math.round(review.duration)} sec` },
+          { icon: Quote, label: 'Markers', value: `${allMarkers.length} flagged` },
+        ] : undefined}
+      />
 
-        <LearnerPageHero
-          eyebrow="Speaking Evidence"
-          icon={Quote}
-          accent="primary"
-          title="Review speaking evidence with the real transcript and waveform"
-          description="Review your transcript, waveform, and playback together to see exactly where to focus."
-          highlights={[
-            { icon: Headphones, label: 'Audio', value: review.audioAvailable ? 'Available' : 'Transcript only' },
-            { icon: Volume2, label: 'Duration', value: `${Math.round(review.duration)} sec` },
-            { icon: Quote, label: 'Markers', value: `${allMarkers.length} flagged` },
-          ]}
-        />
+      {loading ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+        </div>
+      ) : !review ? (
+        <ErrorState message={error ?? 'Transcript review is unavailable.'} />
+      ) : (
+        <>
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {review.disclaimer ? <InlineAlert variant="info">{review.disclaimer}</InlineAlert> : null}
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-            <LearnerSurfaceSectionHeader
-              eyebrow="Transcript"
-              title="Review the real conversation flow"
-              description="Each marker stays on the line where the issue happened, so you can hear it for yourself."
-              className="mb-4"
-            />
-
-            <SelectionToVocab source="speaking" sourceRefPrefix={`speaking:${resultId}`} className="space-y-4">
-              {review.transcript.map((line) => (
-                <div key={line.id} className="rounded-2xl border border-border bg-background-light p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="eyebrow text-muted">{line.speaker}</p>
-                      <p className="mt-2 text-sm leading-6 text-navy">{line.text}</p>
-                    </div>
-                    <span className="text-xs font-bold text-muted">{Math.round(line.startTime)}s</span>
-                  </div>
-                  {line.markers?.length ? (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {line.markers.map((marker) => (
-                        <button
-                          key={marker.id}
-                          onClick={() => setSelectedMarker(marker)}
-                          className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-primary"
-                        >
-                          {markerLabel[marker.type]}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </SelectionToVocab>
-          </div>
-
-          <div className="space-y-6">
-            {review.roleCard ? (
-              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <MotionSection className="min-w-0">
+              <Card padding="lg">
                 <LearnerSurfaceSectionHeader
-                  eyebrow="Role card context"
-                  title={review.roleCard.title}
-                  description="Candidate-facing card details are kept with the transcript so comments stay anchored to the task."
+                  eyebrow="Transcript"
+                  title="Review the real conversation flow"
+                  description="Each marker stays on the line where the issue happened, so you can hear it for yourself."
                   className="mb-4"
                 />
-                <div className="space-y-3 text-sm text-muted">
-                  <p><span className="font-bold text-navy">Setting:</span> {review.roleCard.setting}</p>
-                  <p><span className="font-bold text-navy">Patient:</span> {review.roleCard.patient}</p>
-                  <p><span className="font-bold text-navy">Task:</span> {review.roleCard.brief}</p>
-                </div>
-              </section>
-            ) : null}
 
-                        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <LearnerSurfaceSectionHeader
-                eyebrow="Audio Review"
-                title="Real waveform from the learner’s recording"
-                description="The waveform reflects your actual recording, so what you see matches what you hear."
-                className="mb-4"
-              />
-            
-              <div className="rounded-2xl border border-border bg-background-light p-4">
-                {review.audioAvailable && review.audioUrl && !lowBandwidthMode ? (
-                  <AudioPlayerWaveform
-                    audioUrl={review.audioUrl}
-                    onTimeUpdate={handleWaveformTimeUpdate}
-                    seekToTime={seekToTime}
-                  />
-                ) : review.audioAvailable && lowBandwidthMode ? (
-                  <div className="space-y-3">
-                    <div className="mb-4 flex items-center justify-between text-sm text-muted">
-                      <span>Low-bandwidth mode active</span>
-                      <span>{Math.round(currentTime)} / {Math.round(review.duration)} sec</span>
+                <SelectionToVocab source="speaking" sourceRefPrefix={`speaking:${resultId}`} className="space-y-3">
+                  {review.transcript.map((line) => (
+                    <div key={line.id} className="rounded-xl bg-background-light p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="eyebrow text-muted">{line.speaker}</p>
+                          <p className="mt-2 text-sm leading-6 text-navy">{line.text}</p>
+                        </div>
+                        <span className="shrink-0 text-xs font-bold tabular-nums text-muted">{Math.round(line.startTime)}s</span>
+                      </div>
+                      {line.markers?.length ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {line.markers.map((marker) => {
+                            const isSelected = selectedMarker?.id === marker.id;
+                            return (
+                              <button
+                                key={marker.id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => setSelectedMarker(marker)}
+                                className={cn(
+                                  'inline-flex min-h-11 items-center rounded-control border px-3 text-xs font-semibold text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:min-h-8',
+                                  isSelected ? 'border-primary bg-primary/15' : 'border-primary/20 bg-primary/10 hover:bg-primary/15',
+                                )}
+                              >
+                                {markerLabel[marker.type]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
+                  ))}
+                </SelectionToVocab>
+              </Card>
+            </MotionSection>
+
+            <div className="min-w-0 space-y-6">
+              {review.roleCard ? (
+                <MotionSection delayIndex={1}>
+                  <Card padding="lg">
+                    <LearnerSurfaceSectionHeader
+                      eyebrow="Role card context"
+                      title={review.roleCard.title}
+                      className="mb-4"
+                    />
+                    <div className="space-y-3 text-sm text-muted">
+                      <p><span className="font-bold text-navy">Setting:</span> {review.roleCard.setting}</p>
+                      <p><span className="font-bold text-navy">Patient:</span> {review.roleCard.patient}</p>
+                      <p><span className="font-bold text-navy">Task:</span> {review.roleCard.brief}</p>
+                    </div>
+                  </Card>
+                </MotionSection>
+              ) : null}
+
+              <MotionSection delayIndex={2}>
+                <Card padding="lg">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Audio Review"
+                    title="Real waveform from the learner’s recording"
+                    className="mb-4"
+                  />
+
+                  {review.audioAvailable && review.audioUrl && !lowBandwidthMode ? (
+                    <div className="rounded-xl bg-background-light p-4">
+                      <AudioPlayerWaveform
+                        audioUrl={review.audioUrl}
+                        onTimeUpdate={handleWaveformTimeUpdate}
+                        seekToTime={seekToTime}
+                      />
+                    </div>
+                  ) : review.audioAvailable && lowBandwidthMode ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm text-muted">
+                        <span>Low-bandwidth mode active</span>
+                        <span className="tabular-nums">{Math.round(currentTime)} / {Math.round(review.duration)} sec</span>
+                      </div>
+                      <InlineAlert variant="info">
+                        Audio waveform is hidden in low-bandwidth mode. Change this in audio settings.
+                      </InlineAlert>
+                    </div>
+                  ) : (
                     <InlineAlert variant="info">
-                      Audio waveform is hidden in low-bandwidth mode. Change this in audio settings.
+                      Audio is not available for this evaluation, so this page remains transcript-first.
                     </InlineAlert>
+                  )}
+                </Card>
+              </MotionSection>
+
+              <MotionSection delayIndex={3}>
+                <Card padding="lg">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Marker Detail"
+                    title={selectedMarker ? markerLabel[selectedMarker.type] : 'Choose a transcript marker'}
+                    description="Selected markers explain what happened and why it matters for your OET Speaking score."
+                    className="mb-4"
+                  />
+
+                  {selectedMarker ? (
+                    <div className="space-y-3">
+                      <div className="rounded-xl bg-background-light p-4">
+                        <p className="eyebrow text-muted">Flagged phrase</p>
+                        <p className="mt-2 text-sm font-bold text-navy">&quot;{selectedMarker.text}&quot;</p>
+                      </div>
+                      <div className="rounded-xl bg-background-light p-4">
+                        <p className="eyebrow text-muted">Suggestion</p>
+                        <p className="mt-2 text-sm leading-6 text-muted">{selectedMarker.suggestion}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="rounded-xl bg-background-light p-4 text-sm text-muted">
+                      Choose one of the transcript markers to inspect the feedback attached to that moment.
+                    </p>
+                  )}
+                </Card>
+              </MotionSection>
+
+              <MotionSection delayIndex={4}>
+                <RulebookFindingsPanel
+                  title="Rulebook Audit"
+                  subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
+                  findings={auditFindings}
+                  className="rounded-2xl"
+                />
+              </MotionSection>
+
+              <MotionSection delayIndex={5}>
+                <Card padding="lg">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Review Summary"
+                    title="Keep the next speaking actions close"
+                    className="mb-4"
+                  />
+                  <div className="space-y-3">
+                    <p className="rounded-xl bg-background-light p-4 text-sm text-muted">
+                      <span className="tabular-nums">{allMarkers.length}</span> transcript markers surfaced across pronunciation, fluency, grammar, vocabulary, empathy, and structure.
+                    </p>
+                    <Button variant="outline" fullWidth asChild>
+                      <Link href={`/speaking/phrasing/${resultId}`}>
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                        Open phrasing review
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" fullWidth asChild>
+                      <Link href="/speaking">
+                        <Volume2 className="h-4 w-4" aria-hidden="true" />
+                        Return to speaking home
+                      </Link>
+                    </Button>
                   </div>
-                ) : (
-                  <InlineAlert variant="info">
-                    Audio is not available for this evaluation, so this page remains transcript-first.
-                  </InlineAlert>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <LearnerSurfaceSectionHeader
-                eyebrow="Marker Detail"
-                title={selectedMarker ? markerLabel[selectedMarker.type] : 'Choose a transcript marker'}
-                description="Selected markers explain what happened and why it matters for your OET Speaking score."
-                className="mb-4"
-              />
-
-              {selectedMarker ? (
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-border bg-background-light p-4">
-                    <p className="eyebrow text-muted">Flagged phrase</p>
-                    <p className="mt-2 text-sm font-bold text-navy">&quot;{selectedMarker.text}&quot;</p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-background-light p-4">
-                    <p className="eyebrow text-muted">Suggestion</p>
-                    <p className="mt-2 text-sm leading-6 text-muted">{selectedMarker.suggestion}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                  Choose one of the transcript markers to inspect the feedback attached to that moment.
-                </div>
-              )}
-            </section>
-
-            <RulebookFindingsPanel
-              title="Rulebook Audit"
-              subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
-              findings={auditFindings}
-              className="rounded-2xl"
-            />
-
-            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-              <LearnerSurfaceSectionHeader
-                eyebrow="Review Summary"
-                title="Keep the next speaking actions close"
-                description="Ready for the next step? Your options stay close at hand."
-                className="mb-4"
-              />
-              <div className="space-y-3">
-                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                  {allMarkers.length} transcript markers surfaced across pronunciation, fluency, grammar, vocabulary, empathy, and structure.
-                </div>
-                <Button variant="outline" fullWidth onClick={() => router.push(`/speaking/phrasing/${resultId}`)}>
-                  <RefreshCw className="h-4 w-4" />
-                  Open phrasing review
-                </Button>
-                <Button variant="ghost" fullWidth onClick={() => router.push('/speaking')}>
-                  <Volume2 className="h-4 w-4" />
-                  Return to speaking home
-                </Button>
-              </div>
-            </section>
-          </div>
-        </section>
-      </div>
+                </Card>
+              </MotionSection>
+            </div>
+          </section>
+        </>
+      )}
     </>
   );
 }

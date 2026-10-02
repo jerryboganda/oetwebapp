@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
 import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -21,6 +21,43 @@ import {
   SPEAKING_INTRO_QUESTIONS_HREF,
 } from '@/lib/speaking-candidate-resources';
 
+const REFERENCE_CARDS: LearnerSurfaceCardModel[] = [
+  {
+    kind: 'navigation',
+    sourceType: 'frontend_navigation',
+    accent: 'speaking',
+    eyebrow: 'Reference · All professions',
+    eyebrowIcon: ClipboardList,
+    title: 'Speaking Assessment Criteria',
+    description: 'The 9 criteria your role-plays are assessed against, with 4 linguistic bands and 5 clinical indicators. Same for all professions.',
+    metaItems: [
+      { icon: ClipboardList, label: '9 sections' },
+      { icon: ClipboardList, label: 'Language + clinical' },
+    ],
+    primaryAction: {
+      label: 'Open Assessment Criteria',
+      href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
+    },
+  },
+  {
+    kind: 'navigation',
+    sourceType: 'frontend_navigation',
+    accent: 'speaking',
+    eyebrow: 'Reference · All professions',
+    eyebrowIcon: MessageCircleQuestion,
+    title: 'Speaking Intro Questions',
+    description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+    metaItems: [
+      { icon: MessageCircleQuestion, label: '12 questions' },
+      { icon: MessageCircleQuestion, label: 'All professions' },
+    ],
+    primaryAction: {
+      label: 'Open Intro Questions',
+      href: SPEAKING_INTRO_QUESTIONS_HREF,
+    },
+  },
+];
+
 /**
  * 23 Sep 2026 owner copy (exact): the Practice Library is a full card in the
  * same pattern as the Writing hub's practice card (WritingLandingCardItem).
@@ -29,7 +66,7 @@ function PracticeLibraryCard() {
   return (
     <Card padding="md" className="h-full" data-testid="speaking-practice-library-card">
       <CardContent className="flex h-full flex-col">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-background-light text-primary">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-skill-speaking/10 text-skill-speaking">
           <BookOpen className="h-5 w-5" aria-hidden="true" />
         </span>
         <h3 className="mt-3 text-base font-bold text-navy">Practice Library</h3>
@@ -41,9 +78,9 @@ function PracticeLibraryCard() {
         </p>
         <Link
           href="/speaking/selection"
-          className="mt-4 inline-flex items-center gap-1.5 rounded text-sm font-bold text-primary transition-colors hover:text-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="group mt-4 inline-flex min-h-11 items-center gap-1.5 self-start rounded-control text-sm font-bold text-primary transition-colors hover:text-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
-          Open practice library <span aria-hidden="true">→</span>
+          Open practice library <span aria-hidden="true" className="inline-block transition-transform duration-200 ease-standard group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none">→</span>
         </Link>
       </CardContent>
     </Card>
@@ -82,19 +119,11 @@ export default function SpeakingHome() {
   }, [authLoading, needsProfession]);
 
   if (loading) {
-    return (
-      <>
-        <LearnerSkeleton variant="dashboard" />
-      </>
-    );
+    return <LearnerSkeleton variant="dashboard" />;
   }
 
-  const credits = home?.reviewCredits?.available ?? 0;
-  // Distinct cards on the platform (the recommended role play is also in the
-  // featured list) — shown in the hero; the cards themselves live in the library.
-  const practiceCardCount = new Set(
-    [home?.recommendedRolePlay?.id, ...(home?.featuredTasks ?? []).map((task) => task?.id)].filter(Boolean),
-  ).size;
+  // Real balance only: a failed load shows no chip rather than "0 available".
+  const credits = home?.reviewCredits?.available;
 
   // Resume an in-progress role play — kept because it's necessary for progress
   // (backend surfaces pastAttempts[].state='in_progress'/'draft').
@@ -106,7 +135,7 @@ export default function SpeakingHome() {
   const examCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'backend_task',
-    accent: 'indigo',
+    accent: 'speaking',
     eyebrow: 'AI Assessment',
     eyebrowIcon: Mic,
     title: 'Full AI Speaking Mock',
@@ -123,7 +152,7 @@ export default function SpeakingHome() {
   const tutorCard: LearnerSurfaceCardModel = {
     kind: 'task',
     sourceType: 'frontend_navigation',
-    accent: 'emerald',
+    accent: 'speaking',
     eyebrow: 'Live Tutor',
     eyebrowIcon: Video,
     title: 'Book a tutor as your patient',
@@ -145,71 +174,34 @@ export default function SpeakingHome() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Speaking"
-          icon={Mic}
-          accent="primary"
-          title="Get assessed by AI or book a live tutor"
-          description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
-          highlights={[
-            { icon: Star, label: 'AI credits', value: `${credits} available` },
-            { icon: Mic, label: 'Practice cards', value: practiceCardCount > 0 ? `${practiceCardCount} ready` : 'Browse library' },
-            { icon: Video, label: 'Live tutoring', value: '1-on-1 booking' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Mic}
+        accent="speaking"
+        title="Get assessed by AI or book a live tutor"
+        description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
+        highlights={credits != null ? [{ icon: Star, label: 'AI credits', value: `${credits} available` }] : undefined}
+      />
 
-        <CreditsGuideButton variant="banner" />
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {/* Same for every profession / package — not filtered by the practice library. */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'primary',
-              eyebrow: 'Reference · All professions',
-              eyebrowIcon: ClipboardList,
-              title: 'Speaking Assessment Criteria',
-              description: 'The 9 criteria your role-plays are assessed against, with 4 linguistic bands and 5 clinical indicators. Same for all professions.',
-              metaItems: [
-                { icon: ClipboardList, label: '9 sections' },
-                { icon: ClipboardList, label: 'Language + clinical' },
-              ],
-              primaryAction: {
-                label: 'Open Assessment Criteria',
-                href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
-              },
-            }}
-          />
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'primary',
-              eyebrow: 'Reference · All professions',
-              eyebrowIcon: MessageCircleQuestion,
-              title: 'Speaking Intro Questions',
-              description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
-              metaItems: [
-                { icon: MessageCircleQuestion, label: '12 questions' },
-                { icon: MessageCircleQuestion, label: 'All professions' },
-              ],
-              primaryAction: {
-                label: 'Open Intro Questions',
-                href: SPEAKING_INTRO_QUESTIONS_HREF,
-              },
-            }}
-          />
-        </section>
+      <CreditsGuideButton variant="banner" />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {/* Same for every profession / package — not filtered by the practice library. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {REFERENCE_CARDS.map((card, index) => (
+          <MotionItem key={card.title} delayIndex={index} className="h-full">
+            <LearnerSurfaceCard card={card} />
+          </MotionItem>
+        ))}
+      </div>
 
-        {/* Start Speaking (22 Sep 2026 handoff, item 3): fixed order — Free
-            Speaking Mock, then Practice Library (a full card, not a text
-            link), then the SEPARATE full two-card AI mock, then the gated
-            tutor booking. The library is not inlined here and never absorbs
-            the full AI mock. */}
+      {/* Start Speaking (22 Sep 2026 handoff, item 3): fixed order — Free
+          Speaking Mock, then Practice Library (a full card, not a text
+          link), then the SEPARATE full two-card AI mock, then the gated
+          tutor booking. The library is not inlined here and never absorbs
+          the full AI mock. */}
+      <MotionSection>
         <section aria-label="Start Speaking" data-tour="speaking-hub" className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="AI Assessment"
@@ -221,23 +213,21 @@ export default function SpeakingHome() {
               surfaces pastAttempts[].state='in_progress'. Shown first: picking
               up saved work outranks starting something new. */}
           {resumeAttempt ? (
-            <MotionSection>
-              <LearnerSurfaceCard card={{
-                kind: 'task',
-                sourceType: 'backend_task',
-                accent: 'indigo',
-                eyebrow: 'Resume Attempt',
-                eyebrowIcon: RefreshCw,
-                title: 'Continue your in-progress role play',
-                description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
-                metaItems: [
-                  { icon: Clock, label: 'Paused' },
-                  { icon: RefreshCw, label: 'In progress' },
-                ],
-                primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
-                secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
-              }} />
-            </MotionSection>
+            <LearnerSurfaceCard card={{
+              kind: 'task',
+              sourceType: 'backend_task',
+              accent: 'speaking',
+              eyebrow: 'Resume Attempt',
+              eyebrowIcon: RefreshCw,
+              title: 'Continue your in-progress role play',
+              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
+              metaItems: [
+                { icon: Clock, label: 'Paused' },
+                { icon: RefreshCw, label: 'In progress' },
+              ],
+              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
+              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
+            }} />
           ) : null}
 
           {/* Free Mocks: ONE free AI-graded role-play card per learner, for the
@@ -252,19 +242,19 @@ export default function SpeakingHome() {
             className=""
           />
 
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <MotionSection>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <MotionItem className="h-full">
               <PracticeLibraryCard />
-            </MotionSection>
-            <MotionSection delayIndex={1}>
+            </MotionItem>
+            <MotionItem delayIndex={1} className="h-full">
               <LearnerSurfaceCard card={examCard} />
-            </MotionSection>
-            <MotionSection delayIndex={2}>
+            </MotionItem>
+            <MotionItem delayIndex={2} className="h-full">
               <LearnerSurfaceCard card={tutorCard} />
-            </MotionSection>
-          </section>
+            </MotionItem>
+          </div>
         </section>
-      </div>
+      </MotionSection>
     </>
   );
 }

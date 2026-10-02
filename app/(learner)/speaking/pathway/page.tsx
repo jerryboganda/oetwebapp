@@ -8,11 +8,17 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Compass } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { CountUp } from '@/components/ui/count-up';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { ProgressBar } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 import {
   type SpeakingPathwayStage,
   type SpeakingPathway as SpeakingPathwayResponse,
@@ -29,6 +35,11 @@ function stateBadge(state: SpeakingPathwayStage['state']) {
     default:
       return <Badge variant="muted">locked</Badge>;
   }
+}
+
+/** `OrientationVideo` → `Orientation Video`: the activity code, read as words. */
+function activityLabel(kind: string) {
+  return kind.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
 export default function SpeakingPathwayPage() {
@@ -58,74 +69,75 @@ export default function SpeakingPathwayPage() {
     };
   }, []);
 
+  const progressPercent = data ? Math.min(100, Math.max(0, data.progressPercent)) : 0;
+
   return (
     <>
-      <div className="mx-auto max-w-4xl space-y-6 py-8">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">
-            {data?.title ?? 'Your Speaking pathway'}
-          </h1>
-          <p className="text-muted">
-            A guided sequence of warm-ups, drills, and full role-plays. Complete each stage to
-            unlock the next.
-          </p>
-        </header>
+      <LearnerPageHero
+        eyebrow="Speaking"
+        icon={Compass}
+        accent="speaking"
+        title={data?.title ?? 'Your Speaking pathway'}
+        description="A guided sequence of warm-ups, drills, and full role-plays. Complete each stage to unlock the next."
+      />
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-        {!data ? (
-          <Skeleton className="h-64 w-full rounded-xl" />
-        ) : (
-          <>
-            <Card className="p-4">
+      {/* An error replaces the skeleton: a failed load never looks like one still in flight. */}
+      {error ? (
+        <InlineAlert variant="error">{error}</InlineAlert>
+      ) : !data ? (
+        <LearnerSkeleton variant="list" />
+      ) : (
+        <>
+          <MotionSection>
+            <Card padding="md">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-sm text-muted">Progress</div>
-                  <div className="text-lg font-semibold text-foreground">
+                  <p className="eyebrow text-muted">Progress</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-navy">
                     {data.completedStageCount} / {data.totalStages} stages
-                  </div>
+                  </p>
                 </div>
-                <div className="text-3xl font-mono font-semibold text-primary">
-                  {Math.round(data.progressPercent)}%
-                </div>
+                <p className="text-3xl font-bold text-primary">
+                  <CountUp value={progressPercent} suffix="%" />
+                </p>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-background-light">
-                <div
-                  className="h-full bg-primary transition-[width,background-color] duration-300"
-                  style={{ width: `${Math.min(100, Math.max(0, data.progressPercent))}%` }}
-                />
-              </div>
+              <ProgressBar value={progressPercent} ariaLabel="Speaking pathway progress" className="mt-3" />
             </Card>
+          </MotionSection>
 
-            <ol className="space-y-3">
-              {data.stages.map((stage, idx) => (
-                <li key={stage.code}>
-                  <Card className="p-4">
+          <ol className="space-y-3">
+            {data.stages.map((stage, idx) => (
+              <li key={stage.code}>
+                <MotionItem delayIndex={Math.min(idx, 5)}>
+                  <Card
+                    padding="md"
+                    className={cn(stage.state === 'in_progress' && 'border-primary/40 ring-1 ring-primary/20')}
+                  >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-1">
+                      <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-mono text-muted">
+                          <span className="text-xs font-semibold tabular-nums text-muted">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
-                          <span className="font-medium text-foreground">{stage.title}</span>
+                          <h2 className="text-base font-semibold text-navy">{stage.title}</h2>
                           {stateBadge(stage.state)}
-                          <Badge variant="outline">{stage.activityKind}</Badge>
+                          <Badge variant="outline">{activityLabel(stage.activityKind)}</Badge>
                         </div>
                         <p className="text-sm text-muted">{stage.description}</p>
                       </div>
                       {stage.actionHref && stage.state !== 'locked' ? (
-                        <Button asChild variant={stage.state === 'in_progress' ? 'primary' : 'outline'} size="sm">
+                        <Button asChild variant={stage.state === 'in_progress' ? 'primary' : 'outline'} size="sm" className="shrink-0 self-start sm:self-auto">
                           <Link href={stage.actionHref}>{stage.actionLabel ?? 'Continue'}</Link>
                         </Button>
                       ) : null}
                     </div>
                   </Card>
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
-      </div>
+                </MotionItem>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </>
   );
 }

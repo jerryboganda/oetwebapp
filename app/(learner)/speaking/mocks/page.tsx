@@ -12,6 +12,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 export default function RetiredSpeakingMocksIndexPage() {
   const router = useRouter();
@@ -22,15 +24,15 @@ export default function RetiredSpeakingMocksIndexPage() {
   }, [router]);
 
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center text-center" role="status">
+    <Card padding="lg" className="flex flex-col items-center py-12 text-center" role="status">
       <Loader2 className="h-6 w-6 animate-spin text-muted" aria-hidden="true" />
-      <h1 className="mt-4 text-lg font-semibold text-navy">Speaking mocks have moved</h1>
-      <p className="mt-2 text-sm text-muted">
+      <h1 className="mt-4 text-lg font-bold text-navy">Speaking mocks have moved</h1>
+      <p className="mt-2 max-w-md text-sm text-muted">
         Book and start every mock exam from the Mock Center now. Taking you there…
       </p>
-      <Link href="/mocks?subtest=speaking" className="mt-4 text-sm font-medium text-primary hover:underline">
-        Go to Mock Center now
-      </Link>
-    </div>
+      <Button asChild variant="outline" size="sm" className="mt-4">
+        <Link href="/mocks?subtest=speaking">Go to Mock Center now</Link>
+      </Button>
+    </Card>
   );
 }

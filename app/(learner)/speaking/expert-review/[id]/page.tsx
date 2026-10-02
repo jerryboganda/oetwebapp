@@ -4,14 +4,17 @@ import { useState, useEffect, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Clock, CreditCard, MessageSquare, CheckCircle2,
-  Target, Loader2, ArrowRight, Sparkles,
+  Target, ArrowRight, Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionPage } from '@/components/ui/motion-primitives';
+import { ErrorState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { PageSkeleton } from '@/components/ui/skeleton';
 import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, isApiError, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { TurnaroundOption } from '@/lib/mock-data';
@@ -83,170 +86,155 @@ function ExpertReviewRequestContent() {
 
   if (isSuccess) {
     return (
-      <>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <MotionPage className="max-w-md w-full">
-            <div className="w-24 h-24 bg-success/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 className="w-12 h-12 text-success-strong" />
-            </div>
-            <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
-            <p className="text-muted mb-10 leading-relaxed">
-              Your recording has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used{estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.
-            </p>
-            <Button size="lg" asChild>
-<Link href="/speaking">
-                Back to Dashboard <ArrowRight className="w-5 h-5" />
-              </Link>
-</Button>
-          </MotionPage>
-        </div>
-      </>
+      <LearnerPageHero
+        eyebrow="Beyond AI Evaluation"
+        icon={CheckCircle2}
+        accent="emerald"
+        title="Request Submitted"
+        description={`Your recording has been queued for tutor review. ${selectedCost} review credit${selectedCost > 1 ? 's were' : ' was'} used${estimatedDelivery ? `, and the estimated turnaround is ${estimatedDelivery}` : ''}.`}
+        aside={(
+          <Button asChild>
+            <Link href="/speaking">
+              Back to Dashboard <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            </Link>
+          </Button>
+        )}
+      />
     );
   }
 
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
-        </div>
+        <LearnerSkeleton variant="hero" />
+        <LearnerSkeleton variant="card-grid" />
       </>
     );
   }
 
   if (error) {
-    return (
-      <>
-        <div>
-          <InlineAlert variant="error">{error}</InlineAlert>
-        </div>
-      </>
-    );
+    return <ErrorState message={error} />;
   }
 
   return (
     <>
-      <div className="flex-1">
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-5 sm:space-y-8">
+      {/* The "Beyond AI Evaluation" note is the page's purpose, so it is the hero, not a callout under it. */}
+      <LearnerPageHero
+        eyebrow="Beyond AI Evaluation"
+        icon={Sparkles}
+        accent="speaking"
+        title="Request Tutor Review"
+        description="While our AI provides immediate insights, a Tutor Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators."
+      />
 
-          {/* AI vs Human Distinction */}
-          <InlineAlert variant="info">
-            <div className="flex items-start gap-4">
-                <Sparkles className="w-6 h-6 text-info shrink-0" />
-              <div>
-                <h2 className="text-sm font-bold text-info uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
-                <p className="text-sm text-info/80 leading-relaxed">
-                  While our AI provides immediate insights, a Tutor Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
-                </p>
-              </div>
-            </div>
-          </InlineAlert>
+      <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
+        {/* Focus Areas */}
+        <MotionSection>
+          <Card padding="lg">
+            <LearnerSurfaceSectionHeader
+              icon={Target}
+              title="Focus Areas"
+              description="Select specific criteria you want the reviewer to prioritize."
+              className="mb-6"
+            />
 
-          {/* Focus Areas */}
-          <Card className="p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <Target className="w-5 h-5 text-primary shrink-0" aria-hidden />
-              <h2 className="text-lg font-black text-navy">Focus Areas</h2>
-            </div>
-            <p className="text-sm text-muted mb-6">Select specific criteria you want the reviewer to prioritize.</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {focusAreas.map((area) => (
-                <button
-                  key={area.id}
-                  type="button"
-                  aria-pressed={selectedFocus.includes(area.id)}
-                  onClick={() => toggleFocus(area.id)}
-                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-left ${
-                    selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-                    selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-border-hover'
-                  }`}>
-                    {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" aria-hidden="true" />}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-navy">{area.label}</h3>
-                    <p className="text-xs text-muted leading-relaxed">{area.description}</p>
-                  </div>
-                </button>
-              ))}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {focusAreas.map((area) => {
+                const isSelected = selectedFocus.includes(area.id);
+                return (
+                  <button
+                    key={area.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => toggleFocus(area.id)}
+                    className={`flex items-start gap-4 rounded-control border-2 p-4 text-start transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      isSelected ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors duration-200 ${
+                        isSelected ? 'border-primary bg-primary dark:border-violet-700 dark:bg-violet-700' : 'border-border-hover'
+                      }`}
+                    >
+                      {isSelected && <CheckCircle2 className="h-4 w-4 text-white" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-navy">{area.label}</span>
+                      <span className="block text-xs leading-relaxed text-muted">{area.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Card>
+        </MotionSection>
 
-          {/* Reviewer Notes */}
-          <Card className="p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <MessageSquare className="w-5 h-5 text-primary shrink-0" aria-hidden />
-              <h2 className="text-lg font-black text-navy">Reviewer Notes</h2>
-            </div>
+        {/* Reviewer Notes */}
+        <MotionSection delayIndex={1}>
+          <Card padding="lg">
+            <LearnerSurfaceSectionHeader icon={MessageSquare} title="Reviewer Notes" className="mb-6" />
             <textarea
               aria-label="Reviewer notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="E.g., 'I struggled with the transition to the physical exam explanation. Please check my empathy during the patient's interruption.'"
-              className="w-full h-32 p-4 bg-surface border border-border text-navy rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              className="h-32 w-full resize-none rounded-control border border-border bg-surface p-4 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </Card>
+        </MotionSection>
 
-          {/* Priority & Turnaround */}
-          <Card className="p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <Clock className="w-5 h-5 text-primary shrink-0" aria-hidden />
-              <h2 className="text-lg font-black text-navy">Priority & Turnaround</h2>
-            </div>
+        {/* Priority & Turnaround */}
+        <MotionSection delayIndex={2}>
+          <Card padding="lg">
+            <LearnerSurfaceSectionHeader icon={Clock} title="Priority & Turnaround" className="mb-6" />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {turnaroundOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
                   aria-pressed={turnaroundId === opt.id}
                   onClick={() => setTurnaroundId(opt.id)}
-                  className={`p-6 rounded-2xl border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-center ${
-                    turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
+                  className={`rounded-control border-2 p-5 text-center transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover'
                   }`}
                 >
-                  <h3 className="text-sm font-bold text-navy mb-1">{opt.label}</h3>
-                  <p className="text-xs text-primary font-bold mb-2">{opt.time}</p>
-                  <p className="eyebrow text-muted">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
+                  <span className="mb-1 block text-sm font-bold text-navy">{opt.label}</span>
+                  <span className="mb-2 block text-xs font-bold text-primary">{opt.time}</span>
+                  <span className="block eyebrow tabular-nums text-muted">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</span>
                 </button>
               ))}
             </div>
           </Card>
+        </MotionSection>
 
-          {/* Review Credits */}
-          <Card className="p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <CreditCard className="w-5 h-5 text-primary shrink-0" aria-hidden />
-              <h2 className="text-lg font-black text-navy">Review Credits</h2>
-            </div>
+        {/* Review Credits */}
+        <MotionSection delayIndex={3}>
+          <Card padding="lg">
+            <LearnerSurfaceSectionHeader icon={CreditCard} title="Review Credits" className="mb-6" />
 
-            <div className="flex items-center justify-between p-6 rounded-2xl border-2 border-primary bg-primary/5">
-              <div>
-                <h3 className="text-sm font-bold text-navy">Use Review Credits</h3>
-                <p className="text-xs text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 p-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-navy">Use Review Credits</p>
+                <p className="text-xs tabular-nums text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
               </div>
-              <div className="eyebrow text-primary">
+              <p className="eyebrow tabular-nums text-primary">
                 -{selectedCost} Credit{selectedCost > 1 ? 's' : ''}
-              </div>
+              </p>
             </div>
             {!hasEnoughCredits ? (
-              <div className="mt-4">
-                <InlineAlert variant="warning">
-                  This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
-                </InlineAlert>
-              </div>
+              <InlineAlert variant="warning" className="mt-4">
+                This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
+              </InlineAlert>
             ) : null}
           </Card>
+        </MotionSection>
 
-          {submitError ? <InlineAlert variant="error">{submitError}</InlineAlert> : null}
+        {submitError ? <InlineAlert variant="error">{submitError}</InlineAlert> : null}
 
-          {/* Submit Button */}
+        {/* Submit Button */}
+        <div className="space-y-3">
           <Button
             type="submit"
             fullWidth
@@ -255,30 +243,24 @@ function ExpertReviewRequestContent() {
             disabled={isSubmitting || selectedFocus.length === 0 || !turnaroundId || !hasEnoughCredits}
           >
             {isSubmitting ? 'Submitting Request...' : (
-              <>Submit Tutor Review Request <ArrowRight className="w-5 h-5" /></>
+              <>Submit Tutor Review Request <ArrowRight className="h-5 w-5 rtl:rotate-180" aria-hidden="true" /></>
             )}
           </Button>
 
           {selectedFocus.length === 0 && (
-            <p className="text-center eyebrow text-warning-strong">
+            <p className="text-center text-sm font-medium text-warning-strong">
               Please select at least one focus area
             </p>
           )}
-        </form>
-      </div>
+        </div>
+      </form>
     </>
   );
 }
 
 export default function ExpertReviewRequest() {
   return (
-    <Suspense fallback={
-      <>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        </div>
-      </>
-    }>
+    <Suspense fallback={<PageSkeleton />}>
       <ExpertReviewRequestContent />
     </Suspense>
   );
