@@ -15,6 +15,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { CreditsGuideButton } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { ResumeWritingBanner } from '@/components/domain/writing/ResumeWritingBanner';
 import { analytics } from '@/lib/analytics';
 
 interface WritingLandingCard {
@@ -89,6 +90,9 @@ export default function WritingHome() {
         title={t('writing.hub.hero.title')}
         description={t('writing.hub.hero.description')}
       />
+
+      {/* Newest active draft or retryable letter; renders nothing otherwise. */}
+      <ResumeWritingBanner />
 
       <CreditsGuideButton variant="banner" />
 
