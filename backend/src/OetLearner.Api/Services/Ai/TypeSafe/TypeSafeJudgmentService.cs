@@ -45,7 +45,8 @@ public sealed class TypeSafeJudgmentService(
     IDirectAiCallRecorder recorder,
     IOptions<TypeSafeOptions> options,
     TimeProvider clock,
-    ILogger<TypeSafeJudgmentService> logger) : ITypeSafeJudgmentService
+    ILogger<TypeSafeJudgmentService> logger,
+    IAiProviderRegistry? registry = null) : ITypeSafeJudgmentService
 {
     private const string Module = "jev";
     private const int MaxLoggedErrorMessageChars = 300;
@@ -56,8 +57,28 @@ public sealed class TypeSafeJudgmentService(
         ArgumentNullException.ThrowIfNull(call);
 
         var opts = options.Value;
-        if (!opts.Enabled || string.IsNullOrWhiteSpace(opts.ApiKey))
-            return JevJudgmentResult.Disabled(opts.Enabled ? "typesafe_key_missing" : "typesafe_disabled");
+        if (!opts.Enabled)
+            return JevJudgmentResult.Disabled("typesafe_disabled");
+
+        var apiKey = opts.ApiKey;
+        if (registry is not null)
+        {
+            try
+            {
+                apiKey = await registry.GetPlatformKeyAsync(TypeSafeOptions.ProviderCode, ct) ?? apiKey;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                logger.LogWarning("TypeSafe credential resolution unavailable for {FeatureCode}.", call.FeatureCode);
+                return JevJudgmentResult.Unavailable("jev_credentials_unavailable");
+            }
+        }
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return JevJudgmentResult.Disabled("typesafe_key_missing");
 
         // Hash the exact wire bytes — the control plane sees a digest of the
         // judgment request, never the payload itself (prompt-hash policy).
