@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai.TypeSafe;
 
@@ -118,7 +120,8 @@ public interface ITypeSafeJudgmentClient
 
 public sealed class TypeSafeJudgmentClient(
     IHttpClientFactory httpClientFactory,
-    IOptions<TypeSafeOptions> options) : ITypeSafeJudgmentClient
+    IOptions<TypeSafeOptions> options,
+    IServiceScopeFactory? scopeFactory = null) : ITypeSafeJudgmentClient
 {
     public const string HttpClientName = "TypeSafeJudgmentClient";
 
@@ -170,8 +173,15 @@ public sealed class TypeSafeJudgmentClient(
     public async Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct)
     {
         var opts = options.Value;
-        if (string.IsNullOrWhiteSpace(opts.ApiKey))
-            throw new InvalidOperationException("TypeSafe is enabled but TypeSafe:ApiKey is empty.");
+        var apiKey = opts.ApiKey;
+        if (scopeFactory is not null)
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            apiKey = await scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>()
+                .GetPlatformKeyAsync(TypeSafeOptions.ProviderCode, ct) ?? apiKey;
+        }
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("TypeSafe is enabled but no platform key is configured.");
         if (IsBreakerOpen())
             throw new TypeSafeHttpException("TypeSafe judgment breaker open after consecutive failures; cooling down.", statusCode: 0);
 
@@ -184,7 +194,7 @@ public sealed class TypeSafeJudgmentClient(
             Exception? failure = null;
             try
             {
-                parsed = await SendOnceAsync(client, baseUri, opts, payloadJson, ct);
+                parsed = await SendOnceAsync(client, baseUri, opts, apiKey, payloadJson, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -210,6 +220,7 @@ public sealed class TypeSafeJudgmentClient(
         HttpClient client,
         string baseUri,
         TypeSafeOptions opts,
+        string apiKey,
         string payloadJson,
         CancellationToken ct)
     {
@@ -217,7 +228,7 @@ public sealed class TypeSafeJudgmentClient(
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUri}/{EndpointPath}");
             httpRequest.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.ApiKey);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, opts.TimeoutSeconds)));
