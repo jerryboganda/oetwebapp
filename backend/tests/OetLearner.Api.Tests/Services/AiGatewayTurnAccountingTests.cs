@@ -1,10 +1,14 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
 using Xunit;
@@ -193,6 +197,38 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
 
     // ── Fixtures ────────────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task JevReview_InvokesGovernedJudgments_WithoutChangingCompletionOrProviderAccounting()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("original completion", 50, 5));
+        var judgments = new CapturingJudgments();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TypeSafe:Enabled"] = "true",
+            ["TypeSafe:ApiKey"] = "apikey_test",
+            ["TypeSafe:ResponseVerifyEnabled"] = "true",
+        }).Build();
+        var services = new ServiceCollection();
+        services.Configure<TypeSafeOptions>(configuration.GetSection(TypeSafeOptions.SectionName));
+        services.AddSingleton<ITypeSafeJudgmentService>(judgments);
+        services.AddSingleton<IAiUsageRecorder>(new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance));
+        using var serviceProvider = services.BuildServiceProvider();
+        var gateway = ActivatorUtilities.CreateInstance<AiGatewayService>(
+            serviceProvider, _loader, new IAiModelProvider[] { provider });
+
+        var result = await gateway.CompleteAsync(NewRequest(gateway, operationId: null));
+
+        Assert.Equal(1, judgments.Calls);
+        Assert.Equal(AiFeatureCodes.JevResponseVerify, judgments.LastCall?.FeatureCode);
+        Assert.Equal("user-1", judgments.LastCall?.UserId);
+        Assert.Equal("original completion", result.Completion);
+        Assert.Equal("scripted", result.ResolvedProvider);
+        Assert.Equal(1, provider.Calls);
+        Assert.Equal(50, result.Usage!.PromptTokens);
+        Assert.Single(await db.AiUsageRecords.AsNoTracking().ToListAsync());
+    }
+
     private readonly RulebookLoader _loader = new();
 
     private AiGatewayService BuildGateway(LearnerDbContext db, ScriptedMultiTurnProvider provider, int maxToolCalls = 4)
@@ -236,6 +272,19 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
             UpdatedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
+    }
+
+    private sealed class CapturingJudgments : ITypeSafeJudgmentService
+    {
+        public int Calls { get; private set; }
+        public JevCallMetadata? LastCall { get; private set; }
+
+        public Task<JevJudgmentResult> AskAsync(JevJudgmentRequest request, JevCallMetadata call, CancellationToken ct)
+        {
+            Calls++;
+            LastCall = call;
+            return Task.FromResult(JevJudgmentResult.Unavailable("fixture_unavailable"));
+        }
     }
 
     /// <summary>One scripted physical provider turn.</summary>

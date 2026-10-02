@@ -6,7 +6,10 @@ on:
     paths:
       - 'backend/src/OetLearner.Api/Services/Ai/TypeSafe/**'
       - 'backend/src/OetLearner.Api/Configuration/TypeSafeOptions.cs'
+      - 'backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService*.cs'
+      - 'backend/src/OetLearner.Api/Endpoints/OwnerAgentEndpoints*.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiGatewayTurnAccountingTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
       - 'scripts/ai/**'
       - '.github/workflows/jev-integration.yml'
@@ -14,7 +17,10 @@ on:
     paths:
       - 'backend/src/OetLearner.Api/Services/Ai/TypeSafe/**'
       - 'backend/src/OetLearner.Api/Configuration/TypeSafeOptions.cs'
+      - 'backend/src/OetLearner.Api/Services/Rulebook/AiGatewayService*.cs'
+      - 'backend/src/OetLearner.Api/Endpoints/OwnerAgentEndpoints*.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/TypeSafeJudgmentServiceTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiGatewayTurnAccountingTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/Jev*Tests.cs'
       - 'scripts/ai/**'
       - '.github/workflows/jev-integration.yml'
@@ -42,4 +48,4 @@ jobs:
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
           --configuration Debug --nologo
           --logger "console;verbosity=normal"
-          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev"
+          --filter "FullyQualifiedName~TypeSafeJudgmentServiceTests|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests"
