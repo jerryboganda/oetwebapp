@@ -625,10 +625,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
     /// <summary>
     /// Stuck-proofing guard: any failure after a successful claim that leaves
-    /// no persisted grade transitions the row to <c>failed</c> and releases
-    /// any uncommitted credit reservation (best effort, never throwing) so
-    /// the attempt stays recoverable via retry-grade — and no credit is left
-    /// held forever — instead of wedging in <c>grading</c>. Rows that already
+    /// no persisted grade transitions the row to <c>failed</c> (best effort,
+    /// never throwing) so the attempt stays recoverable via retry-grade instead
+    /// of wedging in <c>grading</c>; its credit hold stays on the letter
+    /// (WAI-01: Retry costs nothing). Rows that already
     /// carry a grade, or already reached a terminal state, are left untouched.
     /// Uses a set-based update (never the tracked instance) so a poisoned
     /// entity that caused the failure cannot break the marking itself.
@@ -688,42 +688,14 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
             // ExecuteUpdate bypasses change tracking: sync the in-hand
             // instance too so same-scope readers never see a stale status.
+            // The credit hold is NOT released: it stays on this letter for the retry.
             submission.Status = WritingSubmissionStatuses.Failed;
-
-            await ReleaseReservationForSubmissionAsync(submission, CancellationToken.None);
         }
         catch (Exception markEx)
         {
             logger.LogWarning(
                 markEx,
                 "Failed to mark submission {SubmissionId} as failed after grading error.",
-                submission.Id);
-        }
-    }
-
-    /// <summary>
-    /// Best-effort release of this attempt's credit reservation when grading
-    /// never reached commit (rubric-phase failures release inside
-    /// <see cref="GradeWithReservationAsync"/>; this covers everything after:
-    /// canon, report build, persistence, side effects). Idempotent: already
-    /// committed or released reservations are no-ops.
-    /// </summary>
-    private async Task ReleaseReservationForSubmissionAsync(WritingSubmission submission, CancellationToken ct)
-    {
-        if (creditReservations is null) return;
-        try
-        {
-            var businessReference = $"writing-grade:{submission.Id:N}";
-            var existing = await db.AiCreditReservations.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
-            if (existing is null) return;
-            await creditReservations.ReleaseAsync(existing.Id, ct);
-        }
-        catch (Exception releaseEx)
-        {
-            logger.LogWarning(
-                releaseEx,
-                "Failed to release writing credit reservation for submission {SubmissionId}.",
                 submission.Id);
         }
     }
@@ -1008,66 +980,90 @@ public sealed class WritingSubmissionEvaluationPipeline(
         int? resourceVersion,
         CancellationToken ct)
     {
+        // A failure below never releases the hold (owner decision 2 Oct 2026):
+        // the credit stays on this letter and every retry reuses it for free.
         string? reservationId = null;
         var freeSample = false;
-        var businessReference = $"writing-grade:{submission.Id:N}";
         var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
-        try
+        if (creditReservations is not null
+            && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
         {
-            if (creditReservations is not null
-                && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
-            {
-                // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
-                // results on the learner's pinned scenario — the second is the
-                // "Revise & Resubmit" of the same letter, so revisions qualify
-                // too. The server decides: the scenario must be the claimed one
-                // and fewer than two results may exist. The use is bound to THIS
-                // submission id, so retry-grade re-enters idempotently and a
-                // failed grade never counts.
-                freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
-                    submission.UserId,
-                    FreeSamples.FreeSampleService.Writing,
-                    submission.ScenarioId.ToString("D"),
-                    FreeSampleUse.KindWritingSubmission,
-                    submission.Id.ToString("N"),
-                    ct);
-                var ticket = freeSample
-                    ? await creditReservations.ReserveFreeSampleAsync(
-                        submission.UserId, operationId, businessReference, ct)
-                    : await creditReservations.ReserveWritingAsync(
-                        submission.UserId, operationId, businessReference, ct);
-                reservationId = ticket.ReservationId;
-                submission.GradeOperationId = ticket.OperationId;
-            }
-
-            if (TryReadPersistedRubric(submission, out var persisted))
-            {
-                return (persisted, reservationId);
-            }
-
-            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct, freeSample);
-            submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
-                rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
-                rubric.EstimatedBand, rubric.EstimatedScaledScore,
-                rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
-                rubric.ConfidenceFlag, rubric.ModelUsed, rubric.AiFindings));
-            submission.GradeOperationId ??= operationId;
-            await db.SaveChangesAsync(ct);
-            return (rubric, reservationId);
+            // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
+            // results on the learner's pinned scenario — the second is the
+            // "Revise & Resubmit" of the same letter, so revisions qualify
+            // too. The server decides: the scenario must be the claimed one
+            // and fewer than two results may exist. The use is bound to THIS
+            // submission id, so retry-grade re-enters idempotently and a
+            // failed grade never counts.
+            freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                submission.UserId,
+                FreeSamples.FreeSampleService.Writing,
+                submission.ScenarioId.ToString("D"),
+                FreeSampleUse.KindWritingSubmission,
+                submission.Id.ToString("N"),
+                ct);
+            var businessReference = await ResolveCreditReferenceAsync(submission, freeSample, ct);
+            var ticket = freeSample
+                ? await creditReservations.ReserveFreeSampleAsync(
+                    submission.UserId, operationId, businessReference, ct)
+                : await creditReservations.ReserveWritingAsync(
+                    submission.UserId, operationId, businessReference, ct);
+            reservationId = ticket.ReservationId;
+            submission.GradeOperationId = ticket.OperationId;
         }
-        catch
+
+        if (TryReadPersistedRubric(submission, out var persisted))
         {
-            if (reservationId is not null && creditReservations is not null)
-            {
-                try { await creditReservations.ReleaseAsync(reservationId, CancellationToken.None); }
-                catch (Exception releaseEx)
-                {
-                    logger.LogWarning(releaseEx, "Failed to release writing credit reservation {ReservationId}", reservationId);
-                }
-            }
-
-            throw;
+            return (persisted, reservationId);
         }
+
+        // A credit-funded grade skips the plan feature list and token caps, as a
+        // free sample and a credit-funded Speaking grade already do: the learner
+        // paid with credits, so a default free/starter plan must not refuse it.
+        // The kill list, kill switch, platform budget and per-user disable still apply.
+        var rubric = await CallRubricAsync(
+            submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct,
+            freeSampleGrant: freeSample || reservationId is not null);
+        submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
+            rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
+            rubric.EstimatedBand, rubric.EstimatedScaledScore,
+            rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
+            rubric.ConfidenceFlag, rubric.ModelUsed, rubric.AiFindings));
+        submission.GradeOperationId ??= operationId;
+        await db.SaveChangesAsync(ct);
+        return (rubric, reservationId);
+    }
+
+    /// <summary>
+    /// The ledger reference this letter is paid under (WAI-01), fixed at its first
+    /// run so every automatic and manual retry reuses the same hold. A free sample
+    /// or a revision pays on its own reference; any other letter adopts the start
+    /// gate's reference — unless another letter already holds it (a new letter
+    /// written after the first one failed), which then pays on its own. Saved at
+    /// once so a later failure cannot lose it.
+    /// </summary>
+    private async Task<string> ResolveCreditReferenceAsync(WritingSubmission submission, bool freeSample, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(submission.CreditReference)) return submission.CreditReference;
+
+        var reference = WritingCreditReferences.Grade(submission.Id);
+        if (!freeSample && !submission.IsRevision)
+        {
+            var start = WritingCreditReferences.Start(
+                submission.UserId,
+                submission.ScenarioId,
+                await WritingCreditReferences.GradedCountAsync(db, submission.UserId, submission.ScenarioId, ct));
+            var held = await db.WritingSubmissions.AsNoTracking()
+                .AnyAsync(s => s.UserId == submission.UserId
+                    && s.ScenarioId == submission.ScenarioId
+                    && s.Id != submission.Id
+                    && s.CreditReference == start, ct);
+            if (!held) reference = start;
+        }
+
+        submission.CreditReference = reference;
+        await db.SaveChangesAsync(ct);
+        return reference;
     }
 
     private static bool TryReadPersistedRubric(WritingSubmission submission, out RubricResult rubric)

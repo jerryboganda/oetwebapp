@@ -25,6 +25,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddAiResultCache), "20261201090000_AddAiResultCache")]
     [InlineData(typeof(AddListeningQnaTurns), "20261202090000_AddListeningQnaTurns")]
     [InlineData(typeof(AddWritingSubmissionIdempotency), "20261203090000_AddWritingSubmissionIdempotency")]
+    [InlineData(typeof(AddWritingGradeRecoveryState), "20270104090000_AddWritingGradeRecoveryState")]
     [InlineData(typeof(AddSpeakingAssessmentIdentityAndTurns), "20261204090000_AddSpeakingAssessmentIdentityAndTurns")]
     [InlineData(typeof(AddMockLifecycleReservation), "20261205090000_AddMockLifecycleReservation")]
     [InlineData(typeof(AddVocabularyNormalizedKey), "20261206090000_AddVocabularyNormalizedKey")]

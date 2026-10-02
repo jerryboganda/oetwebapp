@@ -17,7 +17,9 @@ public interface IAiCreditReservationService
 {
     /// <summary>
     /// Hold 2 AI credits (Writing → Flexible W/S → Shared) for one writing grade.
-    /// Idempotent on <paramref name="businessReference"/>.
+    /// Idempotent on <paramref name="businessReference"/>: one hold per reference,
+    /// reused by every retry of the letter. A reference the start gate already
+    /// debited is adopted with no second debit and no balance check (WAI-01).
     /// The funding rule lives in the CreditLedger
     /// (<see cref="Billing.IAiPackageCreditService"/>); this method holds
     /// admission policy only, never cost math.
@@ -58,8 +60,10 @@ public interface IAiCreditReservationService
 
 /// <summary>
 /// W6 two-phase learner credit hold. Deducts via the package ledger on reserve
-/// (idempotent on business reference), commits the reservation row on delivery,
-/// and refunds on terminal system failure.
+/// (idempotent on business reference) and commits the reservation row on
+/// delivery. Speaking releases (refunds) a hold on terminal failure; a Writing
+/// hold is never released: it stays Reserved through every retry until the
+/// grade commits it (WAI-01, owner decision 2 Oct 2026).
 /// </summary>
 public sealed class AiCreditReservationService(
     LearnerDbContext db,
@@ -76,17 +80,22 @@ public sealed class AiCreditReservationService(
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(businessReference);
 
+        // A legacy Released hold (refunded by a failure before 2 Oct 2026) is never
+        // handed back as funded: it goes through the funding decision below and is
+        // re-armed in place only once that decision pays for the grade.
         var existing = await db.AiCreditReservations
             .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
-        if (existing is not null)
+        if (existing is { State: not AiCreditReservationState.Released })
         {
-            return new AiCreditReservationTicket(
-                existing.Id,
-                existing.OperationId,
-                existing.BucketKind,
-                existing.Units,
-                existing.State,
-                AlreadyExisted: true);
+            return Ticket(existing, alreadyExisted: true);
+        }
+
+        // Adopt a reference that is already paid — the start gate debited it when
+        // the task opened. BEFORE the balance gate, so the learner whose last
+        // credit paid for this very letter is graded instead of refused (402).
+        if (await packageCredits.FindGradingDebitAsync(userId, businessReference, ct) is not null)
+        {
+            return await HoldAsync(existing, userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
         }
 
         // Admission policy (proven codes, kept verbatim): the fundability
@@ -110,9 +119,7 @@ public sealed class AiCreditReservationService(
         // credits" despite an active Unlimited Writing entitlement).
         if (snapshot.WritingUnlimited)
         {
-            await EnsureOperationAsync(operationId, userId, businessReference, ct);
-            return await InsertRowAsync(
-                userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
+            return await HoldAsync(existing, userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
         }
 
         if (snapshot.ExpiredBecausePassed
@@ -130,8 +137,11 @@ public sealed class AiCreditReservationService(
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
 
+        // Nothing has paid this reference yet (a revision, or a letter submitted
+        // without opening the task): debit it once under the SAME reference, so a
+        // later start gate dedupes to already-debited. Whichever runs first pays.
         await EnsureOperationAsync(operationId, userId, businessReference, ct);
-        return await InsertForSubtestAsync(userId, operationId, businessReference, "writing", ct);
+        return await InsertForSubtestAsync(userId, operationId, businessReference, "writing", ct, existing);
     }
 
     public async Task<AiCreditReservationTicket> ReserveFreeSampleAsync(
@@ -256,6 +266,37 @@ public sealed class AiCreditReservationService(
         await db.SaveChangesAsync(ct);
     }
 
+    private static AiCreditReservationTicket Ticket(AiCreditReservation row, bool alreadyExisted)
+        => new(row.Id, row.OperationId, row.BucketKind, row.Units, row.State, alreadyExisted);
+
+    /// <summary>
+    /// Holds the grade on a new row, or re-arms a legacy Released row in place (the
+    /// business reference is unique, so a second row cannot exist). A re-armed row
+    /// keeps its original operation, which the foreign key already points at.
+    /// </summary>
+    private async Task<AiCreditReservationTicket> HoldAsync(
+        AiCreditReservation? released,
+        string userId,
+        string operationId,
+        string businessReference,
+        string bucketKind,
+        int units,
+        CancellationToken ct)
+    {
+        if (released is null)
+        {
+            await EnsureOperationAsync(operationId, userId, businessReference, ct);
+            return await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, ct);
+        }
+
+        released.BucketKind = bucketKind;
+        released.Units = units;
+        released.State = AiCreditReservationState.Reserved;
+        released.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return Ticket(released, alreadyExisted: true);
+    }
+
     private async Task<AiCreditReservationTicket> InsertRowAsync(
         string userId,
         string operationId,
@@ -344,7 +385,8 @@ public sealed class AiCreditReservationService(
         string operationId,
         string businessReference,
         string subtest,
-        CancellationToken ct)
+        CancellationToken ct,
+        AiCreditReservation? released = null)
     {
         var debitResult = await packageCredits.DeductGradingCreditAsync(
             userId, subtest, businessReference, ct);
@@ -366,7 +408,9 @@ public sealed class AiCreditReservationService(
         // The debit above is already committed, so the request's cancellation (client timeout, refresh,
         // deploy drain) must not lose the reservation row: a debit without a row is an orphan that no
         // commit or sweep can ever settle.
-        return await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, CancellationToken.None);
+        return released is null
+            ? await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, CancellationToken.None)
+            : await HoldAsync(released, userId, operationId, businessReference, bucketKind, units, CancellationToken.None);
     }
 
     private async Task EnsureSpeakingOperationAsync(

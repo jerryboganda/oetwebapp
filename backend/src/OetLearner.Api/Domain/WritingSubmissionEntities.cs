@@ -91,6 +91,31 @@ public class WritingSubmission
     /// successful rubric call, so a later DB failure resumes without a second paid call.
     /// </summary>
     public string? ProviderResultJson { get; set; }
+
+    /// <summary>
+    /// WAI-01 — the ledger reference this letter is paid under, fixed at its first
+    /// grading run and reused by every retry (see <c>WritingCreditReferences</c>).
+    /// </summary>
+    [MaxLength(128)]
+    public string? CreditReference { get; set; }
+
+    /// <summary>WAI-03 — grading runs so far; each run grades under its own AI-operation slots.</summary>
+    public int GradeEpoch { get; set; }
+
+    /// <summary>WAI-03 — automatic re-queues after a retryable failure; a manual Retry resets it.</summary>
+    public int AutoRetryCount { get; set; }
+
+    /// <summary>WAI-03 — when a re-queued row is due again.</summary>
+    public DateTimeOffset? NextAutoRetryAt { get; set; }
+
+    public DateTimeOffset? LastFailureAt { get; set; }
+
+    /// <summary>WAI-03 — candidate-safe reason the last run failed (never a provider name).</summary>
+    [MaxLength(32)]
+    public string? FailureCode { get; set; }
+
+    /// <summary>WAI-03 — false when Retry can never help; null (legacy rows) counts as retryable.</summary>
+    public bool? FailureRetryable { get; set; }
 }
 
 public class WritingGrade

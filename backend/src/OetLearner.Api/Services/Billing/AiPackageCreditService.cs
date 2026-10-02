@@ -519,6 +519,12 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
             FeedbackMessage: spend.FeedbackMessage);
     }
 
+    public Task<AiPackageCreditTransaction?> FindGradingDebitAsync(string userId, string referenceId, CancellationToken ct)
+        => db.AiPackageCreditTransactions.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.UserId == userId
+                && row.ReferenceId == referenceId
+                && row.Reason == AiPackageCreditReason.GradingDeduct, ct);
+
     public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
         => CheckGradingCreditAsync(userId, subtest, 1, ct);
 

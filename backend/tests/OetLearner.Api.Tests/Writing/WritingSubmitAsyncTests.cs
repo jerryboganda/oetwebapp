@@ -397,11 +397,12 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
         Assert.Equal(0, await _db.WritingGrades.CountAsync());
         Assert.Equal(1, credits.ReserveCalls);
-        Assert.Equal(1, credits.ReleaseCalls);
+        // WAI-01: a failed grade keeps its credit hold for the retry.
+        Assert.Equal(0, credits.ReleaseCalls);
     }
 
     [Fact]
-    public async Task SeamReserve_RubricFailure_ReleasesReservation_AndFailsRetryable()
+    public async Task SeamReserve_RubricFailure_KeepsReservation_AndFailsRetryable()
     {
         var credits = new CountingReservations();
         var pipeline = BuildRealPreflightPipeline(new ThrowingGateway(), credits);
@@ -419,7 +420,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         // (409 already-in-progress) nor retry-grade could ever resume it.
         Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
         Assert.Equal(1, credits.ReserveCalls);
-        Assert.Equal(1, credits.ReleaseCalls);
+        Assert.Equal(0, credits.ReleaseCalls);
         Assert.Equal(0, await _db.WritingGrades.CountAsync());
     }
 
@@ -609,13 +610,13 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task CanonFailure_MarksFailed_ReleasesReservation_Retryable()
+    public async Task CanonFailure_MarksFailed_KeepsReservation_Retryable()
     {
         var credits = new CountingReservations();
         var pipeline = BuildRealPreflightPipeline(new CountingGateway(CanonicalCompletion), credits);
         // Swap in a canon engine that explodes AFTER a successful rubric call:
         // the grade must not persist half-built, the row must land in failed
-        // (never wedge in grading), and the uncommitted reservation releases.
+        // (never wedge in grading), and the uncommitted hold stays on the letter.
         var throwingPipeline = BuildThrowingCanonPipeline(new CountingGateway(CanonicalCompletion), credits);
         var submit = await throwingPipeline.SubmitAsync(
             SampleAttempt("matrix-canon-1", LetterA, scenarioId: ScenarioReadyId), default);
@@ -653,7 +654,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.True(ex.Retryable);
         Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
         Assert.Equal(1, credits.ReserveCalls);
-        Assert.Equal(1, credits.ReleaseCalls);
+        Assert.Equal(0, credits.ReleaseCalls);
         Assert.Equal(0, await _db.WritingGrades.CountAsync(g => g.SubmissionId == submit.SubmissionId));
     }
 

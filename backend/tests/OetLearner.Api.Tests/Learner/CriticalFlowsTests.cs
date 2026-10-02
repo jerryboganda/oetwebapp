@@ -337,7 +337,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task WritingSubmission_WhenEveryGradingProviderFails_PersistsFailureAndReleasesCredits()
+    public async Task WritingSubmission_WhenEveryGradingProviderFails_PersistsFailureAndHoldsTheCredit()
     {
         await EnsureV11GradingPrerequisitesAsync();
         var userId = $"writing-providers-down-{Guid.NewGuid():N}";
@@ -367,8 +367,11 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
             await using var scope = _factory.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             Assert.False(await db.WritingGrades.AnyAsync(x => x.SubmissionId == submissionId));
+            // WAI-01: the failed letter keeps its credit hold so Retry costs nothing.
             var reservation = await db.AiCreditReservations.SingleAsync(x => x.UserId == userId);
-            Assert.Equal(AiCreditReservationState.Released, reservation.State);
+            Assert.Equal(AiCreditReservationState.Reserved, reservation.State);
+            Assert.False(await db.AiPackageCreditTransactions.AnyAsync(
+                x => x.UserId == userId && x.Reason == AiPackageCreditReason.RefundOnFailure));
         }
         finally
         {
