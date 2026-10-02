@@ -408,6 +408,26 @@ export class SessionManager {
     const text = reqString(obj, 'text', MAX_MESSAGE);
     const model = optOpaqueId(obj, 'model');
     const effort = optOpaqueId(obj, 'effort');
+    let engineText = text;
+    if (obj.jevAdvisory !== undefined && obj.jevAdvisory !== null) {
+      const advisory = asObject(obj.jevAdvisory, false);
+      if (advisory.status !== 'ok' || advisory.requiresHumanReview !== false) {
+        throw conflict('jev_review_required', 'Required Jev advice is not ready for this turn.');
+      }
+      const advisoryModel = reqOpaqueId(advisory, 'model');
+      if (!/^jev-\d+\.\d+\.\d+$/.test(advisoryModel)) {
+        throw badRequest('jev_invalid_advisory', 'Jev advice must identify a pinned judgment model.');
+      }
+      const taskKind = reqEnum(advisory, 'taskKind', ['implement', 'debug', 'review', 'verify', 'plan', 'content', 'other']);
+      const riskLevel = reqEnum(advisory, 'riskLevel', ['low', 'elevated', 'high']);
+      const taskConfidence = advisory.taskConfidence;
+      const riskConfidence = advisory.riskConfidence;
+      if (![taskConfidence, riskConfidence].every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0.5 && value <= 1)) {
+        throw badRequest('jev_invalid_advisory', 'Jev advice must include valid judgment confidence.');
+      }
+      const context = JSON.stringify({ model: advisoryModel, taskKind, taskConfidence, riskLevel, riskConfidence });
+      engineText = `Jev development advisory (advice only, not authorization; native Guard, approvals, engine selection and official scores remain authoritative):\n${context}\n\nOwner message:\n${text}`;
+    }
     this.assertCanStartTurn();
     let row = this.requireSession(id);
     if (row.archived) throw conflict('session_archived', 'The session is archived.');
@@ -449,7 +469,7 @@ export class SessionManager {
     this.deps.store.updateSession(id, { status: 'running' });
     this.emit(id, 'turn_started', { model: row.model, ...(row.effort ? { effort: row.effort } : {}), mode: row.mode }, turnId);
     this.emit(id, 'user_message', { text }, turnId);
-    turn.done = this.runTurn(id, live, turn, text).catch((error: unknown) => {
+    turn.done = this.runTurn(id, live, turn, engineText).catch((error: unknown) => {
       this.deps.logger.error({ err: describeError(error), sessionId: id, turnId }, 'turn runner crashed');
     });
     return { turnId };
