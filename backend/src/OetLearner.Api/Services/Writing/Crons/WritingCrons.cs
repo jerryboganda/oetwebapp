@@ -155,7 +155,9 @@ public sealed class WritingTutorQueueAlertCron(
     }
 }
 
-/// <summary>Daily 04:30 UTC: delete WritingDraftsV2 rows older than 30 days.</summary>
+/// <summary>Daily 04:30 UTC draft retention: consumed (<c>submitted</c>) rows and
+/// empty legacy rows go 30 days after their last save; an active draft with
+/// text — work the learner can still resume — is kept for 180 days.</summary>
 public sealed class WritingDraftCleanupCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
@@ -170,14 +172,26 @@ public sealed class WritingDraftCleanupCron(
         if (now.Hour != 4 || now.Minute > 35) return;
         using var scope = ScopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var cutoff = now.AddDays(-30);
-        var stale = await db.WritingDraftsV2.Where(d => d.LastSavedAt < cutoff).ToListAsync(ct);
-        if (stale.Count > 0)
+        var deleted = await PurgeExpiredAsync(db, now, ct);
+        if (deleted > 0)
         {
-            db.WritingDraftsV2.RemoveRange(stale);
-            await db.SaveChangesAsync(ct);
-            Logger.LogInformation("WritingDraftCleanupCron deleted {Count} drafts older than 30 days.", stale.Count);
+            Logger.LogInformation("WritingDraftCleanupCron deleted {Count} expired drafts.", deleted);
         }
+    }
+
+    internal static async Task<int> PurgeExpiredAsync(LearnerDbContext db, DateTimeOffset now, CancellationToken ct)
+    {
+        var shortCutoff = now.AddDays(-30);
+        var longCutoff = now.AddDays(-180);
+        var expired = await db.WritingDraftsV2
+            .Where(d => d.LastSavedAt < longCutoff
+                || (d.LastSavedAt < shortCutoff
+                    && (d.Status == WritingDraftStatuses.Submitted || (d.Phase == null && d.Content.Trim() == ""))))
+            .ToListAsync(ct);
+        if (expired.Count == 0) return 0;
+        db.WritingDraftsV2.RemoveRange(expired);
+        await db.SaveChangesAsync(ct);
+        return expired.Count;
     }
 }
 
