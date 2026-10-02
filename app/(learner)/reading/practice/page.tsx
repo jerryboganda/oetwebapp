@@ -29,7 +29,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import {
   LearnerPageHero,
   LearnerSurfaceCard,
@@ -181,20 +181,14 @@ export default function ReadingPracticePage() {
   if (authLoading || (loading && !home)) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
+        <Skeleton className="h-32 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
       </>
     );
   }
 
   if (!isAuthenticated) {
-    return (
-      <>
-        <InlineAlert variant="warning">Sign in to access the Reading practice hub.</InlineAlert>
-      </>
-    );
+    return <InlineAlert variant="warning">Sign in to access the Reading practice hub.</InlineAlert>;
   }
 
   // Mini-tests need at least one published paper to attach the timed subset
@@ -209,37 +203,38 @@ export default function ReadingPracticePage() {
         message={insufficientCreditsMessage ?? ''}
         onClose={() => setInsufficientCreditsMessage(null)}
       />
-      <div className="space-y-6 sm:space-y-10">
-        <LearnerPageHero
-          eyebrow="Reading"
-          title="Practice Hub"
-          description="Untimed practice on papers you've already unlocked, plus quick mixed-Part warm-ups."
-          icon={Sparkles}
-        />
+      <LearnerPageHero
+        eyebrow="Reading"
+        title="Practice Hub"
+        description="Untimed practice on papers you've already unlocked, plus quick mixed-Part warm-ups."
+        icon={Sparkles}
+        accent="reading"
+      />
 
-        {errorMsg ? <InlineAlert variant="error">{errorMsg}</InlineAlert> : null}
+      {errorMsg ? <InlineAlert variant="error">{errorMsg}</InlineAlert> : null}
 
-        {/* ── AI Reading Performance Snapshot ─────────────────────────
-            Concise, data-based summary from the candidate's own completed
-            attempts — not a pathway/drill system. Hidden until there's
-            enough graded history to say something real. */}
-        {snapshot?.available ? (
-          <InlineAlert variant="info">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              <strong>Weakest area: Part {snapshot.weakestPart}.</strong>
-              <span className="text-muted">
-                {snapshot.accuracyByPart
-                  ?.map((p) => `Part ${p.partCode} ${p.accuracyPct}%`)
-                  .join(' • ')}
-              </span>
-              {snapshot.mainIssue ? (
-                <span className="text-muted">Main issue: {snapshot.mainIssue}.</span>
-              ) : null}
-            </div>
-          </InlineAlert>
-        ) : null}
+      {/* ── AI Reading Performance Snapshot ─────────────────────────
+          Concise, data-based summary from the candidate's own completed
+          attempts — not a pathway/drill system. Hidden until there's
+          enough graded history to say something real. */}
+      {snapshot?.available ? (
+        <InlineAlert variant="info">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <strong>Weakest area: Part {snapshot.weakestPart}.</strong>
+            <span className="text-muted">
+              {snapshot.accuracyByPart
+                ?.map((p) => `Part ${p.partCode} ${p.accuracyPct}%`)
+                .join(' • ')}
+            </span>
+            {snapshot.mainIssue ? (
+              <span className="text-muted">Main issue: {snapshot.mainIssue}.</span>
+            ) : null}
+          </div>
+        </InlineAlert>
+      ) : null}
 
-        {/* ── Untimed Practice ─────────────────────────────────────── */}
+      {/* ── Untimed Practice ─────────────────────────────────────── */}
+      <MotionSection delayIndex={0}>
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="Untimed Practice"
@@ -258,12 +253,12 @@ export default function ReadingPracticePage() {
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {untimedEligiblePapers.map((paper, idx) => (
-                <MotionItem key={paper.id} delayIndex={idx}>
+                <MotionItem key={paper.id} delayIndex={Math.min(idx, 5)} className="h-full">
                   <LearnerSurfaceCard
                     card={{
                       kind: 'navigation',
                       sourceType: 'frontend_navigation',
-                      accent: 'blue',
+                      accent: 'reading',
                       eyebrow: 'READING',
                       eyebrowIcon: BookOpen,
                       title: paper.title,
@@ -293,7 +288,7 @@ export default function ReadingPracticePage() {
                         onClick={() => void handleStartUntimedFullExam(paper)}
                       >
                         {busyKey === `${paper.id}::full` ? 'Starting…' : 'Full Exam'}
-                        <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                        <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden />
                       </Button>
                     </div>
                   </LearnerSurfaceCard>
@@ -302,8 +297,10 @@ export default function ReadingPracticePage() {
             </div>
           )}
         </section>
+      </MotionSection>
 
-        {/* ── Mini-Tests ─────────────────────────────────────── */}
+      {/* ── Mini-Tests ─────────────────────────────────────── */}
+      <MotionSection delayIndex={1}>
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="Mini-Tests"
@@ -325,12 +322,12 @@ export default function ReadingPracticePage() {
                 const key = miniTestPaperId ? `${miniTestPaperId}::mini::${m.minutes}` : null;
                 const busy = key !== null && busyKey === key;
                 return (
-                  <MotionItem key={m.minutes} delayIndex={idx}>
+                  <MotionItem key={m.minutes} delayIndex={Math.min(idx, 5)} className="h-full">
                     <LearnerSurfaceCard
                       card={{
                         kind: 'navigation',
                         sourceType: 'frontend_navigation',
-                        accent: 'amber',
+                        accent: 'primary',
                         eyebrow: 'MINI-TEST',
                         eyebrowIcon: Clock,
                         title: m.label,
@@ -338,7 +335,7 @@ export default function ReadingPracticePage() {
                       }}
                     >
                       <div className="mt-4 flex items-center justify-between gap-3">
-                        <Badge variant="info">{m.minutes} min</Badge>
+                        <Badge variant="muted" className="tabular-nums">{m.minutes} min</Badge>
                         <Button
                           variant="primary"
                           size="sm"
@@ -346,7 +343,7 @@ export default function ReadingPracticePage() {
                           onClick={() => miniTestPaperId && void handleStartMiniTest(miniTestPaperId, m.minutes)}
                         >
                           {busy ? 'Starting…' : 'Start'}
-                          <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                          <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden />
                         </Button>
                       </div>
                     </LearnerSurfaceCard>
@@ -356,7 +353,7 @@ export default function ReadingPracticePage() {
             </div>
           )}
         </section>
-      </div>
+      </MotionSection>
     </>
   );
 }

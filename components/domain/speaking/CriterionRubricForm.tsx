@@ -117,7 +117,7 @@ function CriterionSlider({
           onChange={(e) => onChange(Number(e.target.value))}
           className={cn(
             'h-2 flex-1 cursor-pointer appearance-none rounded-full bg-border accent-primary',
-            error && 'ring-1 ring-red-400',
+            error && 'ring-1 ring-danger',
           )}
           aria-describedby={`${id}-descriptor`}
           aria-invalid={!!error}
@@ -158,7 +158,7 @@ function CriterionSlider({
       </div>
 
       {error && (
-        <p className="mt-2 text-xs font-semibold text-red-600" role="alert">
+        <p className="mt-2 text-xs font-semibold text-danger-strong" role="alert">
           {error}
         </p>
       )}
@@ -259,7 +259,7 @@ export function CriterionRubricForm({
   return (
     <form className="flex flex-col gap-4" data-testid="criterion-rubric-form">
       <section aria-label="Linguistic criteria">
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+        <h4 className="mb-2 eyebrow text-muted">
           Linguistic Criteria (0–6)
         </h4>
         <div className="flex flex-col gap-3">
@@ -276,7 +276,7 @@ export function CriterionRubricForm({
       </section>
 
       <section aria-label="Clinical communication criteria">
-        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+        <h4 className="mb-2 eyebrow text-muted">
           Clinical Communication (0–3)
         </h4>
         <div className="flex flex-col gap-3">
@@ -332,7 +332,7 @@ export function CriterionRubricForm({
         <div
           role="alert"
           data-testid="rubric-validation-summary"
-          className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-200"
+          className="rounded-xl border border-danger/20 bg-danger/10 p-3 text-sm text-danger-strong"
         >
           <p className="font-bold">Please address the following before submitting:</p>
           <ul className="ml-4 mt-1 list-disc space-y-0.5 text-xs">

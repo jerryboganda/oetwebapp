@@ -308,7 +308,7 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Submission"
                     title="Your calibration"
                     description={isReadOnly ? 'Submitted scores and notes from your completed benchmark attempt.' : 'Enter criterion-level scores using the benchmark rubric as your comparison anchor.'}
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success" /> : <GraduationCap className="h-5 w-5 text-muted" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success-strong" /> : <GraduationCap className="h-5 w-5 text-muted" />}
                   />
                   <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
@@ -358,7 +358,7 @@ export default function CalibrationCaseWorkspacePage() {
                     eyebrow="Alignment Evidence"
                     title="How you compare"
                     description="Use the benchmark workspace to inspect how your criterion judgments compare with the reference position."
-                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success" /> : <MessageSquare className="h-5 w-5 text-muted" />}
+                    action={isReadOnly ? <CheckCircle2 className="h-5 w-5 text-success-strong" /> : <MessageSquare className="h-5 w-5 text-muted" />}
                   />
                   <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">

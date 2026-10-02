@@ -11,12 +11,16 @@ import type { PlacementDiagnosticArea, PlacementResultReport, PlacementSkillResu
  * fifth skill and never averaged in. Unmeasured and under-review skills are
  * stated honestly rather than shown as a level.
  */
+type HeadingLevel = 1 | 2 | 3;
+type SubHeadingTag = 'h2' | 'h3' | 'h4';
+
 export function ResultReportCard({
   title,
   report,
   primaryLabel,
   onPrimary,
   embedded = false,
+  headingLevel,
 }: {
   title: string;
   report: PlacementResultReport;
@@ -24,6 +28,8 @@ export function ResultReportCard({
   onPrimary?: () => void;
   /** Render without the outer card chrome (inside another card). */
   embedded?: boolean;
+  /** The title's heading level; sections sit one level below. Defaults to 3 embedded, else 2. */
+  headingLevel?: HeadingLevel;
 }) {
   const skills = PRIMARY_SKILLS.map((key) => report.skills.find((skill) => skill.skill === key)).filter(
     (skill): skill is PlacementSkillResult => Boolean(skill),
@@ -31,12 +37,14 @@ export function ResultReportCard({
   const isPartial = skills.length < PRIMARY_SKILLS.length || skills.some((skill) => skill.status !== 'measured');
   const reasons = report.confidenceReasons ?? report.confidence_reasons ?? [];
   const retestAdvice = report.retestAdvice ?? report.retest_advice;
-  const HeadingTag = embedded ? 'h3' : 'h2';
+  const level = headingLevel ?? (embedded ? 3 : 2);
+  const HeadingTag = `h${level}` as const;
+  const SubHeading = `h${level + 1}` as SubHeadingTag;
 
   const body = (
     <div className="space-y-5">
       <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+        <p className="eyebrow text-muted">
           Indicative CEFR Placement Estimate · Diagnostic English Profile
         </p>
         <HeadingTag className="text-xl font-semibold text-navy">{title}</HeadingTag>
@@ -53,18 +61,18 @@ export function ResultReportCard({
         </div>
       </header>
 
-      <section aria-label="Skill profile" className="grid gap-3 sm:grid-cols-2">
+      <section aria-label="Skill profile" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {skills.map((skill) => (
-          <SkillTile key={skill.skill} skill={skill} />
+          <SkillTile key={skill.skill} skill={skill} headingTag={SubHeading} />
         ))}
       </section>
 
-      <Diagnostics report={report} />
+      <Diagnostics report={report} headingTag={SubHeading} />
 
       {reasons.length > 0 ? (
         <section className="space-y-1">
-          <h4 className="text-sm font-semibold text-navy">About this estimate</h4>
-          <ul className="list-disc space-y-1 pl-5 text-xs text-muted">
+          <SubHeading className="text-sm font-semibold text-navy">About this estimate</SubHeading>
+          <ul className="list-disc space-y-1 ps-5 text-xs text-muted">
             {reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
@@ -74,7 +82,7 @@ export function ResultReportCard({
 
       {retestAdvice || report.readiness ? (
         <section className="space-y-2 rounded-xl border border-border bg-background-light p-4">
-          <h4 className="text-sm font-semibold text-navy">Next step</h4>
+          <SubHeading className="text-sm font-semibold text-navy">Next step</SubHeading>
           {report.readiness ? (
             <p className="text-sm text-navy">
               {report.readiness.text}{' '}
@@ -146,7 +154,7 @@ function isUnderReview(skill: PlacementSkillResult): boolean {
   );
 }
 
-function SkillTile({ skill }: { skill: PlacementSkillResult }) {
+function SkillTile({ skill, headingTag: Heading }: { skill: PlacementSkillResult; headingTag: SubHeadingTag }) {
   const label = SKILL_LABELS[skill.skill] ?? skill.skill;
   const canDo = (skill.canDo ?? skill.can_do ?? []).slice(0, 3);
   const growth = (skill.growthAreas ?? skill.growth_areas ?? []).slice(0, 3);
@@ -168,13 +176,13 @@ function SkillTile({ skill }: { skill: PlacementSkillResult }) {
   }
 
   return (
-    <article className="space-y-2 rounded-xl border border-border bg-background-light p-4">
+    <article className="min-w-0 space-y-2 rounded-xl border border-border bg-background-light p-4">
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-semibold text-navy">{label}</h4>
+        <Heading className="text-sm font-semibold text-navy">{label}</Heading>
         {skill.status === 'measured' ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success-strong" aria-hidden />
         ) : isUnderReview(skill) ? (
-          <Clock3 className="h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <Clock3 className="h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
         ) : (
           <Info className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         )}
@@ -184,7 +192,7 @@ function SkillTile({ skill }: { skill: PlacementSkillResult }) {
       {skill.status === 'measured' && canDo.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-navy">You can</p>
-          <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted">
+          <ul className="list-disc space-y-0.5 ps-4 text-xs text-muted">
             {canDo.map((item) => (
               <li key={item}>{item}</li>
             ))}
@@ -194,7 +202,7 @@ function SkillTile({ skill }: { skill: PlacementSkillResult }) {
       {skill.status === 'measured' && growth.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-navy">Focus next</p>
-          <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted">
+          <ul className="list-disc space-y-0.5 ps-4 text-xs text-muted">
             {growth.map((item) => (
               <li key={item}>{item}</li>
             ))}
@@ -228,7 +236,7 @@ function DiagnosticArea({ label, area }: { label: string; area: PlacementDiagnos
   );
 }
 
-function Diagnostics({ report }: { report: PlacementResultReport }) {
+function Diagnostics({ report, headingTag: Heading }: { report: PlacementResultReport; headingTag: SubHeadingTag }) {
   const breakdown = report.diagnostics?.language_systems ?? null;
   const constructs = report.diagnostics?.languageSystems;
   const strong = constructs?.constructsStrong ?? [];
@@ -238,12 +246,12 @@ function Diagnostics({ report }: { report: PlacementResultReport }) {
 
   return (
     <section className="space-y-2">
-      <h4 className="text-sm font-semibold text-navy">Grammar &amp; Vocabulary diagnostics</h4>
+      <Heading className="text-sm font-semibold text-navy">Grammar &amp; Vocabulary diagnostics</Heading>
       <p className="text-xs text-muted">
         A diagnostic from Part 1. It guides your study plan and is not part of the skill levels above.
       </p>
       {hasBreakdown ? (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {breakdown?.grammar?.total ? <DiagnosticArea label="Grammar" area={breakdown.grammar} /> : null}
           {breakdown?.vocabulary?.total ? <DiagnosticArea label="Vocabulary" area={breakdown.vocabulary} /> : null}
         </div>

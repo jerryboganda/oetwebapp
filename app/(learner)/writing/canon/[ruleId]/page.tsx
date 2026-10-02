@@ -8,8 +8,10 @@ import { ArrowLeft, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { getMyCanonViolationsForRule, getWritingCanonRule } from '@/lib/writing/api';
 import type {
   WritingCanonRuleV2Dto,
@@ -57,44 +59,46 @@ export default function WritingCanonRuleDetailPage() {
 
   return (
     <>
-      <div className="space-y-6" aria-busy={!rule}>
-        <LearnerPageHero
-          eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
-          icon={BookOpen}
-          accent="amber"
-          // Rule id is a canonical identifier (e.g. "PURPOSE-01") — keep verbatim.
-          title={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}
-          // Rule text is Dr Ahmed's authored English canon content (spec §32).
-          description={rule?.ruleText ?? t('writing.canon.detail.descriptionLoading')}
-          highlights={rule ? [
-            { icon: BookOpen, label: t('writing.canon.detail.fields.category'), value: rule.category },
-            { icon: CheckCircle2, label: t('writing.canon.detail.fields.active'), value: rule.active ? t('writing.canon.detail.fields.activeYes') : t('writing.canon.detail.fields.activeNo') },
-          ] : []}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
+        icon={BookOpen}
+        accent="writing"
+        // Rule id is a canonical identifier (e.g. "PURPOSE-01") — keep verbatim.
+        title={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}
+        // Rule text is Dr Ahmed's authored English canon content (spec §32).
+        description={rule?.ruleText ?? t('writing.canon.detail.descriptionLoading')}
+        highlights={rule ? [
+          { icon: BookOpen, label: t('writing.canon.detail.fields.category'), value: rule.category },
+          { icon: CheckCircle2, label: t('writing.canon.detail.fields.active'), value: rule.active ? t('writing.canon.detail.fields.activeYes') : t('writing.canon.detail.fields.activeNo') },
+        ] : []}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {rule ? (
-          <section aria-labelledby="meta-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <header className="flex items-center justify-between gap-2">
+      {!rule && !error ? <LearnerSkeleton variant="card-grid" /> : null}
+
+      {rule ? (
+        <MotionSection delayIndex={0}>
+          <section aria-labelledby="meta-heading" className={cardClassName({ padding: 'lg' })}>
+            <header className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="meta-heading" className="text-base font-bold text-navy">{t('writing.canon.detail.metadataTitle')}</h2>
               {tone ? <Badge variant={tone.badge} size="sm">{t(tone.labelKey)}</Badge> : null}
             </header>
-            <dl className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.detection')}</dt>
-                <dd className="mt-1 font-bold text-navy capitalize">{rule.detectionType}</dd>
+            <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+              <div className="min-w-0">
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.detection')}</dt>
+                <dd className="mt-1 font-bold capitalize text-navy">{rule.detectionType}</dd>
               </div>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.letterTypes')}</dt>
+              <div className="min-w-0">
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.letterTypes')}</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {rule.appliesToLetterTypes.length > 0
                     ? rule.appliesToLetterTypes.map((lt) => <Badge key={lt} variant="muted" size="sm">{lt}</Badge>)
                     : <Badge variant="muted" size="sm">{t('writing.canon.detail.fields.all')}</Badge>}
                 </dd>
               </div>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.canon.detail.fields.professions')}</dt>
+              <div className="min-w-0">
+                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.professions')}</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {rule.appliesToProfessions.length > 0
                     ? rule.appliesToProfessions.map((p) => <Badge key={p} variant="info" size="sm" className="capitalize">{p}</Badge>)
@@ -103,68 +107,66 @@ export default function WritingCanonRuleDetailPage() {
               </div>
             </dl>
           </section>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {rule ? (
-          <section aria-labelledby="examples-heading" className="grid gap-4 md:grid-cols-2">
+      {rule ? (
+        <MotionSection delayIndex={1}>
+          <section aria-labelledby="examples-heading" className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <h2 id="examples-heading" className="sr-only">{t('writing.canon.detail.examples.title')}</h2>
-            <Card padding="md" className="border-emerald-200/70 bg-emerald-50/40 dark:border-emerald-800/50 dark:bg-emerald-950/20">
-              <CardContent>
-                <h3 className="flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-300">
-                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.correct')}
-                </h3>
-                <ul className="mt-2 space-y-2">
-                  {rule.correctExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
-                  {/* Examples are authored English canon content (spec §32). */}
-                  {rule.correctExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-emerald-200/60 bg-surface p-2 text-xs text-emerald-900 dark:border-emerald-800/50 dark:text-emerald-200" dir="ltr">
-                      {ex}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+            <Card padding="md" className="min-w-0 border-success/20 bg-success/10">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-success-strong">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.correct')}
+              </h3>
+              <ul className="mt-2 space-y-2">
+                {rule.correctExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
+                {/* Examples are authored English canon content (spec §32). */}
+                {rule.correctExamples.map((ex, idx) => (
+                  <li key={idx} className="rounded-control border border-success/20 bg-surface p-2 text-xs text-success-strong" dir="ltr">
+                    {ex}
+                  </li>
+                ))}
+              </ul>
             </Card>
-            <Card padding="md" className="border-red-200/70 bg-red-50/40 dark:border-red-800/50 dark:bg-red-950/20">
-              <CardContent>
-                <h3 className="flex items-center gap-2 text-sm font-bold text-red-800 dark:text-red-300">
-                  <XCircle className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.incorrect')}
-                </h3>
-                <ul className="mt-2 space-y-2">
-                  {rule.incorrectExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
-                  {rule.incorrectExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-red-200/60 bg-surface p-2 text-xs text-red-900" dir="ltr">
-                      {ex}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+            <Card padding="md" className="min-w-0 border-danger/20 bg-danger/10">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-danger-strong">
+                <XCircle className="h-4 w-4" aria-hidden="true" /> {t('writing.canon.detail.incorrect')}
+              </h3>
+              <ul className="mt-2 space-y-2">
+                {rule.incorrectExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
+                {rule.incorrectExamples.map((ex, idx) => (
+                  <li key={idx} className="rounded-control border border-danger/20 bg-surface p-2 text-xs text-danger-strong" dir="ltr">
+                    {ex}
+                  </li>
+                ))}
+              </ul>
             </Card>
           </section>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {rule?.lessonId ? (
-          <Card padding="md">
-            <CardContent>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-navy">{t('writing.canon.detail.lessonPrompt')}</p>
-                <Button asChild size="sm">
-                  <Link href={`/writing/lessons/${encodeURIComponent(rule.lessonId)}`}>{t('writing.canon.detail.lessonOpen')}</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
+      {rule?.lessonId ? (
+        <Card padding="md">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-navy">{t('writing.canon.detail.lessonPrompt')}</p>
+            <Button asChild size="sm">
+              <Link href={`/writing/lessons/${encodeURIComponent(rule.lessonId)}`}>{t('writing.canon.detail.lessonOpen')}</Link>
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
-        <section aria-labelledby="history-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <MotionSection delayIndex={2}>
+        <section aria-labelledby="history-heading" className={cardClassName({ padding: 'lg' })}>
           <h2 id="history-heading" className="text-base font-bold text-navy">{t('writing.canon.detail.history.heading')}</h2>
           <p className="mt-1 text-sm text-muted">
             {t('writing.canon.detail.history.summary', { count: personalCount })}
           </p>
           {violations.length > 0 ? (
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 divide-y divide-border">
               {violations.slice(0, 5).map((v) => (
-                <li key={v.id} className="rounded-lg border border-border bg-background p-3 text-sm">
-                  <Link href={`/writing/submissions/${encodeURIComponent(v.submissionId)}/results`} className="font-bold text-primary underline">
+                <li key={v.id} className="py-2.5 text-sm first:pt-0 last:pb-0">
+                  <Link href={`/writing/submissions/${encodeURIComponent(v.submissionId)}/results`} className="rounded font-bold text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                     {t('writing.canon.detail.history.submission', { id: v.submissionId.slice(0, 8) })}
                   </Link>
                   {/* Snippet is verbatim from the learner letter (English). */}
@@ -175,11 +177,11 @@ export default function WritingCanonRuleDetailPage() {
           ) : null}
           <div className="mt-3">
             <Button asChild variant="outline" size="sm">
-              <Link href="/writing/canon"><ArrowLeft className="h-3 w-3" aria-hidden="true" /> {t('writing.canon.detail.back')}</Link>
+              <Link href="/writing/canon"><ArrowLeft className="h-3 w-3 rtl:rotate-180" aria-hidden="true" /> {t('writing.canon.detail.back')}</Link>
             </Button>
           </div>
         </section>
-      </div>
+      </MotionSection>
     </>
   );
 }

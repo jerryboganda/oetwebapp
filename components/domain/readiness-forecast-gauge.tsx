@@ -15,7 +15,7 @@ export function ReadinessForecastGauge({ probability, confidenceBand, targetDate
 
   return (
     <div className="flex flex-col items-center text-center">
-      <svg viewBox="0 0 200 120" className="w-56 h-auto">
+      <svg viewBox="0 0 200 120" className="h-auto w-56 max-w-full" role="img" aria-label={pct == null ? 'Target-date probability pending' : `Target-date probability ${Math.round(pct)}%`}>
         <defs>
           <linearGradient id="readinessGauge" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="var(--color-danger)" />
@@ -38,10 +38,10 @@ export function ReadinessForecastGauge({ probability, confidenceBand, targetDate
         </text>
       </svg>
       {targetDate && (
-        <p className="text-xs text-muted mt-2">Chance of hitting target by <span className="font-bold text-navy">{targetDate}</span></p>
+        <p className="mt-2 text-xs text-muted">Chance of hitting target by <span className="font-bold tabular-nums text-navy">{targetDate}</span></p>
       )}
       {confidenceBand && (
-        <p className="text-2xs uppercase tracking-widest font-bold text-muted mt-2">Confidence: {confidenceBand}</p>
+        <p className="eyebrow mt-2 text-muted">Confidence: {confidenceBand}</p>
       )}
     </div>
   );

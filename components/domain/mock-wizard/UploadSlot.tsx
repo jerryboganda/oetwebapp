@@ -89,7 +89,7 @@ export function UploadSlot({
           {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
         </div>
         {state.kind === 'done' ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-bold text-success-strong">
             <CheckCircle2 className="h-3 w-3" /> Attached
           </span>
         ) : null}
@@ -141,7 +141,7 @@ export function UploadSlot({
       ) : null}
 
       {state.kind === 'error' ? (
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger-strong">
           <span>{state.message}</span>
           {pendingFile ? (
             <Button variant="outline" size="sm" onClick={() => void runUpload(pendingFile)}>

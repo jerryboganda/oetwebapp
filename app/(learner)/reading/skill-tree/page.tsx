@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
-import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import {
   getLessons,
   getSkillRadar,
@@ -38,25 +41,15 @@ const SKILLS: SkillDef[] = [
 
 function ScoreBar({ score, max = 10 }: { score: number; max?: number }) {
   const pct = Math.min(100, (score / max) * 100);
-  const color =
-    pct >= 70 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-danger';
+  const color = pct >= 70 ? 'success' : pct >= 40 ? 'warning' : 'danger';
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs text-muted">
         <span>Score</span>
-        <span className="font-semibold text-foreground">{score.toFixed(1)} / {max}</span>
+        <span className="font-semibold tabular-nums text-navy">{score.toFixed(1)} / {max}</span>
       </div>
-      <div className="h-2 w-full rounded-full bg-border">
-        <div
-          className={cn('h-2 rounded-full transition-[width,background-color] duration-300', color)}
-          style={{ width: `${pct}%` }}
-          role="progressbar"
-          aria-valuenow={score}
-          aria-valuemax={max}
-          aria-label={`Skill score ${score} of ${max}`}
-        />
-      </div>
+      <ProgressBar value={score} max={max} color={color} ariaLabel={`Skill score ${score} of ${max}`} />
     </div>
   );
 }
@@ -70,46 +63,37 @@ interface SkillNodeProps {
 }
 
 function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
-  const score = radarSkill?.current ?? 0;
   const isComplete = lesson?.progress?.completedAt != null;
 
+  // Not clickable itself (its buttons are), so no hover lift.
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical">
+    <Card className="flex h-full flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary dark:bg-primary-900/30 dark:text-primary-400">
-            {skill.code}
-          </span>
-          <h3 className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{skill.name}</h3>
+        <div className="min-w-0">
+          <Badge className="tabular-nums">{skill.code}</Badge>
+          <h3 className="mt-1.5 text-sm font-semibold leading-snug text-navy">{skill.name}</h3>
         </div>
         {isComplete && (
-          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+          <Badge variant="success" className="shrink-0">
             Done
-          </span>
+          </Badge>
         )}
       </div>
 
-      <p className="text-xs text-muted leading-relaxed">{skill.description}</p>
+      <p className="text-xs leading-relaxed text-muted">{skill.description}</p>
 
-      <ScoreBar score={score} />
+      {/* Only a real radar score; no skill data is not a 0.0 / 10 score. */}
+      {radarSkill ? <ScoreBar score={radarSkill.current} /> : null}
 
-      <div className="flex flex-col gap-2 pt-1">
+      <div className="mt-auto flex flex-col gap-2 pt-1">
         <Button asChild variant="primary" size="sm" fullWidth>
           <Link href={`/reading/practice?skill=${skill.code}`}>
             Practice
           </Link>
         </Button>
-
-        {lesson ? (
-          <Button asChild variant="outline" size="sm" fullWidth>
-            <Link href={`/reading/lessons/${lesson.lesson.slug}`}>
-              <BookOpen className="h-4 w-4" aria-hidden />
-              {lesson.progress?.completedAt ? 'Review lesson' : 'Study lesson'}
-            </Link>
-          </Button>
-        ) : null}
+        {/* No "Study lesson" link: /reading/lessons/[slug] has no page yet, so it could only 404. */}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -144,40 +128,39 @@ export default function SkillTreePage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Reading"
-          icon={BookOpen}
-          accent="blue"
-          title="Reading Skill Tree"
-          description="8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness."
-        />
+      <LearnerPageHero
+        eyebrow="Reading"
+        icon={BookOpen}
+        accent="reading"
+        title="Reading Skill Tree"
+        description="8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness."
+      />
 
-        {error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
-        ) : loading ? (
-          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
-            {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} className="h-52 w-full rounded-2xl" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
-            {SKILLS.map((skill) => {
-              const radarSkill = radar?.skills.find((s) => s.code === skill.code) ?? null;
-              const lesson = lessons.find((l) => l.lesson.skillCode === skill.code) ?? null;
-              return (
+      {error ? (
+        <ErrorState message={error} />
+      ) : loading ? (
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
+          {Array.from({ length: 8 }, (_, i) => (
+            <Skeleton key={i} className="h-52 w-full rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-4">
+          {SKILLS.map((skill, index) => {
+            const radarSkill = radar?.skills.find((s) => s.code === skill.code) ?? null;
+            const lesson = lessons.find((l) => l.lesson.skillCode === skill.code) ?? null;
+            return (
+              <MotionItem key={skill.code} delayIndex={Math.min(index, 5)} className="h-full">
                 <SkillNode
-                  key={skill.code}
                   skill={skill}
                   radarSkill={radarSkill}
                   lesson={lesson}
                 />
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </MotionItem>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

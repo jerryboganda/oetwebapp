@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
 import { ChevronRight, Clock, Heart, LockKeyhole, PlayCircle, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { CardLink } from '@/components/ui/card-link';
+import { ProgressBar } from '@/components/ui/progress';
 import type { VideoSummary } from '@/lib/types/videos';
 
 const SUBTEST_LABELS: Record<string, string> = {
@@ -11,6 +12,14 @@ const SUBTEST_LABELS: Record<string, string> = {
   speaking: 'Speaking',
   reading: 'Reading',
   listening: 'Listening',
+};
+
+// Sub-test identity chips (DESIGN.md §2); anything else stays a neutral chip.
+const SUBTEST_CHIPS: Record<string, string> = {
+  writing: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing',
+  speaking: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking',
+  reading: 'border-skill-reading/20 bg-skill-reading/10 text-skill-reading',
+  listening: 'border-skill-listening/20 bg-skill-listening/10 text-skill-listening',
 };
 
 const NEW_BADGE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -42,10 +51,11 @@ export function VideoCard({
   const isNew =
     Boolean(video.publishedAt) &&
     Date.now() - new Date(video.publishedAt as string).getTime() < NEW_BADGE_WINDOW_MS;
+  const subtest = video.subtestCode ?? '';
 
   return (
-    <Link href={`/videos/${video.id}`} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-      <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
+    <CardLink href={`/videos/${video.id}`} padding="none" className="group flex h-full flex-col overflow-hidden">
+      <article className="flex h-full flex-col">
         <div className="relative flex h-40 items-center justify-center bg-background-dark">
           {video.thumbnailUrl ? (
             <Image
@@ -59,9 +69,9 @@ export function VideoCard({
           ) : (
             <PlayCircle className="h-14 w-14 text-white/70 transition-colors group-hover:text-white" aria-hidden="true" />
           )}
-          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+          <div className="absolute start-3 top-3 flex flex-wrap gap-2">
             {locked ? (
-              <Badge variant="warning"><LockKeyhole className="mr-1 h-3 w-3" aria-hidden="true" /> Premium</Badge>
+              <Badge variant="warning"><LockKeyhole className="me-1 h-3 w-3" aria-hidden="true" /> Premium</Badge>
             ) : video.progress?.completed ? (
               <Badge variant="success">Completed</Badge>
             ) : video.accessTier === 'free' ? (
@@ -69,7 +79,7 @@ export function VideoCard({
             ) : null}
             {isNew && <Badge variant="info">New</Badge>}
             {video.isFeatured && (
-              <Badge variant="muted"><Star className="mr-1 h-3 w-3" aria-hidden="true" /> Featured</Badge>
+              <Badge variant="muted"><Star className="me-1 h-3 w-3" aria-hidden="true" /> Featured</Badge>
             )}
           </div>
           {onToggleBookmark && (
@@ -82,12 +92,12 @@ export function VideoCard({
                 event.stopPropagation();
                 onToggleBookmark(video.id);
               }}
-              className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-background-dark/70 text-white transition-colors hover:bg-background-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="absolute end-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-background-dark/70 text-white transition-colors hover:bg-background-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger' : ''}`} aria-hidden="true" />
+              <Heart className={`h-4 w-4 ${video.bookmarked ? 'fill-danger text-danger-strong' : ''}`} aria-hidden="true" />
             </button>
           )}
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-background-dark/70 px-2 py-1 text-xs text-white">
+          <div className="absolute bottom-3 end-3 flex items-center gap-1 rounded-full bg-background-dark/70 px-2 py-1 text-xs tabular-nums text-white">
             <Clock className="h-3 w-3" aria-hidden="true" />
             {formatDuration(video.durationSeconds)}
           </div>
@@ -95,7 +105,7 @@ export function VideoCard({
 
         <div className="flex flex-1 flex-col p-5">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant="muted">{SUBTEST_LABELS[video.subtestCode ?? ''] ?? 'General'}</Badge>
+            <Badge variant="muted" className={SUBTEST_CHIPS[subtest]}>{SUBTEST_LABELS[subtest] ?? 'General'}</Badge>
             {video.language && (
               <Badge variant="info">{video.language === 'ar' ? 'Arabic' : 'English'}</Badge>
             )}
@@ -109,19 +119,17 @@ export function VideoCard({
           )}
 
           <div className="mt-auto pt-4">
-            <div className="h-2 overflow-hidden rounded-full bg-background-light">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
-            </div>
+            <ProgressBar value={progress} ariaLabel={`${progress}% complete`} />
             <div className="mt-3 flex items-center justify-between text-xs font-semibold">
-              <span className="text-muted">{progress}% complete</span>
+              <span className="tabular-nums text-muted">{progress}% complete</span>
               <span className="inline-flex items-center gap-1 text-primary">
                 {locked ? 'View details' : videoHasProgress(video) ? 'Resume' : 'Watch'}
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
               </span>
             </div>
           </div>
         </div>
       </article>
-    </Link>
+    </CardLink>
   );
 }

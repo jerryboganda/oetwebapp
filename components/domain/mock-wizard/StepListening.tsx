@@ -256,7 +256,7 @@ export function StepListening() {
                 <button
                   onClick={() => removeItem(item.id)}
                   aria-label={`Remove question ${item.number}`}
-                  className="text-muted hover:text-red-600"
+                  className="text-muted hover:text-danger-strong"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

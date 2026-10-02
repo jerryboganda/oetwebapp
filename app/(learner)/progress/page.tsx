@@ -30,6 +30,8 @@ import { analytics } from '@/lib/analytics';
 import { queryKeys } from '@/lib/query/hooks';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
@@ -50,10 +52,14 @@ const CHART_COLORS = {
 
 const CHART_TICK = { fontSize: 12, fill: CHART_COLORS.muted } as const;
 const CHART_TOOLTIP_STYLE = { borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' } as const;
+const CRITERION_TABS = [
+  { id: 'Writing', label: 'Writing' },
+  { id: 'Speaking', label: 'Speaking' },
+];
 
 function ChartEmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex h-full min-h-[240px] items-center justify-center">
+    <div className="flex min-h-[240px] items-center justify-center">
       <LearnerEmptyState
         compact
         icon={TrendingUp}
@@ -68,6 +74,10 @@ function ChartEmptyState({ title, description }: { title: string; description: s
 
 function SrChartSummary({ children }: { children: string }) {
   return <p className="sr-only">{children}</p>;
+}
+
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 export default function ProgressDashboard() {
@@ -119,266 +129,249 @@ export default function ProgressDashboard() {
   }, []);
 
   const completedLast7 = completionData.reduce((sum, point) => sum + point.completed, 0);
-  const averageTurnaroundLabel = progressSummary?.reviewUsage.averageTurnaroundHours
-    ? `${progressSummary.reviewUsage.averageTurnaroundHours}h avg`
+  const averageTurnaroundHours = progressSummary?.reviewUsage.averageTurnaroundHours ?? null;
+  const averageTurnaroundLabel = averageTurnaroundHours
+    ? `${averageTurnaroundHours}h avg`
     : 'Pending';
   const hasTrendData = trendData.length > 0;
   const hasCompletionData = completionData.length > 0;
   const hasVolumeData = volumeData.length > 0;
   const hasAnyProgressData = hasTrendData || hasCompletionData || hasVolumeData || Boolean(progressSummary);
   const generatedAt = progressSummary?.freshness.generatedAt ?? null;
+  // Real counts once loaded; a dash when that series failed, never a stuck "Loading...".
+  const countLabel = (failed: boolean, label: string) => (loading ? 'Loading...' : failed ? '—' : label);
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Evidence Check"
-          icon={TrendingUp}
-          accent="primary"
-          title="See whether recent effort is turning into better evidence"
-          description="Track your score trends, completed work, and review activity to choose your next priority."
-          highlights={[
-            { icon: Activity, label: 'Trend coverage', value: trendData.length ? `${trendData.length} checkpoints` : 'Loading...' },
-            { icon: CheckCircle2, label: 'Completed work', value: completionData.length ? `${completedLast7} tasks` : 'Loading...' },
-            { icon: Clock, label: 'Review speed', value: averageTurnaroundLabel },
-          ]}
-          aside={<LearnerFreshnessIndicator updatedAt={generatedAt} staleAfterMinutes={1440} />}
-        />
+      <LearnerPageHero
+        eyebrow="Evidence Check"
+        icon={TrendingUp}
+        accent="primary"
+        title="See whether recent effort is turning into better evidence"
+        description="Track your score trends, completed work, and review activity to choose your next priority."
+        highlights={[
+          { icon: Activity, label: 'Trend coverage', value: countLabel(Boolean(trendQuery.error), plural(trendData.length, 'checkpoint')) },
+          { icon: CheckCircle2, label: 'Completed work', value: countLabel(Boolean(completionQuery.error), plural(completedLast7, 'task')) },
+          { icon: Clock, label: 'Review speed', value: averageTurnaroundLabel },
+        ]}
+        aside={<LearnerFreshnessIndicator updatedAt={generatedAt} staleAfterMinutes={1440} />}
+      />
 
-        {loading && (
-          <LearnerSkeleton variant="dashboard" />
-        )}
+      {loading && (
+        <LearnerSkeleton variant="chart-panel" />
+      )}
 
-        {!loading && error && (
-          <InlineAlert
-            variant={hasAnyProgressData ? 'warning' : 'error'}
-            action={<Button size="sm" variant="outline" onClick={() => failedQueries.forEach((query) => void query.refetch())}>Retry</Button>}
-          >
-            {error}
-          </InlineAlert>
-        )}
+      {!loading && error && (
+        <InlineAlert
+          variant={hasAnyProgressData ? 'warning' : 'error'}
+          action={<Button size="sm" variant="outline" onClick={() => failedQueries.forEach((query) => void query.refetch())}>Retry</Button>}
+        >
+          {error}
+        </InlineAlert>
+      )}
 
-        {!loading && (
-          <>
-            {!hasAnyProgressData ? (
-              <LearnerEmptyState
-                icon={Activity}
-                title="No progress evidence yet"
-                description="Complete practice submissions or mock tests to unlock charts and review timing insights."
-                primaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
-                secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
-              />
-            ) : null}
+      {!loading && (
+        <>
+          {!hasAnyProgressData ? (
+            <LearnerEmptyState
+              icon={Activity}
+              title="No progress evidence yet"
+              description="Complete practice submissions or mock tests to unlock charts and review timing insights."
+              primaryAction={{ label: 'Start Writing Practice', href: '/writing' }}
+              secondaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+            />
+          ) : null}
 
-            {/* 1. Sub-test Trend */}
-            <MotionSection
-              delayIndex={0}
-              className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
-            >
+          {/* 1. Sub-test Trend */}
+          <MotionSection delayIndex={0}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow="Sub-test Performance Trend"
                 title="See score movement across all skills"
                 description="Compare your trajectory across all four sub-tests at a glance."
                 className="mb-6"
               />
-              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
-                <SrChartSummary>
-                  {hasTrendData
-                    ? `Sub-test trend has ${trendData.length} checkpoints. Latest checkpoint is ${trendData[trendData.length - 1]?.date ?? 'unknown'}.`
-                    : 'No score trend is available yet.'}
-                </SrChartSummary>
-                {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      <Line type="monotone" dataKey="reading" name="Reading" stroke={seriesColor('reading')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="listening" name="Listening" stroke={seriesColor('listening')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="writing" name="Writing" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <ChartEmptyState
-                    title="No trend data yet"
-                    description="Complete a few scored submissions to unlock movement across Reading, Listening, Writing, and Speaking."
-                  />
-                )}
-              </div>
-            </MotionSection>
+              {hasTrendData ? (
+                <>
+                  <SrChartSummary>
+                    {`Sub-test trend has ${trendData.length} checkpoints. Latest checkpoint is ${trendData[trendData.length - 1]?.date ?? 'unknown'}.`}
+                  </SrChartSummary>
+                  <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                        <Line type="monotone" dataKey="reading" name="Reading" stroke={seriesColor('reading')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="listening" name="Listening" stroke={seriesColor('listening')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="writing" name="Writing" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="speaking" name="Speaking" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              ) : (
+                <ChartEmptyState
+                  title="No trend data yet"
+                  description="Complete a few scored submissions to unlock movement across Reading, Listening, Writing, and Speaking."
+                />
+              )}
+            </Card>
+          </MotionSection>
 
-            {/* 2. Criterion Trend */}
-            <MotionSection
-              delayIndex={1}
-              className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
-            >
+          {/* 2. Criterion Trend */}
+          <MotionSection delayIndex={1}>
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow="Criterion Trend"
                 title="Filter deeper without losing the main story"
                 description="Filter Writing and Speaking by individual criterion to see exactly where you're improving."
+                action={(
+                  <Tabs
+                    tabs={CRITERION_TABS}
+                    activeTab={criterionFilter}
+                    onChange={setCriterionFilter}
+                    scrollable={false}
+                    className="w-auto shrink-0 self-start sm:self-auto"
+                  />
+                )}
                 className="mb-6"
               />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-6">
-                <div className="flex items-center gap-2 bg-background-light p-1 rounded-xl border border-border">
-                  {['Writing', 'Speaking'].map(f => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setCriterionFilter(f)}
-                      aria-pressed={criterionFilter === f}
-                      aria-label={`Show ${f} criterion trend`}
-                      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${criterionFilter === f ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
-                <SrChartSummary>
-                  {hasTrendData
-                    ? `${criterionFilter} criterion trend is displayed using the same ${trendData.length} score checkpoints.`
-                    : `No ${criterionFilter} criterion trend is available yet.`}
-                </SrChartSummary>
+              <TabPanel id={criterionFilter} activeTab={criterionFilter}>
                 {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      {criterionFilter === 'Writing' ? (
-                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      ) : (
-                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <>
+                    <SrChartSummary>
+                      {`${criterionFilter} criterion trend is displayed using the same ${trendData.length} score checkpoints.`}
+                    </SrChartSummary>
+                    <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                          {criterionFilter === 'Writing' ? (
+                            <Line type="monotone" dataKey="writing" name="Writing Score" stroke={seriesColor('writing')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          ) : (
+                            <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={seriesColor('speaking')} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
                 ) : (
                   <ChartEmptyState
                     title={`No ${criterionFilter.toLowerCase()} trend yet`}
                     description="Submit scored work in this skill to unlock criterion movement."
                   />
                 )}
-              </div>
-            </MotionSection>
+              </TabPanel>
+            </Card>
+          </MotionSection>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* 3. Completion Trend */}
-              <MotionSection
-                delayIndex={2}
-                className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
-              >
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* 3. Completion Trend */}
+            <MotionSection delayIndex={2}>
+              <Card padding="lg" className="h-full">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Completion Trend"
                   title="Keep task completion visible"
                   description="Progress isn't just score movement; it's also how consistently you're completing planned work."
                   className="mb-6"
                 />
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Completion trend chart showing tasks completed over the last 7 days">
-                  <SrChartSummary>
-                    {hasCompletionData ? `${completedLast7} tasks are represented across ${completionData.length} completion points.` : 'No task completion trend is available yet.'}
-                  </SrChartSummary>
-                  {hasCompletionData ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                      <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <defs>
-                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke={CHART_COLORS.success} strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <ChartEmptyState
-                      title="No completion trend yet"
-                      description="Complete planned tasks to make your weekly consistency visible."
-                    />
-                  )}
-                </div>
-              </MotionSection>
+                {hasCompletionData ? (
+                  <>
+                    <SrChartSummary>{`${completedLast7} tasks are represented across ${completionData.length} completion points.`}</SrChartSummary>
+                    <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Completion trend chart showing tasks completed over the last 7 days">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
+                          <defs>
+                            <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
+                              <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                          <XAxis dataKey="day" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                          <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke={CHART_COLORS.success} strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                ) : (
+                  <ChartEmptyState
+                    title="No completion trend yet"
+                    description="Complete planned tasks to make your weekly consistency visible."
+                  />
+                )}
+              </Card>
+            </MotionSection>
 
-              {/* 4. Submission Volume */}
-              <MotionSection
-                delayIndex={3}
-                className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
-              >
+            {/* 4. Submission Volume */}
+            <MotionSection delayIndex={3}>
+              <Card padding="lg" className="h-full">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Submission Volume"
                   title="Make writing and speaking effort visible"
                   description="Your submission volume shows how much practice you've banked."
                   className="mb-6"
                 />
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Submission volume chart showing Writing and Speaking tasks submitted">
-                  <SrChartSummary>
-                    {hasVolumeData ? `Submission volume includes ${volumeData.length} weekly points.` : 'No submission-volume data is available yet.'}
-                  </SrChartSummary>
-                  {hasVolumeData ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                      <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="week" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip cursor={{ fill: CHART_COLORS.border }} contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="submissions" name="Submissions" fill={CHART_COLORS.warning} radius={[6, 6, 0, 0]} barSize={32} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <ChartEmptyState
-                      title="No submissions yet"
-                      description="Submit Writing or Speaking work to see weekly volume and transfer practice."
-                    />
-                  )}
-                </div>
-              </MotionSection>
-            </div>
+                {hasVolumeData ? (
+                  <>
+                    <SrChartSummary>{`Submission volume includes ${volumeData.length} weekly points.`}</SrChartSummary>
+                    <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Submission volume chart showing Writing and Speaking tasks submitted">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                          <XAxis dataKey="week" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                          <Tooltip cursor={{ fill: CHART_COLORS.border }} contentStyle={CHART_TOOLTIP_STYLE} />
+                          <Bar dataKey="submissions" name="Submissions" fill={CHART_COLORS.warning} radius={[6, 6, 0, 0]} barSize={32} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                ) : (
+                  <ChartEmptyState
+                    title="No submissions yet"
+                    description="Submit Writing or Speaking work to see weekly volume and transfer practice."
+                  />
+                )}
+              </Card>
+            </MotionSection>
+          </div>
 
-            {/* 5. Review Usage */}
-            <MotionSection
-              delayIndex={4}
-              className="rounded-2xl border border-white/10 bg-background-dark p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
-            >
-              <div className="mb-6 relative z-10">
-                <p className="text-xs font-black uppercase tracking-widest text-white/70 mb-2">Tutor Review Turnaround</p>
-                <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
-                <p className="text-sm text-white/80 mt-1">
-                  Tutor review should feel like part of the same learner system, with clear operational expectations.
+          {/* 5. Review Usage */}
+          <MotionSection delayIndex={4}>
+            <Card padding="lg">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Tutor Review Turnaround"
+                icon={Clock}
+                title="Keep human-feedback timing visible"
+                description="Average time from submission to feedback"
+                className="mb-5"
+              />
+              <div className="inline-flex flex-col rounded-2xl border border-border bg-background-light px-5 py-4">
+                <p className="tile-label text-muted">Avg Turnaround</p>
+                <p className="mt-1 flex items-baseline gap-2">
+                  <span className="text-3xl font-bold tabular-nums text-navy">{averageTurnaroundHours ?? 'Pending'}</span>
+                  {averageTurnaroundHours != null ? <span className="text-sm font-semibold text-muted">hours</span> : null}
                 </p>
               </div>
-              <div className="relative z-10 flex items-center gap-3">
-                <Clock className="w-5 h-5 text-white shrink-0" aria-hidden="true" />
-                <div>
-                  <h2 className="text-base font-black">Tutor Review Turnaround</h2>
-                  <p className="text-xs text-white/80">Average time from submission to feedback</p>
-                </div>
-              </div>
-              <div className="mt-6 bg-white/10 rounded-2xl p-5 border border-white/15 inline-block">
-                <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">Avg Turnaround</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black">{progressSummary?.reviewUsage.averageTurnaroundHours ?? 'Pending'}</span>
-                  <span className="text-sm font-bold text-white/80">hours</span>
-                </div>
-              </div>
-              <p className="mt-4 text-xs text-white/70">
-                {progressSummary?.freshness.usesFallbackSeries
-                  ? 'Review timing is still based on limited data and will sharpen after more requests complete.'
-                  : `Updated ${new Date(progressSummary?.freshness.generatedAt ?? new Date().toISOString()).toLocaleString()}.`}
-              </p>
-            </MotionSection>
-          </>
-        )}
-
-      </div>
+              {progressSummary?.freshness.usesFallbackSeries ? (
+                <p className="mt-4 text-xs text-muted">
+                  Review timing is still based on limited data and will sharpen after more requests complete.
+                </p>
+              ) : null}
+            </Card>
+          </MotionSection>
+        </>
+      )}
     </>
   );
 }

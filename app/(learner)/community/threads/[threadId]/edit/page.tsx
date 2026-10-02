@@ -6,7 +6,6 @@ import { PenLine, ArrowLeft } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 
@@ -27,21 +26,19 @@ export default function EditThreadPage() {
         icon={PenLine}
       />
 
-      <MotionSection className="mx-auto max-w-2xl space-y-4">
+      <MotionSection className="space-y-4">
         <Button
           variant="outline"
           size="sm"
           onClick={() => router.push(`/community/threads/${threadId}`)}
         >
-          <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Thread
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to Thread
         </Button>
 
-        <Card className="p-6 shadow-sm">
-          <InlineAlert variant="info">
-            Editing threads isn&apos;t available yet. You can still view the thread
-            and add replies. Thank you for your patience while we build this out.
-          </InlineAlert>
-        </Card>
+        <InlineAlert variant="info" live="polite">
+          Editing threads isn&apos;t available yet. You can still view the thread
+          and add replies. Thank you for your patience while we build this out.
+        </InlineAlert>
       </MotionSection>
     </>
   );

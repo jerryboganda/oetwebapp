@@ -6,36 +6,38 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  FileText,
   XCircle,
   Search,
   Plus,
   Send,
   X,
 } from 'lucide-react';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Button, InlineAlert, Input, Textarea } from '@/components/ui';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { Badge, Button, Card, InlineAlert, Input, Textarea } from '@/components/ui';
+import { cardClassName } from '@/components/ui/card';
+import { LearnerPageHero } from '@/components/domain';
 import { fetchMyEscalations, submitEscalation } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
 
-const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
-  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },
-  InReview: { label: 'In Review', icon: Search,       classes: 'bg-info/10 text-info' },
-  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-success/10 text-success' },
-  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-danger/10 text-danger' },
+const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; variant: 'warning' | 'info' | 'success' | 'danger' }> = {
+  Pending:  { label: 'Pending',   icon: Clock,        variant: 'warning' },
+  InReview: { label: 'In Review', icon: Search,       variant: 'info' },
+  Resolved: { label: 'Resolved',  icon: CheckCircle2, variant: 'success' },
+  Rejected: { label: 'Rejected',  icon: XCircle,      variant: 'danger' },
 };
 
 function StatusBadge({ status }: { status: EscalationStatus }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.Pending;
   const Icon = config.icon;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${config.classes}`}>
-      <Icon className="w-3.5 h-3.5" />
+    <Badge variant={config.variant} className="gap-1">
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       {config.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -102,146 +104,142 @@ export default function EscalationsPage() {
     }
   }
 
+  const openEscalation = (id: string) => router.push(`/escalations/${id}`);
+
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Disputes & Escalations"
-          icon={AlertTriangle}
-          accent="amber"
-          title="Your Escalations"
-          description="Submit a dispute if you believe a score or review was inaccurate. Track the status of each escalation here."
-          highlights={[
-            { icon: Clock, label: 'Total', value: String(escalations.length) },
-            { icon: Search, label: 'In Review', value: String(escalations.filter((e) => e.status === 'InReview').length) },
-            { icon: CheckCircle2, label: 'Resolved', value: String(escalations.filter((e) => e.status === 'Resolved').length) },
-          ]}
-        />
-
-        <div className="flex items-center justify-between">
-          <LearnerSurfaceSectionHeader title="Your Escalations" />
-          <Button variant="primary" className="gap-2" onClick={() => { setShowForm(true); setSubmitSuccess(false); }}>
-            <Plus className="h-4 w-4" />
+      {/* The hero names the list, so the CTA lives in its aside instead of a
+          second "Your Escalations" header. Counts appear once they are real. */}
+      <LearnerPageHero
+        eyebrow="Disputes & Escalations"
+        icon={AlertTriangle}
+        accent="amber"
+        title="Your Escalations"
+        description="Submit a dispute if you believe a score or review was inaccurate. Track the status of each escalation here."
+        highlights={loading || error ? undefined : [
+          { icon: Clock, label: 'Total', value: String(escalations.length) },
+          { icon: Search, label: 'In Review', value: String(escalations.filter((e) => e.status === 'InReview').length) },
+          { icon: CheckCircle2, label: 'Resolved', value: String(escalations.filter((e) => e.status === 'Resolved').length) },
+        ]}
+        aside={(
+          <Button variant="primary" onClick={() => { setShowForm(true); setSubmitSuccess(false); }}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
             Submit Escalation
           </Button>
-        </div>
+        )}
+      />
 
-        {submitSuccess && !showForm ? (
-          <InlineAlert variant="success">Escalation submitted successfully. It will be reviewed shortly.</InlineAlert>
-        ) : null}
+      {submitSuccess && !showForm ? (
+        <InlineAlert variant="success" live="polite">Escalation submitted successfully. It will be reviewed shortly.</InlineAlert>
+      ) : null}
 
-        {/* ─── Submit Form ─── */}
-        {showForm ? (
-          <div className="rounded-2xl border border-border bg-surface p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-navy">Submit New Escalation</h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowForm(false)} aria-label="Close form">
-                <X className="h-4 w-4" />
+      {/* ─── Submit Form ─── */}
+      {showForm ? (
+        <MotionSection>
+          <Card padding="lg" className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-navy">Submit New Escalation</h2>
+              <Button variant="ghost" size="sm" className="w-11 px-0" onClick={() => setShowForm(false)} aria-label="Close form">
+                <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
 
             {submitError ? <InlineAlert variant="error">{submitError}</InlineAlert> : null}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="esc-submission-id" className="block text-sm font-medium text-navy mb-1">
-                  Submission ID
-                </label>
-                <Input
-                  id="esc-submission-id"
-                  value={formSubmissionId}
-                  onChange={(e) => setFormSubmissionId(e.target.value)}
-                  placeholder="Enter the submission ID to dispute"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="esc-reason" className="block text-sm font-medium text-navy mb-1">
-                  Reason
-                </label>
-                <Input
-                  id="esc-reason"
-                  value={formReason}
-                  onChange={(e) => setFormReason(e.target.value)}
-                  placeholder="Brief reason for the escalation"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="esc-details" className="block text-sm font-medium text-navy mb-1">
-                  Details
-                </label>
-                <Textarea
-                  id="esc-details"
-                  value={formDetails}
-                  onChange={(e) => setFormDetails(e.target.value)}
-                  placeholder="Provide full details about your dispute"
-                  rows={4}
-                  required
-                />
-              </div>
-              <div className="flex gap-3 justify-end">
+            <form onSubmit={handleSubmit} className="max-w-2xl space-y-4">
+              <Input
+                id="esc-submission-id"
+                label="Submission ID"
+                value={formSubmissionId}
+                onChange={(e) => setFormSubmissionId(e.target.value)}
+                placeholder="Enter the submission ID to dispute"
+                required
+              />
+              <Input
+                id="esc-reason"
+                label="Reason"
+                value={formReason}
+                onChange={(e) => setFormReason(e.target.value)}
+                placeholder="Brief reason for the escalation"
+                required
+              />
+              <Textarea
+                id="esc-details"
+                label="Details"
+                value={formDetails}
+                onChange={(e) => setFormDetails(e.target.value)}
+                placeholder="Provide full details about your dispute"
+                rows={4}
+                required
+              />
+              <div className="flex flex-wrap justify-end gap-3">
                 <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" className="gap-2" disabled={submitting}>
-                  <Send className="h-4 w-4" />
+                <Button type="submit" variant="primary" disabled={submitting}>
+                  <Send className="h-4 w-4" aria-hidden="true" />
                   {submitting ? 'Submitting…' : 'Submit'}
                 </Button>
               </div>
             </form>
-          </div>
-        ) : null}
+          </Card>
+        </MotionSection>
+      ) : null}
 
-        {/* ─── Loading ─── */}
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-        ) : null}
+      {/* ─── Loading ─── */}
+      {loading ? (
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+          {[1, 2, 3].map((i) => (
+            <Skeleton aria-hidden key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+      ) : null}
 
-        {/* ─── Error ─── */}
-        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {/* ─── Error ─── */}
+      {!loading && error ? <ErrorState message={error} onRetry={loadEscalations} /> : null}
 
-        {/* ─── Empty ─── */}
-        {!loading && !error && escalations.length === 0 ? (
-          <EmptyState
-            title="No escalations yet"
-            description="You haven't submitted any escalations. If you believe a score is incorrect, submit one above."
-          />
-        ) : null}
+      {/* ─── Empty ─── */}
+      {!loading && !error && escalations.length === 0 ? (
+        <EmptyState
+          icon={<FileText className="h-8 w-8" />}
+          title="No escalations yet"
+          description="You haven't submitted any escalations. If you believe a score is incorrect, submit one above."
+        />
+      ) : null}
 
-        {/* ─── Escalation List ─── */}
-        {!loading && !error && escalations.length > 0 ? (
-          <div className="space-y-3">
-            {escalations.map((esc, index) => (
-              <MotionItem key={esc.id} delayIndex={index}>
-                <div
-                  data-escalation-id={esc.id}
-                  onClick={() => router.push(`/escalations/${esc.id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/escalations/${esc.id}`); }}
-                  role="button"
-                  tabIndex={0}
-                  className="rounded-2xl border border-border bg-surface p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-navy">{esc.submissionId}</span>
-                        <StatusBadge status={esc.status} />
-                      </div>
-                      <p className="text-sm text-muted">{truncate(esc.reason, 80)}</p>
+      {/* ─── Escalation List ─── */}
+      {!loading && !error && escalations.length > 0 ? (
+        <div className="space-y-3">
+          {escalations.map((esc, index) => (
+            <MotionItem key={esc.id} delayIndex={Math.min(index, 5)}>
+              <div
+                data-escalation-id={esc.id}
+                onClick={() => openEscalation(esc.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openEscalation(esc.id);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                className={cardClassName({ hoverable: true, interactive: true })}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="break-all text-sm font-semibold text-navy">{esc.submissionId}</span>
+                      <StatusBadge status={esc.status} />
                     </div>
-                    <span className="text-xs text-muted whitespace-nowrap">{formatDate(esc.createdAt)}</span>
+                    <p className="text-sm text-muted">{truncate(esc.reason, 80)}</p>
                   </div>
+                  <span className="whitespace-nowrap text-xs text-muted tabular-nums">{formatDate(esc.createdAt)}</span>
                 </div>
-              </MotionItem>
-            ))}
-          </div>
-        ) : null}
-      </div>
+              </div>
+            </MotionItem>
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }

@@ -144,7 +144,7 @@ export function BCQuestionRenderer({
         <span
           data-testid="bc-flagged-indicator"
           aria-hidden="true"
-          className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning"
+          className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning-strong"
         >
           <Flag className="h-3 w-3" />
           Flagged for review
@@ -153,7 +153,7 @@ export function BCQuestionRenderer({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="info">Q{questionNumber}</Badge>
-          <span className="text-xs font-black uppercase tracking-widest text-muted">
+          <span className="eyebrow text-muted">
             {partLabel}
           </span>
         </div>

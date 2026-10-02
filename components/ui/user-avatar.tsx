@@ -78,7 +78,7 @@ export function UserAvatar({ avatarUrl, displayName, className }: UserAvatarProp
   return (
     <span
       className={cn(
-        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-bold text-primary ring-1 ring-primary/10',
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary ring-1 ring-primary/10',
         className,
       )}
     >

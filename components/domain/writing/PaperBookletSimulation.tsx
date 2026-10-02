@@ -306,7 +306,7 @@ export function PaperBookletSimulation({
         aria-label={t('writing.paper.controlsLabel')}
       >
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">
+          <p className="eyebrow text-muted">
             {t('writing.paper.eyebrow')}
           </p>
           {/* Booklet title is OET-authored English content (spec §32). */}
@@ -358,7 +358,7 @@ export function PaperBookletSimulation({
           {/* Cover */}
           <BookletPage ariaLabel={t('writing.paper.coverLabel')}>
             <div className="text-center">
-              <p className="font-serif text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">
+              <p className="font-serif eyebrow text-amber-800">
                 {t('writing.paper.cover.testName')}
               </p>
               <h2 className="mt-2 font-serif text-2xl font-bold text-amber-950">
@@ -378,7 +378,7 @@ export function PaperBookletSimulation({
             </div>
 
             <div className="mt-6 rounded-sm border border-amber-200 bg-amber-50/60 p-4">
-              <h3 className="font-serif text-xs font-bold uppercase tracking-wide text-amber-900">
+              <h3 className="font-serif eyebrow text-amber-900">
                 {t('writing.paper.cover.instructionsHeading')}
               </h3>
               <ul className="mt-2 space-y-1 text-xs leading-relaxed text-stone-700">

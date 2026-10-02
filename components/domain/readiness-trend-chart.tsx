@@ -7,6 +7,7 @@ import type { ReadinessHistoryPoint } from '@/lib/mock-data';
 interface ReadinessTrendChartProps {
   data: ReadinessHistoryPoint[];
   series?: 'overall' | 'writing' | 'speaking' | 'reading' | 'listening' | 'vocabulary';
+  /** The series' own target from the learner's readiness data; no line without one. */
   target?: number;
 }
 
@@ -19,7 +20,7 @@ const SERIES_COLOR: Record<NonNullable<ReadinessTrendChartProps['series']>, stri
   vocabulary: seriesColor('vocabulary'),
 };
 
-export function ReadinessTrendChart({ data, series = 'overall', target = 70 }: ReadinessTrendChartProps) {
+export function ReadinessTrendChart({ data, series = 'overall', target }: ReadinessTrendChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="h-56 flex items-center justify-center text-sm text-muted">
@@ -52,7 +53,7 @@ export function ReadinessTrendChart({ data, series = 'overall', target = 70 }: R
             contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: 'var(--color-navy)' }}
           />
-          {target > 0 && (
+          {target !== undefined && target > 0 && (
             <ReferenceLine y={target} stroke="var(--color-success)" strokeDasharray="5 5" label={{ value: `Target ${target}`, position: 'right', fill: 'var(--color-success)', fontSize: 11 }} />
           )}
           <Area type="monotone" dataKey="value" stroke={color} fill={`url(#${gradientId})`} strokeWidth={2} />

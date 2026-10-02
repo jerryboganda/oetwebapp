@@ -42,15 +42,23 @@ public static class CommunityEndpoints
 
         // ── Forum threads ────────────────────────────────────────────────
         community.MapGet("/threads", async (
+            HttpContext http,
             [FromQuery] string? categoryId,
-            [FromQuery] int page,
-            [FromQuery] int pageSize,
+            [FromQuery] bool? mine,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
             var query = db.ForumThreads.AsQueryable();
             if (!string.IsNullOrEmpty(categoryId)) query = query.Where(t => t.CategoryId == categoryId);
-            var ps = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 100);
-            var pg = page <= 0 ? 1 : page;
+            // "My threads" by user id: a display name is neither unique nor stable.
+            if (mine == true)
+            {
+                var userId = http.UserId();
+                query = query.Where(t => t.AuthorUserId == userId);
+            }
+            var ps = Math.Clamp(pageSize is > 0 ? pageSize.Value : 20, 1, 100);
+            var pg = page is > 0 ? page.Value : 1;
             var total = await query.CountAsync(ct);
             var threads = await query.OrderByDescending(t => t.IsPinned).ThenByDescending(t => t.LastActivityAt)
                 .Skip((pg - 1) * ps)
@@ -131,19 +139,28 @@ public static class CommunityEndpoints
         }).RequireRateLimiting("PerUserWrite");
 
         // ── Study groups ─────────────────────────────────────────────────
+        // page/pageSize are optional: the learner page lists the first page, and a
+        // required int answered 400 to every call that left them out.
         community.MapGet("/study-groups", async (
+            HttpContext http,
             [FromQuery] string? examTypeCode,
-            [FromQuery] int page,
-            [FromQuery] int pageSize,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var ps = pageSize <= 0 ? 20 : pageSize;
-            var pg = page <= 0 ? 1 : page;
+            var ps = pageSize is > 0 ? pageSize.Value : 20;
+            var pg = page is > 0 ? page.Value : 1;
             var query = db.StudyGroups.Where(g => g.IsPublic && g.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(g => g.ExamTypeCode == examTypeCode);
             var total = await query.CountAsync(ct);
             var groups = await query.OrderByDescending(g => g.MemberCount).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);
-            return Results.Ok(new { total, groups = groups.Select(g => new { id = g.Id, name = g.Name, description = g.Description, examTypeCode = g.ExamTypeCode, memberCount = g.MemberCount, maxMembers = g.MaxMembers, createdAt = g.CreatedAt }) });
+            var userId = http.UserId();
+            var groupIds = groups.Select(g => g.Id).ToList();
+            var joinedIds = await db.StudyGroupMembers
+                .Where(m => m.UserId == userId && groupIds.Contains(m.GroupId))
+                .Select(m => m.GroupId)
+                .ToListAsync(ct);
+            return Results.Ok(new { total, groups = groups.Select(g => new { id = g.Id, name = g.Name, description = g.Description, examTypeCode = g.ExamTypeCode, memberCount = g.MemberCount, maxMembers = g.MaxMembers, createdAt = g.CreatedAt, isJoined = joinedIds.Contains(g.Id) }) });
         });
 
         community.MapPost("/study-groups", async (HttpContext http, CreateStudyGroupRequest req, LearnerDbContext db, CancellationToken ct) =>

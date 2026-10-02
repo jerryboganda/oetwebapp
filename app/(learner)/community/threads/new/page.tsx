@@ -79,15 +79,16 @@ export default function NewThreadPage() {
         icon={PenLine}
       />
 
-      <MotionSection className="mx-auto max-w-2xl space-y-4">
+      <MotionSection className="space-y-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
-          <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Threads
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to Threads
         </Button>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        <Card className="p-6 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <Card padding="lg">
+          {/* Fields keep a readable width; the card itself spans the page with the hero. */}
+          <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
             <Input
               label="Title"
               placeholder="What do you want to discuss?"
@@ -115,7 +116,7 @@ export default function NewThreadPage() {
               rows={8}
             />
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
               <Button
                 type="button"
                 variant="outline"

@@ -26,24 +26,25 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                 <Link
                   href={`/writing/profile-setup/${step.code}`}
                   className={cn(
-                    'flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                    'pressable flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                     isCurrent
                       ? 'border-primary bg-primary/10 text-primary'
                       : isComplete
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300'
-                        : 'border-border bg-background text-navy hover:border-primary/40',
+                        ? 'border-success/30 bg-success/10 text-success-strong'
+                        : 'hover-primary border-border bg-background text-navy hover:border-primary/40',
                   )}
                   aria-current={isCurrent ? 'step' : undefined}
                   aria-label={`Step ${step.index} of ${WIZARD_STEPS.length}: ${step.label}, ${stateLabel}`}
                 >
                   <span
                     className={cn(
-                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-3xs font-bold',
+                      'inline-flex h-5 w-5 items-center justify-center rounded-full text-3xs font-bold tabular-nums',
                       isCurrent
                         ? 'bg-primary text-white dark:bg-primary-700'
                         : isComplete
-                          ? 'bg-emerald-500 text-white'
+                          // A tint, not white on success: that fails 3:1 for the check.
+                          ? 'bg-success/20 text-success-strong'
                           : 'bg-background-light text-muted',
                     )}
                   >
@@ -53,7 +54,7 @@ export function StepperNav({ currentStep }: StepperNavProps) {
                 </Link>
               ) : (
                 <span
-                  className="flex items-center gap-2 rounded-full border border-dashed border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted"
+                  className="flex min-h-11 items-center gap-2 rounded-full border border-dashed border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted"
                   aria-label={`Step ${step.index} of ${WIZARD_STEPS.length}: ${step.label}, locked`}
                 >
                   <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-background-light text-3xs font-bold text-muted">

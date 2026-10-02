@@ -7,7 +7,10 @@ import { ArrowRight, CheckCircle2, ListChecks, RefreshCcw, SkipForward } from 'l
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
+import { cardClassName } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import {
   completeWritingTodayItem,
   getWritingTodayPlanV2,
@@ -149,75 +152,81 @@ export default function WritingTodayPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow={t('writing.today.eyebrow')}
-          icon={ListChecks}
-          accent="amber"
-          title={t('writing.today.title')}
-          description={t('writing.today.hero.description')}
-          highlights={[
-            { icon: ListChecks, label: t('writing.today.highlights.items'), value: `${plan?.items.length ?? 0}` },
-            { icon: CheckCircle2, label: t('writing.today.highlights.completed'), value: `${plan?.completedCount ?? 0}` },
-            { icon: ArrowRight, label: t('writing.today.highlights.minutes'), value: `${plan?.totalMinutes ?? 0}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.today.eyebrow')}
+        icon={ListChecks}
+        accent="writing"
+        title={t('writing.today.title')}
+        description={t('writing.today.hero.description')}
+        highlights={[
+          { icon: ListChecks, label: t('writing.today.highlights.items'), value: `${plan?.items.length ?? 0}` },
+          { icon: CheckCircle2, label: t('writing.today.highlights.completed'), value: `${plan?.completedCount ?? 0}` },
+          { icon: ArrowRight, label: t('writing.today.highlights.minutes'), value: `${plan?.totalMinutes ?? 0}` },
+        ]}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <LearnerSurfaceSectionHeader
-            eyebrow={plan?.source === 'v2' ? t('writing.today.section.v2') : t('writing.today.section.v1')}
-            title={plan ? new Date(`${plan.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }) : 'Loading'}
-            description={t('writing.today.section.description')}
-            action={
-              plan?.source === 'v2' ? (
-                <Button onClick={() => void onRegenerate()} loading={busyAction === 'regen'} disabled={plan.regenerationsRemaining <= 0} size="sm" variant="outline">
-                  <RefreshCcw className="h-4 w-4" aria-hidden="true" /> {t('writing.today.regenerateLabel', { remaining: plan.regenerationsRemaining })}
-                </Button>
-              ) : undefined
-            }
-            className="mb-5"
-          />
+      {!plan && !error ? <LearnerSkeleton variant="list" /> : null}
 
-          <ol className="divide-y divide-border rounded-xl border border-border bg-background" aria-label={t('writing.today.title')}>
-            {(plan?.items ?? []).map((item) => (
-              <li key={item.id} className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={item.status === 'completed' ? 'success' : item.status === 'skipped' ? 'muted' : 'warning'} size="sm">{item.status}</Badge>
-                    <Badge variant="info" size="sm">{item.estimatedMinutes} min</Badge>
-                    {item.focusSkill ? <Badge variant="muted" size="sm">{item.focusSkill}</Badge> : null}
-                    <Badge variant="muted" size="sm" className="capitalize">{item.itemKind}</Badge>
-                  </div>
-                  {/*
-                    Item title + description come from the backend plan generator
-                    (English content per spec §32). Force LTR so they render
-                    correctly when the surrounding chrome is RTL.
-                  */}
-                  <h2 className="text-lg font-bold text-navy" dir="ltr">{item.title}</h2>
-                  <p className="max-w-3xl text-sm text-muted" dir="ltr">{item.description}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => void onStart(item)} loading={busyAction === `start-${item.id}`}>
-                    {t('writing.today.actions.start')} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+      {plan ? (
+        <MotionSection delayIndex={0}>
+          <section className={cardClassName({ padding: 'lg' })}>
+            <LearnerSurfaceSectionHeader
+              eyebrow={plan.source === 'v2' ? t('writing.today.section.v2') : t('writing.today.section.v1')}
+              title={new Date(`${plan.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+              description={t('writing.today.section.description')}
+              action={
+                plan.source === 'v2' ? (
+                  <Button onClick={() => void onRegenerate()} loading={busyAction === 'regen'} disabled={plan.regenerationsRemaining <= 0} size="sm" variant="outline">
+                    <RefreshCcw className="h-4 w-4" aria-hidden="true" /> {t('writing.today.regenerateLabel', { remaining: plan.regenerationsRemaining })}
                   </Button>
-                  {item.status !== 'completed' ? (
-                    <Button size="sm" variant="outline" onClick={() => void onComplete(item)} loading={busyAction === `complete-${item.id}`}>
-                      {t('writing.today.actions.complete')}
-                    </Button>
-                  ) : null}
-                  {plan?.source === 'v1' && item.status === 'pending' ? (
-                    <Button size="sm" variant="ghost" onClick={() => void onSkip(item)} loading={busyAction === `skip-${item.id}`}>
-                      <SkipForward className="h-4 w-4" aria-hidden="true" /> {t('writing.today.actions.skip')}
-                    </Button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
+                ) : undefined
+              }
+              className="mb-5"
+            />
+
+            <ol className="divide-y divide-border" aria-label={t('writing.today.title')}>
+              {plan.items.map((item, index) => (
+                <li key={item.id} className="py-4 first:pt-0 last:pb-0">
+                  <MotionItem delayIndex={Math.min(index, 5)} className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={item.status === 'completed' ? 'success' : item.status === 'skipped' ? 'muted' : 'warning'} size="sm">{item.status}</Badge>
+                        <Badge variant="info" size="sm" className="tabular-nums">{item.estimatedMinutes} min</Badge>
+                        {item.focusSkill ? <Badge variant="muted" size="sm">{item.focusSkill}</Badge> : null}
+                        <Badge variant="muted" size="sm" className="capitalize">{item.itemKind}</Badge>
+                      </div>
+                      {/*
+                        Item title + description come from the backend plan generator
+                        (English content per spec §32). Force LTR so they render
+                        correctly when the surrounding chrome is RTL.
+                      */}
+                      <h3 className="text-lg font-bold text-navy" dir="ltr">{item.title}</h3>
+                      <p className="max-w-3xl text-sm text-muted" dir="ltr">{item.description}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button size="sm" onClick={() => void onStart(item)} loading={busyAction === `start-${item.id}`}>
+                        {t('writing.today.actions.start')} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                      </Button>
+                      {item.status !== 'completed' ? (
+                        <Button size="sm" variant="outline" onClick={() => void onComplete(item)} loading={busyAction === `complete-${item.id}`}>
+                          {t('writing.today.actions.complete')}
+                        </Button>
+                      ) : null}
+                      {plan.source === 'v1' && item.status === 'pending' ? (
+                        <Button size="sm" variant="ghost" onClick={() => void onSkip(item)} loading={busyAction === `skip-${item.id}`}>
+                          <SkipForward className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> {t('writing.today.actions.skip')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </MotionItem>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </MotionSection>
+      ) : null}
     </>
   );
 }

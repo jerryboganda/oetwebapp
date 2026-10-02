@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Clock, Dumbbell, FileText, Gauge, Stethoscope } from 'lucide-react';
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { DrillPlayer } from '@/components/domain/writing-drills/drill-player';
 import { DrillNotFoundError, getDrill } from '@/lib/writing-drills/loader';
 import { DrillTypeSchema } from '@/lib/writing-drills/types';
@@ -47,40 +49,34 @@ export default async function WritingDrillPlayerPage({
 
   return (
     <>
-      <header className="bg-navy dark:bg-surface text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
-        <Link
-          href={`/writing/drills/${drill.type}`}
-          className="text-info text-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-info rounded"
-        >
-          ← Back to {drill.type.replaceAll('_', ' ')} drills
-        </Link>
-        <div className="flex items-center gap-2 mt-2 flex-wrap">
-          <Badge variant="muted" size="sm">
-            {drill.profession}
-          </Badge>
-          {drill.letterType && (
-            <Badge variant="info" size="sm">
-              {drill.letterType.replaceAll('_', ' ')}
-            </Badge>
-          )}
-          <Badge variant="outline" size="sm">
-            {drill.difficulty}
-          </Badge>
-          <span className="text-xs text-white/60">~{drill.estimatedMinutes} min</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-bold mt-2">{drill.title}</h1>
-        <p className="text-white/70 mt-2 max-w-3xl">{drill.brief}</p>
-      </header>
+      {/* A server page: icons go to the client hero as elements, not components. */}
+      <LearnerPageHero
+        eyebrow="Writing Drill"
+        icon={<Dumbbell />}
+        accent="writing"
+        title={drill.title}
+        description={drill.brief}
+        highlights={[
+          { icon: <Stethoscope />, label: 'Profession', value: drill.profession },
+          ...(drill.letterType ? [{ icon: <FileText />, label: 'Letter type', value: drill.letterType.replaceAll('_', ' ') }] : []),
+          { icon: <Gauge />, label: 'Difficulty', value: drill.difficulty },
+          { icon: <Clock />, label: 'Time', value: `~${drill.estimatedMinutes} min` },
+        ]}
+        aside={
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/writing/drills/${drill.type}`}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to {drill.type.replaceAll('_', ' ')} drills
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16 space-y-4">
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20">
-          <CardContent className="p-4 text-xs text-amber-900 dark:text-amber-200">
-            <strong>Practice mode.</strong> This drill is graded automatically against an authored
-            answer key. It is not a substitute for teacher correction or the AI Writing Coach.
-          </CardContent>
-        </Card>
-        <DrillPlayer drill={drill} />
-      </div>
+      <InlineAlert variant="warning" live="polite">
+        <strong>Practice mode.</strong> This drill is graded automatically against an authored
+        answer key. It is not a substitute for teacher correction or the AI Writing Coach.
+      </InlineAlert>
+
+      <DrillPlayer drill={drill} />
     </>
   );
 }

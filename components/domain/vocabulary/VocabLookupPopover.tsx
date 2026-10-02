@@ -175,7 +175,7 @@ export function VocabLookupPopover({
         )}
 
         {error && (
-          <div role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>
+          <div role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger-strong">{error}</div>
         )}
 
         {!loading && lookup?.found && lookup.term && (
@@ -188,7 +188,7 @@ export function VocabLookupPopover({
             canPlayAudio
             onPlayAudio={() => void playAudio(lookup.term!.id)}
             cta={added ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-success-strong">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Saved
               </span>
             ) : (

@@ -59,7 +59,7 @@ export function RevisionPlanCard() {
         <Skeleton className="mt-3 h-24 rounded-xl" />
       ) : error ? (
         <div className="mt-3 flex flex-wrap items-center gap-3" role="alert">
-          <p className="text-xs text-warning">{error}</p>
+          <p className="text-xs text-warning-strong">{error}</p>
           <Button onClick={refresh} variant="outline" size="sm">
             Retry
           </Button>
@@ -67,9 +67,9 @@ export function RevisionPlanCard() {
       ) : plan ? (
         <div className="mt-3 space-y-3 text-sm">
           <p className="font-medium text-navy">{plan.headline}</p>
-          <ul className="space-y-1 text-muted">
+          <ul className="list-disc space-y-1 ps-5 text-muted marker:text-primary">
             {plan.steps.map((s, i) => (
-              <li key={i}>• {s}</li>
+              <li key={i}>{s}</li>
             ))}
           </ul>
           {plan.aiNarrative && (

@@ -71,7 +71,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
               <Icon className="h-6 w-6" />
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wide text-muted">
+              <div className="flex flex-wrap items-center gap-2 eyebrow text-muted">
                 <span>{websitePackage?.profession ?? professionLabel(config, plan.profession)}</span>
                 <span aria-hidden="true">·</span>
                 <span>{websitePackage?.category ?? categoryLabel(config, plan.productCategory)}</span>
@@ -95,7 +95,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             <div className="grid grid-cols-2 gap-2">
               {stats.map((stat) => (
                 <div key={stat.label} className="rounded-xl border border-border bg-background-light px-3 py-2">
-                  <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">{stat.label}</p>
+                  <p className="eyebrow text-muted">{stat.label}</p>
                   <p className="text-sm font-semibold text-navy">{stat.value}</p>
                 </div>
               ))}
@@ -104,11 +104,11 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
 
           {bullets.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">What you get</p>
+              <p className="mb-2 eyebrow text-muted">What you get</p>
               <ul className="space-y-2 text-sm text-navy">
                 {bullets.map((bullet) => (
                   <li key={bullet} className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                     <span>{bullet}</span>
                   </li>
                 ))}
@@ -129,7 +129,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
 
           {flags.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Available add-ons</p>
+              <p className="mb-2 eyebrow text-muted">Available add-ons</p>
               <div className="flex flex-wrap gap-1.5">
                 {flags.map((flag) => (
                   <span key={flag.key} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
@@ -142,7 +142,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
 
           <div className="border-t border-border pt-4">
             {owned ? (
-              <div className="flex items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm font-semibold text-success">
+              <div className="flex items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm font-semibold text-success-strong">
                 <CheckCircle2 className="h-4 w-4" /> This package is active on your account
               </div>
             ) : plan.code === 'tutor-book' ? (

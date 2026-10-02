@@ -41,56 +41,60 @@ export default function FeedbackGuidePage() {
         highlights={heroHighlights}
       />
 
-      <MotionSection className="space-y-6">
+      <MotionSection>
         <LearnerSurfaceSectionHeader
           eyebrow="Writing criteria"
           title="How writing feedback is scored"
           description="Understand each Writing criterion and what it scores."
+          className="mb-4"
         />
-        <div className="space-y-3">
-          {WRITING_CRITERIA.map(c => (
-            <MotionItem key={c.code}>
-              <Card className="p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted">{c.description}</p>
-                <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
-                </div>
-              </Card>
-            </MotionItem>
-          ))}
-        </div>
+        <CriteriaList criteria={WRITING_CRITERIA} />
+      </MotionSection>
 
+      <MotionSection delayIndex={1}>
         <LearnerSurfaceSectionHeader
           eyebrow="Speaking criteria"
           title="How speaking feedback is scored"
           description="A guided walkthrough of your Speaking feedback."
+          className="mb-4"
         />
-        <div className="space-y-3">
-          {SPEAKING_CRITERIA.map(c => (
-            <MotionItem key={c.code}>
-              <Card className="p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted">{c.description}</p>
-                <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
-                </div>
-              </Card>
-            </MotionItem>
-          ))}
-        </div>
+        <CriteriaList criteria={SPEAKING_CRITERIA} />
+      </MotionSection>
 
+      <MotionSection delayIndex={2}>
         <LearnerSurfaceSectionHeader
           eyebrow="Score guide"
           title="How to read the bands"
           description="Quick interpretation tips so you know exactly what to do next."
+          className="mb-4"
         />
-        <Card className="p-5 space-y-3 shadow-sm">
-          <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
-          <div className="flex items-start gap-2"><Target className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
-          <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with a tutor reviewer.</p></div>
+        <Card padding="lg" className="space-y-3">
+          <div className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
+          <div className="flex items-start gap-2"><Target className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden="true" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
+          <div className="flex items-start gap-2"><HelpCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger-strong" aria-hidden="true" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with a tutor reviewer.</p></div>
         </Card>
       </MotionSection>
     </>
+  );
+}
+
+function CriteriaList({ criteria }: { criteria: typeof WRITING_CRITERIA }) {
+  return (
+    <div className="space-y-3">
+      {criteria.map((c, index) => (
+        <MotionItem key={c.code} delayIndex={Math.min(index, 5)}>
+          <Card>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-navy">{c.label}</h3>
+              <Badge variant="outline" className="tabular-nums">Bands {c.bands}</Badge>
+            </div>
+            <p className="max-w-3xl text-sm text-muted">{c.description}</p>
+            <div className="mt-3 rounded-xl bg-success/10 p-3">
+              <p className="max-w-3xl text-sm"><TrendingUp className="me-1 inline h-4 w-4 text-success-strong" aria-hidden="true" /><strong>How to improve:</strong> {c.improve}</p>
+            </div>
+          </Card>
+        </MotionItem>
+      ))}
+    </div>
   );
 }

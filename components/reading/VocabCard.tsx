@@ -1,21 +1,21 @@
-﻿'use client';
+'use client';
 
-import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import type { VocabItemDto } from '@/lib/reading-pathway-api';
 
 interface VocabCardProps {
   item: VocabItemDto;
-  onFlip?: () => void;
+  /**
+   * Which face shows. The review session owns it, so its Reveal button turns
+   * the card and every new word starts on its front (the card used to keep a
+   * private copy: Reveal never turned it, and a word flipped by tapping left
+   * the next word showing its answer).
+   */
+  flipped: boolean;
+  onFlip: () => void;
 }
 
-export default function VocabCard({ item, onFlip }: VocabCardProps) {
-  const [flipped, setFlipped] = useState(false);
-
-  function handleFlip() {
-    setFlipped((prev) => !prev);
-    onFlip?.();
-  }
-
+export default function VocabCard({ item, flipped, onFlip }: VocabCardProps) {
   return (
     <div
       role="button"
@@ -23,11 +23,11 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
       aria-pressed={flipped}
       className="relative w-full cursor-pointer select-none rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       style={{ perspective: '1000px' }}
-      onClick={handleFlip}
+      onClick={onFlip}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          handleFlip();
+          onFlip();
         }
       }}
     >
@@ -42,7 +42,7 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
       >
         {/* Front face */}
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-primary-100 bg-surface px-8 py-10 shadow-md dark:border-primary-900/40"
+          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border bg-surface px-8 py-10 shadow-sm"
           style={{ backfaceVisibility: 'hidden' }}
         >
           <p className="mb-3 text-4xl font-bold tracking-tight text-navy">
@@ -53,14 +53,14 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
               /{item.pronunciationIpa}/
             </p>
           ) : null}
-          <p className="mt-auto pt-6 text-xs font-medium uppercase tracking-widest text-primary-400">
+          <p className="mt-auto pt-6 eyebrow text-primary">
             Tap to reveal
           </p>
         </div>
 
         {/* Back face */}
         <div
-          className="absolute inset-0 flex flex-col gap-3 rounded-2xl border border-primary-200 bg-primary-50 px-8 py-7 shadow-md dark:border-primary-800/50 dark:bg-primary-950/40"
+          className="absolute inset-0 flex flex-col gap-3 rounded-2xl border border-primary/20 bg-lavender px-8 py-7 shadow-sm"
           style={{
             backfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',
@@ -99,9 +99,9 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
 
           {/* Healthcare context badge */}
           {item.healthcareContext ? (
-            <span className="inline-flex w-fit items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/60 dark:text-primary-300">
+            <Badge className="w-fit font-medium">
               {item.healthcareContext}
-            </span>
+            </Badge>
           ) : null}
 
           {/* Arabic example — RTL */}

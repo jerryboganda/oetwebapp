@@ -38,7 +38,7 @@ export function PrivilegedMfaBanner() {
         </span>
         <button
           onClick={() => router.push(setupHref)}
-          className="ml-3 shrink-0 rounded bg-surface px-2 py-0.5 font-semibold text-warning transition-colors hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-warning"
+          className="ml-3 shrink-0 rounded bg-surface px-2 py-0.5 font-semibold text-warning-strong transition-colors hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-warning"
         >
           Set up MFA
         </button>

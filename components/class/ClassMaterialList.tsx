@@ -1,6 +1,10 @@
 'use client';
 
 import { ExternalLink, FileText, Paperclip } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { cn } from '@/lib/utils';
 
 export interface ClassMaterial {
   id: string;
@@ -30,11 +34,11 @@ function visibilityLabel(visibility: ClassMaterial['visibility']): string | null
 export function ClassMaterialList({ materials }: ClassMaterialListProps) {
   if (!materials || materials.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-surface p-6 text-center">
-        <Paperclip className="mx-auto mb-3 h-6 w-6 text-muted/50" />
-        <p className="text-sm font-medium text-navy">No materials shared.</p>
-        <p className="mt-1 text-xs text-muted">Tutors can attach slides, PDFs, and links to a class.</p>
-      </div>
+      <EmptyState
+        icon={<Paperclip className="h-7 w-7" />}
+        title="No materials shared."
+        description="Tutors can attach slides, PDFs, and links to a class."
+      />
     );
   }
 
@@ -45,10 +49,10 @@ export function ClassMaterialList({ materials }: ClassMaterialListProps) {
         return (
           <li
             key={material.id}
-            className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm"
+            className={cn(cardClassName({ padding: 'sm' }), 'flex items-center justify-between gap-3')}
           >
             <div className="flex min-w-0 items-start gap-3">
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-navy">{material.title}</p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -57,14 +61,11 @@ export function ClassMaterialList({ materials }: ClassMaterialListProps) {
                 </div>
               </div>
             </div>
-            <a
-              href={material.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              Open <ExternalLink className="h-3 w-3" />
-            </a>
+            <Button asChild variant="ghost" size="sm" className="shrink-0 text-primary">
+              <a href={material.fileUrl} target="_blank" rel="noreferrer">
+                Open <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </a>
+            </Button>
           </li>
         );
       })}

@@ -216,7 +216,7 @@ export default function AiPackagesPage() {
       <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
         {websitePackage.features.map((feature) => (
           <li key={feature} className="flex gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
             <span>{feature}</span>
           </li>
         ))}

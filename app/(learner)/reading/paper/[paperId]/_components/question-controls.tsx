@@ -36,11 +36,11 @@ export function QuestionInput({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {readingPublicDisplayNumber(partCode, question.displayOrder)}</p>
+          <p className="eyebrow text-muted">Question {readingPublicDisplayNumber(partCode, question.displayOrder)}</p>
           <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
-          <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
+          <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning-strong')} />
           {flagged ? 'Flagged' : 'Flag'}
         </Button>
       </div>

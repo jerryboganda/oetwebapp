@@ -356,7 +356,7 @@ export function WritingStimulusViewer({
             className={cn(
               'flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-bold transition-colors duration-150',
               wtool === 'pan'
-                ? 'border-amber-400 bg-amber-200 text-amber-900'
+                ? 'border-warning bg-warning/20 text-warning-strong'
                 : 'border-border text-muted hover:bg-background-light',
             )}
           >
@@ -373,7 +373,7 @@ export function WritingStimulusViewer({
               className={cn(
                 'flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-bold transition-colors duration-150',
                 markerOn
-                  ? 'border-amber-400 bg-amber-200 text-amber-900'
+                  ? 'border-warning bg-warning/20 text-warning-strong'
                   : 'border-border text-muted hover:bg-background-light',
               )}
             >
@@ -422,7 +422,7 @@ export function WritingStimulusViewer({
       {/* Document surface */}
       <div className="flex-1 overflow-auto overscroll-contain bg-background-light p-4">
         {error ? (
-          <p className="p-4 text-sm text-danger">{error}</p>
+          <p className="p-4 text-sm text-danger-strong">{error}</p>
         ) : loading ? (
           <p className="p-4 text-sm text-muted">Loading document…</p>
         ) : (
@@ -460,7 +460,7 @@ export function WritingStimulusViewer({
                       height: `${h.h * 100}%`,
                     }}
                   >
-                    <div className="absolute inset-0 bg-yellow-300/45 mix-blend-multiply" />
+                    <div className="absolute inset-0 bg-warning/30 mix-blend-multiply" />
                     {allowHighlight && (
                       <button
                         type="button"
@@ -475,7 +475,7 @@ export function WritingStimulusViewer({
                         }}
                         aria-label="Remove highlight"
                         title="Remove highlight"
-                        className="pointer-events-auto absolute -right-2 -top-2 z-30 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-white shadow ring-1 ring-white transition-transform duration-100 hover:scale-110"
+                        className="pointer-events-auto absolute -right-2 -top-2 z-30 flex h-4 w-4 items-center justify-center rounded-full bg-danger-strong text-white shadow ring-1 ring-white transition-transform duration-100 hover:scale-110"
                       >
                         <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" aria-hidden="true">
                           <path d="M4 4l8 8M12 4l-8 8" />
@@ -488,7 +488,7 @@ export function WritingStimulusViewer({
                 {/* In-progress drag rectangle. */}
                 {draft && draft.page === page.pageNumber && (
                   <div
-                    className="pointer-events-none absolute bg-yellow-300/45 ring-1 ring-amber-500/60 mix-blend-multiply"
+                    className="pointer-events-none absolute bg-warning/30 ring-1 ring-warning/60 mix-blend-multiply"
                     style={{
                       left: `${draft.x * 100}%`,
                       top: `${draft.y * 100}%`,

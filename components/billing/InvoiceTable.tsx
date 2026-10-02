@@ -102,11 +102,11 @@ function StatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase();
   const tone =
     normalized === 'paid'
-      ? 'bg-success/10 text-success'
+      ? 'bg-success/10 text-success-strong'
       : normalized === 'pending' || normalized === 'open'
-        ? 'bg-warning/10 text-warning'
+        ? 'bg-warning/10 text-warning-strong'
         : normalized === 'failed' || normalized === 'void' || normalized === 'uncollectible'
-          ? 'bg-danger/10 text-danger'
+          ? 'bg-danger/10 text-danger-strong'
           : 'bg-background-light text-muted';
   return (
     <span

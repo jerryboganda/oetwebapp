@@ -2,8 +2,9 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import {
+  ArrowRight,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -17,7 +18,7 @@ import {
   Download,
 } from 'lucide-react';
 import Link from 'next/link';
-import { OetStatementOfResultsCard } from '@/components/domain';
+import { LearnerSurfaceSectionHeader, OetStatementOfResultsCard } from '@/components/domain';
 import { WeaknessNarrative } from '@/components/domain/mock-weakness-narrative';
 import { ReadinessDeltaBanner } from '@/components/domain/readiness-delta-banner';
 import { TimeAnalyticsBreakdown } from '@/components/domain/mock-time-analytics';
@@ -26,6 +27,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { cn } from '@/lib/utils';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ResultGauge } from '@/components/domain/results/gauge';
 import {
@@ -51,12 +55,23 @@ import { oetGradeFromScaled } from '@/lib/scoring';
 import { isMockReportStatementOfResultsReady, mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
 import { buildMockRemediationPlan, getMockReadinessDecision } from '@/lib/mocks/workflow';
 
+/** Sub-test identity (DESIGN.md §2 skill tokens); grade status lives on the score, never here. */
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  listening: { icon: Headphones, color: 'text-primary', bg: 'bg-primary/10' },
-  reading:   { icon: FileText,   color: 'text-info',   bg: 'bg-info/10' },
-  writing:   { icon: PenTool,    color: 'text-rose-600',   bg: 'bg-rose-50' },
-  speaking:  { icon: Mic,        color: 'text-primary', bg: 'bg-primary/10' },
+  listening: { icon: Headphones, color: 'text-skill-listening', bg: 'bg-skill-listening/10' },
+  reading:   { icon: FileText,   color: 'text-skill-reading',   bg: 'bg-skill-reading/10' },
+  writing:   { icon: PenTool,    color: 'text-skill-writing',   bg: 'bg-skill-writing/10' },
+  speaking:  { icon: Mic,        color: 'text-skill-speaking',  bg: 'bg-skill-speaking/10' },
 };
+
+function ReportSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-busy="true" aria-label="Loading mock report">
+      {[1, 2, 3].map((i) => (
+        <Skeleton key={i} className="h-32 rounded-2xl" />
+      ))}
+    </div>
+  );
+}
 
 /** Colour a mock sub-test from persisted grade evidence. Reading/Listening
  * must never derive a grade from a numeric score in the browser. */
@@ -65,9 +80,9 @@ function scoreColor(score: string, persistedGrade?: string | null, governedScore
   if (trimmed.length === 0) return 'text-muted';
   if (persistedGrade?.trim()) {
     const grade = persistedGrade.trim().toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '';
-    if (grade === 'A' || grade === 'B') return 'text-success';
-    if (grade === 'C+' || grade === 'C') return 'text-warning';
-    if (grade === 'D' || grade === 'E') return 'text-danger';
+    if (grade === 'A' || grade === 'B') return 'text-success-strong';
+    if (grade === 'C+' || grade === 'C') return 'text-warning-strong';
+    if (grade === 'D' || grade === 'E') return 'text-danger-strong';
     return 'text-muted';
   }
   if (governedScore) return 'text-muted';
@@ -75,27 +90,27 @@ function scoreColor(score: string, persistedGrade?: string | null, governedScore
   const grade = Number.isFinite(numeric)
     ? oetGradeFromScaled(numeric)
     : (trimmed.toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '');
-  if (grade === 'A' || grade === 'B') return 'text-success';
-  if (grade === 'C+' || grade === 'C') return 'text-warning';
-  if (grade === 'D' || grade === 'E') return 'text-danger';
+  if (grade === 'A' || grade === 'B') return 'text-success-strong';
+  if (grade === 'C+' || grade === 'C') return 'text-warning-strong';
+  if (grade === 'D' || grade === 'E') return 'text-danger-strong';
   return 'text-muted';
 }
 
 /** Map a sub-test score to a stat-strip tone (mirrors {@link scoreColor}). */
 function scoreTone(score: string, persistedGrade?: string | null, governedScore = false): 'success' | 'warning' | 'danger' | 'default' {
   const color = scoreColor(score, persistedGrade, governedScore);
-  if (color === 'text-success') return 'success';
-  if (color === 'text-warning') return 'warning';
-  if (color === 'text-danger') return 'danger';
+  if (color === 'text-success-strong') return 'success';
+  if (color === 'text-warning-strong') return 'warning';
+  if (color === 'text-danger-strong') return 'danger';
   return 'default';
 }
 
 /** CSS colour for a sub-test gauge arc, derived from the same grade bands. */
 function scoreGaugeColor(score: string, persistedGrade?: string | null, governedScore = false): string {
   const color = scoreColor(score, persistedGrade, governedScore);
-  if (color === 'text-success') return 'var(--color-success)';
-  if (color === 'text-warning') return 'var(--color-warning)';
-  if (color === 'text-danger') return 'var(--color-danger)';
+  if (color === 'text-success-strong') return 'var(--color-success)';
+  if (color === 'text-warning-strong') return 'var(--color-warning)';
+  if (color === 'text-danger-strong') return 'var(--color-danger)';
   return 'var(--color-primary)';
 }
 
@@ -232,25 +247,11 @@ function MockReportContent() {
   };
 
   if (error) {
-    return (
-      <>
-        <div>
-          <InlineAlert variant="error">{error}</InlineAlert>
-        </div>
-      </>
-    );
+    return <InlineAlert variant="error">{error}</InlineAlert>;
   }
 
   if (!report) {
-    return (
-      <>
-        <div className="space-y-6">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
-          ))}
-        </div>
-      </>
-    );
+    return <ReportSkeleton />;
   }
 
   // V1 payload fields are populated incrementally (see lib/mocks/report-payload.ts);
@@ -314,189 +315,175 @@ function MockReportContent() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
+      {/* The page's h1 block. It never animates in: it is the first thing read. */}
+      <ResultsScorePanel
+        eyebrow="Mock report"
+        icon={ShieldCheck}
+        title="Overall Performance"
+        subtitle={report.summary}
+        gaugeValue={overallGaugePct}
+        gaugeCenter={<span className="text-2xl font-black tabular-nums text-navy">{report.overallGrade ?? report.overallScore}</span>}
+        gaugeLabel={overallScaled != null ? `${overallScaled}/500` : undefined}
+        gaugeColor={
+          readinessTone === 'success' ? 'var(--color-success)'
+            : readinessTone === 'warning' ? 'var(--color-warning)'
+              : readinessTone === 'danger' ? 'var(--color-danger)'
+                : 'var(--color-primary)'
+        }
+        grade={{ label: readiness.label, tone: readinessTone }}
+        stats={report.subTests.map((test) => {
+          const Icon = SUBTEST_META[test.id]?.icon ?? Headphones;
+          const governedScore = test.id === 'reading' || test.id === 'listening';
+          return { label: test.name, value: test.score, tone: scoreTone(String(test.score), test.grade, governedScore), icon: <Icon aria-hidden="true" /> };
+        })}
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4">
+            <p className="eyebrow text-muted">Estimated academy report</p>
+            <p className="text-sm leading-6 text-muted">{readiness.description}</p>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.
+            </p>
+          </div>
+        )}
+      />
 
-        {/* Readiness delta banner — surfaces the change this mock made
-            to the learner's overall readiness and links into the
-            full readiness centre for the "see why" follow-up. */}
-        <ReadinessDeltaBanner
-          before={readinessBefore}
-          after={readinessAfter}
-          risk={readinessRisk}
-          loading={readinessLoading}
-        />
+      {/* Readiness delta banner — surfaces the change this mock made
+          to the learner's overall readiness and links into the
+          full readiness centre for the "see why" follow-up. */}
+      <ReadinessDeltaBanner
+        before={readinessBefore}
+        after={readinessAfter}
+        risk={readinessRisk}
+        loading={readinessLoading}
+      />
 
-        {/* 0. OET Statement of Results — pixel-faithful CBLA format.
-            Mission-critical: this is the single place the "official" OET
-            result card is rendered. See docs/OET-RESULT-CARD-SPEC.md. */}
-        <MotionSection delayIndex={0}>
-          {statementReady ? (
-            <OetStatementOfResultsCard data={mockReportToStatementOfResults({
-              report,
-              profession: report.profession ?? undefined,
-              country: report.targetCountry ?? undefined,
-            })} />
-          ) : (
-            <InlineAlert variant="warning" title="Practice Statement of Results pending">
-              This report has incomplete or teacher-marked evidence still pending. The OET-style practice result card appears only after all four sub-tests have final numeric scores.
-            </InlineAlert>
-          )}
-        </MotionSection>
+      {/* OET Statement of Results — pixel-faithful CBLA format.
+          Mission-critical: this is the single place the "official" OET
+          result card is rendered. See docs/OET-RESULT-CARD-SPEC.md. */}
+      <MotionSection>
+        {statementReady ? (
+          <OetStatementOfResultsCard data={mockReportToStatementOfResults({
+            report,
+            profession: report.profession ?? undefined,
+            country: report.targetCountry ?? undefined,
+          })} />
+        ) : (
+          <InlineAlert variant="warning" title="Practice Statement of Results pending">
+            This report has incomplete or teacher-marked evidence still pending. The OET-style practice result card appears only after all four sub-tests have final numeric scores.
+          </InlineAlert>
+        )}
+      </MotionSection>
 
-        {resultTemplateUrl ? (
-          <MotionSection delayIndex={1} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-muted">Result-table reference</h2>
-                <p className="mt-1 text-xs text-muted">{resultTemplate?.title}</p>
-              </div>
-              <Badge variant="outline">OET style</Badge>
-            </div>
+      {resultTemplateUrl ? (
+        <MotionSection delayIndex={1}>
+          <Card>
+            <LearnerSurfaceSectionHeader
+              title="Result-table reference"
+              description={resultTemplate?.title}
+              action={<Badge variant="outline" className="self-start sm:self-auto">OET style</Badge>}
+              className="mb-3"
+            />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={resultTemplateUrl}
               alt={resultTemplate?.title ?? 'OET result table reference'}
               className="max-h-[520px] w-full rounded-xl border border-border object-contain"
             />
-          </MotionSection>
-        ) : null}
+          </Card>
+        </MotionSection>
+      ) : null}
 
-        {/* 1. Overall Score */}
+      {pendingTeacherReviews > 0 ? (
         <MotionSection delayIndex={1}>
-          <ResultsScorePanel
-            eyebrow="Mock report"
-            icon={ShieldCheck}
-            title="Overall Performance"
-            subtitle={report.summary}
-            gaugeValue={overallGaugePct}
-            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{report.overallGrade ?? report.overallScore}</span>}
-            gaugeLabel={overallScaled != null ? `${overallScaled}/500` : undefined}
-            gaugeColor={
-              readinessTone === 'success' ? 'var(--color-success)'
-                : readinessTone === 'warning' ? 'var(--color-warning)'
-                  : readinessTone === 'danger' ? 'var(--color-danger)'
-                    : 'var(--color-primary)'
-            }
-            grade={{ label: readiness.label, tone: readinessTone }}
-            stats={report.subTests.map((test) => {
-              const Icon = SUBTEST_META[test.id]?.icon ?? Headphones;
-              const governedScore = test.id === 'reading' || test.id === 'listening';
-              return { label: test.name, value: test.score, tone: scoreTone(String(test.score), test.grade, governedScore), icon: <Icon /> };
-            })}
-            aside={(
-              <div className="rounded-2xl border border-border bg-background-light p-4">
-                <p className="text-xs font-black uppercase tracking-widest text-muted">Estimated academy report</p>
-                <p className="text-sm leading-6 text-muted">{readiness.description}</p>
-                <p className="mt-2 text-xs leading-5 text-muted">
-                  Do not treat mock results as a guaranteed pass. Use repeated green mock evidence and tutor feedback before booking the official OET.
+          <InlineAlert variant="warning" title="Teacher-marked sections still affect the final readiness report">
+            Listening and Reading evidence may be available immediately, but Writing/Speaking readiness should remain provisional until tutor feedback is returned.
+          </InlineAlert>
+        </MotionSection>
+      ) : null}
+
+      <MotionSection delayIndex={2} className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <LearnerSurfaceSectionHeader icon={ShieldCheck} title="V2 readiness and integrity" className="mb-4" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(report.perModuleReadiness?.length ? report.perModuleReadiness : []).map((item) => (
+              <div key={item.subtest} className="min-w-0 rounded-xl border border-border bg-background-light p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-navy">{item.subtest}</p>
+                  <Badge variant={item.rag === 'red' ? 'danger' : item.rag === 'amber' ? 'warning' : item.rag === 'pending' ? 'muted' : 'success'} size="sm">
+                    {item.rag.replace(/-/g, ' ')}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted">{item.message}</p>
+              </div>
+            ))}
+            {report.proctoringSummary ? (
+              <div className="min-w-0 rounded-xl border border-border bg-background-light p-4">
+                <p className="text-sm font-bold text-navy">Proctoring summary</p>
+                <p className="mt-2 text-xs leading-5 text-muted">{report.proctoringSummary.message}</p>
+                <p className="mt-2 eyebrow tabular-nums text-muted">
+                  {report.proctoringSummary.totalEvents} events / {report.proctoringSummary.warningEvents} warnings
                 </p>
               </div>
-            )}
-          />
-        </MotionSection>
-
-        {pendingTeacherReviews > 0 ? (
-          <MotionSection delayIndex={1}>
-            <InlineAlert variant="warning" title="Teacher-marked sections still affect the final readiness report">
-              Listening and Reading evidence may be available immediately, but Writing/Speaking readiness should remain provisional until tutor feedback is returned.
-            </InlineAlert>
-          </MotionSection>
-        ) : null}
-
-        <MotionSection delayIndex={2} className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm lg:col-span-2">
-            <div className="mb-4 flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              <h2 className="text-sm font-black uppercase tracking-widest text-muted">V2 readiness and integrity</h2>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(report.perModuleReadiness?.length ? report.perModuleReadiness : []).map((item) => (
-                <div key={item.subtest} className="rounded-xl border border-border bg-background-light p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-navy">{item.subtest}</p>
-                    <Badge variant={item.rag === 'red' ? 'danger' : item.rag === 'amber' ? 'warning' : item.rag === 'pending' ? 'muted' : 'success'} size="sm">
-                      {item.rag.replace(/-/g, ' ')}
-                    </Badge>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-muted">{item.message}</p>
-                </div>
-              ))}
-              {report.proctoringSummary ? (
-                <div className="rounded-xl border border-border bg-background-light p-4">
-                  <p className="text-sm font-bold text-navy">Proctoring summary</p>
-                  <p className="mt-2 text-xs leading-5 text-muted">{report.proctoringSummary.message}</p>
-                  <p className="mt-2 text-2xs font-black uppercase tracking-widest text-muted">
-                    {report.proctoringSummary.totalEvents} events / {report.proctoringSummary.warningEvents} warnings
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <CalendarCheck className="h-5 w-5 text-success" />
-              <h2 className="text-sm font-black uppercase tracking-widest text-muted">Booking advice</h2>
-            </div>
-            <p className="text-sm leading-6 text-muted">{report.bookingAdvice?.message ?? readiness.description}</p>
-            {report.retakeAdvice ? (
-              <p className="mt-3 text-xs leading-5 text-muted">{report.retakeAdvice.message}</p>
             ) : null}
-            <Button className="mt-4 w-full" variant="secondary" onClick={handleLeakReport} loading={leakState === 'sending'} disabled={leakState === 'sent' || !report.mockAttemptId}>
-              {leakState === 'sent' ? 'Leak report sent' : 'Report leaked content'}
-            </Button>
           </div>
-        </MotionSection>
+        </Card>
+        <Card>
+          <LearnerSurfaceSectionHeader icon={CalendarCheck} title="Booking advice" className="mb-3" />
+          <p className="text-sm leading-6 text-muted">{report.bookingAdvice?.message ?? readiness.description}</p>
+          {report.retakeAdvice ? (
+            <p className="mt-3 text-xs leading-5 text-muted">{report.retakeAdvice.message}</p>
+          ) : null}
+          <Button className="mt-4" fullWidth variant="secondary" onClick={handleLeakReport} loading={leakState === 'sending'} disabled={leakState === 'sent' || !report.mockAttemptId}>
+            {leakState === 'sent' ? 'Leak report sent' : 'Report leaked content'}
+          </Button>
+        </Card>
+      </MotionSection>
 
-        {/* 2. Prior Comparison */}
-        {comp && comp.exists && (
-          <MotionSection
-            delayIndex={1}
-            className="bg-background-light rounded-2xl border border-border p-6"
-          >
-            <div className="flex items-start gap-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                comp.overallTrend === 'up'   ? 'bg-success/10 text-success' :
-                comp.overallTrend === 'down' ? 'bg-danger/10 text-danger' :
-                                               'bg-border text-muted'
-              }`}>
-                {comp.overallTrend === 'up'   && <TrendingUp className="w-5 h-5" />}
-                {comp.overallTrend === 'down' && <TrendingDown className="w-5 h-5" />}
-                {comp.overallTrend === 'flat' && <Minus className="w-5 h-5" />}
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-navy uppercase tracking-widest mb-1">
-                  Compared to {comp.priorMockName}
-                </h3>
-                <p className="text-sm text-muted leading-relaxed">{comp.details}</p>
-              </div>
+      {comp && comp.exists && (
+        <MotionSection delayIndex={2}>
+          <Card className="flex items-start gap-4">
+            <div
+              aria-hidden="true"
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                comp.overallTrend === 'up'   ? 'bg-success/10 text-success-strong' :
+                comp.overallTrend === 'down' ? 'bg-danger/10 text-danger-strong' :
+                                               'bg-background-light text-muted'
+              }`}
+            >
+              {comp.overallTrend === 'up'   && <TrendingUp className="h-5 w-5" />}
+              {comp.overallTrend === 'down' && <TrendingDown className="h-5 w-5" />}
+              {comp.overallTrend === 'flat' && <Minus className="h-5 w-5" />}
             </div>
-          </MotionSection>
-        )}
+            <div className="min-w-0">
+              <h2 className="mb-1 text-base font-bold text-navy">Compared to {comp.priorMockName}</h2>
+              <p className="text-sm leading-relaxed text-muted">{comp.details}</p>
+            </div>
+          </Card>
+        </MotionSection>
+      )}
 
-        {/* 3. Sub-test Breakdown */}
-        <MotionSection
-          delayIndex={2}
-        >
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Sub-test Breakdown</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {report.subTests.map((test) => {
-              const meta = SUBTEST_META[test.id] ?? SUBTEST_META.listening;
-              const Icon = meta.icon;
-              const isWriting = test.id === 'writing';
-              const governedScore = test.id === 'reading' || test.id === 'listening';
-              const canDownload = isWriting && Boolean(report.mockAttemptId);
-              return (
-                <div key={test.id} className="bg-surface rounded-2xl border border-border p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-2xl ${meta.bg} flex items-center justify-center shrink-0`}>
-                        <Icon className={`w-6 h-6 ${meta.color}`} />
+      <MotionSection delayIndex={3}>
+        <LearnerSurfaceSectionHeader title="Sub-test Breakdown" className="mb-4" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {report.subTests.map((test, index) => {
+            const meta = SUBTEST_META[test.id] ?? SUBTEST_META.listening;
+            const Icon = meta.icon;
+            const isWriting = test.id === 'writing';
+            const governedScore = test.id === 'reading' || test.id === 'listening';
+            const canDownload = isWriting && Boolean(report.mockAttemptId);
+            return (
+              <MotionItem key={test.id} delayIndex={Math.min(index, 5)}>
+                <Card className="h-full">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${meta.bg}`}>
+                        <Icon className={`h-6 w-6 ${meta.color}`} aria-hidden="true" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <h3 className="text-base font-bold text-navy">{test.name}</h3>
-                        <p className="text-xs text-muted">Raw: {test.rawScore}</p>
+                        <p className="text-xs tabular-nums text-muted">Raw: {test.rawScore}</p>
                         {test.reviewState ? (
-                          <p className="mt-1 text-3xs font-black uppercase tracking-widest text-warning">
+                          <p className="mt-1 tile-label text-warning-strong">
                             Review {test.reviewState.replace(/_/g, ' ')}
                           </p>
                         ) : null}
@@ -508,7 +495,7 @@ function MockReportContent() {
                       stroke={6}
                       color={scoreGaugeColor(String(test.score), test.grade, governedScore)}
                     >
-                      <span className={`text-sm font-black ${scoreColor(String(test.score), test.grade, governedScore)}`}>{test.grade ?? test.score}</span>
+                      <span className={`text-sm font-bold tabular-nums ${scoreColor(String(test.score), test.grade, governedScore)}`}>{test.grade ?? test.score}</span>
                     </ResultGauge>
                   </div>
                   {canDownload ? (
@@ -516,93 +503,94 @@ function MockReportContent() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="w-full"
+                        fullWidth
                         onClick={handleDownloadWritingPdf}
                         loading={pdfState === 'downloading'}
                         disabled={pdfState === 'downloading'}
                       >
-                        <Download className="mr-2 h-4 w-4" />
+                        <Download className="h-4 w-4" aria-hidden="true" />
                         Download practice PDF
                       </Button>
                       <p className="mt-2 text-2xs leading-4 text-muted">
                         Watermarked “Practice Copy”. For your own study only, not for resale or redistribution.
                       </p>
                       {pdfState === 'error' && pdfError ? (
-                        <p className="mt-2 text-2xs text-danger" role="alert">
+                        <p className="mt-2 text-2xs text-danger-strong" role="alert">
                           {pdfError}
                         </p>
                       ) : null}
                     </div>
                   ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </MotionSection>
+                </Card>
+              </MotionItem>
+            );
+          })}
+        </div>
+      </MotionSection>
 
-        {/* 4. Weakest Criterion — V1 payload renders WeaknessNarrative with
-            aggregated headline/body/tags; pre-V1 payloads fall back to the
-            legacy weakestCriterion card via the component's `fallback` prop. */}
-        <MotionSection delayIndex={3}>
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Area for Improvement</h2>
-          <WeaknessNarrative
-            headline={reportV1.weaknessNarrative?.headline}
-            body={reportV1.weaknessNarrative?.body}
-            tags={reportV1.weaknessNarrative?.tags}
-            fallback={report.weakestCriterion ? {
-              subtest: report.weakestCriterion.subtest,
-              criterion: report.weakestCriterion.criterion,
-              description: report.weakestCriterion.description,
-            } : undefined}
-          />
-        </MotionSection>
+      {/* Weakest Criterion — V1 payload renders WeaknessNarrative with
+          aggregated headline/body/tags; pre-V1 payloads fall back to the
+          legacy weakestCriterion card via the component's `fallback` prop. */}
+      <MotionSection delayIndex={4}>
+        <LearnerSurfaceSectionHeader title="Area for Improvement" className="mb-4" />
+        <WeaknessNarrative
+          headline={reportV1.weaknessNarrative?.headline}
+          body={reportV1.weaknessNarrative?.body}
+          tags={reportV1.weaknessNarrative?.tags}
+          fallback={report.weakestCriterion ? {
+            subtest: report.weakestCriterion.subtest,
+            criterion: report.weakestCriterion.criterion,
+            description: report.weakestCriterion.description,
+          } : undefined}
+        />
+      </MotionSection>
 
-        {/* 4b. Time analytics — per-section utilisation and (when populated)
-            longest-3-questions panel. Reads timing from the legacy MockReport
-            field plus the optional V1 perQuestionTiming array. */}
-        <MotionSection delayIndex={3}>
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Time analytics</h2>
-          <TimeAnalyticsBreakdown
-            timingAnalysis={report.timingAnalysis ?? []}
-            perQuestionTiming={reportV1.perQuestionTiming ?? null}
-          />
-        </MotionSection>
+      {/* Time analytics — per-section utilisation and (when populated)
+          longest-3-questions panel. Reads timing from the legacy MockReport
+          field plus the optional V1 perQuestionTiming array. */}
+      <MotionSection delayIndex={4}>
+        <LearnerSurfaceSectionHeader title="Time analytics" className="mb-4" />
+        <TimeAnalyticsBreakdown
+          timingAnalysis={report.timingAnalysis ?? []}
+          perQuestionTiming={reportV1.perQuestionTiming ?? null}
+        />
+      </MotionSection>
 
-        {/* 5. Words to Review — surfaces OET vocabulary tied to the weakest criterion */}
-        {report.weakestCriterion && (
-          <MockVocabularyReview
-            mockId={report.id}
-            weakSubtest={report.weakestCriterion.subtest}
-            weakCriterion={report.weakestCriterion.criterion}
-            weakDescription={report.weakestCriterion.description}
-          />
-        )}
+      {/* Words to Review — surfaces OET vocabulary tied to the weakest criterion */}
+      {report.weakestCriterion && (
+        <MockVocabularyReview
+          mockId={report.id}
+          weakSubtest={report.weakestCriterion.subtest}
+          weakCriterion={report.weakestCriterion.criterion}
+          weakDescription={report.weakestCriterion.description}
+        />
+      )}
 
-        {/* 6. Remediation Plan — spec requirement: every mock report ends with a concrete next 7-day plan.
-            When server-side W5 RemediationTask plan exists we render it (with completion controls);
-            otherwise we fall back to the deterministic client-derived plan. */}
-        <MotionSection delayIndex={5}>
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Your next 7-day plan</h2>
-          {serverTasks && serverTasks.length > 0 ? (
-            <div className="grid gap-4 lg:grid-cols-5">
-              {serverTasks
-                .slice()
-                .sort((a, b) => a.dayIndex - b.dayIndex)
-                .map((task) => {
-                  const completed = task.status === 'completed';
-                  return (
-                    <div
-                      key={task.id}
-                      className={`group flex flex-col rounded-2xl border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${completed ? 'border-success/40 opacity-80' : 'border-border hover:border-primary/30 hover:shadow-md'}`}
-                    >
-                      <span className="text-3xs font-black uppercase tracking-widest text-primary">Day {task.dayIndex}</span>
-                      <h3 className="mt-2 text-sm font-black text-navy">{task.title}</h3>
+      {/* Remediation Plan — spec requirement: every mock report ends with a concrete next 7-day plan.
+          When server-side W5 RemediationTask plan exists we render it (with completion controls);
+          otherwise we fall back to the deterministic client-derived plan. */}
+      <MotionSection delayIndex={5}>
+        <LearnerSurfaceSectionHeader title="Your next 7-day plan" className="mb-4" />
+        {serverTasks && serverTasks.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {serverTasks
+              .slice()
+              .sort((a, b) => a.dayIndex - b.dayIndex)
+              .map((task, index) => {
+                const completed = task.status === 'completed';
+                return (
+                  <MotionItem key={task.id} delayIndex={Math.min(index, 5)}>
+                    <Card padding="sm" className={cn('flex h-full flex-col', completed && 'border-success/40 opacity-80')}>
+                      <span className="tile-label text-primary">Day {task.dayIndex}</span>
+                      <h3 className="mt-2 text-sm font-bold text-navy">{task.title}</h3>
                       <p className="mt-2 text-xs leading-5 text-muted">{task.description}</p>
-                      <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3">
                         {task.routeHref ? (
-                          <Link href={task.routeHref} className="text-2xs font-black uppercase tracking-widest text-primary hover:underline">
-                            Start
-                          </Link>
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={task.routeHref}>
+                              Start <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
+                            </Link>
+                          </Button>
                         ) : <span />}
                         {completed ? (
                           <Badge variant="success" size="sm">Done</Badge>
@@ -618,71 +606,57 @@ function MockReportContent() {
                           </Button>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
-            </div>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-5">
-              {remediationPlan.map((item, index) => (
-                <Link
-                  key={`${item.day || 'day'}-${item.title || 'item'}-${index}`}
-                  href={item.route}
-                  className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md"
-                >
-                  <span className="text-3xs font-black uppercase tracking-widest text-primary">{item.day}</span>
-                  <h3 className="mt-2 text-sm font-black text-navy transition-colors group-hover:text-primary">{item.title}</h3>
+                    </Card>
+                  </MotionItem>
+                );
+              })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {remediationPlan.map((item, index) => (
+              <MotionItem key={`${item.day || 'day'}-${item.title || 'item'}-${index}`} delayIndex={Math.min(index, 5)}>
+                <CardLink href={item.route} padding="sm" className="group h-full">
+                  <span className="tile-label text-primary">{item.day}</span>
+                  <h3 className="mt-2 text-sm font-bold text-navy transition-colors group-hover:text-primary">{item.title}</h3>
                   <p className="mt-2 text-xs leading-5 text-muted">{item.description}</p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </MotionSection>
+                </CardLink>
+              </MotionItem>
+            ))}
+          </div>
+        )}
+      </MotionSection>
 
-        {/* 7. Study Plan CTA */}
-        <MotionSection
-          delayIndex={6}
-          className="pt-4"
-        >
-          <div className="bg-navy dark:bg-surface dark:border dark:border-border rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.1),_transparent)]" />
-            <div className="relative z-10">
-              <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
-                <RefreshCw className="w-8 h-8 text-white" aria-hidden="true" />
-              </div>
-              <h2 className="text-xl font-black mb-2">Update Your Study Plan</h2>
+      <MotionSection delayIndex={5}>
+        <Card padding="lg" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <RefreshCw className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-navy">Update Your Study Plan</h2>
               {report.weakestCriterion ? (
-                <p className="text-sm text-white/70 max-w-md mx-auto mb-6">
-                  Based on this report, we recommend focusing on <strong>{report.weakestCriterion.criterion}</strong> in {report.weakestCriterion.subtest}.
+                <p className="mt-1 max-w-prose text-sm text-muted">
+                  Based on this report, we recommend focusing on <strong className="text-navy">{report.weakestCriterion.criterion}</strong> in {report.weakestCriterion.subtest}.
                 </p>
               ) : (
-                <p className="text-sm text-white/70 max-w-md mx-auto mb-6">
+                <p className="mt-1 max-w-prose text-sm text-muted">
                   Based on this report, review your detailed sub-test breakdown to update your focus areas.
                 </p>
               )}
-              <Button size="lg" asChild>
-                <Link href="/study-plan">Update Study Plan</Link>
-              </Button>
             </div>
           </div>
-        </MotionSection>
-
-      </div>
+          <Button asChild className="shrink-0">
+            <Link href="/study-plan">Update Study Plan</Link>
+          </Button>
+        </Card>
+      </MotionSection>
     </>
   );
 }
 
 export default function MockReport() {
   return (
-    <Suspense fallback={
-      <>
-        <div className="space-y-6">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
-          ))}
-        </div>
-      </>
-    }>
+    <Suspense fallback={<ReportSkeleton />}>
       <MockReportContent />
     </Suspense>
   );

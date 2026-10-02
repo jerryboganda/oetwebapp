@@ -2,22 +2,27 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowRight,
   BookOpen,
+  BookOpenText,
   CalendarDays,
   ClipboardCheck,
-  Clock,
   Eye,
+  FileText,
   ListChecks,
   PlayCircle,
+  ScanSearch,
   Target,
+  Timer,
   TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
+import { LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import {
@@ -50,61 +55,42 @@ interface HubCard {
   subtitle: string;
   href: string;
   accent: 'partA' | 'partB' | 'partC' | 'exam';
+  icon: LucideIcon;
 }
 
+// One Reading identity colour for every card; the icon tells the parts apart.
 const HUB_CARDS: HubCard[] = [
   {
     title: 'Practice Part A',
     subtitle: 'Expeditious reading. Match section headings to four short medical texts in 15 minutes.',
     href: '/reading/parts/a',
     accent: 'partA',
+    icon: ScanSearch,
   },
   {
     title: 'Practice Part B',
     subtitle: 'Workplace texts. Short workplace notices and excerpts, six 3-option items.',
     href: '/reading/parts/b',
     accent: 'partB',
+    icon: FileText,
   },
   {
     title: 'Practice Part C',
     subtitle: 'Long-text comprehension. Two longer texts with detailed 4-option questions.',
     href: '/reading/parts/c',
     accent: 'partC',
+    icon: BookOpenText,
   },
   {
     title: 'Full Reading Exam',
     subtitle: '60 minutes • 42 questions • Part A hard-locked, Parts B+C share a 45-minute window.',
     href: '/reading/exam',
     accent: 'exam',
+    icon: Timer,
   },
 ];
 
-const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
-  partA: {
-    ring: 'border-blue-200 hover:border-blue-300 dark:border-blue-900/60 dark:hover:border-blue-700',
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
-    icon: 'text-blue-600 dark:text-blue-400',
-    chip: 'Part A',
-  },
-  partB: {
-    ring: 'border-sky-200 hover:border-sky-300 dark:border-sky-900/60 dark:hover:border-sky-700',
-    badge: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
-    icon: 'text-sky-600 dark:text-sky-400',
-    chip: 'Part B',
-  },
-  partC: {
-    ring: 'border-emerald-200 hover:border-emerald-300 dark:border-emerald-900/60 dark:hover:border-emerald-700',
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
-    icon: 'text-emerald-600 dark:text-emerald-400',
-    chip: 'Part C',
-  },
-  exam: {
-    ring: 'border-amber-200 hover:border-amber-300 dark:border-amber-900/60 dark:hover:border-amber-700',
-    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300',
-    icon: 'text-amber-600 dark:text-amber-400',
-    chip: 'Full exam',
-  },
-};
+const SKILL_CHIP = 'inline-flex w-fit items-center rounded-full border border-skill-reading/20 bg-skill-reading/10 px-2 py-0.5 tile-label text-skill-reading';
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -198,110 +184,100 @@ export default function ReadingHome() {
 
   return (
     <>
-      <div className="space-y-6 sm:space-y-10">
-        <LearnerPageHero
-          eyebrow="Module focus"
-          icon={BookOpen}
-          accent="blue"
-          title="OET Reading"
-          description="Practice each part separately or attempt the full reading exam under official timing."
-          highlights={heroHighlights}
-        />
+      <LearnerPageHero
+        eyebrow="Module focus"
+        icon={BookOpen}
+        accent="reading"
+        title="OET Reading"
+        description="Practice each part separately or attempt the full reading exam under official timing."
+        highlights={heroHighlights}
+      />
 
-        <CreditsGuideButton variant="banner" />
+      <CreditsGuideButton variant="banner" />
 
-        <LearnerSkillSwitcher compact />
+      <LearnerSkillSwitcher compact />
 
-        {error ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <InlineAlert variant="error">{error}</InlineAlert>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRetryCount((count) => count + 1)}
-              className="border-danger/30 bg-surface text-danger hover:bg-danger/5 dark:border-danger/40 dark:hover:bg-danger/10"
-            >
+      {error ? (
+        <InlineAlert
+          variant="error"
+          action={(
+            <Button variant="outline" size="sm" onClick={() => setRetryCount((count) => count + 1)}>
               Try again
             </Button>
-          </div>
-        ) : null}
+          )}
+        >
+          {error}
+        </InlineAlert>
+      ) : null}
 
-        {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
+      {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <MotionSection delayIndex={0}>
-          <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
-            <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                Choose how to practice
-              </p>
-              <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
-                Practice by Part, or attempt the full exam
-              </h2>
-            </div>
-  
-            <CreditUsageInfoCard module="reading" className="mb-4" />
-  
-            {freeSampleHref ? (
-              <FreeSampleCard
-                testId="reading-free-mock-card"
-                icon={BookOpen}
-                title="Free Reading Mock"
-                description="Try one complete OET Reading mock for free."
-                href={freeSampleHref}
-                onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
-                className="mb-4"
-              />
-            ) : null}
-  
-            {loading ? (
-              <LearnerSkeleton variant="card-grid" />
-            ) : (
-              <ul
-                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-                data-testid="reading-hub-cards"
-              >
-                {HUB_CARDS.map((card) => {
-                  const accent = ACCENT_STYLES[card.accent];
-                  return (
-                    <li key={card.href}>
-                      <Link
-                        href={card.href}
-                        data-testid={`reading-hub-card-${card.accent}`}
-                        className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${accent.ring}`}
-                      >
-                        <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <h3 className="text-sm font-bold text-navy">
-                              {card.title}
-                            </h3>
-                            <span className={`rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide ${accent.badge}`}>
-                              {accent.chip}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
-                        </div>
-                        <PlayCircle
-                          className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                          aria-hidden
-                        />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        </MotionSection>
-
-        {!loading && home ? (
-          <ReadingSecondaryDashboard
-            assignments={assignments}
-            papers={home.papers}
-            recentResults={home.recentResults}
+      <MotionSection delayIndex={0}>
+        <section aria-label="Practice by Part, or attempt the full exam" data-tour="reading-hub">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Choose how to practice"
+            title="Practice by Part, or attempt the full exam"
+            className="mb-4"
           />
-        ) : null}
-      </div>
+
+          <CreditUsageInfoCard module="reading" className="mb-4" />
+
+          {freeSampleHref ? (
+            <FreeSampleCard
+              testId="reading-free-mock-card"
+              icon={BookOpen}
+              title="Free Reading Mock"
+              description="Try one complete OET Reading mock for free."
+              href={freeSampleHref}
+              onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
+              className="mb-4"
+            />
+          ) : null}
+
+          {/* The four entry cards are static, so they never wait on the API. */}
+          <ul
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            data-testid="reading-hub-cards"
+          >
+            {HUB_CARDS.map((card, index) => {
+              const Icon = card.icon;
+              return (
+                <li key={card.href}>
+                  <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                    <CardLink
+                      href={card.href}
+                      data-testid={`reading-hub-card-${card.accent}`}
+                      className="group flex h-full items-start gap-4"
+                    >
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-skill-reading/10 text-skill-reading">
+                        <Icon className="h-5 w-5" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-navy">{card.title}</h3>
+                        <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
+                      </div>
+                      <PlayCircle
+                        className="h-4 w-4 shrink-0 self-center text-primary opacity-0 transition-opacity group-hoverable:opacity-100 group-focus-visible:opacity-100"
+                        aria-hidden
+                      />
+                    </CardLink>
+                  </MotionItem>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </MotionSection>
+
+      {loading ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : home ? (
+        <ReadingSecondaryDashboard
+          assignments={assignments}
+          papers={home.papers}
+          recentResults={home.recentResults}
+        />
+      ) : null}
     </>
   );
 }
@@ -316,77 +292,80 @@ function ReadingSecondaryDashboard({
   recentResults: ReadingHomeResultDto[];
 }) {
   return (
-    <section aria-labelledby="reading-workspace-heading" className="grid gap-4 lg:grid-cols-3">
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <DashboardPanelHeader
-          icon={ClipboardCheck}
-          eyebrow="Practice"
-          title="Practice Hub"
-          href="/reading/practice"
-        />
-        {assignments.length > 0 ? (
-          <ul className="mt-4 space-y-3">
-            {assignments.slice(0, 3).map((assignment) => (
-              <li key={assignment.id} className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
-                <p className="font-semibold text-navy">{assignment.kind.replace(/_/g, ' ')}</p>
-                <p className="mt-1 text-xs text-muted">
-                  Due {formatOptionalDate(assignment.dueAt)} · {assignment.status}
-                </p>
-                {assignment.note ? <p className="mt-2 text-xs text-muted">{assignment.note}</p> : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
-            No active Reading assignments.
-          </p>
-        )}
-      </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <MotionItem delayIndex={0} className="h-full">
+        <Card className="h-full">
+          <DashboardPanelHeader
+            icon={ClipboardCheck}
+            eyebrow="Practice"
+            title="Practice Hub"
+            href="/reading/practice"
+          />
+          {assignments.length > 0 ? (
+            <ul className="mt-3 divide-y divide-border">
+              {assignments.slice(0, 3).map((assignment) => (
+                <li key={assignment.id} className="py-3 text-sm last:pb-0">
+                  <p className="font-semibold capitalize text-navy">{assignment.kind.replace(/_/g, ' ')}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Due {formatOptionalDate(assignment.dueAt)} · {assignment.status}
+                  </p>
+                  {assignment.note ? <p className="mt-2 text-xs text-muted">{assignment.note}</p> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <PanelEmpty icon={ClipboardCheck}>No active Reading assignments.</PanelEmpty>
+          )}
+        </Card>
+      </MotionItem>
 
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <DashboardPanelHeader
-          icon={Target}
-          eyebrow="Paper library"
-          title="Available papers"
-          href="/reading/exam"
-        />
-        {papers.length > 0 ? (
-          <ul className="mt-4 space-y-3">
-            {papers.slice(0, 3).map((paper) => (
-              <li key={paper.id}>
-                <Link href={paper.route} className="block rounded-xl border border-border/70 bg-background-light p-3 text-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                  <span className="font-semibold text-navy">{paper.title}</span>
-                  <span className="mt-1 block text-xs text-muted">
-                    {paper.partACount}+{paper.partBCount}+{paper.partCCount} items · {paper.estimatedDurationMinutes} min
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
-            Published Reading papers will appear here.
-          </p>
-        )}
-      </div>
+      <MotionItem delayIndex={1} className="h-full">
+        <Card className="h-full">
+          <DashboardPanelHeader
+            icon={Target}
+            eyebrow="Paper library"
+            title="Available papers"
+            href="/reading/exam"
+          />
+          {papers.length > 0 ? (
+            <ul className="mt-3 divide-y divide-border">
+              {papers.slice(0, 3).map((paper) => (
+                <li key={paper.id} className="py-1.5 last:pb-0">
+                  <Link
+                    href={paper.route}
+                    className="hover-primary -mx-2 block rounded-control px-2 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <span className="font-semibold text-navy">{paper.title}</span>
+                    <span className="mt-1 block text-xs tabular-nums text-muted">
+                      {paper.partACount}+{paper.partBCount}+{paper.partCCount} items · {paper.estimatedDurationMinutes} min
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <PanelEmpty icon={Target}>Published Reading papers will appear here.</PanelEmpty>
+          )}
+        </Card>
+      </MotionItem>
 
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <DashboardPanelHeader
-          icon={TrendingUp}
-          eyebrow="Review"
-          title="Recent results"
-          href="/reading/stats"
-        />
-        {recentResults.length > 0 ? (
-          <ul className="mt-4 space-y-3">
-            {recentResults.map((result) => (
-              <li key={result.attemptId}>
-                <article className="rounded-xl border border-border/70 bg-background-light p-3 text-sm">
-                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-3xs font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+      <MotionItem delayIndex={2} className="h-full">
+        <Card className="h-full">
+          <DashboardPanelHeader
+            icon={TrendingUp}
+            eyebrow="Review"
+            title="Recent results"
+            href="/reading/stats"
+          />
+          {recentResults.length > 0 ? (
+            <ul className="mt-3 divide-y divide-border">
+              {recentResults.map((result) => (
+                <li key={result.attemptId} className="py-3 text-sm last:pb-0">
+                  <span className={SKILL_CHIP}>
                     {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
                   </span>
                   <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs tabular-nums text-muted">
                     {result.rawScore}/{result.maxRawScore}
                     {result.requiresAdminReview
                       ? ' · admin review pending'
@@ -395,7 +374,7 @@ function ReadingSecondaryDashboard({
                         : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
                   </p>
                   <div className="mt-3 flex items-center gap-2">
-                    <Button asChild size="sm" variant="outline" className="flex-1 bg-surface">
+                    <Button asChild size="sm" variant="outline" className="flex-1">
                       <Link href={result.route}>
                         <Eye className="h-3.5 w-3.5" aria-hidden />
                         Review
@@ -408,17 +387,15 @@ function ReadingSecondaryDashboard({
                       </Link>
                     </Button>
                   </div>
-                </article>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
-            Submit a Reading attempt to unlock review.
-          </p>
-        )}
-      </div>
-    </section>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <PanelEmpty icon={TrendingUp}>Submit a Reading attempt to unlock review.</PanelEmpty>
+          )}
+        </Card>
+      </MotionItem>
+    </div>
   );
 }
 
@@ -435,18 +412,26 @@ function DashboardPanelHeader({
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
-          <Icon className="h-3.5 w-3.5" aria-hidden />
-          {eyebrow}
-        </p>
-        <h2 id={title === 'Practice Hub' ? 'reading-workspace-heading' : undefined} className="mt-1 text-base font-bold text-navy">
+      <div className="min-w-0">
+        <p className="eyebrow text-muted">{eyebrow}</p>
+        <h2 className="mt-1 flex items-center gap-2 text-base font-bold text-navy">
+          <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
           {title}
         </h2>
       </div>
-      <Link href={href} className="text-xs font-semibold text-primary hover:text-primary-dark">
-        View
-      </Link>
+      <Button asChild variant="ghost" size="sm" className="-me-2 shrink-0 text-primary">
+        <Link href={href}>View</Link>
+      </Button>
+    </div>
+  );
+}
+
+/** A panel's own empty state: an icon and its one line, inside the panel card. */
+function PanelEmpty({ icon: Icon, children }: { icon: LucideIcon; children: string }) {
+  return (
+    <div role="status" className="mt-4 flex items-center gap-3 rounded-control border border-dashed border-border px-3 py-4 text-sm text-muted">
+      <Icon className="h-4 w-4 shrink-0" aria-hidden />
+      <p>{children}</p>
     </div>
   );
 }
@@ -465,21 +450,21 @@ function ResumeBanner({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {
   if (!resumable) return null;
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-700 dark:bg-emerald-900/20">
-      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-        <Clock className="h-4 w-4" aria-hidden />
-        You have an open Reading attempt
-      </p>
-      <p className="mb-3 text-xs text-emerald-700/80 dark:text-emerald-300/70">
-        {resumable.paperTitle}: {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
-        before the timer window closes.
-      </p>
-      <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
-        <Link href={resumable.route}>
-          <ListChecks className="h-4 w-4" aria-hidden />
-          Resume attempt
-        </Link>
-      </Button>
-    </div>
+    <InlineAlert
+      variant="success"
+      live="polite"
+      title="You have an open Reading attempt"
+      action={(
+        <Button asChild size="sm">
+          <Link href={resumable.route}>
+            <ListChecks className="h-4 w-4" aria-hidden />
+            Resume attempt
+          </Link>
+        </Button>
+      )}
+    >
+      {resumable.paperTitle}: {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
+      before the timer window closes.
+    </InlineAlert>
   );
 }

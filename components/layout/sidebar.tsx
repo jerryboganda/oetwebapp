@@ -116,11 +116,11 @@ export const mainNavItems: NavItem[] = [
 // platform-specific gating. Permissions are enforced inside each area; the
 // nav link always renders.
 export const learnerMainNavItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
-  { href: '/listening', label: 'Listening', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
-  { href: '/reading', label: 'Reading', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
-  { href: '/writing', label: 'Writing', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
-  { href: '/speaking', label: 'Speaking', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
+  { href: '/', label: 'Dashboard', mobileLabel: 'Home', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
+  { href: '/listening', label: 'Listening', mobileLabel: 'Listen', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
+  { href: '/reading', label: 'Reading', mobileLabel: 'Read', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
+  { href: '/writing', label: 'Writing', mobileLabel: 'Write', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
+  { href: '/speaking', label: 'Speaking', mobileLabel: 'Speak', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   // Free General English placement test. Shown only when the learner can
   // actually open it (flag on + inside any active beta) — see usePlacementAccess.
   { href: PLACEMENT_NAV_HREF, label: 'Placement Test', icon: <ClipboardCheck className="w-5 h-5" />, matchPrefix: PLACEMENT_NAV_HREF },
@@ -267,7 +267,7 @@ function NavSection({
 
   return (
     <motion.div className="mb-4" layout={!reducedMotion}>
-      <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted">{label}</div>
+      <div className="mb-2 px-2 eyebrow text-muted">{label}</div>
       <motion.ul className="flex flex-col gap-1" layout={!reducedMotion}>
         {items.map((item, index) => {
           const active = item.href === activeHref;
@@ -299,7 +299,7 @@ function NavSection({
                 </span>
                 <span className="relative z-10">{item.sidebarLabel ?? item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
-                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-3xs font-bold tabular-nums text-white shadow-sm">
+                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-warning px-1.5 py-0.5 text-3xs font-bold tabular-nums text-white shadow-sm">
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}

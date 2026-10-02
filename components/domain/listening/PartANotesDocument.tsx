@@ -235,7 +235,7 @@ export function PartANotesDocument({
         {/* DEFENSIVE: leftover questions whose index >= gap count get their own answer fields */}
         {leftoverQuestions.length > 0 && (
           <div className="mt-4 border-t border-border pt-3 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted">
+            <p className="eyebrow text-muted">
               Additional answer{leftoverQuestions.length > 1 ? 's' : ''}
             </p>
             {leftoverQuestions.map((q) => (

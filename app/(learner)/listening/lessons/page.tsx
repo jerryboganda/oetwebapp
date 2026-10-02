@@ -1,9 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, CheckCircle2, GraduationCap } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { ErrorState } from '@/components/ui/empty-error';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Badge } from '@/components/ui/badge';
+import { CardLink } from '@/components/ui/card-link';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { CardSkeleton } from '@/components/ui/skeleton';
 import { queryKeys } from '@/lib/query/hooks';
 
@@ -38,17 +42,16 @@ export default function ListeningLessonsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 sm:space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-navy">Foundation Lessons</h1>
-        <p className="mt-2 text-muted">
-          8 bite-sized lessons covering each Listening sub-skill (L1–L8). Each lesson runs ~30 min:
-          watch, read, drill × 3, then a mini-quiz.
-        </p>
-      </header>
+    <>
+      <LearnerPageHero
+        icon={GraduationCap}
+        accent="listening"
+        title="Foundation Lessons"
+        description="8 bite-sized lessons covering each Listening sub-skill (L1–L8). Each lesson runs ~30 min: watch, read, drill × 3, then a mini-quiz."
+      />
 
       {isPending ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-busy="true">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-busy="true">
           {Array.from({ length: 8 }, (_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : isError ? (
@@ -57,40 +60,38 @@ export default function ListeningLessonsPage() {
           onRetry={() => void refetch()}
         />
       ) : lessons.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-background-light p-6 text-muted">
-          <p>Foundation lessons are being seeded by the content team.</p>
-          <p className="mt-2 text-sm">
-            Enable the <code className="rounded bg-background-light px-1">Seed:ListeningContent</code> flag
-            in development to populate sample lessons.
-          </p>
-        </div>
+        // The developer seed-flag hint that used to follow is not for learners.
+        <EmptyState
+          icon={<GraduationCap className="h-8 w-8" aria-hidden />}
+          title="Foundation lessons are being seeded by the content team."
+        />
       ) : (
-        <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {lessons.map((l) => (
-            <li
-              key={l.id}
-              className="rounded-2xl border border-border bg-surface p-5 shadow-sm flex flex-col"
-            >
-              <span className="text-xs font-semibold tracking-wide text-primary uppercase">
-                {l.skillCode} · {SKILL_LABEL[l.skillCode] ?? l.skillCode}
-              </span>
-              <h2 className="mt-1 text-base font-semibold text-navy">{l.title}</h2>
-              <p className="mt-1 text-xs text-muted">~{l.estimatedMinutes} min</p>
-              {l.completedByUser && (
-                <span className="mt-2 inline-block rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
-                  ✓ Completed
-                </span>
-              )}
-              <Link
-                href={`/listening/lessons/${l.slug}`}
-                className="mt-4 self-start text-sm text-primary underline"
-              >
-                Open lesson →
-              </Link>
+        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {lessons.map((l, index) => (
+            <li key={l.id}>
+              <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                {/* The whole card opens the lesson. */}
+                <CardLink href={`/listening/lessons/${l.slug}`} className="group flex h-full flex-col">
+                  <span className="eyebrow text-skill-listening">
+                    {l.skillCode} · {SKILL_LABEL[l.skillCode] ?? l.skillCode}
+                  </span>
+                  <h2 className="mt-1 text-base font-semibold text-navy">{l.title}</h2>
+                  <p className="mt-1 text-xs tabular-nums text-muted">~{l.estimatedMinutes} min</p>
+                  <div className="mt-auto flex items-center gap-2 pt-4">
+                    {l.completedByUser ? (
+                      <Badge variant="success" className="gap-1">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden />
+                        Completed
+                      </Badge>
+                    ) : null}
+                    <ArrowRight className="ms-auto h-4 w-4 text-primary transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden />
+                  </div>
+                </CardLink>
+              </MotionItem>
             </li>
           ))}
         </ol>
       )}
-    </div>
+    </>
   );
 }

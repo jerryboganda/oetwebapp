@@ -53,7 +53,7 @@ export function SpeakingScoreDisclaimer({ className }: SpeakingScoreDisclaimerPr
         (className ?? '')
       }
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
       <p className="leading-relaxed">{text}</p>
     </div>
   );

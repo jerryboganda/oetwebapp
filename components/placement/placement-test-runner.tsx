@@ -245,7 +245,7 @@ export function PlacementTestRunner() {
   if (screen.kind === 'disabled') {
     return (
       <div className="mx-auto max-w-xl space-y-3 rounded-2xl border border-border bg-surface p-6 text-center">
-        <AlertTriangle className="mx-auto h-8 w-8 text-warning" aria-hidden />
+        <AlertTriangle className="mx-auto h-8 w-8 text-warning-strong" aria-hidden />
         <h2 className="text-lg font-semibold text-navy">Placement test unavailable</h2>
         <p className="text-sm text-muted">
           {errorMessage ?? 'The free placement test has not been switched on for your account yet. Please check back soon.'}

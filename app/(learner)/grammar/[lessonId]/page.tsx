@@ -5,12 +5,15 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
-import { MotionPage, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CelebrationBurst } from '@/components/ui/celebration-burst';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState } from '@/components/ui/empty-error';
 import { ProgressBar } from '@/components/ui/progress';
 import {
   GrammarContentRenderer,
@@ -123,22 +126,20 @@ export default function GrammarLessonPage() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-40 rounded-2xl" />
-          <Skeleton className="h-64 rounded-2xl" />
-        </div>
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl" />
       </>
     );
   }
 
   if (!lesson) {
     return (
-      <>
-        <div className="space-y-4">
-          <BackLink />
-          <InlineAlert variant="warning">Lesson not found.</InlineAlert>
-        </div>
-      </>
+      <EmptyState
+        icon={<BookMarked className="h-7 w-7" aria-hidden="true" />}
+        title="Lesson not found."
+        description={error ?? undefined}
+        action={{ label: 'Back to grammar', href: '/grammar' }}
+      />
     );
   }
 
@@ -165,192 +166,184 @@ export default function GrammarLessonPage() {
   // ── render ─────────────────────────────────────────────────────────
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
+      {/* ── Hero — same visual contract as every learner page ── */}
+      <LearnerPageHero
+        eyebrow="Grammar lesson"
+        icon={BookMarked}
+        accent="primary"
+        title={lesson.title}
+        description={lesson.description ?? `Strengthen ${lesson.topicName ?? lesson.category} patterns through guided practice.`}
+        highlights={heroHighlights}
+        aside={<BackLink topicSlug={lesson.topicSlug} topicName={lesson.topicName} />}
+      />
 
-        {/* Back breadcrumb */}
-        <BackLink topicSlug={lesson.topicSlug} topicName={lesson.topicName} />
+      {/* Paywall banner — only renders when free tier is exhausted */}
+      {entitlement ? (
+        <GrammarEntitlementBanner entitlement={entitlement} lessonId={lesson.id} />
+      ) : null}
 
-        {/* ── Hero — same visual contract as every learner page ── */}
-        <LearnerPageHero
-          eyebrow="Grammar lesson"
-          icon={BookMarked}
-          accent="primary"
-          title={lesson.title}
-          description={lesson.description ?? `Strengthen ${lesson.topicName ?? lesson.category} patterns through guided practice.`}
-          highlights={heroHighlights}
-        />
+      {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        {/* Paywall banner — only renders when free tier is exhausted */}
-        {entitlement ? (
-          <GrammarEntitlementBanner entitlement={entitlement} lessonId={lesson.id} />
-        ) : null}
-
-        {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
-
-        {/* ── Content area — max 3xl keeps it readable ── */}
-        <div className="max-w-3xl space-y-6">
-
-          {/* ── INTRO view ── */}
-          {view === 'intro' ? (
-            <MotionItem>
-              <Card>
-                <div className="flex flex-col items-center gap-5 py-4 text-center sm:py-6">
-                  {/* Icon tile matching dashboard task-card icon style */}
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Sparkles className="h-7 w-7" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <h2 className="text-xl font-bold text-navy">Ready to learn?</h2>
-                    <p className="mx-auto max-w-md text-sm leading-6 text-muted">
-                      {exerciseCount > 0 ? (
-                        <>
-                          Review the teaching notes, then complete{' '}
-                          <span className="font-semibold text-navy">{exerciseCount} exercises</span>{' '}
-                          graded instantly by the server.
-                        </>
-                      ) : (
-                        <>Review the teaching notes for this lesson and return to the grammar hub when you are ready for the next activity.</>
-                      )}
-                    </p>
-                  </div>
-
-                  {lesson.progress && masteryScore > 0 ? (
-                    <div className="w-full max-w-xs space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-semibold text-muted">
-                        <span>Previous mastery</span>
-                        <span className="text-navy">{Math.round(masteryScore)}%</span>
-                      </div>
-                      <ProgressBar
-                        value={masteryScore}
-                        ariaLabel={`Previous mastery ${Math.round(masteryScore)}%`}
-                        color={masteryScore >= 80 ? 'success' : 'primary'}
-                      />
-                    </div>
-                  ) : null}
-
-                  {lesson.mastered ? (
-                    <Badge variant="success" size="md">
-                      <Trophy className="mr-1.5 h-3.5 w-3.5" /> Mastered
-                    </Badge>
-                  ) : null}
-
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="min-w-[140px]"
-                    onClick={onStart}
-                    disabled={isBlocked}
-                  >
-                    {isBlocked ? 'Upgrade to unlock' : 'Start lesson'}
-                  </Button>
-                </div>
-              </Card>
-            </MotionItem>
-          ) : null}
-
-          {/* ── STUDY view ── */}
-          {view === 'study' ? (
-            <MotionItem className="space-y-5">
-              {/* Teaching content inside cream surface cards */}
-              <GrammarContentRenderer blocks={lesson.contentBlocks} />
-
-              <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-                <Button variant="outline" size="sm" onClick={() => setView('intro')}>
-                  <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setView('practice')}
-                  disabled={exerciseCount === 0}
-                >
-                  {exerciseCount === 0
-                    ? 'Study notes only'
-                    : `Practise now · ${exerciseCount} exercises`}
-                </Button>
+      {/* ── INTRO view ── */}
+      {view === 'intro' ? (
+        <MotionSection>
+          <Card>
+            <div className="flex flex-col items-center gap-5 py-4 text-center sm:py-6">
+              {/* Icon tile matching dashboard task-card icon style */}
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Sparkles className="h-7 w-7" aria-hidden="true" />
               </div>
 
-              {exerciseCount === 0 ? (
-                <p className="text-sm text-muted">This lesson is available as a focused study-note activity.</p>
+              <div className="space-y-2">
+                <h2 className="text-xl font-bold text-navy">Ready to learn?</h2>
+                <p className="mx-auto max-w-md text-sm leading-6 text-muted">
+                  {exerciseCount > 0 ? (
+                    <>
+                      Review the teaching notes, then complete{' '}
+                      <span className="font-semibold text-navy">{exerciseCount} exercises</span>{' '}
+                      graded instantly by the server.
+                    </>
+                  ) : (
+                    <>Review the teaching notes for this lesson and return to the grammar hub when you are ready for the next activity.</>
+                  )}
+                </p>
+              </div>
+
+              {lesson.progress && masteryScore > 0 ? (
+                <div className="w-full max-w-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-muted">
+                    <span>Previous mastery</span>
+                    <span className="tabular-nums text-navy">{Math.round(masteryScore)}%</span>
+                  </div>
+                  <ProgressBar
+                    value={masteryScore}
+                    ariaLabel={`Previous mastery ${Math.round(masteryScore)}%`}
+                    color={masteryScore >= 80 ? 'success' : 'primary'}
+                  />
+                </div>
               ) : null}
-            </MotionItem>
+
+              {lesson.mastered ? (
+                <Badge variant="success" size="md">
+                  <Trophy className="me-1.5 h-3.5 w-3.5" aria-hidden="true" /> Mastered
+                </Badge>
+              ) : null}
+
+              <Button
+                variant="primary"
+                size="sm"
+                className="min-w-36"
+                onClick={onStart}
+                disabled={isBlocked}
+              >
+                {isBlocked ? 'Upgrade to unlock' : 'Start lesson'}
+              </Button>
+            </div>
+          </Card>
+        </MotionSection>
+      ) : null}
+
+      {/* ── STUDY view ── */}
+      {view === 'study' ? (
+        <MotionSection className="space-y-5">
+          {/* Teaching notes are long-form reading: a 3xl column keeps lines readable. */}
+          <div className="max-w-3xl">
+            <GrammarContentRenderer blocks={lesson.contentBlocks} />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <Button variant="outline" size="sm" onClick={() => setView('intro')}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setView('practice')}
+              disabled={exerciseCount === 0}
+            >
+              {exerciseCount === 0
+                ? 'Study notes only'
+                : `Practise now · ${exerciseCount} exercises`}
+            </Button>
+          </div>
+
+          {exerciseCount === 0 ? (
+            <p className="text-sm text-muted">This lesson is available as a focused study-note activity.</p>
           ) : null}
+        </MotionSection>
+      ) : null}
 
-          {/* ── PRACTICE view ── */}
-          {view === 'practice' ? (
-            <div className="space-y-5">
-              {/* Inline progress strip — uses primary bar on cream background */}
-              <AnswerProgress answered={answered} total={exerciseCount} />
+      {/* ── PRACTICE view ── */}
+      {view === 'practice' ? (
+        <div className="space-y-5">
+          {/* Inline progress strip — uses primary bar on cream background */}
+          <AnswerProgress answered={answered} total={exerciseCount} />
 
-              {lesson.exercises.map((ex, i) => (
-                <MotionItem key={ex.id} delayIndex={i}>
+          {lesson.exercises.map((ex, i) => (
+            <MotionItem key={ex.id} delayIndex={Math.min(i, 5)}>
+              <GrammarExerciseRunner
+                exercise={ex}
+                answer={answers[ex.id]}
+                disabled={submitting}
+                onAnswer={(value) =>
+                  setAnswers((prev) => ({ ...prev, [ex.id]: value }))
+                }
+              />
+            </MotionItem>
+          ))}
+
+          <div className="flex flex-col items-stretch justify-end gap-2 border-t border-border pt-4 sm:flex-row">
+            <Button variant="outline" size="sm" onClick={() => setView('study')}>
+              Back to study notes
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="min-w-44 tabular-nums"
+            >
+              {submitting
+                ? 'Grading…'
+                : canSubmit
+                  ? `Submit (${answered}/${exerciseCount} answered)`
+                  : `Answer all exercises (${answered}/${exerciseCount})`}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── RESULT view ── */}
+      {view === 'result' && result ? (
+        <MotionSection className="space-y-6">
+          <ResultSummary result={result} />
+
+          {/* Per-exercise results */}
+          <div className="space-y-4">
+            {lesson.exercises.map((ex, i) => {
+              const r = resultsByExerciseId.get(ex.id) ?? null;
+              return (
+                <MotionItem key={ex.id} delayIndex={Math.min(i, 5)}>
                   <GrammarExerciseRunner
                     exercise={ex}
-                    answer={answers[ex.id]}
-                    disabled={submitting}
-                    onAnswer={(value) =>
-                      setAnswers((prev) => ({ ...prev, [ex.id]: value }))
-                    }
+                    answer={r?.userAnswer ?? answers[ex.id]}
+                    disabled
+                    onAnswer={() => {}}
+                    result={r}
                   />
                 </MotionItem>
-              ))}
+              );
+            })}
+          </div>
 
-              <div className="flex flex-col items-stretch justify-end gap-2 border-t border-border pt-4 sm:flex-row">
-                <Button variant="outline" size="sm" onClick={() => setView('study')}>
-                  Back to study notes
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={onSubmit}
-                  disabled={!canSubmit}
-                  className="min-w-[180px]"
-                >
-                  {submitting
-                    ? 'Grading…'
-                    : canSubmit
-                      ? `Submit (${answered}/${exerciseCount} answered)`
-                      : `Answer all exercises (${answered}/${exerciseCount})`}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* ── RESULT view ── */}
-          {view === 'result' && result ? (
-            <MotionPage className="space-y-6">
-              <ResultSummary result={result} />
-
-              {/* Per-exercise results */}
-              <div className="space-y-4">
-                {lesson.exercises.map((ex, i) => {
-                  const r = resultsByExerciseId.get(ex.id) ?? null;
-                  return (
-                    <MotionItem key={ex.id} delayIndex={i}>
-                      <GrammarExerciseRunner
-                        exercise={ex}
-                        answer={r?.userAnswer ?? answers[ex.id]}
-                        disabled
-                        onAnswer={() => {}}
-                        result={r}
-                      />
-                    </MotionItem>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
-                <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
-                <Button variant="primary" size="sm" asChild>
-<Link href="/grammar">Back to grammar hub</Link>
-</Button>
-              </div>
-            </MotionPage>
-          ) : null}
-
-        </div>
-      </div>
+          <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
+            <Button variant="primary" size="sm" asChild>
+              <Link href="/grammar">Back to grammar hub</Link>
+            </Button>
+          </div>
+        </MotionSection>
+      ) : null}
     </>
   );
 }
@@ -367,13 +360,12 @@ function BackLink({
   const href  = topicSlug ? `/grammar/topics/${encodeURIComponent(topicSlug)}` : '/grammar';
   const label = topicName ?? 'Back to grammar';
   return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-2 text-sm font-semibold text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-    >
-      <ArrowLeft className="h-4 w-4" />
-      {label}
-    </Link>
+    <Button variant="ghost" size="sm" asChild>
+      <Link href={href}>
+        <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+        {label}
+      </Link>
+    </Button>
   );
 }
 
@@ -384,7 +376,7 @@ function AnswerProgress({ answered, total }: { answered: number; total: number }
     <Card padding="sm">
       <div className="flex items-center justify-between text-xs font-semibold text-muted">
         <span>Exercises answered</span>
-        <span className="text-navy">{answered} / {total}</span>
+        <span className="tabular-nums text-navy">{answered} / {total}</span>
       </div>
       <div className="mt-2">
         <ProgressBar value={pct} ariaLabel={`${answered} of ${total} exercises answered`} color="primary" />
@@ -400,38 +392,39 @@ function ResultSummary({ result }: { result: GrammarAttemptResult }) {
   return (
     <Card className="text-center">
       <div className="flex flex-col items-center gap-4 py-2">
-        {/* Trophy or check icon */}
-        <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${mastered ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+        {/* Trophy or check icon; a real mastery bursts once per lesson per session. */}
+        <div className={`relative flex h-16 w-16 items-center justify-center rounded-2xl ${mastered ? 'bg-warning/10 text-warning-strong' : 'bg-success/10 text-success-strong'}`}>
           {mastered
-            ? <Trophy    className="h-8 w-8" />
-            : <CheckCircle2 className="h-8 w-8" />}
+            ? <Trophy    className="h-8 w-8" aria-hidden="true" />
+            : <CheckCircle2 className="h-8 w-8" aria-hidden="true" />}
+          <CelebrationBurst active={mastered} onceKey={`grammar-mastered:${result.lessonId}`} />
         </div>
 
         {/* Score */}
         <div>
-          <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">
+          <p className="eyebrow text-muted">
             {mastered ? 'Mastery achieved!' : 'Lesson complete'}
           </p>
-          <div className="mt-1 text-5xl font-extrabold text-primary">{score}%</div>
-          <p className="mt-2 text-sm text-muted">
+          <div className="mt-1 text-5xl font-extrabold tabular-nums text-primary">
+            <CountUp value={score} suffix="%" />
+          </div>
+          <p className="mt-2 text-sm tabular-nums text-muted">
             {correctCount} correct · {incorrectCount} to review · mastery {masteryScore}%
           </p>
         </div>
 
         {/* Reward chips — same style as dashboard engagement row */}
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-            +{xpAwarded} XP
-          </span>
+          <Badge variant="default" size="md" className="tabular-nums">+{xpAwarded} XP</Badge>
           {reviewItemsCreated > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-3 py-1 text-xs font-bold text-warning">
+            <Badge variant="warning" size="md" className="tabular-nums">
               {reviewItemsCreated} added to review queue
-            </span>
+            </Badge>
           ) : null}
           {mastered ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-bold text-success">
-              <Trophy className="h-3 w-3" /> Mastered
-            </span>
+            <Badge variant="success" size="md">
+              <Trophy className="me-1 h-3 w-3" aria-hidden="true" /> Mastered
+            </Badge>
           ) : null}
         </div>
 

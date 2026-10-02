@@ -352,7 +352,7 @@ export function TopNav({
             >
               <div className="flex max-h-[inherit] flex-col">
                 <div className="border-b border-border/60 px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Navigation</p>
+                  <p className="eyebrow text-muted">Navigation</p>
                   <p className="mt-1 text-sm font-semibold text-navy">Move quickly between practice areas.</p>
                 </div>
 
@@ -372,7 +372,7 @@ export function TopNav({
                     <div className="space-y-4">
                       {visibleSectionedItems?.map((section) => (
                         <div key={section.label}>
-                          <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
+                          <div className="mb-2 px-2 eyebrow text-muted">{section.label}</div>
                           <ul className="flex flex-col gap-1">
                             {section.items.map((item, itemIndex) => {
                               const active = sectionedActiveHref === item.href;
@@ -406,7 +406,7 @@ export function TopNav({
                       ))}
 
                       <div className="border-t border-border/60 pt-4">
-                        <div className="mb-2 px-2 text-2xs font-semibold uppercase tracking-[0.24em] text-muted">Quick links</div>
+                        <div className="mb-2 px-2 eyebrow text-muted">Quick links</div>
                         <div className="grid grid-cols-2 gap-2">
                           <Link
                             href={getWorkspaceSettingsHref(workspaceRole)}

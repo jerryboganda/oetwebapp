@@ -16,6 +16,10 @@ import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { formatAnswerValue } from '@/lib/results/format-answer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import {
@@ -233,9 +237,9 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
+      <div className="learner-page-flow">
         {loading ? <Skeleton className="h-96" /> : null}
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {error ? <ErrorState message={error} /> : null}
 
         {pendingMockCompletion ? (
           <InlineAlert variant="warning">
@@ -245,7 +249,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 receive the score on the first try. Click <strong>Retry mock
                 completion</strong> to send it again.
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="primary"
@@ -253,19 +257,18 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   onClick={() => void handleRetryMockCompletion()}
                   disabled={mockRetryState === 'retrying'}
                 >
-                  <RefreshCw className="mr-1.5 h-4 w-4" aria-hidden />
+                  <RefreshCw className="h-4 w-4" aria-hidden />
                   {mockRetryState === 'retrying' ? 'Retrying…' : 'Retry mock completion'}
                 </Button>
-                <Link
-                  href={`/mocks/player/${pendingMockCompletion.mockAttemptId}`}
-                  className="text-xs font-semibold text-primary hover:underline"
-                >
-                  Open mock dashboard
-                </Link>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/mocks/player/${pendingMockCompletion.mockAttemptId}`}>
+                    Open mock dashboard
+                  </Link>
+                </Button>
               </div>
             </div>
             {mockRetryError ? (
-              <p className="mt-2 text-xs text-danger">{mockRetryError}</p>
+              <p className="mt-2 text-xs text-danger-strong">{mockRetryError}</p>
             ) : null}
           </InlineAlert>
         ) : null}
@@ -288,95 +291,100 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 {review.attempt.adminReviewReason ? ` Reason: ${review.attempt.adminReviewReason}.` : ''}
               </InlineAlert>
             ) : null}
-            <ResultsScorePanel
-              eyebrow="Reading review"
-              icon={BookOpen}
-              title={review.paper.title}
-              subtitle={!hasApprovedConversion
-                ? `${raw}/${review.attempt.maxRawScore} practice marks`
-                : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
-              gaugeValue={accuracyPct}
-              gaugeLabel="Accuracy"
-              gaugeColor={hasApprovedConversion ? 'var(--color-success)' : 'var(--color-primary)'}
-              grade={hasApprovedConversion ? { label: `Grade ${review.attempt.gradeLetter}`, tone: 'success' } : null}
-              stats={[
-                { label: 'Correct', value: partTotals.correct, tone: 'success', icon: <CheckCircle2 /> },
-                { label: 'Incorrect', value: partTotals.incorrect, tone: 'danger', icon: <XCircle /> },
-                ...(partTotals.invalid > 0
-                  ? [{ label: 'Invalid review', value: partTotals.invalid, tone: 'warning' as const, icon: <AlertTriangle /> }]
-                  : []),
-                { label: 'Unanswered', value: partTotals.unanswered, tone: 'warning', icon: <MinusCircle /> },
-                {
-                  label: hasApprovedConversion ? 'Scaled' : 'Raw score',
-                  value: hasApprovedConversion ? `${scaled}/500` : `${raw}/${review.attempt.maxRawScore}`,
-                  tone: 'info',
-                  icon: <Target />,
-                },
-              ]}
-              aside={(
-                // One headline per page: the conversion note that used to sit in a
-                // second hero above this panel now lives beside the score.
-                <div className="space-y-3">
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <Badge variant={hasApprovedConversion ? 'success' : 'info'}>
-                    {hasApprovedConversion ? 'Owner-table conversion' : 'Scaled score unavailable'}
-                  </Badge>
-                  <p className="mt-3 text-sm leading-6 text-muted">
-                    {hasApprovedConversion
-                      ? `This result uses owner-approved conversion table ${review.attempt.scoreConversionTableVersionKey}.`
-                      : 'This result reports raw practice marks because an owner-approved conversion table is not configured.'}
-                  </p>
-                  <p className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted">
-                    AI Practice Score — not an official OET result.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-sm font-semibold text-navy dark:text-white">{nextAction.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">{nextAction.desc}</p>
-                  <Button asChild variant="primary" size="sm" className="mt-3">
-                    <Link href={nextAction.href}>{nextAction.label}</Link>
-                  </Button>
-                </div>
-                </div>
-              )}
-              chartSlot={(
-                <ScoreBandGraph
-                  rawScore={raw}
-                  maxRawScore={review.attempt.maxRawScore}
-                  scaledScore={hasApprovedConversion ? scaled : null}
-                  passed={hasApprovedConversion ? review.attempt.passed : null}
-                  grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
-                  tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
-                />
-              )}
-            />
+            <MotionSection delayIndex={0}>
+              <ResultsScorePanel
+                eyebrow="Reading review"
+                icon={BookOpen}
+                title={review.paper.title}
+                subtitle={!hasApprovedConversion
+                  ? `${raw}/${review.attempt.maxRawScore} practice marks`
+                  : `${raw}/${review.attempt.maxRawScore} raw | ${scaled}/500 scaled`}
+                gaugeValue={accuracyPct}
+                gaugeLabel="Accuracy"
+                gaugeColor={hasApprovedConversion ? 'var(--color-success)' : 'var(--color-primary)'}
+                grade={hasApprovedConversion ? { label: `Grade ${review.attempt.gradeLetter}`, tone: 'success' } : null}
+                stats={[
+                  { label: 'Correct', value: partTotals.correct, tone: 'success', icon: <CheckCircle2 /> },
+                  { label: 'Incorrect', value: partTotals.incorrect, tone: 'danger', icon: <XCircle /> },
+                  ...(partTotals.invalid > 0
+                    ? [{ label: 'Invalid review', value: partTotals.invalid, tone: 'warning' as const, icon: <AlertTriangle /> }]
+                    : []),
+                  { label: 'Unanswered', value: partTotals.unanswered, tone: 'warning', icon: <MinusCircle /> },
+                  {
+                    label: hasApprovedConversion ? 'Scaled' : 'Raw score',
+                    value: hasApprovedConversion ? `${scaled}/500` : `${raw}/${review.attempt.maxRawScore}`,
+                    tone: 'info',
+                    icon: <Target />,
+                  },
+                ]}
+                aside={(
+                  // One headline per page: the conversion note that used to sit in a
+                  // second hero above this panel now lives beside the score.
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-border bg-background-light p-4">
+                      <Badge variant={hasApprovedConversion ? 'success' : 'info'}>
+                        {hasApprovedConversion ? 'Owner-table conversion' : 'Scaled score unavailable'}
+                      </Badge>
+                      <p className="mt-3 text-sm leading-6 text-muted">
+                        {hasApprovedConversion
+                          ? `This result uses owner-approved conversion table ${review.attempt.scoreConversionTableVersionKey}.`
+                          : 'This result reports raw practice marks because an owner-approved conversion table is not configured.'}
+                      </p>
+                      <p className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted">
+                        AI Practice Score — not an official OET result.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-background-light p-4">
+                      <p className="text-sm font-semibold text-navy">{nextAction.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">{nextAction.desc}</p>
+                      <Button asChild variant="primary" size="sm" className="mt-3">
+                        <Link href={nextAction.href}>{nextAction.label}</Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                chartSlot={(
+                  <ScoreBandGraph
+                    rawScore={raw}
+                    maxRawScore={review.attempt.maxRawScore}
+                    scaledScore={hasApprovedConversion ? scaled : null}
+                    passed={hasApprovedConversion ? review.attempt.passed : null}
+                    grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
+                    tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
+                  />
+                )}
+              />
+            </MotionSection>
 
-            <ScoreConversionEvidence
-              assessment="Reading"
-              rawScore={raw}
-              maxRawScore={review.attempt.maxRawScore}
-              scaledScore={hasApprovedConversion ? scaled : null}
-              passed={hasApprovedConversion ? review.attempt.passed : null}
-              grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
-              tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
-              errorCode={review.attempt.scoreConversionErrorCode}
-            />
+            <MotionSection delayIndex={1}>
+              <ScoreConversionEvidence
+                assessment="Reading"
+                rawScore={raw}
+                maxRawScore={review.attempt.maxRawScore}
+                scaledScore={hasApprovedConversion ? scaled : null}
+                passed={hasApprovedConversion ? review.attempt.passed : null}
+                grade={hasApprovedConversion ? review.attempt.gradeLetter : null}
+                tableVersion={hasApprovedConversion ? review.attempt.scoreConversionTableVersionKey : null}
+                errorCode={review.attempt.scoreConversionErrorCode}
+              />
+            </MotionSection>
 
-            <TimeUsedSummary
-              totalMilliseconds={review.timeUsed?.totalElapsedMs ?? null}
-              sections={(review.timeUsed?.byPart ?? []).map((part) => ({
-                label: `Part ${part.partCode}`,
-                milliseconds: part.totalElapsedMs,
-              }))}
-              description="Time is reported from server-persisted attempt and answer telemetry. Unavailable telemetry is shown as not recorded."
-            />
+            <MotionSection delayIndex={2}>
+              <TimeUsedSummary
+                totalMilliseconds={review.timeUsed?.totalElapsedMs ?? null}
+                sections={(review.timeUsed?.byPart ?? []).map((part) => ({
+                  label: `Part ${part.partCode}`,
+                  milliseconds: part.totalElapsedMs,
+                }))}
+                description="Time is reported from server-persisted attempt and answer telemetry. Unavailable telemetry is shown as not recorded."
+              />
+            </MotionSection>
 
-            <p
-              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted"
-              data-testid="reading-marking-strictness-disclosure"
-            >
-              This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
-            </p>
+            <Card padding="sm" data-testid="reading-marking-strictness-disclosure">
+              <p className="text-sm leading-6 text-muted">
+                This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
+              </p>
+            </Card>
 
             {structure?.paper.questionPaperAssets?.length ? (
               <section id="pdf-review">
@@ -409,24 +417,28 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 className="mb-5"
               />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {review.partBreakdown.map((part) => (
-                  <div key={part.partCode} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">Part {part.partCode}</p>
-                    <div className="mt-2 flex items-baseline gap-2">
-                      <p className="text-2xl font-semibold text-navy">{part.rawScore}/{part.maxRawScore}</p>
-                      {typeof part.accuracyPercent === 'number' ? (
-                        <span
-                          className="text-sm font-bold text-primary"
-                          data-testid={`reading-part-accuracy-${part.partCode}`}
-                        >
-                          {formatPercent(part.accuracyPercent)} correct
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm text-muted">
-                      {part.correctCount} correct | {part.incorrectCount} wrong | {(part.invalidCount ?? 0) > 0 ? `${part.invalidCount} invalid review | ` : ''}{part.unansweredCount} unanswered
-                    </p>
-                  </div>
+                {review.partBreakdown.map((part, index) => (
+                  <MotionItem key={part.partCode} delayIndex={Math.min(index, 5)} className="h-full">
+                    <Card className="h-full">
+                      <p className="eyebrow text-muted">Part {part.partCode}</p>
+                      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <p className="text-2xl font-semibold text-navy">
+                          <CountUp value={part.rawScore} suffix={`/${part.maxRawScore}`} />
+                        </p>
+                        {typeof part.accuracyPercent === 'number' ? (
+                          <span
+                            className="text-sm font-bold tabular-nums text-primary"
+                            data-testid={`reading-part-accuracy-${part.partCode}`}
+                          >
+                            {formatPercent(part.accuracyPercent)} correct
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm tabular-nums text-muted">
+                        {part.correctCount} correct | {part.incorrectCount} wrong | {(part.invalidCount ?? 0) > 0 ? `${part.invalidCount} invalid review | ` : ''}{part.unansweredCount} unanswered
+                      </p>
+                    </Card>
+                  </MotionItem>
                 ))}
               </div>
             </section>
@@ -439,16 +451,18 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 className="mb-5"
               />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {review.skillBreakdown.map((skill) => (
-                  <div key={skill.label} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{skill.label}</p>
-                      <Badge variant="muted">{skill.totalCount} item(s)</Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-muted">
-                      {skill.correctCount} correct | {skill.incorrectCount} wrong | {(skill.invalidCount ?? 0) > 0 ? `${skill.invalidCount} invalid review | ` : ''}{skill.unansweredCount} unanswered
-                    </p>
-                  </div>
+                {review.skillBreakdown.map((skill, index) => (
+                  <MotionItem key={skill.label} delayIndex={Math.min(index, 5)} className="h-full">
+                    <Card className="h-full">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="eyebrow min-w-0 text-muted">{skill.label}</p>
+                        <Badge variant="muted" className="shrink-0 tabular-nums">{skill.totalCount} item(s)</Badge>
+                      </div>
+                      <p className="mt-2 text-sm tabular-nums text-muted">
+                        {skill.correctCount} correct | {skill.incorrectCount} wrong | {(skill.invalidCount ?? 0) > 0 ? `${skill.invalidCount} invalid review | ` : ''}{skill.unansweredCount} unanswered
+                      </p>
+                    </Card>
+                  </MotionItem>
                 ))}
               </div>
             </section>
@@ -462,18 +476,23 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               />
               {review.clusters.length ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {review.clusters.map((cluster) => (
-                    <div key={cluster.label} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{cluster.label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-navy">{cluster.incorrectCount} missed</p>
-                      <p className="mt-1 text-sm text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
-                    </div>
+                  {review.clusters.map((cluster, index) => (
+                    <MotionItem key={cluster.label} delayIndex={Math.min(index, 5)} className="h-full">
+                      <Card className="h-full">
+                        <p className="eyebrow text-muted">{cluster.label}</p>
+                        <p className="mt-2 text-2xl font-semibold text-navy">
+                          <CountUp value={cluster.incorrectCount} suffix=" missed" />
+                        </p>
+                        <p className="mt-1 text-sm tabular-nums text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
+                      </Card>
+                    </MotionItem>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-border bg-surface p-5 text-sm font-semibold text-muted shadow-sm">
-                  No incorrect clusters on this attempt.
-                </div>
+                <EmptyState
+                  icon={<CheckCircle2 className="h-8 w-8 text-success-strong" aria-hidden />}
+                  title="No incorrect clusters on this attempt."
+                />
               )}
             </section>
 
@@ -485,13 +504,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 className="mb-5"
               />
               <div className="space-y-3">
-                {review.items.map((item) => (
-                  <ReviewItemDetails
-                    key={item.questionId}
-                    attemptId={attemptId}
-                    item={item}
-                    alreadyReported={reportedQuestionIds.has(item.questionId)}
-                  />
+                {review.items.map((item, index) => (
+                  <MotionItem key={item.questionId} delayIndex={Math.min(index, 5)}>
+                    <ReviewItemDetails
+                      attemptId={attemptId}
+                      item={item}
+                      alreadyReported={reportedQuestionIds.has(item.questionId)}
+                    />
+                  </MotionItem>
                 ))}
               </div>
             </section>
@@ -505,20 +525,18 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   className="mb-5"
                 />
                 <div className="space-y-3">
-                  {review.feedback.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-[16px] border border-border bg-surface p-4 shadow-sm"
-                      data-testid="reading-tutor-feedback"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="info" className="inline-flex items-center gap-1">
-                          <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-                          {feedbackScopeLabel(entry.scope, entry.targetRef)}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-navy">{entry.feedbackText}</p>
-                    </div>
+                  {review.feedback.map((entry, index) => (
+                    <MotionItem key={entry.id} delayIndex={Math.min(index, 5)}>
+                      <Card data-testid="reading-tutor-feedback">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className="gap-1">
+                            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+                            {feedbackScopeLabel(entry.scope, entry.targetRef)}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 max-w-prose whitespace-pre-wrap text-sm leading-6 text-navy">{entry.feedbackText}</p>
+                      </Card>
+                    </MotionItem>
                   ))}
                 </div>
               </section>
@@ -575,7 +593,7 @@ function ReviewItemDetails({
       distractor={distractor}
       explanation={item.explanationMarkdown ? (
         <div data-testid="reading-explanation">
-          <MarkdownContent markdown={item.explanationMarkdown} className="text-sm leading-6 text-navy dark:text-white/90" />
+          <MarkdownContent markdown={item.explanationMarkdown} className="text-sm leading-6 text-navy" />
         </div>
       ) : null}
     >
@@ -587,16 +605,16 @@ function ReviewItemDetails({
               className="rounded-xl border border-border bg-background-light p-3"
               data-testid={`reading-box-explanation-${key}`}
             >
-              <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Explanation ({key})</p>
-              <p className="mt-1 text-sm leading-6 text-navy dark:text-white">{text}</p>
+              <p className="eyebrow text-muted">Explanation ({key})</p>
+              <p className="mt-1 text-sm leading-6 text-navy">{text}</p>
             </div>
           ))}
         </div>
       ) : null}
       {item.evidenceSentence ? (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-400/30 dark:bg-blue-950/20" data-testid="reading-source-evidence">
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-300">Source evidence</p>
-          <p className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{item.evidenceSentence}</p>
+        <div className="rounded-xl border border-skill-reading/20 bg-skill-reading/10 p-3" data-testid="reading-source-evidence">
+          <p className="eyebrow text-skill-reading">Source evidence</p>
+          <p className="mt-1 text-sm leading-6 text-navy">{item.evidenceSentence}</p>
         </div>
       ) : null}
       <GroundedReadingExplanation attemptId={attemptId} item={item} unanswered={unanswered || invalid} />
@@ -639,10 +657,10 @@ function GroundedReadingExplanation({
   if (unanswered) return null;
 
   return (
-    <div className="mt-4 rounded-xl border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-400/30 dark:bg-primary-950/20" data-testid="reading-grounded-ai">
+    <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4" data-testid="reading-grounded-ai">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-primary-700 dark:text-primary-300">Grounded AI explanation</p>
+          <p className="eyebrow text-primary">Grounded AI explanation</p>
           <p className="mt-1 text-xs text-muted">Advisory only; it cannot change your marks.</p>
         </div>
         {!result ? (
@@ -651,9 +669,9 @@ function GroundedReadingExplanation({
           </Button>
         ) : null}
       </div>
-      {error ? <p className="mt-3 text-sm font-semibold text-danger" role="alert">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm font-semibold text-danger-strong" role="alert">{error}</p> : null}
       {result ? (
-        <div className="mt-4 space-y-3 text-sm leading-6 text-navy dark:text-white/90">
+        <div className="mt-4 max-w-prose space-y-3 text-sm leading-6 text-navy">
           <p><strong>Why the correct answer fits:</strong> {result.explanation.whyCorrect}</p>
           <p><strong>Why your answer was a trap:</strong> {result.explanation.whyWrong}</p>
           <p><strong>Trap:</strong> {result.explanation.trapName}</p>

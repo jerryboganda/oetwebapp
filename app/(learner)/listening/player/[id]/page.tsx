@@ -1858,7 +1858,7 @@ function PlayerContent() {
     return (
       <AppShell pageTitle="Listening Task" distractionFree>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-danger" />
+          <AlertCircle className="h-12 w-12 text-danger-strong" />
           <h2 className="text-xl font-black text-navy">Listening task unavailable</h2>
           <p className="max-w-md text-sm text-muted">{loadError ?? 'Task not found.'}</p>
           <Button variant="ghost" asChild>
@@ -2270,7 +2270,7 @@ function PlayerContent() {
                     return (
                       <span key={extractKey} className="inline-flex items-center gap-2 rounded-lg bg-background-light px-3 py-2">
                         {completed ? (
-                          <CheckCircle2 className="h-4 w-4 text-success" aria-label="Listened to completion" />
+                          <CheckCircle2 className="h-4 w-4 text-success-strong" aria-label="Listened to completion" />
                         ) : (
                           <Volume2 className="h-4 w-4" />
                         )}
@@ -2328,7 +2328,7 @@ function PlayerContent() {
                       translucent overlay on scroll (owner directive 2026-07-05). */}
                   {navigationQuestions.length > 1 ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
-                      <span className="mr-1 text-3xs font-black uppercase tracking-widest text-muted">
+                      <span className="mr-1 tile-label text-muted">
                         Jump to
                       </span>
                       {navigationQuestions.map((question) => {
@@ -2376,7 +2376,7 @@ function PlayerContent() {
                             aria-label={`Go to question ${question.number}`}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-black transition-colors ${
                               isAnswered
-                                ? 'bg-success/10 text-success hover:bg-success/20'
+                                ? 'bg-success/10 text-success-strong hover:bg-success/20'
                                 : 'bg-background-light text-muted hover:bg-border'
                             }`}
                           >
@@ -2446,7 +2446,7 @@ function PlayerContent() {
                                       role="tablist"
                                       aria-label="Question selector"
                                     >
-                                      <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                                      <span className="eyebrow text-muted mr-1">Questions:</span>
                                       {questions.map((q, idx) => {
                                         const isActive = idx === activeIdx;
                                         const isAnswered = Boolean((answers[q.id] ?? '').trim());

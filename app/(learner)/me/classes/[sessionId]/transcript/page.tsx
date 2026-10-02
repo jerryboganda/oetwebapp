@@ -8,7 +8,10 @@ import { ArrowLeft, FileText, Search } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { Input } from '@/components/ui/form-controls';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchClassTranscript, type LiveClassTranscript } from '@/lib/api';
 
@@ -22,7 +25,7 @@ function highlight(text: string, query: string): React.ReactNode {
   const parts = text.split(re);
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} className="rounded bg-amber-200 px-0.5 dark:bg-amber-500/40">
+      <mark key={i} className="rounded bg-gold/30 px-0.5 text-navy">
         {part}
       </mark>
     ) : (
@@ -68,69 +71,67 @@ export default function ClassTranscriptPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <Link
-          href={sessionId ? `/me/classes/recordings/${sessionId}` : '/me/classes/past'}
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Link>
-
-        <LearnerPageHero
-          title="Class transcript"
-          description="Full transcript of the live class. Use the search box to jump to a specific phrase."
-          icon={FileText}
-        />
-
-        {!sessionId ? (
-          <InlineAlert variant="warning">Invalid session id.</InlineAlert>
-        ) : loading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-12 rounded-2xl" />
-            <Skeleton className="h-96 rounded-2xl" />
-          </div>
-        ) : error ? (
-          <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
-              Dismiss
-            </Button>
-          </InlineAlert>
-        ) : !text ? (
-          <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-            <FileText className="mx-auto mb-3 h-8 w-8 text-muted/50" />
-            <p className="text-sm font-medium text-navy">No transcript available yet.</p>
-            <p className="mt-1 text-sm text-muted">Transcripts appear once the recording is processed.</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex-1">
-                <Input
-                  type="search"
-                  placeholder="Search the transcript..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
-              <span className="flex items-center gap-2 text-sm text-muted">
-                <Search className="h-4 w-4" />
-                {query.trim() ? `${matches} match${matches === 1 ? '' : 'es'}` : 'Type to search'}
-              </span>
-            </div>
-
-            <article className="rounded-2xl border border-border bg-surface p-5 text-sm leading-7 text-navy shadow-sm whitespace-pre-wrap">
-              {highlight(text, query)}
-            </article>
-
-            {transcript?.processedAt ? (
-              <p className="text-xs text-muted">
-                Processed {new Date(transcript.processedAt).toLocaleString()}
-              </p>
-            ) : null}
-          </>
+      <LearnerPageHero
+        title="Class transcript"
+        description="Full transcript of the live class. Use the search box to jump to a specific phrase."
+        icon={FileText}
+        aside={(
+          <Button asChild variant="outline" size="sm">
+            <Link href={sessionId ? `/me/classes/recordings/${sessionId}` : '/me/classes/past'}>
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back
+            </Link>
+          </Button>
         )}
-      </div>
+      />
+
+      {!sessionId ? (
+        <InlineAlert variant="warning">Invalid session id.</InlineAlert>
+      ) : loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-12 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+        </div>
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : !text ? (
+        <EmptyState
+          icon={<FileText className="h-8 w-8" />}
+          title="No transcript available yet."
+          description="Transcripts appear once the recording is processed."
+        />
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <Input
+                type="search"
+                aria-label="Search the transcript"
+                placeholder="Search the transcript..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <span className="flex items-center gap-2 text-sm tabular-nums text-muted" aria-live="polite">
+              <Search className="h-4 w-4" aria-hidden="true" />
+              {query.trim() ? `${matches} match${matches === 1 ? '' : 'es'}` : 'Type to search'}
+            </span>
+          </div>
+
+          <MotionSection>
+            <Card padding="lg">
+              <article className="max-w-prose whitespace-pre-wrap text-sm leading-7 text-navy">
+                {highlight(text, query)}
+              </article>
+            </Card>
+          </MotionSection>
+
+          {transcript?.processedAt ? (
+            <p className="text-xs tabular-nums text-muted">
+              Processed {new Date(transcript.processedAt).toLocaleString()}
+            </p>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

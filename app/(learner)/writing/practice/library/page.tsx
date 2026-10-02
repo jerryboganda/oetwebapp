@@ -7,8 +7,11 @@ import { ArrowRight, FilterIcon, Layers, Library, PenTool, Search } from 'lucide
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { listWritingScenarios } from '@/lib/writing/api';
 import type {
@@ -97,73 +100,75 @@ export default function WritingPracticeLibraryPage() {
 
   return (
     <>
-      <div className="space-y-6" aria-busy={loading}>
-        <LearnerPageHero
-          eyebrow={t('writing.practice.library.eyebrow')}
-          icon={Library}
-          accent="amber"
-          title={t('writing.practice.library.title')}
-          description={t('writing.practice.library.description')}
-          highlights={[
-            { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length} / ${total}` },
-            { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[letterType, search].filter(Boolean).length}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.practice.library.eyebrow')}
+        icon={Library}
+        accent="writing"
+        title={t('writing.practice.library.title')}
+        description={t('writing.practice.library.description')}
+        highlights={[
+          { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length} / ${total}` },
+          { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[letterType, search].filter(Boolean).length}` },
+        ]}
+      />
 
-        {/* Same free-sample state as the Writing hub card (one source: /v1/free-samples/writing). */}
-        <FreeSampleLauncher
-          subtest="writing"
-          icon={PenTool}
-          testId="writing-library-free-sample-card"
-          title={t('writing.hub.freeSample.title')}
-          description={t('writing.hub.freeSample.description')}
-          badgeLabel={t('writing.hub.freeSample.badge')}
-          className=""
-        />
+      {/* Same free-sample state as the Writing hub card (one source: /v1/free-samples/writing). */}
+      <FreeSampleLauncher
+        subtest="writing"
+        icon={PenTool}
+        testId="writing-library-free-sample-card"
+        title={t('writing.hub.freeSample.title')}
+        description={t('writing.hub.freeSample.description')}
+        badgeLabel={t('writing.hub.freeSample.badge')}
+        className=""
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+      <MotionSection delayIndex={0} className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow={t('writing.practice.library.filters.eyebrow')}
           title={t('writing.practice.library.filters.title')}
           description={t('writing.practice.library.filters.description')}
         />
 
-        <fieldset className="grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm md:grid-cols-2" aria-label={t('writing.practice.library.filters.legend')}>
-          <legend className="sr-only">{t('writing.practice.library.filters.legend')}</legend>
+        <Card padding="md">
+          <fieldset className="grid grid-cols-1 gap-3 md:grid-cols-2" aria-label={t('writing.practice.library.filters.legend')}>
+            <legend className="sr-only">{t('writing.practice.library.filters.legend')}</legend>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
-            {t('writing.practice.library.filters.letterType')}
-            <select
-              value={letterType ?? ''}
-              onChange={(e) => setLetterType((e.target.value || null) as WritingLetterType | null)}
-              className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="">{t('writing.practice.library.filters.all')}</option>
-              {LETTER_TYPES.map((lt) => (
-                <option key={lt} value={lt}>{t(`writing.practice.library.letterType.${lt}`)} ({lt})</option>
-              ))}
-            </select>
-          </label>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="eyebrow text-muted">{t('writing.practice.library.filters.letterType')}</span>
+              <select
+                value={letterType ?? ''}
+                onChange={(e) => setLetterType((e.target.value || null) as WritingLetterType | null)}
+                className="min-h-11 rounded-control border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="">{t('writing.practice.library.filters.all')}</option>
+                {LETTER_TYPES.map((lt) => (
+                  <option key={lt} value={lt}>{t(`writing.practice.library.letterType.${lt}`)} ({lt})</option>
+                ))}
+              </select>
+            </label>
 
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
-            {t('writing.practice.library.filters.search')}
-            <span className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('writing.practice.library.filters.searchPlaceholder')}
-                className="min-h-11 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </span>
-          </label>
-        </fieldset>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="eyebrow text-muted">{t('writing.practice.library.filters.search')}</span>
+              <span className="relative">
+                <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('writing.practice.library.filters.searchPlaceholder')}
+                  className="min-h-11 w-full rounded-control border border-border bg-background ps-9 pe-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </span>
+            </label>
+          </fieldset>
+        </Card>
 
         {topicSet.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-            <span className="font-bold uppercase tracking-wider">{t('writing.practice.library.topics.label')}</span>
+            <span className="eyebrow">{t('writing.practice.library.topics.label')}</span>
             {/* Topics are OET-authored English content; force LTR for badge contents. */}
             {topicSet.slice(0, 12).map((topic) => (
               <Badge key={topic} variant="muted" size="sm"><span dir="ltr">{topic}</span></Badge>
@@ -171,26 +176,21 @@ export default function WritingPracticeLibraryPage() {
             {topicSet.length > 12 ? <span>{t('writing.practice.library.topics.more', { count: topicSet.length - 12 })}</span> : null}
           </div>
         ) : null}
+      </MotionSection>
 
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t('writing.practice.library.list.label')}>
-          {scenarios.length === 0 && !loading ? (
-            <li className="col-span-full">
-              <Card padding="lg">
-                <CardContent>
-                  <p className="text-sm text-muted">{t('writing.practice.library.list.empty')}</p>
-                </CardContent>
-              </Card>
-            </li>
-          ) : null}
-          {scenarios.map((scenario) => (
+      {loading && scenarios.length === 0 ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : scenarios.length === 0 ? (
+        <EmptyState icon={<Library className="h-8 w-8" />} title={t('writing.practice.library.list.empty')} />
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={t('writing.practice.library.list.label')} aria-busy={loading}>
+          {scenarios.map((scenario, index) => (
             <li key={scenario.id}>
-              <Card padding="md" aria-label={t('writing.practice.library.cardAria', { title: scenario.title })}>
-                <CardContent>
-                  <header className="flex flex-wrap items-center justify-between gap-1">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
-                      <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
-                    </div>
+              <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                <Card padding="md" className="flex h-full flex-col" aria-label={t('writing.practice.library.cardAria', { title: scenario.title })}>
+                  <header className="flex flex-wrap items-center gap-1">
+                    <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
+                    <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </header>
                   {/* Scenario title and topics are OET-authored English content. */}
                   <h2 className="mt-2 text-base font-bold text-navy" dir="ltr">{scenario.title}</h2>
@@ -200,29 +200,29 @@ export default function WritingPracticeLibraryPage() {
                       <span dir="ltr">{scenario.topics.slice(0, 4).join(', ')}</span>
                     </p>
                   ) : null}
-                  <div className="mt-3">
+                  <div className="mt-auto pt-3">
                     <Button asChild size="sm">
                       <Link href={`/writing/practice/session/${encodeURIComponent(scenario.id)}`} aria-label={t('writing.practice.library.cta.practiceAria', { title: scenario.title })}>
-                        {t('writing.practice.library.cta.practice')} <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                        {t('writing.practice.library.cta.practice')} <ArrowRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
                       </Link>
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                </Card>
+              </MotionItem>
             </li>
           ))}
         </ul>
+      )}
 
-        {hasMore ? (
-          <div className="flex justify-center">
-            <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
-              {loadingMore
-                ? t('writing.practice.library.list.loadingMore')
-                : t('writing.practice.library.list.loadMore', { count: total - scenarios.length })}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      {hasMore ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore
+              ? t('writing.practice.library.list.loadingMore')
+              : t('writing.practice.library.list.loadMore', { count: total - scenarios.length })}
+          </Button>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -845,12 +845,12 @@ export default function UbagBoardPage() {
                         </p>
                       )}
                       {modelTestResult.errorMessage && (
-                        <p className="text-xs text-danger break-words">{modelTestResult.errorMessage}</p>
+                        <p className="text-xs text-danger-strong break-words">{modelTestResult.errorMessage}</p>
                       )}
                       <ul className="space-y-1">
                         {modelTestResult.steps.map((step) => (
                           <li key={step.step} className="flex items-start gap-2 text-xs">
-                            <span className={step.ok ? 'text-success' : step.step === 'model' ? 'text-warning' : step.step === 'provider' ? 'text-warning' : 'text-danger'}>
+                            <span className={step.ok ? 'text-success-strong' : step.step === 'model' ? 'text-warning-strong' : step.step === 'provider' ? 'text-warning-strong' : 'text-danger-strong'}>
                               {step.ok ? '●' : step.step === 'model' ? '◐' : '○'}
                             </span>
                             <span className="font-mono font-semibold text-navy">{step.step}</span>

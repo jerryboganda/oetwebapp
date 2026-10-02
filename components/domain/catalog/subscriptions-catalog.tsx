@@ -5,6 +5,11 @@ import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, ShoppingCart, Sparkles } from 'lucide-react';
 import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { Button, buttonClassName } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
 import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
@@ -130,24 +135,25 @@ function SubscriptionPackageCard({
     <article
       id={`pkg-${pkg.code}`}
       className={cn(
-        'flex h-full scroll-mt-24 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-shadow',
+        cardClassName({ padding: 'none' }),
+        'flex h-full scroll-mt-24 flex-col overflow-hidden transition-shadow',
         pkg.featured && 'ring-2 ring-primary/40',
         highlighted && 'ring-2 ring-primary shadow-clinical',
       )}
     >
       {pkg.featured ? (
-        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white">
-          <Sparkles className="h-3.5 w-3.5" /> {pkg.badges.includes('Recommended') ? 'Recommended' : pkg.badges.includes('Best value') ? 'Best value' : 'Most popular'}
+        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 eyebrow text-white dark:bg-primary-700">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {pkg.badges.includes('Recommended') ? 'Recommended' : pkg.badges.includes('Best value') ? 'Best value' : 'Most popular'}
         </div>
       ) : null}
 
-      <div className="flex h-full flex-col gap-4 p-5">
+      <div className="flex h-full flex-col gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">Package {pkg.packageNo}</span>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-navy">{formatPrice(price, currency)}</div>
+          <span className="eyebrow text-muted">Package {pkg.packageNo}</span>
+          <div className="text-end">
+            <div className="text-2xl font-bold tabular-nums text-navy">{formatPrice(price, currency)}</div>
             {hasDiscount ? (
-              <div className="text-xs text-muted line-through">was {formatPrice(live!.originalPrice as number, currency)}</div>
+              <div className="text-xs tabular-nums text-muted line-through">was {formatPrice(live!.originalPrice as number, currency)}</div>
             ) : null}
           </div>
         </div>
@@ -196,7 +202,7 @@ function SubscriptionPackageCard({
           <ul className="space-y-1.5 text-sm text-navy">
             {pkg.features.map((feature) => (
               <li key={feature} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" aria-hidden="true" />
                 <span>{feature}</span>
               </li>
             ))}
@@ -204,28 +210,24 @@ function SubscriptionPackageCard({
         ) : null}
 
         {pkg.bestFor ? (
-          <p className="rounded-xl border border-border bg-background-light px-3 py-2 text-sm text-navy">
+          <p className="rounded-xl bg-background-light px-3 py-2 text-sm text-navy">
             <span className="font-bold">Best for:</span> {pkg.bestFor}
           </p>
         ) : null}
 
         <div className="mt-auto pt-1">
           {owned ? (
-            <span className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-2.5 text-sm font-semibold text-success">
-              <CheckCircle2 className="h-4 w-4" /> Active on your account
+            <span className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-success/10 px-4 py-2.5 text-sm font-semibold text-success-strong">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Active on your account
             </span>
           ) : pkg.section === 'tutorbook' ? (
-            <BuyTutorBookButton className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-              <ShoppingCart className="h-4 w-4" /> Buy The Tutor Book
+            <BuyTutorBookButton className={buttonClassName({ fullWidth: true, className: 'pressable' })}>
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" /> Buy The Tutor Book
             </BuyTutorBookButton>
           ) : (
-            <button
-              type="button"
-              onClick={onAddToCart}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            >
-              <ShoppingCart className="h-4 w-4" /> Add to cart
-            </button>
+            <Button fullWidth onClick={onAddToCart}>
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" /> Add to cart
+            </Button>
           )}
         </div>
       </div>
@@ -385,7 +387,7 @@ export function SubscriptionsCatalog() {
   };
 
   return (
-    <div className="space-y-8">
+    <>
       <LearnerPageHero
         eyebrow="OET with Dr Ahmed Hesham · 2026 portfolio"
         title="Subscriptions & Packages"
@@ -401,10 +403,10 @@ export function SubscriptionsCatalog() {
       {/* Horizontally scrollable mobile shortcut buttons (in normal page flow, non-sticky) */}
       <nav
         aria-label="Catalogue quick jump navigation"
-        className="relative w-full rounded-2xl border border-border/80 bg-surface p-1.5 shadow-xs sm:p-2"
+        className={cn(cardClassName({ padding: 'none' }), 'relative w-full p-1.5 sm:p-2')}
       >
-        <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain py-1 px-1 [-webkit-overflow-scrolling:touch] touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="shrink-0 pl-1.5 text-2xs font-bold uppercase tracking-wider text-muted select-none">
+        <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [-webkit-overflow-scrolling:touch] touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 select-none ps-1.5 eyebrow text-muted">
             Quick jump:
           </span>
           {CATALOG_SHORTCUTS.map((shortcut) => (
@@ -412,7 +414,7 @@ export function SubscriptionsCatalog() {
               key={shortcut.id}
               type="button"
               onClick={() => handleShortcutClick(shortcut.id)}
-              className="shrink-0 touch-manipulation select-none rounded-full border border-border bg-background-light px-3.5 py-1.5 text-xs font-semibold text-navy transition-all duration-150 hover:border-primary/50 hover:bg-primary/10 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="pressable hover-primary min-h-11 shrink-0 touch-manipulation select-none rounded-control border border-border bg-background-light px-3.5 text-xs font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               {shortcut.label}
             </button>
@@ -423,81 +425,88 @@ export function SubscriptionsCatalog() {
       </nav>
 
       {error ? (
-        <div className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">{error}</div>
+        <ErrorState message={error} />
       ) : loading ? (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-80 animate-pulse rounded-2xl border border-border bg-surface" />
+            <Skeleton key={i} className="h-80 rounded-2xl" />
           ))}
         </div>
       ) : (
         <>
           {WEBSITE_SECTIONS.map((section) => {
             const packages = packagesBySection.get(section.key) ?? [];
-            if (packages.length === 0) return null;
+            // A filtered-out Full Recorded section keeps its discipline chips, so the
+            // learner can switch the filter back instead of losing the whole section.
+            const keepFilteredSection = section.key === 'full-recorded' && activeProfession !== 'all';
+            if (packages.length === 0 && !keepFilteredSection) return null;
             return (
               <Fragment key={section.key}>
                 {section.key === firstSeparateAiSectionKey ? (
                   <div id="section-separate-ai" className="scroll-mt-16 border-t border-border pt-8">
-                    <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
-                      {SEPARATE_AI_PACKAGES_GROUP.title}
-                    </h2>
-                    <p className="mt-1 text-[13px] text-muted sm:text-sm">
-                      {SEPARATE_AI_PACKAGES_GROUP.description}
-                    </p>
-                  </div>
-                ) : null}
-              <section id={`section-${section.key}`} className="scroll-mt-16 space-y-4">
-                <LearnerSurfaceSectionHeader
-                  title={section.title}
-                  description={section.description}
-                />
-
-                {section.key === 'full-recorded' ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {professions.map((profession) => {
-                      const active = profession === activeProfession;
-                      return (
-                        <button
-                          key={profession}
-                          type="button"
-                          onClick={() => setActiveProfession(profession)}
-                          aria-pressed={active}
-                          className={cn(
-                            'rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors',
-                            active ? 'bg-primary text-white' : 'border border-border bg-surface text-muted hover:text-navy',
-                          )}
-                        >
-                          {PROFESSION_LABEL[profession] ?? profession}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                  {packages.map((pkg) => (
-                    <SubscriptionPackageCard
-                      key={pkg.code}
-                      pkg={pkg}
-                      live={priceMap.get(pkg.code)!}
-                      owned={canonicalOwnedPlanCode != null && canonicalOwnedPlanCode === pkg.code}
-                      highlighted={highlightCode === pkg.code}
+                    <LearnerSurfaceSectionHeader
+                      title={SEPARATE_AI_PACKAGES_GROUP.title}
+                      description={SEPARATE_AI_PACKAGES_GROUP.description}
                     />
-                  ))}
-                </div>
-              </section>
+                  </div>
+                ) : null}
+                <MotionSection id={`section-${section.key}`} className="scroll-mt-16 space-y-4">
+                  <LearnerSurfaceSectionHeader
+                    title={section.title}
+                    description={section.description}
+                  />
+
+                  {section.key === 'full-recorded' ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {professions.map((profession) => {
+                        const active = profession === activeProfession;
+                        return (
+                          <button
+                            key={profession}
+                            type="button"
+                            onClick={() => setActiveProfession(profession)}
+                            aria-pressed={active}
+                            className={cn(
+                              'pressable min-h-11 rounded-control border px-3.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                              active ? 'border-primary/30 bg-primary/10 text-primary' : 'hover-primary border-border bg-surface text-muted',
+                            )}
+                          >
+                            {PROFESSION_LABEL[profession] ?? profession}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {packages.length === 0 ? (
+                    <EmptyState
+                      icon={<ShoppingCart className="h-8 w-8" />}
+                      title={`No ${PROFESSION_LABEL[activeProfession] ?? activeProfession} packages`}
+                      action={{ label: PROFESSION_LABEL.all, onClick: () => setActiveProfession('all') }}
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                      {packages.map((pkg, index) => (
+                        <MotionItem key={pkg.code} delayIndex={Math.min(index, 5)}>
+                          <SubscriptionPackageCard
+                            pkg={pkg}
+                            live={priceMap.get(pkg.code)!}
+                            owned={canonicalOwnedPlanCode != null && canonicalOwnedPlanCode === pkg.code}
+                            highlighted={highlightCode === pkg.code}
+                          />
+                        </MotionItem>
+                      ))}
+                    </div>
+                  )}
+                </MotionSection>
               </Fragment>
             );
           })}
 
           {/* Official Candidate Apps Download Section */}
-          <div className="pt-4">
-            <AppDownloadPromo variant="card" />
-          </div>
-
+          <AppDownloadPromo variant="card" />
         </>
       )}
-    </div>
+    </>
   );
 }

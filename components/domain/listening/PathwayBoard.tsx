@@ -61,7 +61,7 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-2xs font-black uppercase tracking-[0.16em] text-muted">
+        <span className="rounded-lg bg-surface/70 px-2.5 py-1 eyebrow text-muted">
           Stage {index + 1}
         </span>
         <StatusBadge status={stage.status} />
@@ -108,7 +108,7 @@ function tileClass(status: PathwayStageView['status']) {
 function StatusBadge({ status }: { status: PathwayStageView['status'] }) {
   if (status === 'Completed') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2 py-1 text-xs font-bold text-success">
+      <span className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2 py-1 text-xs font-bold text-success-strong">
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Completed
       </span>
     );

@@ -11,10 +11,10 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 type AlertVariant = 'info' | 'success' | 'warning' | 'error';
 
 const alertConfig: Record<AlertVariant, { icon: typeof Info; bgClass: string; textClass: string; borderClass: string }> = {
-  info: { icon: Info, bgClass: 'bg-blue-50 dark:bg-blue-950', textClass: 'text-blue-800 dark:text-blue-200', borderClass: 'border-blue-200 dark:border-blue-800' },
-  success: { icon: CheckCircle2, bgClass: 'bg-emerald-50 dark:bg-emerald-950', textClass: 'text-emerald-800 dark:text-emerald-200', borderClass: 'border-emerald-200 dark:border-emerald-800' },
-  warning: { icon: AlertTriangle, bgClass: 'bg-amber-50 dark:bg-amber-950', textClass: 'text-amber-800 dark:text-amber-200', borderClass: 'border-amber-200 dark:border-amber-800' },
-  error: { icon: AlertCircle, bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-800 dark:text-red-200', borderClass: 'border-red-200 dark:border-red-800' },
+  info: { icon: Info, bgClass: 'bg-info/10', textClass: 'text-info', borderClass: 'border-info/30' },
+  success: { icon: CheckCircle2, bgClass: 'bg-success/10', textClass: 'text-success-strong', borderClass: 'border-success/30' },
+  warning: { icon: AlertTriangle, bgClass: 'bg-warning/10', textClass: 'text-warning-strong', borderClass: 'border-warning/30' },
+  error: { icon: AlertCircle, bgClass: 'bg-danger/10', textClass: 'text-danger-strong', borderClass: 'border-danger/30' },
 };
 
 interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'> {
@@ -22,13 +22,15 @@ interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'o
   title?: string;
   children: ReactNode;
   dismissible?: boolean;
+  /** Called after the learner dismisses it, so the page can clear the state that raised it. */
+  onDismiss?: () => void;
   className?: string;
   action?: ReactNode;
   /** `polite` announces as role="status" — use for non-urgent suggestions. Default `assertive` (role="alert"). */
   live?: 'assertive' | 'polite';
 }
 
-export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
+export function InlineAlert({ variant = 'info', title, children, dismissible, onDismiss, className, action, live = 'assertive', ...rest }: InlineAlertProps) {
   const [visible, setVisible] = useState(true);
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const motionProps = getSurfaceMotion('item', reducedMotion);
@@ -57,6 +59,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
               onClick={() => {
                 void triggerImpactHaptic('LIGHT');
                 setVisible(false);
+                onDismiss?.();
               }}
               className={cn('rounded-xl p-2.5 -m-1 transition-colors', config.textClass, 'hover:bg-navy/5 dark:hover:bg-white/10')}
               aria-label="Dismiss"

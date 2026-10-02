@@ -798,7 +798,7 @@ function IntroCard({
       <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{title}</h1>
       {preflight ? (
         <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-border bg-background-light p-4 text-left" data-testid="listening-preflight-summary">
-          <h2 className="text-xs font-black uppercase tracking-[0.16em] text-muted">Confirm your test</h2>
+          <h2 className="eyebrow text-muted">Confirm your test</h2>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs font-semibold uppercase text-muted">Candidate</dt>
@@ -814,7 +814,7 @@ function IntroCard({
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-muted">Eligibility</dt>
-              <dd className={cn('font-semibold', preflight.eligibility.eligible ? 'text-success' : 'text-danger')}>
+              <dd className={cn('font-semibold', preflight.eligibility.eligible ? 'text-success-strong' : 'text-danger-strong')}>
                 {preflight.eligibility.eligible ? 'Checked — eligible to start' : preflight.eligibility.reason ?? 'Not eligible to start'}
               </dd>
             </div>
@@ -926,7 +926,7 @@ function SaveStatus({ state }: { state: SaveState }) {
   const Icon = state === 'saving' ? Loader2 : state === 'error' || state === 'conflict' ? AlertCircle : Save;
   return (
     <span
-      className={cn('inline-flex items-center gap-2 text-sm font-semibold', state === 'error' || state === 'conflict' ? 'text-danger' : 'text-muted')}
+      className={cn('inline-flex items-center gap-2 text-sm font-semibold', state === 'error' || state === 'conflict' ? 'text-danger-strong' : 'text-muted')}
       role="status"
       aria-live="polite"
     >
@@ -1228,7 +1228,7 @@ function ActiveSubSectionPanel({
                 role="tablist"
                 aria-label="Question jump navigation"
               >
-                <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                <span className="eyebrow text-muted mr-1">Questions:</span>
                 {questionList.map((q, idx) => {
                   const isActive = idx === activeQuestionIndex;
                   const isAnswered = Boolean((answers[q.id] ?? '').trim());
@@ -1684,7 +1684,7 @@ function SubSectionAudio({
       {needsUserPlay && !audioError ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5 text-navy">
           <div className="flex items-center gap-2 text-sm font-semibold">
-            <Volume2 className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
+            <Volume2 className="h-4 w-4 text-warning-strong shrink-0" aria-hidden="true" />
             <span>Audio is ready. Tap Play to begin playback (plays once).</span>
           </div>
           <Button
@@ -1698,7 +1698,7 @@ function SubSectionAudio({
       ) : null}
 
       {audioError ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-3.5 text-danger">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-3.5 text-danger-strong">
           <p className="text-xs sm:text-sm font-semibold">{audioError}</p>
           <Button
             variant="ghost"
@@ -1708,7 +1708,7 @@ function SubSectionAudio({
               autoPlayTriedRef.current = false;
               setAudioRetryKey((k) => k + 1);
             }}
-            className="h-8 px-3 text-xs text-danger hover:bg-danger/20"
+            className="h-8 px-3 text-xs text-danger-strong hover:bg-danger/20"
           >
             Retry
           </Button>

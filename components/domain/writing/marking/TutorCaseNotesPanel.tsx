@@ -35,7 +35,7 @@ export function TutorCaseNotesPanel({ submissionId }: { submissionId: string }) 
   return (
     <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm" aria-label="Learner's highlighted case notes">
       <h2 className="flex items-center gap-1.5 text-sm font-bold text-navy">
-        <Highlighter className="h-4 w-4 text-amber-600" aria-hidden="true" /> Learner&rsquo;s highlighted case notes
+        <Highlighter className="h-4 w-4 text-warning-strong" aria-hidden="true" /> Learner&rsquo;s highlighted case notes
       </h2>
       <p className="mt-0.5 text-xs text-muted">The portions the learner highlighted during the exam (read-only).</p>
       <div className="mt-3 h-[60vh] overflow-hidden rounded-xl border border-border">

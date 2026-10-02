@@ -59,9 +59,9 @@ export function PartAStrictTimer({
     <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4" role="timer" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Clock className="h-5 w-5 text-warning" aria-hidden />
+          <Clock className="h-5 w-5 text-warning-strong" aria-hidden />
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-warning">Reading Part A strict timer</p>
+            <p className="eyebrow text-warning-strong">Reading Part A strict timer</p>
             <p className="text-sm text-muted">This section locks automatically when the window ends.</p>
           </div>
         </div>
@@ -70,7 +70,7 @@ export function PartAStrictTimer({
         </span>
       </div>
       {remaining <= 120 ? (
-        <p className="mt-3 text-sm font-bold text-warning">Two-minute warning: finish your Part A answers now.</p>
+        <p className="mt-3 text-sm font-bold text-warning-strong">Two-minute warning: finish your Part A answers now.</p>
       ) : null}
     </div>
   );

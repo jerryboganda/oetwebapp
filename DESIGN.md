@@ -37,6 +37,7 @@ This is the single design-system spec for every surface in the web app: learner,
 
 ## 2. Colour
 Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*` for text or surfaces.
+Raw status hues map onto the tokens: a tint is `bg-<status>/10`, a border `border-<status>/30`, text or an icon `text-<status>-strong` (`text-info` for info), so they flip with the theme and need no `dark:` twin.
 
 | Class | Light | Dark | Role |
 | --- | --- | --- | --- |
@@ -50,6 +51,8 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | `muted` | `#526072` | `#94a3b8` | Secondary text, metadata |
 | `border` / `border-hover` | `#d8e0e8` / `#b9c6d1` | `#1f2937` / `#334155` | Borders, dividers |
 | `success` / `warning` / `danger` / `info` | `#10b981` / `#d97706` / `#ef4444` / `#2563eb` | | Status only. Info blue is never the brand accent. |
+| `success-strong` / `warning-strong` / `danger-strong` | `#047857` / `#b45309` / `#b91c1c` | `#34d399` / `#fbbf24` / `#f87171` | Status **text and icons**: the base shades fail AA as small text on light surfaces. Fills, borders and tints keep the base token. |
+| `skill-listening` / `skill-reading` / `skill-writing` / `skill-speaking` | `#156082` / `#2563eb` / `#e11d48` / `#7c3aed` | `#4fb3d3` / `#60a5fa` / `#fb7185` / `#a78bfa` | Sub-test identity: chips `bg-skill-<k>/10 text-skill-<k>`, icons, dots, spines. Same hues as `chart-palette`. Never status, never a solid fill under white text. |
 | `gold`, `oet-navy`, `oet-teal` | | | OET corporate accents (billing, certificates) |
 
 - **Admin** uses the same violet; there is no separate brand colour. Its `--admin-*` variables are aliases whose light and dark values match the table above.
@@ -122,11 +125,13 @@ Use semantic classes. Never use raw hex values, and avoid raw `slate-*`/`gray-*`
 | Card | Border, `bg-surface`, `shadow-sm`; `hoverable` gives a clinical hover | Mobile-dense padding |
 | Inputs | `form-controls`: soft surface, 1px border, primary focus ring | Label, hint and error wired with aria |
 | Tabs | Segmented pill with a moving active pill | Arrow/Home/End keys |
+| Switch | `components/ui/switch`: `h-6 w-11` pill, primary when on, knob mirrors under RTL | Real `role="switch"` with `aria-checked`; the visible label lives beside it and the control carries an `aria-label` |
 | Modal / Drawer | Body portal, focus trap, refcounted scroll lock, focus restore | Escape and backdrop close |
 | Overlays | admin Dialog/AlertDialog use `--z-modal`; Select/DropdownMenu use `--z-popover` | One `--z-*` scale in `app/globals.css` |
-| Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open |
+| Navigation | Sticky glass top nav, desktop sidebar, mobile bottom nav | `aria-current="page"`; bottom nav hides while the keyboard is open; bottom-nav tabs carry a one-word `mobileLabel` (≤ 6 characters at 360px) |
 | Command palette | `GlobalSearch`: a `Modal`-based combobox/listbox, mounted once per AppShell | Ctrl/⌘K or the header trigger; not mounted on `distractionFree` or exam/live routes (`isExamOrLiveRoute`); rows only from the role's real nav plus learner content search |
-| Empty / Error | `EmptyState` / `ErrorState` | Always explain the situation and offer the next action or a retry |
+| Empty / Error | `EmptyState` / `ErrorState`; the empty icon pops in once | Always explain the situation and offer the next action or a retry |
+| Page hero | `LearnerPageHero`: one per page, never nested in another card or a flex row; `aside` sits beside the title and highlights run full width; a module's own pages take its skill accent (`accent="writing"`, …), never a status hue | Highlights are real data only |
 | Data visuals | Charts on `bg-surface`, faint gridlines, one accent per series | Colours from `chart-palette` |
 
 ## 7. Layout and responsive behaviour

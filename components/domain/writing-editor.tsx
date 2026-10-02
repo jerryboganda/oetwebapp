@@ -23,10 +23,10 @@ interface WritingEditorProps {
 
 const saveStatusLabels: Record<SaveStatus, { label: string; color: string }> = {
   idle: { label: '', color: '' },
-  saving: { label: 'Saving...', color: 'text-warning' },
-  saved: { label: 'Saved', color: 'text-success' },
+  saving: { label: 'Saving...', color: 'text-warning-strong' },
+  saved: { label: 'Saved', color: 'text-success-strong' },
   'offline-saved': { label: 'Saved locally', color: 'text-info' },
-  failed: { label: 'Save failed', color: 'text-danger' },
+  failed: { label: 'Save failed', color: 'text-danger-strong' },
 };
 
 export function WritingEditor({

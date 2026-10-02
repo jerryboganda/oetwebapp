@@ -145,7 +145,7 @@ export function StepVideoReview() {
       <div className="grid gap-2 rounded-2xl border border-border bg-background-light p-4 sm:grid-cols-2 lg:grid-cols-3">
         {summary.map((s) => (
           <div key={s.label}>
-            <p className="text-3xs font-bold uppercase tracking-widest text-muted">{s.label}</p>
+            <p className="tile-label text-muted">{s.label}</p>
             <p className="truncate text-sm text-navy">{s.value}</p>
           </div>
         ))}
@@ -157,13 +157,13 @@ export function StepVideoReview() {
           {readiness.items.map((item) => (
             <li key={item.label} className="flex items-center gap-2 text-sm">
               {item.ok ? (
-                <Check className="h-4 w-4 text-emerald-600" />
+                <Check className="h-4 w-4 text-success-strong" />
               ) : item.hard ? (
-                <X className="h-4 w-4 text-red-600" />
+                <X className="h-4 w-4 text-danger-strong" />
               ) : (
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertTriangle className="h-4 w-4 text-warning-strong" />
               )}
-              <span className={item.ok ? 'text-navy' : item.hard ? 'text-red-700' : 'text-amber-700'}>
+              <span className={item.ok ? 'text-navy' : item.hard ? 'text-danger-strong' : 'text-warning-strong'}>
                 {item.label}
                 {!item.ok && !item.hard ? ' (recommended)' : ''}
               </span>
@@ -173,14 +173,14 @@ export function StepVideoReview() {
 
         {gate && (gate.errors.length > 0 || gate.warnings.length > 0) ? (
           <div className="space-y-1.5 border-t border-border pt-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted">Server publish gate</p>
+            <p className="eyebrow text-muted">Server publish gate</p>
             {gate.errors.map((message) => (
-              <p key={message} className="flex items-center gap-2 text-sm text-red-700">
+              <p key={message} className="flex items-center gap-2 text-sm text-danger-strong">
                 <X className="h-4 w-4 shrink-0" /> {message}
               </p>
             ))}
             {gate.warnings.map((message) => (
-              <p key={message} className="flex items-center gap-2 text-sm text-amber-700">
+              <p key={message} className="flex items-center gap-2 text-sm text-warning-strong">
                 <AlertTriangle className="h-4 w-4 shrink-0" /> {message}
               </p>
             ))}
@@ -245,7 +245,7 @@ export function StepVideoReview() {
             {!wizard.canPublish ? (
               <span className="text-xs text-muted">You do not have publish permission.</span>
             ) : !readiness.hardReady ? (
-              <span className="text-xs text-amber-700">Resolve the hard checks above to enable publishing.</span>
+              <span className="text-xs text-warning-strong">Resolve the hard checks above to enable publishing.</span>
             ) : null}
           </div>
 

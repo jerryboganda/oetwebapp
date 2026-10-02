@@ -1,48 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { LearnerRouteError, type LearnerRouteErrorProps } from '@/components/domain/learner-route-error';
 
-export default function GrammarError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  useEffect(() => {
-    console.error('[Grammar Error]', error);
-  }, [error]);
-
+export default function GrammarError(props: LearnerRouteErrorProps) {
   return (
-    <>
-      <div className="mx-auto max-w-xl">
-        <Card className="text-center">
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger/10 text-danger">
-              <AlertTriangle className="h-7 w-7" aria-hidden="true" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">Grammar error</p>
-              <h2 className="text-xl font-bold text-navy">We couldn&apos;t load this view</h2>
-              <p className="mx-auto max-w-md text-sm leading-6 text-muted">
-                Something went wrong while loading grammar. Try again, or head back to your dashboard if the issue persists.
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="primary" size="sm" onClick={reset} className="inline-flex items-center gap-1.5">
-                <RefreshCcw className="h-3.5 w-3.5" /> Try again
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-<Link href="/">Back to dashboard</Link>
-</Button>
-            </div>
-          </div>
-        </Card>
-      </div>
-    </>
+    <LearnerRouteError
+      {...props}
+      title="We couldn't load this view"
+      message="Something went wrong while loading grammar. Try again, or head back to your dashboard if the issue persists."
+    />
   );
 }

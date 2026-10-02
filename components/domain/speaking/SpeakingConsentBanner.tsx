@@ -153,7 +153,7 @@ export function SpeakingConsentBanner({
     >
       <div className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
         <div className="mb-4 flex items-start gap-3">
-          <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
+          <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-success-strong" aria-hidden />
           <div>
             <h2 id={titleId} className="text-lg font-semibold text-foreground">
               {sessionMode === 'live_tutor'
@@ -173,7 +173,7 @@ export function SpeakingConsentBanner({
               {serverRetentionNotice}
             </p>
           ) : null}
-          <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-amber-900">
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning-strong">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <p className="text-xs">{serverDisclaimer}</p>
           </div>
@@ -182,7 +182,7 @@ export function SpeakingConsentBanner({
         {error ? (
           <p
             role="alert"
-            className="mt-3 rounded-md border border-rose-300 bg-rose-50 p-2 text-xs text-rose-700"
+            className="mt-3 rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger-strong"
           >
             {error}
           </p>

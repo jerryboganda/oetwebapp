@@ -11,12 +11,12 @@ export function GroundedReadingPassageQna({
 }) {
   return (
     <div
-      className="mt-4 rounded-xl border border-sky-200 bg-sky-50/70 p-4 dark:border-sky-400/30 dark:bg-sky-950/20"
+      className="mt-4 rounded-xl border border-skill-reading/20 bg-skill-reading/10 p-4"
       data-testid="reading-grounded-qna"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-2xs font-black uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">
+          <p className="eyebrow text-skill-reading">
             AI reading helper
           </p>
           <p className="mt-1 text-xs text-muted">

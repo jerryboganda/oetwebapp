@@ -21,7 +21,7 @@ export function ReadinessMeter({ value, label = 'Test Readiness', change, sublab
       <CircularProgress value={value} size={size} color={color} />
       <p className="text-sm font-bold text-navy mt-3">{label}</p>
       {change !== undefined && change !== 0 && (
-        <p className={cn('text-xs font-semibold flex items-center gap-1 mt-1', change > 0 ? 'text-emerald-600' : 'text-red-600')}>
+        <p className={cn('text-xs font-semibold flex items-center gap-1 mt-1', change > 0 ? 'text-success-strong' : 'text-danger-strong')}>
           {change > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
           {change > 0 ? '+' : ''}{change}% since last week
         </p>

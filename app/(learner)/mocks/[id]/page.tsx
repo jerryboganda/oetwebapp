@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { InlineAlert } from '@/components/ui/alert';
+import { Layers } from 'lucide-react';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { fetchMockReport, fetchMockSession, isApiError } from '@/lib/api';
 
 export default function MockRouteRedirectPage() {
@@ -60,25 +60,13 @@ export default function MockRouteRedirectPage() {
 
   const visibleError = missingIdError ?? error;
 
-  return (
-    <>
-      {!visibleError ? (
-        <div className="flex min-h-[40vh] items-center justify-center px-4">
-          <div className="text-center">
-            <p className="text-lg font-semibold text-navy">Opening your mock...</p>
-            <p className="mt-2 text-sm text-muted">We are routing you to the correct mock player or report.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="mx-auto max-w-xl space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm">
-          <InlineAlert variant="error">{visibleError}</InlineAlert>
-          <div className="flex justify-end">
-            <Button type="button" onClick={() => router.push('/mocks')}>
-              Back To Mocks
-            </Button>
-          </div>
-        </div>
-      )}
-    </>
+  return visibleError ? (
+    <ErrorState message={visibleError} onRetry={() => router.push('/mocks')} retryLabel="Back To Mocks" />
+  ) : (
+    <EmptyState
+      icon={<Layers className="h-7 w-7" aria-hidden="true" />}
+      title="Opening your mock..."
+      description="We are routing you to the correct mock player or report."
+    />
   );
 }

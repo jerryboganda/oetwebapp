@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { LearnerNavActions } from '@/components/layout/learner-dashboard-shell';
 import { SubscriptionsCatalog } from '@/components/domain/catalog/subscriptions-catalog';
 import { CartNavButton } from '@/components/cart';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function SubscriptionsPage() {
   return (
@@ -11,7 +12,7 @@ export default function SubscriptionsPage() {
       <LearnerNavActions>
         <CartNavButton />
       </LearnerNavActions>
-      <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl border border-border bg-surface" />}>
+      <Suspense fallback={<Skeleton className="h-40 rounded-2xl" />}>
         <SubscriptionsCatalog />
       </Suspense>
     </>

@@ -60,8 +60,8 @@ export function PartTabs({
           >
             <span>Part {part.partCode}</span>
             <span className="ml-2 text-xs font-semibold text-muted" aria-hidden="true">{answered}/{part.questions.length}</span>
-            {flaggedCount ? <span className="ml-2 text-xs text-warning" aria-hidden="true">{flaggedCount} flagged</span> : null}
-            {isLocked ? <span className="ml-2 text-xs text-danger" aria-hidden="true">locked</span> : null}
+            {flaggedCount ? <span className="ml-2 text-xs text-warning-strong" aria-hidden="true">{flaggedCount} flagged</span> : null}
+            {isLocked ? <span className="ml-2 text-xs text-danger-strong" aria-hidden="true">locked</span> : null}
           </button>
         );
       })}
@@ -282,8 +282,8 @@ export function QuestionNavigator({
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
               isActive ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background-light text-navy hover:border-primary/40',
-              answered && !isActive && 'border-success/30 bg-success/10 text-success',
-              isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
+              answered && !isActive && 'border-success/30 bg-success/10 text-success-strong',
+              isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning-strong',
             )}
           >
             {publicNumber}

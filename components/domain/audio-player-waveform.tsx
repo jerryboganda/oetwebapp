@@ -192,7 +192,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
         <p className="text-xs text-muted">Loading audio waveform...</p>
       )}
       {loadError && (
-        <p className="text-xs text-danger" role="alert">{loadError}</p>
+        <p className="text-xs text-danger-strong" role="alert">{loadError}</p>
       )}
       <div ref={containerRef} className="w-full" aria-hidden="true" />
       

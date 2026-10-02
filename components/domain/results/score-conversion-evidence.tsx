@@ -1,3 +1,7 @@
+import { Badge } from '@/components/ui/badge';
+import { cardClassName } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
 interface ScoreConversionEvidenceProps {
   assessment: 'Listening' | 'Reading';
   rawScore: number;
@@ -36,38 +40,39 @@ export function ScoreConversionEvidence({
     : `${assessment} AI Practice Score graph. Converted score unavailable. Not an official OET result.`;
 
   return (
-    <section className={`rounded-2xl border border-border bg-surface p-5 shadow-sm ${className ?? ''}`} aria-label={`${assessment} score conversion evidence`}>
+    <section className={cn(cardClassName({}), className)} aria-label={`${assessment} score conversion evidence`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-muted">Score evidence</p>
-          <h2 className="mt-1 text-base font-black text-navy">Owner-table mapping</h2>
+          <p className="eyebrow text-muted">Score evidence</p>
+          <h2 className="mt-1 text-base font-bold text-navy">Owner-table mapping</h2>
         </div>
-        <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-bold text-muted">
+        <Badge variant="muted" size="md">
           {tableVersion ? `Version ${tableVersion}` : 'Version unavailable'}
-        </span>
+        </Badge>
       </div>
 
       {hasConversion ? (
         <>
           <div className="mt-5" role="img" aria-label={`${rawScore} of ${maxRawScore} raw mapped to ${scaledScore} of 500 scaled`}>
-            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-muted">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold tabular-nums text-muted">
               <span>Raw {rawScore}/{maxRawScore}</span>
               <span>Scaled {scaledScore}/500</span>
             </div>
+            {/* The fill starts at the inline start, so the marker is placed from there too (RTL-safe). */}
             <div className="relative h-3 rounded-full bg-background-light" aria-hidden="true">
               <div className="h-3 rounded-full bg-primary/25" style={{ width: `${rawPercent}%` }} />
               <span
-                className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-surface bg-primary shadow-sm"
-                style={{ left: `${rawPercent}%` }}
+                className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-surface bg-primary shadow-sm rtl:translate-x-1/2"
+                style={{ insetInlineStart: `${rawPercent}%` }}
               />
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-            {grade ? <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">Grade {grade}</span> : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {grade ? <Badge size="md">Grade {grade}</Badge> : null}
             {passed != null ? (
-              <span className={`rounded-full px-3 py-1 ${passed ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+              <Badge variant={passed ? 'success' : 'danger'} size="md">
                 Owner table: {passed ? 'passed' : 'not passed'}
-              </span>
+              </Badge>
             ) : null}
           </div>
         </>
@@ -78,28 +83,28 @@ export function ScoreConversionEvidence({
         </p>
       )}
       <div
-        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy dark:bg-surface p-4 text-white shadow-inner"
+        className="mt-5 overflow-hidden rounded-2xl border border-navy/20 bg-navy p-4 text-white dark:bg-background-light"
         role="img"
         aria-label={graphAriaLabel}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-3xs font-black uppercase tracking-[0.18em] text-white/70">Platform score graph</p>
-            <p className="mt-1 text-sm font-black tracking-tight">AI Practice Score — not an official OET result</p>
+            <p className="tile-label text-white/70">Platform score graph</p>
+            <p className="mt-1 text-sm font-bold tracking-tight">AI Practice Score — not an official OET result</p>
           </div>
-          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-black tabular-nums">
+          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold tabular-nums">
             {hasConversion ? `${scaledScore}/500` : 'Awaiting table'}
           </span>
         </div>
         <div className="relative mt-5 h-3 rounded-full bg-white/15" aria-hidden="true">
           <div
-            className="h-3 rounded-full bg-primary shadow-[0_0_18px_rgba(255,255,255,0.25)] transition-[width] duration-500"
+            className="h-3 rounded-full bg-primary"
             style={{ width: `${scaledPercent ?? 0}%` }}
           />
           {scaledPercent != null ? (
             <span
-              className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-navy bg-white shadow-lg"
-              style={{ left: `${scaledPercent}%` }}
+              className="absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-navy bg-white shadow-sm rtl:translate-x-1/2 dark:border-background-light"
+              style={{ insetInlineStart: `${scaledPercent}%` }}
             />
           ) : null}
         </div>

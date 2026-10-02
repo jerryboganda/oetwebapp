@@ -258,7 +258,7 @@ export function DrillPlayer({ drill, attemptId, maxSeconds = DEFAULT_MAX_SECONDS
           <p className="text-sm">{feedback.summary}</p>
           {feedback.specificComments.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <h3 className="eyebrow text-muted">
                 What the scorer noticed
               </h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
@@ -270,7 +270,7 @@ export function DrillPlayer({ drill, attemptId, maxSeconds = DEFAULT_MAX_SECONDS
           )}
           {feedback.nextRecommendations.length > 0 && (
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <h3 className="eyebrow text-muted">
                 Try next
               </h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">

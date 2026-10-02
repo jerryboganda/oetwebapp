@@ -14,9 +14,12 @@ import {
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, cardClassName } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { cn } from '@/lib/utils';
 import { fetchFreezeStatus, fetchReferralInfo, generateReferralCode } from '@/lib/api';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import {
@@ -127,108 +130,89 @@ export default function ReferralPage() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <BackToBillingLink />
-          <Skeleton className="h-44 rounded-2xl" />
-          <Skeleton className="h-48 rounded-2xl" />
-        </div>
+        <Skeleton className="h-44 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
       </>
     );
   }
 
   return (
     <>
-      <div className="space-y-6">
-        <BackToBillingLink />
+      <LearnerPageHero
+        eyebrow="Billing"
+        icon={Gift}
+        accent="purple"
+        title="Referral program"
+        description="Invite colleagues and classmates to OET Prep. Referral benefits are applied only when the backend confirms the current terms and a qualifying paid subscription clears."
+        highlights={heroHighlights}
+        aside={<BackToBillingLink />}
+      />
 
-        <LearnerPageHero
-          eyebrow="Billing"
+      {isFrozen ? (
+        <InlineAlert variant="warning">
+          Your account is frozen, so generating new referral codes is paused. Existing codes still work for friends.
+        </InlineAlert>
+      ) : null}
+      {freezeLoadFailed ? (
+        <InlineAlert variant="error">{FREEZE_UNVERIFIED_MESSAGE}</InlineAlert>
+      ) : null}
+      {loadError ? <InlineAlert variant="error">{loadError}</InlineAlert> : null}
+
+      <MotionSection className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="How it works"
           icon={Gift}
-          accent="purple"
-          title="Referral program"
-          description="Invite colleagues and classmates to OET Prep. Referral benefits are applied only when the backend confirms the current terms and a qualifying paid subscription clears."
-          highlights={heroHighlights}
+          title="Three steps to earn credits"
         />
+        <ol className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="list">
+          {[
+            {
+              step: '1',
+              title: 'Share your code',
+              desc: 'Send your unique referral code to friends preparing for the OET.',
+            },
+            {
+              step: '2',
+              title: 'They subscribe',
+              desc: info
+                ? `They get the backend-published ${info.referredDiscountPercent}% referral discount on their first paid plan.`
+                : 'Any friend discount is shown only after referral terms load from the backend.',
+            },
+            {
+              step: '3',
+              title: 'You earn credits',
+              desc: info
+                ? `You receive ${info.referrerCreditAmount} backend-published credits per successful referral.`
+                : 'Credit amounts are shown only after referral terms load from the backend.',
+            },
+          ].map((s) => (
+            <li key={s.step} className={cn(cardClassName({ padding: 'md' }), 'text-center')}>
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold tabular-nums text-white dark:bg-primary-700">
+                {s.step}
+              </div>
+              <p className="text-sm font-bold text-navy">{s.title}</p>
+              <p className="mt-1 text-xs text-muted">{s.desc}</p>
+            </li>
+          ))}
+        </ol>
+      </MotionSection>
 
-        {isFrozen ? (
-          <InlineAlert variant="warning">
-            Your account is frozen, so generating new referral codes is paused. Existing codes still work for friends.
-          </InlineAlert>
-        ) : null}
-        {freezeLoadFailed ? (
-          <InlineAlert variant="error">{FREEZE_UNVERIFIED_MESSAGE}</InlineAlert>
-        ) : null}
-        {loadError ? <InlineAlert variant="error">{loadError}</InlineAlert> : null}
-
-        <section
-          aria-labelledby="referral-how-heading"
-          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-        >
-          <LearnerSurfaceSectionHeader
-            eyebrow="How it works"
-            icon={Gift}
-            title="Three steps to earn credits"
-          />
-          <h2 id="referral-how-heading" className="sr-only">
-            How the referral program works
-          </h2>
-          <ol className="mt-5 grid gap-4 sm:grid-cols-3" role="list">
-            {[
-              {
-                step: '1',
-                title: 'Share your code',
-                desc: 'Send your unique referral code to friends preparing for the OET.',
-              },
-              {
-                step: '2',
-                title: 'They subscribe',
-                desc: info
-                  ? `They get the backend-published ${info.referredDiscountPercent}% referral discount on their first paid plan.`
-                  : 'Any friend discount is shown only after referral terms load from the backend.',
-              },
-              {
-                step: '3',
-                title: 'You earn credits',
-                desc: info
-                  ? `You receive ${info.referrerCreditAmount} backend-published credits per successful referral.`
-                  : 'Credit amounts are shown only after referral terms load from the backend.',
-              },
-            ].map((s) => (
-              <li
-                key={s.step}
-                className="rounded-2xl border border-border bg-background-light p-4 text-center"
-              >
-                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-white dark:bg-violet-700">
-                  {s.step}
-                </div>
-                <p className="text-sm font-bold text-navy">{s.title}</p>
-                <p className="mt-1 text-xs text-muted">{s.desc}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section
-          aria-labelledby="referral-code-heading"
-          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-        >
-          <LearnerSurfaceSectionHeader
-            eyebrow="Your code"
-            icon={Share2}
-            title="Your referral code"
-            action={
-              info?.referralCode ? <Badge variant="success">Active</Badge> : null
-            }
-          />
-          <h2 id="referral-code-heading" className="sr-only">
-            Your referral code
-          </h2>
+      <MotionSection delayIndex={1} className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Your code"
+          icon={Share2}
+          title="Your referral code"
+          action={
+            info?.referralCode ? <Badge variant="success" className="self-start sm:self-auto">Active</Badge> : null
+          }
+        />
+        <Card padding="lg">
           {info?.referralCode ? (
-            <div className="mt-5 space-y-4">
+            <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div
                   aria-label="Your referral code"
-                  className="flex-1 select-all rounded-xl border border-border bg-background-light px-4 py-3 text-center font-mono text-lg font-bold tracking-widest text-navy"
+                  className="min-w-0 flex-1 select-all break-all rounded-xl border border-border bg-background-light px-4 py-3 text-center font-mono text-lg font-bold tracking-widest text-navy"
                 >
                   {info.referralCode}
                 </div>
@@ -240,14 +224,14 @@ export default function ReferralPage() {
                   className="h-12 w-12 shrink-0"
                 >
                   {copied ? (
-                    <CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />
+                    <CheckCircle2 className="h-5 w-5 text-success-strong" aria-hidden="true" />
                   ) : (
                     <Copy className="h-5 w-5" aria-hidden="true" />
                   )}
                 </Button>
               </div>
               {copied ? (
-                <p className="text-center text-xs text-success" role="status">
+                <p className="text-center text-xs text-success-strong" role="status">
                   Copied to clipboard.
                 </p>
               ) : null}
@@ -273,8 +257,10 @@ export default function ReferralPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border border-dashed border-border bg-background-light p-6 text-center">
-              <Gift className="mx-auto mb-3 h-10 w-10 text-muted/40" aria-hidden="true" />
+            <div className="py-4 text-center">
+              <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-lavender text-primary">
+                <Gift className="h-7 w-7" aria-hidden="true" />
+              </span>
               <p className="mb-4 text-sm text-muted">
                 Generate your unique referral code to start inviting friends.
               </p>
@@ -297,75 +283,29 @@ export default function ReferralPage() {
               </Button>
             </div>
           )}
-        </section>
+        </Card>
+      </MotionSection>
 
-        {info ? (
-          <section
-            aria-labelledby="referral-stats-heading"
-            className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-          >
-            <LearnerSurfaceSectionHeader
-              eyebrow="Stats"
-              icon={Users}
-              title="Your referral stats"
-            />
-            <h2 id="referral-stats-heading" className="sr-only">
-              Your referral statistics
-            </h2>
-            <dl className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
-                <Users className="mx-auto mb-1.5 h-5 w-5 text-info" aria-hidden="true" />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
-                  Friends referred
-                </dt>
-                <dd className="mt-1 text-2xl font-black text-navy">{info.referralsMade}</dd>
-              </div>
-              <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
-                <DollarSign
-                  className="mx-auto mb-1.5 h-5 w-5 text-success"
-                  aria-hidden="true"
-                />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
-                  Credits earned
-                </dt>
-                <dd className="mt-1 text-2xl font-black text-navy">{info.creditsEarned}</dd>
-              </div>
-              <div className="rounded-2xl border border-border bg-background-light p-4 text-center">
-                <Gift className="mx-auto mb-1.5 h-5 w-5 text-primary" aria-hidden="true" />
-                <dt className="text-2xs font-black uppercase tracking-widest text-muted">
-                  Per referral
-                </dt>
-                <dd className="mt-1 text-2xl font-black text-navy">{info.referrerCreditAmount}</dd>
-              </div>
-            </dl>
-          </section>
-        ) : null}
-
-        <section
-          aria-labelledby="referral-terms-heading"
-          className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
-        >
-          <LearnerSurfaceSectionHeader
-            eyebrow="Fine print"
-            title="Referral terms"
-          />
-          <h2 id="referral-terms-heading" className="sr-only">
-            Referral program terms
-          </h2>
-          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-muted">
+      <MotionSection delayIndex={2} className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Fine print"
+          title="Referral terms"
+        />
+        <Card padding="lg">
+          <ul className="list-disc space-y-1 ps-5 text-sm text-muted">
             <li>
               Credits are awarded after the referred user completes their first paid subscription.
             </li>
             <li>
-               Any referred-user discount must match the terms returned by the backend for your account.
+              Any referred-user discount must match the terms returned by the backend for your account.
             </li>
             <li>Self-referrals are not permitted and will be voided.</li>
             <li>Referral abuse, duplicate accounts, payment reversals, or suspicious attribution can pause credits pending support review.</li>
             <li>Credits are wallet credits only; expert-review credits remain separate and are not interchangeable.</li>
             <li>Contact support if a referral attribution needs manual investigation or privacy deletion handling.</li>
           </ul>
-        </section>
-      </div>
+        </Card>
+      </MotionSection>
     </>
   );
 }

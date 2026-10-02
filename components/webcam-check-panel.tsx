@@ -142,8 +142,8 @@ export function WebcamCheckPanel({
           <div
             className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300',
-              isPassed && 'bg-success/15 text-success',
-              isBlocked && 'bg-danger/10 text-danger',
+              isPassed && 'bg-success/15 text-success-strong',
+              isBlocked && 'bg-danger/10 text-danger-strong',
               isBusy && 'bg-primary text-white dark:bg-primary-700 scale-110',
               !isPassed && !isBlocked && !isBusy && 'bg-primary/10 text-primary',
             )}
@@ -162,7 +162,7 @@ export function WebcamCheckPanel({
           <div className="flex-1" aria-live="polite">
             <p className="text-sm font-semibold text-navy">Camera check</p>
             {isPassed ? (
-              <p className="text-xs text-success font-medium tracking-wide">
+              <p className="text-xs text-success-strong font-medium tracking-wide">
                 Passed. Webcam is streaming.
               </p>
             ) : isBusy ? (
@@ -170,7 +170,7 @@ export function WebcamCheckPanel({
                 Waiting for browser permission…
               </p>
             ) : isBlocked ? (
-              <p className="text-xs text-danger font-medium">
+              <p className="text-xs text-danger-strong font-medium">
                 {status === 'unavailable'
                   ? 'No camera detected on this device.'
                   : 'Camera blocked. Enable it to continue.'}

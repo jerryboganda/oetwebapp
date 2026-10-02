@@ -215,7 +215,7 @@ export function WizardShell({ bundle: initialBundle, children }: WizardShellProp
                       (isCurrent
                         ? 'bg-primary text-white dark:bg-violet-700'
                         : isComplete
-                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          ? 'bg-success/10 text-success-strong hover:bg-success/20'
                           : 'bg-background-light text-navy hover-primary')
                     }
                   >

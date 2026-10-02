@@ -22,6 +22,7 @@ export const NON_ROUTABLE_LEARNER_PATHS = [
   '/speaking/sessions',
   '/speaking/task',
   '/speaking/transcript',
+  '/vocabulary/terms',
   '/writing/mocks/session',
   '/writing/paper',
   '/writing/practice',
@@ -43,9 +44,11 @@ const LEARNER_WORKSPACE_ROUTE_ROOTS = [
   '/grammar',
   '/videos',
   '/listening',
+  '/materials',
   '/mocks',
   '/onboarding',
   '/progress',
+  '/pronunciation',
   '/readiness',
   '/reading',
   '/recalls',
@@ -54,6 +57,7 @@ const LEARNER_WORKSPACE_ROUTE_ROOTS = [
   '/strategies',
   '/study-plan',
   '/submissions',
+  '/vocabulary',
   '/writing',
 ] as const;
 
@@ -148,15 +152,14 @@ export interface LearnerChrome {
 
 /**
  * Pages that render AppShell, LearnerLiveRoomShell or a local shell themselves,
- * or no shell: attempt/live screens, a transient payment return, and the
- * full-bleed package page. Content, hub and results pages belong in the
- * workspace chrome so the learner always has navigation.
+ * or no shell: attempt/live screens and a transient payment return. Content,
+ * hub, results and product pages belong in the workspace chrome so the
+ * learner always has navigation.
  */
 export const LEARNER_SELF_CHROMED_ROUTES = [
   '/billing/payment-return',
   '/listening/mocks/[sessionId]',
   '/listening/player/[id]',
-  '/marketplace/packages/[id]',
   '/speaking/exam/[id]',
   '/speaking/sessions/[id]',
   '/speaking/sessions/[id]/live-tutor',

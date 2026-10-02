@@ -1,17 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ElementType } from 'react';
+import Link from 'next/link';
 import { Sparkles, ArrowRight, Clock, AlertTriangle, Trophy, Target, CheckCircle2 } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface NextAction {
   type: string;
@@ -29,18 +31,20 @@ interface NextActionsData {
 
 const apiRequest = apiClient.request;
 
-const PRIORITY_STYLES: Record<string, { border: string; bg: string; icon: React.ReactNode }> = {
-  high: { border: 'border-danger/30', bg: 'bg-danger/10', icon: <AlertTriangle className="w-5 h-5 text-danger" /> },
-  medium: { border: 'border-warning/30', bg: 'bg-warning/10', icon: <Target className="w-5 h-5 text-warning" /> },
-  low: { border: 'border-success/30', bg: 'bg-success/10', icon: <CheckCircle2 className="w-5 h-5 text-success" /> },
+// Priority stays readable at a glance (status border, icon tile, status badge) without
+// painting every card in a full red/amber/green tint.
+const PRIORITY_STYLES: Record<string, { border: string; tile: string; badge: BadgeProps['variant']; icon: ElementType }> = {
+  high: { border: 'border-danger/30', tile: 'bg-danger/10 text-danger-strong', badge: 'danger', icon: AlertTriangle },
+  medium: { border: 'border-warning/30', tile: 'bg-warning/10 text-warning-strong', badge: 'warning', icon: Target },
+  low: { border: 'border-success/30', tile: 'bg-success/10 text-success-strong', badge: 'success', icon: CheckCircle2 },
 };
 
-const TYPE_ICONS: Record<string, React.ReactNode> = {
-  overdue_task: <Clock className="w-4 h-4" />,
-  review_ready: <Trophy className="w-4 h-4" />,
-  weak_area_practice: <Target className="w-4 h-4" />,
-  exam_approaching: <AlertTriangle className="w-4 h-4" />,
-  daily_goal: <CheckCircle2 className="w-4 h-4" />,
+const TYPE_ICONS: Record<string, ElementType> = {
+  overdue_task: Clock,
+  review_ready: Trophy,
+  weak_area_practice: Target,
+  exam_approaching: AlertTriangle,
+  daily_goal: CheckCircle2,
 };
 
 export default function NextActionsPage() {
@@ -62,26 +66,17 @@ export default function NextActionsPage() {
     load();
   }, [load]);
 
-  if (loading) {
-    return (
-      <>
-        <div className="space-y-4 p-6">
-          <Skeleton className="h-10 w-60" />
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
       <LearnerPageHero
         title="What to Do Next"
         description="AI-powered recommendations based on your goals, performance, and exam timeline."
-        icon={<Sparkles className="w-7 h-7" />}
+        icon={Sparkles}
       />
 
-      {error && (
+      {loading ? <LearnerSkeleton variant="list" /> : null}
+
+      {!loading && error && (
         <InlineAlert
           variant="error"
           title="Error"
@@ -91,7 +86,7 @@ export default function NextActionsPage() {
         </InlineAlert>
       )}
 
-      {data && data.actions.length === 0 && (
+      {!loading && data && data.actions.length === 0 && (
         <LearnerEmptyState
           icon={CheckCircle2}
           title="All caught up!"
@@ -100,45 +95,47 @@ export default function NextActionsPage() {
         />
       )}
 
-      {data && data.actions.length > 0 && (
-        <MotionSection>
+      {!loading && data && data.actions.length > 0 && (
+        <section>
           <div className="space-y-4">
             {data.actions.map((action, i) => {
               const style = PRIORITY_STYLES[action.priority] ?? PRIORITY_STYLES.low;
+              const PriorityIcon = style.icon;
+              const TypeIcon = TYPE_ICONS[action.type];
               return (
-                <MotionItem key={i}>
-                  <Card className={`p-5 border-2 ${style.border} ${style.bg}`}>
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0 mt-0.5">{style.icon}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          {TYPE_ICONS[action.type]}
-                          <h3 className="font-semibold text-navy">{action.title}</h3>
-                        </div>
-                        <p className="text-sm text-muted">{action.subtitle}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="outline" className="capitalize">{action.priority} priority</Badge>
-                          {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
-                        </div>
+                <MotionItem key={i} delayIndex={Math.min(i, 5)}>
+                  <Card className={cn('flex items-start gap-3 sm:gap-4', style.border)}>
+                    <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', style.tile)}>
+                      <PriorityIcon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2">
+                        {TypeIcon ? <TypeIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
+                        <h2 className="min-w-0 font-semibold text-navy">{action.title}</h2>
                       </div>
-                      <Button asChild size="sm" className="shrink-0">
-                        <a href={action.actionUrl} aria-label={`Go: ${action.title}`}>
-                          Go <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                        </a>
-                      </Button>
+                      <p className="text-sm text-muted">{action.subtitle}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge variant={style.badge} className="capitalize">{action.priority} priority</Badge>
+                        {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
+                      </div>
                     </div>
+                    <Button asChild size="sm" className="shrink-0">
+                      <Link href={action.actionUrl} aria-label={`Go: ${action.title}`}>
+                        Go <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                      </Link>
+                    </Button>
                   </Card>
                 </MotionItem>
               );
             })}
           </div>
-          <p className="text-xs text-muted/60 mt-4 text-right">
+          <p className="mt-4 text-end text-xs text-muted">
             Generated {data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : 'now'}
           </p>
-        </MotionSection>
+        </section>
       )}
 
-      <MotionSection className="mt-6">
+      <MotionSection>
         <InlineAlert variant="info" title="How it works">
           Recommendations consider your study plan, pending reviews, weak areas, exam proximity, and engagement patterns.
           Check back regularly for updated guidance.

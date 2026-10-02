@@ -176,12 +176,12 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Term — primary key, always required */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Term <span className="text-danger">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Term <span className="text-danger-strong">*</span></label>
               <Input required aria-label="Term" value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Definition <span className="text-danger">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Definition <span className="text-danger-strong">*</span></label>
               <textarea
                 required
                 aria-label="Definition"
@@ -205,7 +205,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Category <span className="text-danger">*</span></label>
+                <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Category <span className="text-danger-strong">*</span></label>
                 <select required aria-label="Category" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                 </select>

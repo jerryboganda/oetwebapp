@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft, CheckCircle2, Circle, GraduationCap } from 'lucide-react';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { MarkdownContent } from '@/components/ui/markdown-content';
-import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { apiClient } from '@/lib/api';
 
@@ -37,6 +41,20 @@ const STEPS = [
   { key: 'quiz', label: '✅ Mini-quiz', minutes: 2 },
 ] as const;
 
+// Each step's own progress field. Building `${key}Completed` only matched the
+// three drills, so Watch, Read and Mini-quiz never showed as done.
+function isStepDone(progress: LessonDetail['progress'], key: (typeof STEPS)[number]['key']): boolean {
+  if (!progress) return false;
+  switch (key) {
+    case 'video': return progress.videoWatched;
+    case 'body': return progress.bodyRead;
+    case 'drill1': return progress.drill1Completed;
+    case 'drill2': return progress.drill2Completed;
+    case 'drill3': return progress.drill3Completed;
+    case 'quiz': return progress.quizScore !== null;
+  }
+}
+
 export default function ListeningLessonPage() {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug ?? '';
@@ -62,9 +80,9 @@ export default function ListeningLessonPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6" aria-busy="true">
+      <div aria-busy="true" className="learner-page-flow">
         <p className="sr-only">Loading lesson…</p>
-        <Skeleton className="h-9 w-2/3 rounded-lg" />
+        <Skeleton className="h-32 rounded-2xl" />
         <CardSkeleton />
       </div>
     );
@@ -72,53 +90,65 @@ export default function ListeningLessonPage() {
 
   if (!lesson) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-bold text-navy">Lesson not found</h1>
-        <Button asChild size="sm">
-          <Link href="/listening/lessons">Back to lesson list</Link>
-        </Button>
-      </div>
+      <EmptyState
+        icon={<GraduationCap className="h-8 w-8" aria-hidden />}
+        title="Lesson not found"
+        action={{ label: 'Back to lesson list', href: '/listening/lessons' }}
+      />
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <header>
-        <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-          Sub-skill {lesson.skillCode}
-        </span>
-        <h1 className="text-3xl font-bold tracking-tight text-navy">{lesson.title}</h1>
-        <p className="mt-1 text-sm text-muted">~{lesson.estimatedMinutes} min</p>
-      </header>
-
-      <ol className="space-y-3">
-        {STEPS.map((step, i) => (
-          <li
-            key={step.key}
-            className="rounded-xl border border-border bg-surface p-4 shadow-sm flex items-center justify-between"
-          >
-            <div>
-              <span className="text-xs font-mono text-muted">Step {i + 1}</span>
-              <p className="font-semibold text-navy">{step.label}</p>
-              <p className="text-xs text-muted">~{step.minutes} min</p>
-            </div>
-            <span className="text-xs text-muted">
-              {lesson.progress?.[(step.key + 'Completed') as keyof typeof lesson.progress]
-                ? '✓'
-                : '·'}
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      <MarkdownContent
-        markdown={lesson.bodyMarkdownEn}
-        className="rounded-2xl border border-border bg-surface p-6 shadow-sm text-navy"
+    <>
+      <LearnerPageHero
+        eyebrow={`Sub-skill ${lesson.skillCode}`}
+        icon={GraduationCap}
+        accent="listening"
+        title={lesson.title}
+        description={`~${lesson.estimatedMinutes} min`}
       />
 
-      <Link href="/listening/lessons" className="text-sm text-primary underline">
-        ← All lessons
+      {/* One card for the step list: rows, not a stack of cards. */}
+      <MotionSection>
+        <Card padding="none">
+          <ol className="divide-y divide-border">
+            {STEPS.map((step, i) => {
+              const done = isStepDone(lesson.progress, step.key);
+              return (
+                <li key={step.key}>
+                  <MotionItem delayIndex={Math.min(i, 5)} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
+                    <div className="min-w-0">
+                      <span className="eyebrow tabular-nums text-muted">Step {i + 1}</span>
+                      <p className="font-semibold text-navy">{step.label}</p>
+                      <p className="text-xs tabular-nums text-muted">~{step.minutes} min</p>
+                    </div>
+                    {done ? (
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" role="img" aria-label="Completed" />
+                    ) : (
+                      <Circle className="h-5 w-5 shrink-0 text-border-hover" aria-hidden />
+                    )}
+                  </MotionItem>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+      </MotionSection>
+
+      <MotionSection>
+        <Card padding="lg">
+          {/* Long-form text: cap the line length, not the page. */}
+          <MarkdownContent markdown={lesson.bodyMarkdownEn} className="max-w-prose text-navy" />
+        </Card>
+      </MotionSection>
+
+      <Link
+        href="/listening/lessons"
+        className="inline-flex min-h-11 w-fit items-center gap-1.5 rounded-control text-sm font-medium text-primary transition-colors hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden />
+        All lessons
       </Link>
-    </div>
+    </>
   );
 }

@@ -4,12 +4,15 @@ import { Suspense, useCallback, useEffect, useState, type ElementType } from 're
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, Info, Landmark, Mail, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { ProofDropzone } from '@/components/billing/proof-dropzone';
@@ -332,13 +335,13 @@ function ManualPaymentContent() {
   return (
     <>
       <LearnerPageHero
-        icon={<Receipt className="h-6 w-6" />}
+        icon={Receipt}
         eyebrow="OET with Dr. Ahmed Hesham"
         title="Submit your payment proof"
         description="Pay with any of the methods below, then upload your screenshot. Access is activated after our team verifies your payment."
       />
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <MotionSection className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-4">
           <PaymentCategory
             title="Payment Inside Egypt"
@@ -355,9 +358,9 @@ function ManualPaymentContent() {
         </div>
 
         {hasOrderContext ? (
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <Card>
             <h2 className="text-base font-semibold text-navy">Submit payment proof</h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 text-sm tabular-nums text-muted">
               {courseName}{orderAmount > 0 ? ` · ${orderAmount} ${currency}` : ''} · activated after admin approval.
             </p>
             {error && <InlineAlert variant="error" className="mt-4">{error}</InlineAlert>}
@@ -404,80 +407,82 @@ function ManualPaymentContent() {
                 reference={reference.trim() || quoteId}
               />
               <Button onClick={handleSubmit} disabled={submitting}>
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="h-4 w-4" aria-hidden="true" />
                 {submitting ? 'Submitting...' : 'Submit'}
               </Button>
             </div>
 
-            <p className="mt-4 flex items-center gap-2 text-xs text-muted">
-              <Mail className="h-3.5 w-3.5" />
+            <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
               Need help? Contact{' '}
               <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-primary hover:underline">
                 {SUPPORT_EMAIL}
               </a>
             </p>
-          </div>
+          </Card>
         ) : (
-          <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+          <Card padding="lg" className="text-center">
             <h2 className="text-base font-semibold text-navy">Pick a package first</h2>
             <p className="mt-2 text-sm text-muted">
               Choose a plan from Subscriptions &amp; Packages, then pick an offline payment method at
               checkout to submit your proof here.
             </p>
-            <Button asChild className="mt-4 font-semibold">
+            <Button asChild className="mt-4">
               <Link href="/subscriptions">Browse Subscriptions &amp; Packages</Link>
             </Button>
             <div className="mt-3 flex justify-center">
               <SendProofOnWhatsAppButton variant="outline" course="" label="Message us on WhatsApp" />
             </div>
-          </div>
+          </Card>
         )}
-      </section>
+      </MotionSection>
 
-      <section className="mt-6 space-y-3">
-        <h2 className="text-lg font-semibold text-navy">Your submissions</h2>
+      <MotionSection delayIndex={1} className="space-y-4">
+        <LearnerSurfaceSectionHeader title="Your submissions" />
         {history === null ? (
-          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full rounded-2xl" />
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted">No submissions yet.</p>
+          <EmptyState icon={<Receipt className="h-8 w-8" />} title="No submissions yet." />
         ) : (
-          <div className="space-y-2">
-            {history.map((row) => (
-              <div key={row.id} className="rounded-lg border border-border bg-surface p-3 text-sm">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium">{row.method.replaceAll('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
-                    <p className="text-xs text-muted">{row.courseName || 'Course not set'} · Ref: {row.reference || '-'}</p>
-                    <p className="text-xs text-muted">{new Date(row.submittedAt).toLocaleString()}</p>
+          <Card padding="none" className="overflow-hidden">
+            <ul className="divide-y divide-border">
+              {history.map((row) => (
+                <li key={row.id} className="p-4 text-sm sm:px-5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold tabular-nums text-navy">{row.method.replaceAll('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
+                      <p className="break-words text-xs text-muted">{row.courseName || 'Course not set'} · Ref: {row.reference || '-'}</p>
+                      <p className="text-xs tabular-nums text-muted">{new Date(row.submittedAt).toLocaleString()}</p>
+                    </div>
+                    <Badge variant={statusVariant(row.status)} className="self-start sm:self-auto">{row.status}</Badge>
                   </div>
-                  <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                </div>
-                {row.status === 'pending' || row.status === 'needs_review' ? (
-                  <p className="mt-2 text-xs text-muted">
-                    Pending admin approval — access will be granted within 12 hours.
-                  </p>
-                ) : null}
-                {row.status === 'rejected' ? (
-                  <div className="mt-2 space-y-2">
-                    <InlineAlert variant="error">
-                      <span className="font-medium">Payment rejected.</span>{' '}
-                      {row.adminNotes?.trim()
-                        ? `Reason: ${row.adminNotes.trim()}`
-                        : 'Please check your payment details and upload a clearer proof.'}
-                    </InlineAlert>
-                    <Button asChild variant="outline" size="sm" className="font-semibold">
-                      <Link href={buildResubmitHref(row)}>
-                        <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                        Fix and resubmit proof
-                      </Link>
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+                  {row.status === 'pending' || row.status === 'needs_review' ? (
+                    <p className="mt-2 text-xs text-muted">
+                      Pending admin approval — access will be granted within 12 hours.
+                    </p>
+                  ) : null}
+                  {row.status === 'rejected' ? (
+                    <div className="mt-3 space-y-2">
+                      <InlineAlert variant="error">
+                        <span className="font-medium">Payment rejected.</span>{' '}
+                        {row.adminNotes?.trim()
+                          ? `Reason: ${row.adminNotes.trim()}`
+                          : 'Please check your payment details and upload a clearer proof.'}
+                      </InlineAlert>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={buildResubmitHref(row)}>
+                          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                          Fix and resubmit proof
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </Card>
         )}
-      </section>
+      </MotionSection>
 
       <Modal open={successOpen} onClose={() => setSuccessOpen(false)} title="Payment submitted">
         <div className="space-y-4">
@@ -527,16 +532,18 @@ function PaymentCategory({
   const rows = methods.filter((method) => method.category === category);
   if (rows.length === 0) return null;
   return (
-    <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-navy">{title}</h2>
-      <div className="mt-4 space-y-3">
+    <Card padding="none" className="overflow-hidden">
+      <h2 className="px-4 pt-4 text-base font-semibold text-navy sm:px-5 sm:pt-5">{title}</h2>
+      <ul className="mt-2 divide-y divide-border">
         {rows.map((method) => {
           const Icon = resolveIcon(method.iconName);
           const qrSrc = qrSrcFor(method);
           return (
-            <div key={method.key} className="rounded-xl border border-border/70 bg-background-light/50 p-4">
+            <li key={method.key} className="p-4 sm:px-5">
               <div className="flex items-start gap-3">
-                <Icon className="mt-0.5 h-5 w-5 text-primary" />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lavender text-primary">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-navy">{method.label}</p>
@@ -546,7 +553,7 @@ function PaymentCategory({
                   {method.meta ? <p className="break-words text-xs text-muted">{method.meta}</p> : null}
                   <p className="mt-2 break-words text-xs text-muted">{method.instructions}</p>
                   {method.referenceRule ? (
-                    <p className="mt-1 break-words text-xs font-medium text-navy/80">
+                    <p className="mt-1 break-words text-xs font-medium text-navy">
                       Payment reference: your full name + course name.
                     </p>
                   ) : null}
@@ -558,10 +565,10 @@ function PaymentCategory({
                   <img src={qrSrc} alt={`${method.label} QR`} className="h-44 w-44 rounded-lg border border-border bg-white object-contain p-2" />
                 </div>
               ) : null}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </section>
+      </ul>
+    </Card>
   );
 }

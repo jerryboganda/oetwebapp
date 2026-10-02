@@ -121,7 +121,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                     <button
                       type="button"
                       onClick={() => removeItem(item.code)}
-                      className="ml-auto text-xs text-danger hover:text-danger/80"
+                      className="ml-auto text-xs text-danger-strong hover:text-danger-strong/80"
                     >
                       Remove
                     </button>

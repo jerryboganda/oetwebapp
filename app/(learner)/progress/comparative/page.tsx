@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Target, BarChart3 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Target, BarChart3, Users } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { ErrorState } from '@/components/ui/empty-error';
+import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -29,83 +32,109 @@ interface ComparativeData {
 
 const apiRequest = apiClient.request;
 
-const TIER_BADGE: Record<string, { label: string; color: string }> = {
-  top10: { label: 'Top 10%', color: 'bg-success/10 text-success' },
-  top25: { label: 'Top 25%', color: 'bg-info/10 text-info' },
-  aboveMedian: { label: 'Above Median', color: 'bg-warning/10 text-warning' },
-  belowMedian: { label: 'Below Median', color: 'bg-danger/10 text-danger' },
+const TIER_BADGE: Record<string, { label: string; variant: BadgeProps['variant'] }> = {
+  top10: { label: 'Top 10%', variant: 'success' },
+  top25: { label: 'Top 25%', variant: 'info' },
+  aboveMedian: { label: 'Above Median', variant: 'warning' },
+  belowMedian: { label: 'Below Median', variant: 'danger' },
 };
 
 export default function ComparativeAnalyticsPage() {
   const [data, setData] = useState<ComparativeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    analytics.track('comparative_analytics_viewed');
+  const load = useCallback(() => {
+    setLoading(true);
+    setFailed(false);
     apiRequest<ComparativeData>('/v1/learner/comparative-analytics')
       .then(setData)
-      .catch(() => setData(null))
+      .catch(() => { setData(null); setFailed(true); })
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    analytics.track('comparative_analytics_viewed');
+    load();
+  }, [load]);
+
   return (
     <>
-      <LearnerPageHero title="Comparative Analytics" description="See how your performance compares to the cohort. Percentile rankings and score gap analysis." />
+      <LearnerPageHero
+        eyebrow="Progress"
+        icon={Users}
+        title="Comparative Analytics"
+        description="See how your performance compares to the cohort. Percentile rankings and score gap analysis."
+      />
 
-      <MotionSection className="space-y-6 max-w-5xl mx-auto">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}</div>
-        ) : !data || data.subtests.length === 0 ? (
-          <Card className="p-8 text-center text-muted"><BarChart3 className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>Complete some practice evaluations to see your comparative analytics.</p></Card>
-        ) : (
-          <>
-            <LearnerSurfaceSectionHeader title="Per-Subtest Ranking" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data.subtests.map(s => {
-                // Backend reports percentile 50 / avg 0 when the 90-day cohort is empty — don't show those as real.
-                const hasCohort = s.cohortSize > 0;
-                const tier = hasCohort ? TIER_BADGE[s.tier] : undefined;
-                return (
-                  <MotionItem key={s.subtestCode}>
-                    <Card className="p-5">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold capitalize">{s.subtestCode}</h3>
-                        {tier && <Badge className={tier.color}>{tier.label}</Badge>}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-hidden="true">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
+        </div>
+      ) : failed ? (
+        <ErrorState onRetry={load} />
+      ) : !data || data.subtests.length === 0 ? (
+        <LearnerEmptyState
+          icon={BarChart3}
+          title="No comparative analytics yet"
+          description="Complete some practice evaluations to see your comparative analytics."
+        />
+      ) : (
+        <MotionSection>
+          <LearnerSurfaceSectionHeader title="Per-Subtest Ranking" className="mb-4" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {data.subtests.map((s, index) => {
+              // Backend reports percentile 50 / avg 0 when the 90-day cohort is empty — don't show those as real.
+              const hasCohort = s.cohortSize > 0;
+              const tier = hasCohort ? TIER_BADGE[s.tier] : undefined;
+              return (
+                <MotionItem key={s.subtestCode} delayIndex={Math.min(index, 5)} className="h-full">
+                  <Card className="h-full">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-lg font-bold capitalize text-navy">{s.subtestCode}</h3>
+                      {tier && <Badge variant={tier.variant}>{tier.label}</Badge>}
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-3 gap-3 text-center">
+                      <div className="min-w-0">
+                        <p className="text-2xl font-bold tabular-nums text-primary">{s.yourScore}</p>
+                        <p className="tile-label text-muted">Your Score</p>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                        <div className="text-center"><p className="text-2xl font-bold text-primary">{s.yourScore}</p><p className="text-xs text-muted">Your Score</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{hasCohort ? s.cohortAverage : '—'}</p><p className="text-xs text-muted">Cohort Avg</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{hasCohort ? `${s.percentile}%` : '—'}</p><p className="text-xs text-muted">Percentile</p></div>
+                      <div className="min-w-0">
+                        <p className="text-2xl font-bold tabular-nums text-navy">{hasCohort ? s.cohortAverage : '—'}</p>
+                        <p className="tile-label text-muted">Cohort Avg</p>
                       </div>
+                      <div className="min-w-0">
+                        <p className="text-2xl font-bold tabular-nums text-navy">{hasCohort ? `${s.percentile}%` : '—'}</p>
+                        <p className="tile-label text-muted">Percentile</p>
+                      </div>
+                    </div>
 
-                      {/* Percentile bar */}
-                      {hasCohort && <div className="mb-3">
-                        <div className="h-3 rounded-full bg-background-light overflow-hidden relative">
-                          <div className="h-full rounded-full bg-gradient-to-r from-danger via-warning to-success" style={{ width: `${s.percentile}%` }} />
-                        </div>
-                        <div className="flex justify-between mt-1"><span className="text-3xs text-muted">0%</span><span className="text-3xs text-muted">50%</span><span className="text-3xs text-muted">100%</span></div>
-                      </div>}
+                    {hasCohort && (
+                      <div className="mb-3">
+                        <ProgressBar value={s.percentile} ariaLabel={`${s.subtestCode} percentile ${s.percentile}%`} size="md" />
+                        <div className="mt-1 flex justify-between text-3xs tabular-nums text-muted"><span>0%</span><span>50%</span><span>100%</span></div>
+                      </div>
+                    )}
 
-                      {s.targetScore && s.gapToTarget !== null && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Target className="w-4 h-4 text-muted" />
-                          <span>Target: {s.targetScore}</span>
-                          <Badge variant={s.gapToTarget <= 0 ? 'default' : 'danger'} className="text-xs">
-                            {s.gapToTarget <= 0 ? 'Target reached!' : `${s.gapToTarget} pts to go`}
-                          </Badge>
-                        </div>
-                      )}
+                    {s.targetScore && s.gapToTarget !== null && (
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-navy">
+                        <Target className="h-4 w-4 text-muted" aria-hidden="true" />
+                        <span className="tabular-nums">Target: {s.targetScore}</span>
+                        <Badge variant={s.gapToTarget <= 0 ? 'default' : 'danger'}>
+                          {s.gapToTarget <= 0 ? 'Target reached!' : `${s.gapToTarget} pts to go`}
+                        </Badge>
+                      </div>
+                    )}
 
-                      <p className="text-xs text-muted mt-2">{hasCohort ? `Based on ${s.cohortSize} scored evaluation${s.cohortSize === 1 ? '' : 's'} in the last 90 days` : 'Not enough cohort data in the last 90 days yet.'}</p>
-                    </Card>
-                  </MotionItem>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </MotionSection>
+                    <p className="mt-2 text-xs text-muted">{hasCohort ? `Based on ${s.cohortSize} scored evaluation${s.cohortSize === 1 ? '' : 's'} in the last 90 days` : 'Not enough cohort data in the last 90 days yet.'}</p>
+                  </Card>
+                </MotionItem>
+              );
+            })}
+          </div>
+        </MotionSection>
+      )}
     </>
   );
 }

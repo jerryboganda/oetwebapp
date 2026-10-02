@@ -46,7 +46,7 @@ export default function AccountPaymentMethodsPage() {
 
       <Card padding="lg" className="text-sm text-muted shadow-none">
         <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-success" aria-hidden="true" />
+          <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-success-strong" aria-hidden="true" />
           <p>
             All payments are encrypted in transit and tokenised by Stripe. We never see your full
             card number or CVV. For receipts and past charges, see your{' '}

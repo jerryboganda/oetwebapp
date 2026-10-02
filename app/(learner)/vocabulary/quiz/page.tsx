@@ -6,15 +6,19 @@ import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2 } from
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { CountUp } from '@/components/ui/count-up';
 import { EmptyState } from '@/components/ui/empty-error';
+import { ProgressBar } from '@/components/ui/progress';
 import { fetchRecallsAudio, fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cn } from '@/lib/utils';
 import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
 
 const QUIZ_FORMATS = [
@@ -177,16 +181,23 @@ function VocabQuizContent() {
 
   return (
     <>
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" aria-label="Back to Vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </Link>
-        <LearnerPageHero title="Vocabulary Quiz" description="Test your medical vocabulary knowledge" icon={HelpCircle} />
-      </div>
+      <LearnerPageHero
+        title="Vocabulary Quiz"
+        description="Test your medical vocabulary knowledge"
+        icon={HelpCircle}
+        aside={(
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/vocabulary">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+              Back to vocabulary
+            </Link>
+          </Button>
+        )}
+      />
 
       {/* Format picker */}
-      <Card className="mb-4 border-border bg-surface p-4">
-        <div className="mb-2 text-xs font-medium uppercase text-muted">Quiz format</div>
+      <Card>
+        <div className="mb-2 eyebrow text-muted">Quiz format</div>
         <div className="flex flex-wrap gap-2">
           {QUIZ_FORMATS.map(fmt => (
             <button
@@ -194,23 +205,24 @@ function VocabQuizContent() {
               type="button"
               aria-pressed={format === fmt.id}
               onClick={() => setFormat(fmt.id)}
-              className={`min-h-9 rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+              className={cn(
+                'inline-flex min-h-11 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-9',
                 format === fmt.id
-                  ? 'bg-primary text-white dark:bg-primary-700'
-                  : 'border border-border bg-background-light text-navy hover:border-primary/30'
-              }`}
+                  ? 'border-primary/30 bg-primary/10 text-primary'
+                  : 'border-border bg-background-light text-navy hover:border-primary/30 hover:text-primary',
+              )}
             >
               {fmt.label}
-              {!fmt.free && <span className="ml-1 opacity-75">• Premium</span>}
+              {!fmt.free && <span className="ms-1 opacity-75">• Premium</span>}
             </button>
           ))}
         </div>
       </Card>
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
       {audioUpgradeModal}
       {premiumBlock && (
-        <InlineAlert variant="info" className="mb-4">
+        <InlineAlert variant="info">
           {premiumBlock}{' '}
           <Link href="/billing" className="font-semibold text-primary hover:underline">
             Upgrade now →
@@ -218,30 +230,35 @@ function VocabQuizContent() {
         </InlineAlert>
       )}
 
+      {/* One question at a time: the quiz keeps a reading-width column. */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="mx-auto w-full max-w-xl space-y-3">
           <Skeleton className="h-48 rounded-2xl" />
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
         </div>
       ) : result ? (
-        <MotionSection className="mx-auto max-w-md py-12 text-center">
-          <Card className="border-border bg-surface p-8">
-            <div className="text-6xl font-bold text-navy mb-2">{result.correctCount}/{result.termsQuizzed}</div>
-            <div className="text-xl text-muted mb-4">{Math.round(result.score)}% correct</div>
-            <div className="text-xs text-muted mb-2">
+        <MotionSection className="mx-auto w-full max-w-xl">
+          <Card padding="lg" className="text-center">
+            <div className="mb-2 text-6xl font-bold tabular-nums text-navy">
+              <CountUp value={result.correctCount} suffix={`/${result.termsQuizzed}`} />
+            </div>
+            <div className="mb-4 text-xl tabular-nums text-muted">
+              <CountUp value={Math.round(result.score)} suffix="%" /> correct
+            </div>
+            <div className="mb-2 text-xs tabular-nums text-muted">
               {result.durationSeconds}s · {result.format.replace(/_/g, ' ')}
             </div>
             {result.xpAwarded > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-4 py-2 text-sm font-medium text-warning mb-4">
+              <Badge variant="warning" size="md" className="mb-4 tabular-nums">
                 +{result.xpAwarded} XP earned
-              </div>
+              </Badge>
             )}
             {result.newlyMasteredTermIds?.length > 0 && (
-              <div className="mb-6 rounded-2xl bg-success/10 p-3 text-sm text-success">
+              <InlineAlert variant="success" live="polite" className="mb-6 text-start">
                 🎉 You mastered {result.newlyMasteredTermIds.length} new term{result.newlyMasteredTermIds.length > 1 ? 's' : ''}!
-              </div>
+              </InlineAlert>
             )}
-            <div className="flex flex-wrap gap-3 justify-center">
+            <div className="flex flex-wrap justify-center gap-3">
               <Button variant="outline" asChild>
                 <Link href="/vocabulary">Back to Vocabulary</Link>
               </Button>
@@ -255,7 +272,7 @@ function VocabQuizContent() {
           </Card>
         </MotionSection>
       ) : q ? (
-        <div className="mx-auto max-w-xl">
+        <MotionSection className="mx-auto w-full max-w-xl space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="Quiz Progress"
             title={q.format.replace(/_/g, ' ')}
@@ -266,17 +283,14 @@ function VocabQuizContent() {
               q.format === 'synonym_match' ? 'Select the best synonym for the term.' :
               'Choose the best meaning for the medical term.'
             }
-            className="mb-4"
           />
-          <div className="mb-3 flex items-center justify-between text-sm text-muted">
-            <span>Question {current + 1} of {questions.length}</span>
-          </div>
-          <div className="mb-6 h-1.5 w-full rounded-full bg-background-light">
-            <div className="h-1.5 rounded-full bg-primary transition-[width,background-color] duration-300" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
+          <div className="space-y-2">
+            <div className="text-sm tabular-nums text-muted">Question {current + 1} of {questions.length}</div>
+            <ProgressBar value={current + 1} max={questions.length} ariaLabel={`Question ${current + 1} of ${questions.length}`} />
           </div>
 
-          <Card className="mb-4 border-border bg-surface p-6">
-            <div className="mb-2 text-xs font-medium uppercase text-muted">
+          <Card padding="lg">
+            <div className="mb-2 eyebrow text-muted">
               {q.format === 'context_usage' ? 'Context Usage' : q.format === 'synonym_match' ? 'Synonym' : q.format === 'fill_blank' ? 'Fill the blank' : q.format === 'audio_recognition' ? 'Audio' : 'What does this word mean?'}
             </div>
             <div className="text-2xl font-bold text-navy" role="heading" aria-level={2}>
@@ -284,11 +298,12 @@ function VocabQuizContent() {
             </div>
             {q.format === 'audio_recognition' && (
               <button
+                type="button"
                 onClick={() => void playAudio(q.termId)}
-                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="pressable mt-4 inline-flex min-h-11 items-center gap-2 rounded-full border border-primary bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Play audio again"
               >
-                <Volume2 className="h-4 w-4" /> Play audio
+                <Volume2 className="h-4 w-4" aria-hidden="true" /> Play audio
               </button>
             )}
           </Card>
@@ -298,23 +313,24 @@ function VocabQuizContent() {
               {q.options.map((option, idx) => {
                 let cls = 'border border-border bg-surface text-navy hover:border-primary/30 hover:bg-background-light';
                 if (revealed) {
-                  if (idx === q.correctIndex) cls = 'border border-success/30 bg-success/10 text-success';
-                  else if (idx === selectedOption) cls = 'border border-danger/30 bg-danger/10 text-danger';
+                  if (idx === q.correctIndex) cls = 'border border-success/30 bg-success/10 text-success-strong';
+                  else if (idx === selectedOption) cls = 'border border-danger/30 bg-danger/10 text-danger-strong';
                   else cls = 'border border-border bg-background-light text-muted opacity-70';
                 }
                 return (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => handleSelect(idx)}
                     disabled={revealed}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cls}`}
+                    className={`pressable flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cls}`}
                   >
-                    <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold" aria-hidden="true">
+                    <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold tabular-nums" aria-hidden="true">
                       {idx + 1}
                     </span>
                     <span className="text-sm">{option}</span>
-                    {revealed && idx === q.correctIndex && <CheckCircle2 className="w-4 h-4 text-success ml-auto" />}
-                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="w-4 h-4 text-danger ml-auto" />}
+                    {revealed && idx === q.correctIndex && <CheckCircle2 className="ms-auto h-4 w-4 shrink-0 text-success-strong" role="img" aria-label="Correct" />}
+                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="ms-auto h-4 w-4 shrink-0 text-danger-strong" role="img" aria-label="Incorrect" />}
                   </button>
                 );
               })}
@@ -330,7 +346,7 @@ function VocabQuizContent() {
                 onKeyDown={e => { if (e.key === 'Enter' && !revealed) handleTextSubmit(); }}
                 disabled={revealed}
                 placeholder="Type your answer…"
-                className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-base text-navy focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                className="min-h-11 w-full rounded-2xl border border-border bg-surface px-4 py-3 text-base text-navy focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                 aria-label="Your answer"
                 autoFocus
               />
@@ -340,23 +356,23 @@ function VocabQuizContent() {
                 </Button>
               )}
               {revealed && (
-                <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                <InlineAlert variant={answers[q.termId]?.correct ? 'success' : 'error'} live="polite">
                   {answers[q.termId]?.correct ? 'Correct!' : (<>
                     Not quite. The correct answer is <strong>{q.correctAnswer}</strong>.
                   </>)}
-                </div>
+                </InlineAlert>
               )}
             </div>
           )}
 
           {revealed && (
-            <MotionSection className="mt-4 flex justify-end">
+            <MotionSection className="flex justify-end">
               <Button onClick={nextQuestion} disabled={submitting} autoFocus>
                 {current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question →'}
               </Button>
             </MotionSection>
           )}
-        </div>
+        </MotionSection>
       ) : !premiumBlock ? (
         <EmptyState
           icon={<HelpCircle className="h-7 w-7" aria-hidden="true" />}

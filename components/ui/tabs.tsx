@@ -19,9 +19,11 @@ interface TabsProps {
   onChange: (id: string) => void;
   className?: string;
   scrollable?: boolean;
+  /** Names the tab list for screen readers when no visible heading does. */
+  ariaLabel?: string;
 }
 
-export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }: TabsProps) {
+export function Tabs({ tabs, activeTab, onChange, className, scrollable = true, ariaLabel }: TabsProps) {
   const reducedMotion = useReducedMotionConfig() ?? false;
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // Per-instance id: a shared layoutId made the active pill fly between
@@ -63,6 +65,7 @@ export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }
         className,
       )}
       role="tablist"
+      aria-label={ariaLabel}
     >
       {tabs.map((tab, index) => (
         <button

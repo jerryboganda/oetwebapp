@@ -25,7 +25,13 @@ export type LearnerSurfaceAccent =
   | 'purple'
   | 'rose'
   | 'emerald'
-  | 'slate';
+  | 'slate'
+  // Sub-test identity (DESIGN.md §2 skill-* tokens), not status: use these for
+  // a module's own heroes and cards instead of a hue that reads as a status.
+  | 'listening'
+  | 'reading'
+  | 'writing'
+  | 'speaking';
 
 export interface LearnerSurfaceMetaItem {
   label: string;
@@ -55,7 +61,8 @@ export interface LearnerSurfaceCardModel {
 
 export interface LearnerPageHeroModel {
   title: string;
-  description: string;
+  /** Optional: pages with no supporting sentence leave it out (no empty paragraph). */
+  description?: string;
   eyebrow?: string;
   icon?: ElementType | ReactNode;
   accent?: LearnerSurfaceAccent;

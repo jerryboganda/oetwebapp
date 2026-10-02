@@ -56,7 +56,7 @@ export function CopyField({
         className={cn(
           'inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-semibold transition sm:px-2.5',
           copied
-            ? 'border-success/40 bg-success/10 text-success'
+            ? 'border-success/40 bg-success/10 text-success-strong'
             : 'border-border text-muted hover:border-primary/50 hover:text-primary',
         )}
       >

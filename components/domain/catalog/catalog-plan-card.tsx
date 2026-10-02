@@ -21,13 +21,13 @@ import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 export const CATALOG_ACCENT_TILE: Record<string, string> = {
   primary: 'bg-primary/10 text-primary',
   navy: 'bg-navy/10 text-navy',
-  amber: 'bg-amber-50 text-amber-700',
-  blue: 'bg-blue-50 text-blue-700',
-  indigo: 'bg-indigo-50 text-indigo-700',
-  purple: 'bg-purple-50 text-purple-700',
-  rose: 'bg-rose-50 text-rose-700',
-  emerald: 'bg-emerald-50 text-emerald-700',
-  slate: 'bg-slate-100 text-slate-700',
+  amber: 'bg-warning/10 text-warning-strong',
+  blue: 'bg-info/10 text-info',
+  indigo: 'bg-lavender text-primary-dark',
+  purple: 'bg-lavender text-primary-dark',
+  rose: 'bg-danger/10 text-danger-strong',
+  emerald: 'bg-success/10 text-success-strong',
+  slate: 'bg-background-light text-navy',
 };
 
 export interface CatalogPlanCardProps {
@@ -55,7 +55,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
       className={cn('flex h-full flex-col overflow-hidden', presentation.featured && 'ring-2 ring-primary/40 shadow-clinical')}
     >
       {presentation.featured ? (
-        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white">
+        <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 eyebrow text-white">
           <Sparkles className="h-3.5 w-3.5" /> {presentation.badgeLabel || 'Most popular'}
         </div>
       ) : null}
@@ -73,7 +73,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         </div>
         <div>
           <h3 className="text-lg font-bold leading-snug text-navy">{websitePackage?.name ?? plan.name}</h3>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wide text-muted">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 eyebrow text-muted">
             {websitePackage ? (
               websitePackage.metaChips.map((chip) => <span key={chip}>{chip}</span>)
             ) : (
@@ -95,7 +95,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
           <ul className="space-y-1.5 text-sm text-navy">
             {bullets.map((bullet) => (
               <li key={bullet} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                 <span>{bullet}</span>
               </li>
             ))}
@@ -112,7 +112,7 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         ) : null}
         <div className="mt-auto pt-1">
           {owned ? (
-            <span className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-2.5 text-sm font-semibold text-success">
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-success/10 px-4 py-2.5 text-sm font-semibold text-success-strong">
               <CheckCircle2 className="h-4 w-4" /> Active on your account
             </span>
           ) : (

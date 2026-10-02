@@ -170,7 +170,7 @@ function RecommendedAreasInput({
             <button
               type="button"
               onClick={() => remove(tag)}
-              className="ml-0.5 text-primary/60 hover:text-danger"
+              className="ml-0.5 text-primary/60 hover:text-danger-strong"
               aria-label={`Remove ${tag}`}
             >
               &times;
@@ -244,7 +244,7 @@ function MetadataCard({
 
       {(bundle.requiresAdminReview || (bundle.invalidCount ?? 0) > 0) && (
         <div
-          className="mt-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          className="mt-3 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-strong"
           data-testid="listening-expert-admin-review-warning"
         >
           <p className="font-bold uppercase tracking-widest">Admin review required</p>
@@ -278,7 +278,7 @@ function MetadataCard({
       </div>
 
       {bundle.existingFeedback && (
-        <div className="mt-4 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+        <div className="mt-4 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-xs text-success-strong">
           Feedback already submitted on{' '}
           {new Date(bundle.existingFeedback.submittedAt).toLocaleDateString()}
         </div>
@@ -364,11 +364,11 @@ function QuestionCard({
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
           {item.isInvalid ? (
-            <XCircle className="h-4 w-4 text-warning" />
+            <XCircle className="h-4 w-4 text-warning-strong" />
           ) : item.isCorrect ? (
-            <CheckCircle2 className="h-4 w-4 text-success" />
+            <CheckCircle2 className="h-4 w-4 text-success-strong" />
           ) : (
-            <XCircle className="h-4 w-4 text-danger" />
+            <XCircle className="h-4 w-4 text-danger-strong" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -390,7 +390,7 @@ function QuestionCard({
             <div>
               <span className="font-semibold text-muted">Your answer: </span>
               <span
-                className={item.isInvalid ? 'text-warning' : item.isCorrect ? 'text-success' : 'text-danger'}
+                className={item.isInvalid ? 'text-warning-strong' : item.isCorrect ? 'text-success-strong' : 'text-danger-strong'}
               >
                 {item.userAnswer ?? 'N/A'}
               </span>
@@ -403,7 +403,7 @@ function QuestionCard({
 
           {/* WORK-STREAM 7a — distractor taxonomy + Part C speaker-attitude */}
           {item.isInvalid && (
-            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-warning">
+            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-warning-strong">
               This answer is held for administrator review; automated correctness is unavailable.
             </p>
           )}

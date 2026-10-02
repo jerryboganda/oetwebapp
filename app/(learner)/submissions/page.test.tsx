@@ -134,7 +134,7 @@ describe('Submission history page', () => {
     renderWithRouter(<SubmissionHistoryPage />);
 
     const row = (await screen.findByText('Full Speaking Mock')).closest('li') as HTMLElement;
-    expect(within(row).getByText('Marking in progress')).toHaveClass('font-bold', 'text-warning');
+    expect(within(row).getByText('Marking in progress')).toHaveClass('font-bold', 'text-warning-strong');
     expect(row).not.toHaveTextContent('/500');
   });
 

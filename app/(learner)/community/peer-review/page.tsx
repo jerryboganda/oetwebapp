@@ -1,18 +1,21 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Send, ClipboardList, Star, CheckCircle, Clock, ArrowRight } from 'lucide-react';
+import { FileText, Send, ClipboardList, Star, Clock, ArrowRight } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/form-controls';
+import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { apiClient } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 type Tab = 'submit' | 'available' | 'my-submissions' | 'my-reviews';
 
@@ -40,12 +43,30 @@ const STATUS_VARIANTS: Record<string, 'default' | 'success' | 'warning' | 'dange
   expired: 'danger',
 };
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'submit', label: 'Submit for Review' },
-  { key: 'available', label: 'Available Reviews' },
-  { key: 'my-submissions', label: 'My Submissions' },
-  { key: 'my-reviews', label: 'My Reviews' },
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'submit', label: 'Submit for Review' },
+  { id: 'available', label: 'Available Reviews' },
+  { id: 'my-submissions', label: 'My Submissions' },
+  { id: 'my-reviews', label: 'My Reviews' },
 ];
+
+// Sub-test identity, not status (DESIGN.md §2).
+const SKILL_CHIP: Record<string, string> = {
+  writing: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing',
+  speaking: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking',
+};
+
+function SubtestBadge({ code }: { code: string }) {
+  return <Badge variant="outline" className={cn('capitalize', SKILL_CHIP[code.toLowerCase()])}>{code}</Badge>;
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
+      {[...Array(3)].map((_, i) => <Skeleton aria-hidden key={i} className="h-20 rounded-2xl" />)}
+    </div>
+  );
+}
 
 export default function PeerReviewPage() {
   const [activeTab, setActiveTab] = useState<Tab>('submit');
@@ -121,238 +142,183 @@ export default function PeerReviewPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Community"
-          title="Peer Review Exchange"
-          description="Submit your writing or speaking practice for peer feedback, and help others improve by reviewing their work."
-          icon={FileText}
-          highlights={[
-            { icon: Send, label: 'Submit', value: 'Get peer feedback' },
-            { icon: ClipboardList, label: 'Review', value: 'Help others improve' },
-            { icon: Star, label: 'Rating', value: '1–5 star system' },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Community"
+        title="Peer Review Exchange"
+        description="Submit your writing or speaking practice for peer feedback, and help others improve by reviewing their work."
+        icon={FileText}
+      />
 
-        {/* Tab Navigation */}
-        <div className="flex gap-1 border-b border-border overflow-x-auto">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              aria-pressed={activeTab === tab.key}
-              className={`min-h-11 px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
-                activeTab === tab.key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted hover:text-navy'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <Tabs tabs={TABS} activeTab={activeTab} onChange={(id) => setActiveTab(id as Tab)} />
 
-        {error && (
-          <InlineAlert
-            variant="error"
-            action={activeTab !== 'submit'
-              ? <Button size="sm" variant="outline" onClick={() => void loadTab(activeTab)}>Retry</Button>
-              : undefined}
+      {error && (
+        <InlineAlert
+          variant="error"
+          action={activeTab !== 'submit'
+            ? <Button size="sm" variant="outline" onClick={() => void loadTab(activeTab)}>Retry</Button>
+            : undefined}
+        >
+          {error}
+        </InlineAlert>
+      )}
+
+      <TabPanel id="submit" activeTab={activeTab}>
+        <Card padding="lg" className="space-y-5">
+          <LearnerSurfaceSectionHeader title="Submit Your Work for Peer Review" />
+
+          <div className="space-y-2" role="group" aria-labelledby="peer-review-subtest-label">
+            <p id="peer-review-subtest-label" className="text-sm font-semibold tracking-tight text-navy">
+              Subtest
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(['writing', 'speaking'] as const).map((code) => (
+                <Button
+                  key={code}
+                  size="sm"
+                  variant={subtestCode === code ? 'primary' : 'outline'}
+                  aria-pressed={subtestCode === code}
+                  onClick={() => setSubtestCode(code)}
+                  className="text-sm"
+                >
+                  {code === 'writing' ? 'Writing' : 'Speaking'}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <Textarea
+            id="peer-review-submission"
+            label="Your Submission"
+            value={submissionText}
+            onChange={(e) => setSubmissionText(e.target.value)}
+            placeholder={subtestCode === 'writing'
+              ? 'Paste your referral letter or case notes here...'
+              : 'Describe your speaking scenario and transcript here...'}
+            className="min-h-[200px] resize-y"
+          />
+
+          {submitSuccess && (
+            <InlineAlert variant="success" live="polite">
+              Submitted successfully! You will be notified when feedback is available.
+            </InlineAlert>
+          )}
+
+          <Button
+            variant="primary"
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={!submissionText.trim()}
           >
-            {error}
-          </InlineAlert>
-        )}
+            {submitting ? 'Submitting...' : 'Submit for Peer Review'}
+          </Button>
+        </Card>
+      </TabPanel>
 
-        {/* Submit Tab */}
-        {activeTab === 'submit' && (
-          <Card className="p-6 space-y-4">
-            <LearnerSurfaceSectionHeader title="Submit Your Work for Peer Review" />
-
-            <div className="space-y-3" role="group" aria-labelledby="peer-review-subtest-label">
-              <p id="peer-review-subtest-label" className="block text-sm font-medium text-navy">
-                Subtest
-              </p>
-              <div className="flex gap-3">
-                {(['writing', 'speaking'] as const).map((code) => (
-                  <Button
-                    key={code}
-                    size="sm"
-                    variant={subtestCode === code ? 'primary' : 'outline'}
-                    aria-pressed={subtestCode === code}
-                    onClick={() => setSubtestCode(code)}
-                    className="text-sm"
-                  >
-                    {code === 'writing' ? 'Writing' : 'Speaking'}
+      <TabPanel id="available" activeTab={activeTab}>
+        {loading ? (
+          <ListSkeleton />
+        ) : available.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList className="h-8 w-8" />}
+            title="No reviews available"
+            description="Check back later. Peers are submitting new work all the time."
+          />
+        ) : (
+          <div className="space-y-3">
+            {available.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <Card padding="md" className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <SubtestBadge code={item.subtestCode} />
+                    <span className="flex items-center gap-1 text-xs text-muted tabular-nums">
+                      <Clock className="h-3 w-3" aria-hidden="true" />
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <Button size="sm" variant="primary" onClick={() => handleClaim(item.id)}>
+                    Claim <ArrowRight className="h-3 w-3 rtl:rotate-180" aria-hidden="true" />
                   </Button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="peer-review-submission" className="block text-sm font-medium text-navy">
-                Your Submission
-              </label>
-              <textarea
-                id="peer-review-submission"
-                value={submissionText}
-                onChange={(e) => setSubmissionText(e.target.value)}
-                placeholder={subtestCode === 'writing'
-                  ? 'Paste your referral letter or case notes here...'
-                  : 'Describe your speaking scenario and transcript here...'}
-                className="w-full min-h-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
-              />
-            </div>
-
-            {submitSuccess && (
-              <div role="status" className="flex items-center gap-2 text-sm text-success">
-                <CheckCircle className="w-4 h-4" aria-hidden="true" />
-                Submitted successfully! You will be notified when feedback is available.
-              </div>
-            )}
-
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={submitting}
-              disabled={!submissionText.trim()}
-            >
-              {submitting ? 'Submitting...' : 'Submit for Peer Review'}
-            </Button>
-          </Card>
-        )}
-
-        {/* Available Reviews Tab */}
-        {activeTab === 'available' && (
-          <div className="space-y-4">
-            <LearnerSurfaceSectionHeader title="Available Reviews" />
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-              </div>
-            ) : available.length === 0 ? (
-              <EmptyState
-                title="No reviews available"
-                description="Check back later. Peers are submitting new work all the time."
-              />
-            ) : (
-              <MotionSection className="space-y-3">
-                {available.map((item) => (
-                  <MotionItem key={item.id}>
-                    <Card className="p-4 flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={STATUS_VARIANTS[item.status] ?? 'default'}>
-                            {item.subtestCode}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" aria-hidden="true" />
-                            {new Date(item.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                      <Button size="sm" variant="primary" onClick={() => handleClaim(item.id)}>
-                        Claim <ArrowRight className="w-3 h-3" aria-hidden="true" />
-                      </Button>
-                    </Card>
-                  </MotionItem>
-                ))}
-              </MotionSection>
-            )}
+                </Card>
+              </MotionItem>
+            ))}
           </div>
         )}
+      </TabPanel>
 
-        {/* My Submissions Tab */}
-        {activeTab === 'my-submissions' && (
-          <div className="space-y-4">
-            <LearnerSurfaceSectionHeader title="My Submissions" />
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-              </div>
-            ) : mySubmissions.length === 0 ? (
-              <EmptyState
-                title="No submissions yet"
-                description="Submit your writing or speaking practice to get peer feedback."
-                action={{ label: 'Submit for Review', onClick: () => setActiveTab('submit') }}
-              />
-            ) : (
-              <MotionSection className="space-y-3">
-                {mySubmissions.map((item) => (
-                  <MotionItem key={item.id}>
-                    <Link href={`/community/peer-review/${item.id}`} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                      <Card className="p-4 hover:shadow-clinical transition-shadow duration-200">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={STATUS_VARIANTS[item.status] ?? 'default'}>
-                              {item.status}
-                            </Badge>
-                            <Badge variant="default">{item.subtestCode}</Badge>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(item.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {item.feedback && (
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <div className="flex items-center gap-1 text-sm">
-                              <Star className="w-4 h-4 fill-warning text-warning" aria-hidden="true" />
-                              <span className="font-medium">{item.feedback.rating}/5</span>
-                              <span className="text-muted-foreground ml-2 truncate">
-                                {item.feedback.comments}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </Card>
-                    </Link>
-                  </MotionItem>
-                ))}
-              </MotionSection>
-            )}
+      <TabPanel id="my-submissions" activeTab={activeTab}>
+        {loading ? (
+          <ListSkeleton />
+        ) : mySubmissions.length === 0 ? (
+          <EmptyState
+            icon={<Send className="h-8 w-8" />}
+            title="No submissions yet"
+            description="Submit your writing or speaking practice to get peer feedback."
+            action={{ label: 'Submit for Review', onClick: () => setActiveTab('submit') }}
+          />
+        ) : (
+          <div className="space-y-3">
+            {mySubmissions.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <CardLink href={`/community/peer-review/${item.id}`} prefetch={false}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={STATUS_VARIANTS[item.status] ?? 'default'} className="capitalize">
+                        {item.status}
+                      </Badge>
+                      <SubtestBadge code={item.subtestCode} />
+                    </div>
+                    <span className="text-xs text-muted tabular-nums">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {item.feedback && (
+                    <div className="mt-3 flex min-w-0 items-center gap-1 border-t border-border pt-3 text-sm">
+                      <Star className="h-4 w-4 shrink-0 fill-warning text-warning-strong" aria-hidden="true" />
+                      <span className="font-medium tabular-nums text-navy">{item.feedback.rating}/5</span>
+                      <span className="ms-2 truncate text-muted">
+                        {item.feedback.comments}
+                      </span>
+                    </div>
+                  )}
+                </CardLink>
+              </MotionItem>
+            ))}
           </div>
         )}
+      </TabPanel>
 
-        {/* My Reviews Tab */}
-        {activeTab === 'my-reviews' && (
-          <div className="space-y-4">
-            <LearnerSurfaceSectionHeader title="My Reviews" />
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-              </div>
-            ) : myReviews.length === 0 ? (
-              <EmptyState
-                title="No reviews yet"
-                description="Claim available reviews to help peers and build your review reputation."
-                action={{ label: 'Browse Available Reviews', onClick: () => setActiveTab('available') }}
-              />
-            ) : (
-              <MotionSection className="space-y-3">
-                {myReviews.map((item) => (
-                  <MotionItem key={item.id}>
-                    <Link href={`/community/peer-review/${item.id}`} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                      <Card className="p-4 hover:shadow-clinical transition-shadow duration-200">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={STATUS_VARIANTS[item.status] ?? 'default'}>
-                              {item.status}
-                            </Badge>
-                            <Badge variant="default">{item.subtestCode}</Badge>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {item.claimedAt ? new Date(item.claimedAt).toLocaleDateString() : ''}
-                          </span>
-                        </div>
-                      </Card>
-                    </Link>
-                  </MotionItem>
-                ))}
-              </MotionSection>
-            )}
+      <TabPanel id="my-reviews" activeTab={activeTab}>
+        {loading ? (
+          <ListSkeleton />
+        ) : myReviews.length === 0 ? (
+          <EmptyState
+            icon={<Star className="h-8 w-8" />}
+            title="No reviews yet"
+            description="Claim available reviews to help peers and build your review reputation."
+            action={{ label: 'Browse Available Reviews', onClick: () => setActiveTab('available') }}
+          />
+        ) : (
+          <div className="space-y-3">
+            {myReviews.map((item, index) => (
+              <MotionItem key={item.id} delayIndex={Math.min(index, 5)}>
+                <CardLink href={`/community/peer-review/${item.id}`} prefetch={false}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={STATUS_VARIANTS[item.status] ?? 'default'} className="capitalize">
+                        {item.status}
+                      </Badge>
+                      <SubtestBadge code={item.subtestCode} />
+                    </div>
+                    <span className="text-xs text-muted tabular-nums">
+                      {item.claimedAt ? new Date(item.claimedAt).toLocaleDateString() : ''}
+                    </span>
+                  </div>
+                </CardLink>
+              </MotionItem>
+            ))}
           </div>
         )}
-      </div>
+      </TabPanel>
     </>
   );
 }

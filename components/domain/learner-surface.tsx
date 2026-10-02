@@ -24,8 +24,8 @@ const accentTokens = {
     eyebrow: 'bg-navy/10 text-navy border-navy/20',
   },
   amber: {
-    icon: 'bg-warning/10 text-warning',
-    eyebrow: 'bg-warning/10 text-warning border-warning/20',
+    icon: 'bg-warning/10 text-warning-strong',
+    eyebrow: 'bg-warning/10 text-warning-strong border-warning/20',
   },
   blue: {
     icon: 'bg-info/10 text-info',
@@ -40,16 +40,32 @@ const accentTokens = {
     eyebrow: 'bg-primary/10 text-primary border-primary/20',
   },
   rose: {
-    icon: 'bg-danger/10 text-danger',
-    eyebrow: 'bg-danger/10 text-danger border-danger/20',
+    icon: 'bg-danger/10 text-danger-strong',
+    eyebrow: 'bg-danger/10 text-danger-strong border-danger/20',
   },
   emerald: {
-    icon: 'bg-success/10 text-success',
-    eyebrow: 'bg-success/10 text-success border-success/20',
+    icon: 'bg-success/10 text-success-strong',
+    eyebrow: 'bg-success/10 text-success-strong border-success/20',
   },
   slate: {
     icon: 'bg-background-light text-muted',
     eyebrow: 'bg-background-light text-muted border-border',
+  },
+  listening: {
+    icon: 'bg-skill-listening/10 text-skill-listening',
+    eyebrow: 'bg-skill-listening/10 text-skill-listening border-skill-listening/20',
+  },
+  reading: {
+    icon: 'bg-skill-reading/10 text-skill-reading',
+    eyebrow: 'bg-skill-reading/10 text-skill-reading border-skill-reading/20',
+  },
+  writing: {
+    icon: 'bg-skill-writing/10 text-skill-writing',
+    eyebrow: 'bg-skill-writing/10 text-skill-writing border-skill-writing/20',
+  },
+  speaking: {
+    icon: 'bg-skill-speaking/10 text-skill-speaking',
+    eyebrow: 'bg-skill-speaking/10 text-skill-speaking border-skill-speaking/20',
   },
 } as const;
 
@@ -67,6 +83,9 @@ function renderIcon(icon: ElementType | ReactNode | undefined, className?: strin
   return <Icon className={className} />;
 }
 
+// The arrow nudges toward where the action goes (hover devices only; mirrored for RTL).
+const actionArrowClassName = 'h-4 w-4 transition-transform duration-200 ease-standard group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none';
+
 function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | LearnerSurfaceCardModel['secondaryAction'], fullWidth = false) {
   if (!action) return null;
 
@@ -74,19 +93,19 @@ function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | Learner
 
   if (action.href) {
     return (
-      <Button asChild fullWidth={fullWidth} variant={variant}>
+      <Button asChild fullWidth={fullWidth} variant={variant} className="group">
         <Link href={action.href}>
           {action.label}
-          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+          <ArrowRight className={actionArrowClassName} aria-hidden="true" />
         </Link>
       </Button>
     );
   }
 
   return (
-    <Button fullWidth={fullWidth} variant={variant} onClick={action.onClick}>
+    <Button fullWidth={fullWidth} variant={variant} onClick={action.onClick} className="group">
       {action.label}
-      <ArrowRight className="w-4 h-4" aria-hidden="true" />
+      <ArrowRight className={actionArrowClassName} aria-hidden="true" />
     </Button>
   );
 }
@@ -144,7 +163,7 @@ export function LearnerSurfaceSectionHeader({
 }) {
   return (
     <div className={cn('flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4', className)}>
-      <div>
+      <div className="min-w-0">
         {eyebrow ? (
           <p className="eyebrow mb-1 text-muted sm:mb-1.5">{eyebrow}</p>
         ) : null}
@@ -192,7 +211,7 @@ export function LearnerPageHero({
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-gradient-to-b from-background-light/60 to-surface px-3 py-3 shadow-clinical sm:px-6 sm:py-6">
+    <section className="rounded-2xl border border-border bg-gradient-to-b from-background-light/60 to-surface px-3 py-3 shadow-clinical sm:rounded-surface sm:px-6 sm:py-6">
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2.5 sm:gap-4">
@@ -202,20 +221,20 @@ export function LearnerPageHero({
             </div>
           ) : null}
             <div className="min-w-0">
-              {eyebrow ? <p className="mb-0.5 text-3xs font-bold uppercase tracking-[0.16em] text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
+              {eyebrow ? <p className="mb-0.5 tile-label text-muted sm:mb-1.5 sm:text-2xs sm:tracking-[0.18em]">{eyebrow}</p> : null}
               <h1 className="text-balance text-lg font-bold leading-tight tracking-tight text-navy sm:text-3xl">{title}</h1>
-              <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p>
+              {description ? <p className="mt-0.5 max-w-3xl text-xs leading-snug text-muted sm:mt-2 sm:text-sm sm:leading-6">{description}</p> : null}
             </div>
           </div>
-
-          {highlights.length > 0 ? (
-            <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2.5">
-              {highlights.map(renderHighlight)}
-            </div>
-          ) : null}
         </div>
         {aside ? <div className="shrink-0 lg:max-w-sm">{aside}</div> : null}
       </div>
+      {/* Full width under both columns, so an aside never leaves the row short. */}
+      {highlights.length > 0 ? (
+        <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2.5">
+          {highlights.map(renderHighlight)}
+        </div>
+      ) : null}
       {footer ? <div className="mt-3 border-t border-border pt-3 sm:mt-4 sm:pt-4">{footer}</div> : null}
     </section>
   );
@@ -242,8 +261,8 @@ export function LearnerSurfaceCard({
           <div className="flex items-start justify-between gap-3">
             <div>
               {card.eyebrow ? (
-                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold uppercase tracking-wider sm:text-xs', palette.eyebrow)}>
-                  {EyebrowIcon ? <EyebrowIcon className="w-3.5 h-3.5" /> : null}
+                <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 eyebrow sm:text-xs', palette.eyebrow)}>
+                  {EyebrowIcon ? <EyebrowIcon className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                   {card.eyebrow}
                 </div>
               ) : null}

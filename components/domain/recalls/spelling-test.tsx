@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, RotateCcw, SpellCheck, Volume2, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { cn } from '@/lib/utils';
 import {
   checkRecallSpelling,
   fetchRecallsAudio,
@@ -32,6 +35,16 @@ const SIZE_OPTIONS: { key: RecallsSpellingTestSize; label: string }[] = [
   { key: '30', label: '30' },
   { key: 'all', label: 'All Words' },
 ];
+
+// Option pills: tint when pressed, 44px tall on touch layouts.
+function optionClass(active: boolean) {
+  return cn(
+    'inline-flex min-h-11 items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8',
+    active
+      ? 'border-primary/30 bg-primary/10 text-primary'
+      : 'border-border bg-surface text-muted hover:border-primary/30 hover:text-primary',
+  );
+}
 
 const SOURCE_OPTIONS: { key: RecallsSpellingTestSource; label: string; hint: string }[] = [
   // Labelled "Whole bank" rather than "All Words" so it cannot be confused with
@@ -120,7 +133,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
 
   return (
     <>
-      <Card className="border-border bg-surface">
+      <Card>
         <div className="flex items-start gap-3">
           <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <SpellCheck size={18} aria-hidden="true" />
@@ -134,7 +147,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-4">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <span className="eyebrow text-muted">
             How many words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -144,11 +157,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
                 type="button"
                 onClick={() => setSize(option.key)}
                 aria-pressed={size === option.key}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  size === option.key
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted hover:border-primary/30 hover:text-primary'
-                }`}
+                className={optionClass(size === option.key)}
               >
                 {option.label}
               </button>
@@ -157,7 +166,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         <div className="mt-3">
-          <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+          <span className="eyebrow text-muted">
             Which words
           </span>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -168,11 +177,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
                 onClick={() => setSource(option.key)}
                 aria-pressed={source === option.key}
                 title={option.hint}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  source === option.key
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted hover:border-primary/30 hover:text-primary'
-                }`}
+                className={optionClass(source === option.key)}
               >
                 {option.label}
               </button>
@@ -181,7 +186,7 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         </div>
 
         {error && (
-          <p role="alert" className="mt-3 text-xs text-red-600">
+          <p role="alert" className="mt-3 text-xs text-danger-strong">
             {error}
           </p>
         )}
@@ -227,7 +232,9 @@ export function SpellingTest({ onMistakesChanged }: SpellingTestProps) {
         {phase === 'results' && (
           <div className="space-y-4">
             <div className="rounded-xl border border-border bg-background-light p-4 text-center">
-              <p className="text-3xl font-bold text-navy">{percentage}%</p>
+              <p className="text-3xl font-bold tabular-nums text-navy">
+                <CountUp value={percentage} suffix="%" />
+              </p>
               <p className="mt-1 text-sm text-muted">
                 {correctCount} correct out of {total} question{total === 1 ? '' : 's'}
               </p>
@@ -349,17 +356,13 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
         <span className="text-xs font-medium text-muted">
           Word {position} of {total}
         </span>
-        {item.fromMistakes && (
-          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-2xs font-medium text-warning">
-            Review mistake
-          </span>
-        )}
+        {item.fromMistakes && <Badge variant="warning">Review mistake</Badge>}
       </div>
 
       <button
         type="button"
         onClick={() => void replay()}
-        className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        className="pressable inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-9"
       >
         <Volume2 size={13} className="h-3.5 w-3.5" aria-hidden="true" />
         {playing ? 'Playing…' : 'Replay Audio'}
@@ -394,7 +397,7 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
       </form>
 
       {error && (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="text-xs text-danger-strong">
           {error}
         </p>
       )}
@@ -402,12 +405,12 @@ function RunningStep({ item, position, total, onGraded, onNext }: RunningStepPro
       {result && (
         <div role="status" className="rounded-lg border border-border bg-background-light p-3">
           {result.correct ? (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-success-strong">
               <CheckCircle2 size={15} className="h-4 w-4" aria-hidden="true" />
               Correct
             </p>
           ) : (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-red-600">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger-strong">
               <XCircle size={15} className="h-4 w-4" aria-hidden="true" />
               Incorrect
             </p>

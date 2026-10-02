@@ -42,15 +42,15 @@ interface MaterialsCourseBrowserProps {
 function FileKindIcon({ kind }: { kind: string }) {
   switch (kind) {
     case 'audio':
-      return <Music className="h-4 w-4 text-blue-500" />;
+      return <Music className="h-4 w-4 text-info" />;
     case 'video':
-      return <Video className="h-4 w-4 text-fuchsia-500" />;
+      return <Video className="h-4 w-4 text-primary" />;
     case 'image':
-      return <ImageIcon className="h-4 w-4 text-emerald-500" />;
+      return <ImageIcon className="h-4 w-4 text-success-strong" />;
     case 'document':
-      return <FileIcon className="h-4 w-4 text-amber-500" />;
+      return <FileIcon className="h-4 w-4 text-warning-strong" />;
     default:
-      return <FileText className="h-4 w-4 text-red-400" />;
+      return <FileText className="h-4 w-4 text-danger-strong" />;
   }
 }
 

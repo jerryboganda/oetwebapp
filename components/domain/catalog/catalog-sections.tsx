@@ -133,7 +133,7 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h4 className="font-bold text-navy">{websitePackage?.name ?? addon.name}</h4>
-                <p className="mt-1 text-2xs uppercase tracking-wider text-muted">
+                <p className="mt-1 eyebrow text-muted">
                   requires {addon.eligibilityFlag || 'n/a'}
                 </p>
               </div>
@@ -156,7 +156,7 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
                 <ul className="mt-3 space-y-1.5 text-sm text-navy">
                   {websitePackage.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -193,10 +193,10 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <CheckCircle2 className="h-5 w-5" />
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <p className="text-2xs font-bold uppercase tracking-[0.16em] text-primary">Your current plan</p>
+            <p className="eyebrow text-primary">Your current plan</p>
             <p className="text-base font-bold text-navy">{snapshot.planCode ?? snapshot.tier}</p>
             {expiry ? <p className="text-sm text-muted">Access until {expiry}</p> : null}
           </div>
@@ -205,8 +205,8 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
           <div className="flex flex-wrap gap-2">
             {stats.map((stat) => (
               <div key={stat.label} className="rounded-xl border border-border bg-surface px-3 py-2 text-center">
-                <p className="text-base font-bold text-navy">{stat.value}</p>
-                <p className="text-2xs uppercase tracking-wider text-muted">{stat.label}</p>
+                <p className="text-base font-bold tabular-nums text-navy">{stat.value}</p>
+                <p className="tile-label text-muted">{stat.label}</p>
               </div>
             ))}
           </div>

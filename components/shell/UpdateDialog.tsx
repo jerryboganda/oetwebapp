@@ -126,7 +126,7 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
         return (
           <>
             <Status
-              icon={<AlertTriangle className="h-9 w-9 text-danger" />}
+              icon={<AlertTriangle className="h-9 w-9 text-danger-strong" />}
               title="Update failed"
               subtitle={state.error}
             />

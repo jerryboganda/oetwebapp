@@ -636,7 +636,7 @@ function ProviderCapacitySection({ onToast }: { onToast: (t: ToastState) => void
         r.monthlyRequestCap === null ? (
           <span className="text-admin-fg-muted">--</span>
         ) : (
-          <span className={r.monthlyRequestCap - r.requestsUsedThisMonth <= r.monthlyRequestCap * 0.1 ? 'font-semibold text-danger' : ''}>
+          <span className={r.monthlyRequestCap - r.requestsUsedThisMonth <= r.monthlyRequestCap * 0.1 ? 'font-semibold text-danger-strong' : ''}>
             {fmt(Math.max(0, r.monthlyRequestCap - r.requestsUsedThisMonth))}
           </span>
         ),

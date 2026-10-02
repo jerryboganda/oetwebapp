@@ -33,7 +33,7 @@ export function ProgressHeader({ part, completed, fraction }: { part: number; co
         {PARTS.map((item, index) => (
           <li key={item.key} className={`flex items-center gap-1 ${index === part ? 'font-semibold text-navy' : ''}`}>
             {index < completed ? (
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success-strong" aria-hidden />
             ) : (
               <span className="inline-block h-3.5 w-3.5 rounded-full border border-border" aria-hidden />
             )}
@@ -68,13 +68,13 @@ export function TransitionCard({
   return (
     <section className="space-y-5 rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <div className="space-y-2">
-        {completed ? <CheckCircle2 className="h-8 w-8 text-success" aria-hidden /> : null}
+        {completed ? <CheckCircle2 className="h-8 w-8 text-success-strong" aria-hidden /> : null}
         <h2 className="text-xl font-semibold text-navy">{heading}</h2>
         <p className="text-sm leading-relaxed text-muted">{text}</p>
       </div>
       {children}
       {error ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-strong">
           {error}
         </p>
       ) : null}
@@ -160,7 +160,7 @@ export function OverviewCard({
       </p>
 
       {errorMessage ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-sm text-danger-strong">
           {errorMessage}
         </p>
       ) : null}
@@ -253,7 +253,7 @@ export function AudioCheckCard({ onStart }: { onStart: () => void }) {
           <Volume2 className="h-4 w-4" aria-hidden /> Play sample
         </button>
         {played === false ? (
-          <p className="text-sm text-warning">This browser could not play the sample. You can still continue.</p>
+          <p className="text-sm text-warning-strong">This browser could not play the sample. You can still continue.</p>
         ) : null}
         <p className="text-xs text-muted">
           Each recording can be played twice. A replay never lowers your result.
@@ -326,14 +326,14 @@ export function MicCheckCard({ onStart }: { onStart: () => void }) {
           </div>
         ) : null}
         <p className="text-sm" role="status">
-          {state === 'ok' ? <span className="text-success">Your microphone is working.</span> : null}
+          {state === 'ok' ? <span className="text-success-strong">Your microphone is working.</span> : null}
           {state === 'silent' ? (
-            <span className="text-warning">
+            <span className="text-warning-strong">
               We could not hear you. Check your microphone and try again — you can still continue.
             </span>
           ) : null}
           {state === 'denied' ? (
-            <span className="text-danger">
+            <span className="text-danger-strong">
               Microphone access was blocked. Allow it in your browser settings to record your responses.
             </span>
           ) : null}

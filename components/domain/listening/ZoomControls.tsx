@@ -26,7 +26,7 @@ export function ZoomControls({ value, onChange }: ZoomControlsProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
       <div>
-        <p className="text-xs font-black uppercase tracking-widest text-muted">Question zoom</p>
+        <p className="eyebrow text-muted">Question zoom</p>
         <p className="text-xs text-muted" aria-live="polite">Current zoom {zoom}%</p>
       </div>
       <div className="flex items-center gap-2" aria-label="Question zoom controls">

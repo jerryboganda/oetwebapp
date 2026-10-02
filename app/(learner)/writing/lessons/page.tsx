@@ -8,8 +8,11 @@ import { BookOpen, CheckCircle2, Clock, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { listWritingLessons } from '@/lib/writing/api';
 import type {
   WritingLessonCompletionDto,
@@ -20,10 +23,10 @@ import type {
 const SKILLS: WritingSubSkill[] = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'];
 
 function LessonsLoadingFallback() {
-  const t = useTranslations();
   return (
     <>
-      <div className="p-6 text-sm text-muted">{t('writing.lessons.loading')}</div>
+      <LearnerSkeleton variant="hero" />
+      <LearnerSkeleton variant="card-grid" />
     </>
   );
 }
@@ -84,23 +87,25 @@ function WritingLessonsCatalogueInner() {
     router.replace(`/writing/lessons${next.size > 0 ? `?${next.toString()}` : ''}`, { scroll: false });
   };
 
+  const pillClassName = (selected: boolean) => `pressable min-h-11 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'hover-primary border-border bg-background text-navy hover:border-primary/40'}`;
+
   return (
     <>
-      <div className="space-y-6" aria-busy={loading}>
-        <LearnerPageHero
-          eyebrow={t('writing.lessons.eyebrow')}
-          icon={BookOpen}
-          accent="amber"
-          title={t('writing.lessons.catalogue.title')}
-          description={t('writing.lessons.catalogue.description')}
-          highlights={[
-            { icon: BookOpen, label: t('writing.lessons.highlights.total'), value: `${lessons.length}` },
-            { icon: CheckCircle2, label: t('writing.lessons.highlights.completed'), value: `${completions.length}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.lessons.eyebrow')}
+        icon={BookOpen}
+        accent="writing"
+        title={t('writing.lessons.catalogue.title')}
+        description={t('writing.lessons.catalogue.description')}
+        highlights={[
+          { icon: BookOpen, label: t('writing.lessons.highlights.total'), value: `${lessons.length}` },
+          { icon: CheckCircle2, label: t('writing.lessons.highlights.completed'), value: `${completions.length}` },
+        ]}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+      <MotionSection delayIndex={0} className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow={t('writing.lessons.filter.eyebrow')}
           title={t('writing.lessons.filter.title')}
@@ -109,15 +114,15 @@ function WritingLessonsCatalogueInner() {
 
         <fieldset className="flex flex-wrap items-center gap-2" aria-label={t('writing.lessons.filter.label')}>
           <legend className="sr-only">{t('writing.lessons.filter.legend')}</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">
-            <Filter className="mr-1 inline h-3 w-3" aria-hidden="true" />
+          <span className="eyebrow text-muted">
+            <Filter className="me-1 inline h-3 w-3" aria-hidden="true" />
             {t('writing.lessons.filter.skillLabel')}
           </span>
           <button
             type="button"
             onClick={() => applyFilter(null)}
             aria-pressed={filter === null}
-            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === null ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+            className={pillClassName(filter === null)}
           >
             {t('writing.lessons.filter.all')}
           </button>
@@ -127,55 +132,52 @@ function WritingLessonsCatalogueInner() {
               type="button"
               onClick={() => applyFilter(skill)}
               aria-pressed={filter === skill}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === skill ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+              className={pillClassName(filter === skill)}
             >
               {skill}
             </button>
           ))}
         </fieldset>
+      </MotionSection>
 
-        <ul className="grid gap-3 md:grid-cols-2" aria-label={t('writing.lessons.list.label')}>
-          {lessons.length === 0 ? (
-            <li className="col-span-full">
-              <Card padding="lg">
-                <CardContent>
-                  <p className="text-sm text-muted">{t('writing.lessons.list.empty')}</p>
-                </CardContent>
-              </Card>
-            </li>
-          ) : null}
-          {lessons.map((lesson) => {
+      {loading && lessons.length === 0 ? (
+        <LearnerSkeleton variant="card-grid" />
+      ) : lessons.length === 0 ? (
+        error ? null : <EmptyState icon={<BookOpen className="h-8 w-8" />} title={t('writing.lessons.list.empty')} />
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2" aria-label={t('writing.lessons.list.label')} aria-busy={loading}>
+          {lessons.map((lesson, index) => {
             const completion = completionMap.get(lesson.id);
             const isComplete = !!completion;
             return (
-              <li key={lesson.id}>
-                <Card padding="md" aria-label={t('writing.lessons.list.aria', { title: lesson.title })}>
-                  <CardContent>
-                    <header className="flex items-center justify-between gap-2">
+              <li key={lesson.id} className="min-w-0">
+                <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
+                  <Card padding="md" className="flex h-full flex-col" aria-label={t('writing.lessons.list.aria', { title: lesson.title })}>
+                    <header className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="muted" size="sm">{lesson.subSkill}</Badge>
-                        {isComplete ? <Badge variant="success" size="sm">{t('writing.lessons.list.completed', { score: completion.quizScore })}</Badge> : null}
+                        {isComplete ? <Badge variant="success" size="sm" className="tabular-nums">{t('writing.lessons.list.completed', { score: completion.quizScore })}</Badge> : null}
                       </div>
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-muted">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold tabular-nums text-muted">
                         <Clock className="h-3 w-3" aria-hidden="true" /> {t('writing.lessons.list.minutes', { minutes: lesson.estimatedMinutes })}
                       </span>
                     </header>
                     {/* Lesson title is OET-authored English content; force LTR inside RTL chrome. */}
                     <h2 className="mt-2 text-base font-bold text-navy" dir="ltr">{lesson.title}</h2>
-                    <div className="mt-3">
+                    <div className="mt-auto pt-3">
                       <Button asChild size="sm" variant={isComplete ? 'outline' : 'primary'}>
                         <Link href={`/writing/lessons/${encodeURIComponent(lesson.id)}`}>
                           {isComplete ? t('writing.lessons.list.review') : t('writing.lessons.list.open')}
                         </Link>
                       </Button>
                     </div>
-                  </CardContent>
-                </Card>
+                  </Card>
+                </MotionItem>
               </li>
             );
           })}
         </ul>
-      </div>
+      )}
     </>
   );
 }

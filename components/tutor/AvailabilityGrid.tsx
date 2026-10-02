@@ -154,7 +154,7 @@ export function AvailabilityGrid({ slots, timeZone, saving, onSave }: Availabili
                   variant="ghost"
                   size="sm"
                   onClick={() => remove(idx)}
-                  className="text-muted hover:bg-danger/10 hover:text-danger sm:hidden"
+                  className="text-muted hover:bg-danger/10 hover:text-danger-strong sm:hidden"
                   aria-label={`Remove slot ${idx + 1}`}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -165,7 +165,7 @@ export function AvailabilityGrid({ slots, timeZone, saving, onSave }: Availabili
                 variant="ghost"
                 size="sm"
                 onClick={() => remove(idx)}
-                className="hidden text-muted hover:bg-danger/10 hover:text-danger sm:mb-1.5 sm:inline-flex"
+                className="hidden text-muted hover:bg-danger/10 hover:text-danger-strong sm:mb-1.5 sm:inline-flex"
                 aria-label={`Remove slot ${idx + 1}`}
               >
                 <Trash2 className="h-4 w-4" />

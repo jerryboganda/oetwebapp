@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { RotateCcw, Volume2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -79,35 +80,31 @@ export function ReviewMistakesList({ refreshToken = 0 }: ReviewMistakesListProps
 
   if (items === null) {
     return (
-      <Card className="border-border bg-surface">
+      <Card>
         <Skeleton className="h-20 rounded-xl" />
       </Card>
     );
   }
 
   return (
-    <Card className="border-border bg-surface">
+    <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-warning/10 text-warning">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning-strong">
             <RotateCcw size={15} aria-hidden="true" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold text-navy">Review mistakes</h3>
             <p className="text-xs text-muted">
               Words you spelled incorrectly. They clear as soon as you spell them right.
             </p>
           </div>
         </div>
-        {items.length > 0 && (
-          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-            {items.length}
-          </span>
-        )}
+        {items.length > 0 && <Badge variant="warning" className="tabular-nums">{items.length}</Badge>}
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-danger">
+        <p role="alert" className="mt-3 text-xs text-danger-strong">
           {error}
         </p>
       )}

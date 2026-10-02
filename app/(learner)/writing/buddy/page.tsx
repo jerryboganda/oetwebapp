@@ -13,11 +13,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, MessageSquare, CalendarCheck, X, Loader2, RefreshCcw } from 'lucide-react';
+import { Users, MessageSquare, CalendarCheck, X, RefreshCcw } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import {
   endWritingBuddyPair,
   getWritingBuddyPair,
@@ -175,176 +176,172 @@ export default function WritingBuddyPage() {
     return messages.filter((m) => m.mineMessage && new Date(m.sentAt).getTime() >= since).length;
   }, [messages]);
 
+  const textareaClassName = 'w-full rounded-control border border-border bg-background p-3 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Community"
-          icon={Users}
-          accent="purple"
-          title="Find a Writing buddy"
-          description="Pair anonymously with someone at your level. Send short check-ins and keep each other accountable on the way to your target band."
-          highlights={[]}
-        />
+      <LearnerPageHero
+        eyebrow="Community"
+        icon={Users}
+        accent="purple"
+        title="Find a Writing buddy"
+        description="Pair anonymously with someone at your level. Send short check-ins and keep each other accountable on the way to your target band."
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {notice ? <InlineAlert variant="success">{notice}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {notice ? <InlineAlert variant="success">{notice}</InlineAlert> : null}
 
-        {/* State 1 — not opted in */}
-        {optedIn === false || optedIn === null ? (
-          <Card>
-            <CardContent className="space-y-4 p-6">
-              <h2 className="text-lg font-bold text-navy">How the Buddy System works</h2>
-              <ul className="ml-5 list-disc space-y-2 text-sm text-navy/80">
-                <li>We pair you anonymously with another learner in your profession at ±1 band.</li>
-                <li>You can swap short messages (max {MESSAGE_MAX} characters, {MESSAGES_PER_DAY}/day).</li>
-                <li>Each week you both submit a short check-in: highlight, challenge, next goal.</li>
-                <li>No personal details are shared. You can end the pairing at any time.</li>
-              </ul>
-              <Button onClick={onOptIn} disabled={busy === 'opt-in'}>
-                {busy === 'opt-in' ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Opting in…</span>
-                ) : (
-                  'Opt in to the Buddy System'
-                )}
-              </Button>
-            </CardContent>
+      {/* State 1 — not opted in */}
+      {optedIn === false || optedIn === null ? (
+        <MotionSection>
+          <Card padding="lg" className="space-y-4">
+            <h2 className="text-lg font-bold text-navy">How the Buddy System works</h2>
+            <ul className="ms-5 list-disc space-y-2 text-sm text-navy/80">
+              <li>We pair you anonymously with another learner in your profession at ±1 band.</li>
+              <li>You can swap short messages (max {MESSAGE_MAX} characters, {MESSAGES_PER_DAY}/day).</li>
+              <li>Each week you both submit a short check-in: highlight, challenge, next goal.</li>
+              <li>No personal details are shared. You can end the pairing at any time.</li>
+            </ul>
+            <Button onClick={onOptIn} loading={busy === 'opt-in'}>
+              {busy === 'opt-in' ? 'Opting in…' : 'Opt in to the Buddy System'}
+            </Button>
           </Card>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {/* State 2 — opted in but no pair yet */}
-        {optedIn && !pair ? (
-          <Card>
-            <CardContent className="space-y-3 p-6 text-center">
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-500" aria-hidden="true" />
-              <h2 className="text-lg font-bold text-navy">Looking for a buddy…</h2>
-              <p className="text-sm text-navy/80">
-                {matchStatus === 'queued'
-                  ? 'No match yet. We will keep looking; tap the button to retry now.'
-                  : 'You are in the matching pool.'}
-              </p>
-              <Button onClick={onFindBuddy} disabled={busy === 'match'}>
-                <RefreshCcw className="mr-2 h-4 w-4" aria-hidden="true" /> Find buddy now
-              </Button>
-            </CardContent>
+      {/* State 2 — opted in but no pair yet. A static icon: the wait is open-ended,
+          so an endless spinner would loop past WCAG 2.2.2's five seconds. */}
+      {optedIn && !pair ? (
+        <MotionSection>
+          <Card padding="lg" className="space-y-3 text-center" role="status">
+            <Users className="mx-auto h-8 w-8 text-primary" aria-hidden="true" />
+            <h2 className="text-lg font-bold text-navy">Looking for a buddy…</h2>
+            <p className="text-sm text-navy/80">
+              {matchStatus === 'queued'
+                ? 'No match yet. We will keep looking; tap the button to retry now.'
+                : 'You are in the matching pool.'}
+            </p>
+            <Button onClick={onFindBuddy} loading={busy === 'match'}>
+              {busy === 'match' ? null : <RefreshCcw className="h-4 w-4" aria-hidden="true" />} Find buddy now
+            </Button>
           </Card>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {/* State 3 — paired */}
-        {pair ? (
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Partner card + chat */}
-            <Card className="lg:col-span-2">
-              <CardContent className="space-y-4 p-6">
-                <header className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-bold text-navy">{pair.partnerDisplayName}</h2>
-                    <p className="text-xs uppercase tracking-wider text-muted">
-                      {pair.profession} · matched at band {pair.matchedAtBand}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={onEndPair} disabled={busy === 'end'}>
-                    <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> End pair
-                  </Button>
-                </header>
+      {/* State 3 — paired */}
+      {pair ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Partner card + chat */}
+          <MotionItem delayIndex={0} className="min-w-0 lg:col-span-2">
+            <Card padding="lg" className="h-full space-y-4">
+              <header className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-navy">{pair.partnerDisplayName}</h2>
+                  <p className="eyebrow text-muted">
+                    {pair.profession} · matched at band {pair.matchedAtBand}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={onEndPair} disabled={busy === 'end'}>
+                  <X className="h-3.5 w-3.5" aria-hidden="true" /> End pair
+                </Button>
+              </header>
 
-                <section aria-label="Conversation" className="rounded-2xl border border-border bg-background p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
-                    <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Conversation
-                  </div>
-                  <div className="space-y-2 max-h-80 overflow-y-auto" role="log" aria-live="polite">
-                    {messages.length === 0 ? (
-                      <p className="text-sm text-muted">No messages yet. Say hi.</p>
-                    ) : null}
-                    {messages.map((m) => (
-                      <article
-                        key={m.id}
-                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ml-auto bg-primary text-white dark:bg-primary-700' : 'bg-surface text-navy'}`}
+              <section aria-label="Conversation" className="rounded-xl bg-background-light p-3">
+                <div className="eyebrow mb-2 flex items-center gap-2 text-muted">
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Conversation
+                </div>
+                <div className="max-h-80 space-y-2 overflow-y-auto" role="log" aria-live="polite">
+                  {messages.length === 0 ? (
+                    <p className="text-sm text-muted">No messages yet. Say hi.</p>
+                  ) : null}
+                  {messages.map((m) => (
+                    <article
+                      key={m.id}
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ms-auto bg-primary text-white dark:bg-primary-700' : 'bg-surface text-navy'}`}
+                    >
+                      <p className="whitespace-pre-wrap">{m.bodyMarkdown}</p>
+                      <time
+                        className={`tile-label mt-1 block tabular-nums ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
+                        dateTime={m.sentAt}
                       >
-                        <p className="whitespace-pre-wrap">{m.bodyMarkdown}</p>
-                        <time
-                          className={`mt-1 block text-3xs uppercase tracking-wider ${m.mineMessage ? 'text-white/70' : 'text-muted'}`}
-                          dateTime={m.sentAt}
-                        >
-                          {new Date(m.sentAt).toLocaleString()}
-                        </time>
-                      </article>
-                    ))}
-                  </div>
-                </section>
+                        {new Date(m.sentAt).toLocaleString()}
+                      </time>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
-                <form onSubmit={onSendMessage} className="space-y-2" aria-label="Send a buddy message">
-                  <label htmlFor="buddy-message" className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Message · {sentToday}/{MESSAGES_PER_DAY} sent today
-                  </label>
-                  <textarea
-                    id="buddy-message"
-                    value={draftMessage}
-                    onChange={(e) => setDraftMessage(e.target.value)}
-                    maxLength={MESSAGE_MAX}
-                    rows={3}
-                    placeholder="Keep it short and supportive. Maximum 500 characters."
-                    className="w-full rounded-xl border border-border bg-background p-3 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  />
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs ${charsRemaining < 0 ? 'text-red-600' : 'text-muted'}`}>
-                      {charsRemaining} characters remaining
-                    </span>
-                    <Button type="submit" disabled={busy === 'send' || !draftMessage.trim() || charsRemaining < 0}>
-                      {busy === 'send' ? 'Sending…' : 'Send'}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Weekly check-in */}
-            <Card>
-              <CardContent className="space-y-3 p-6">
-                <h2 className="flex items-center gap-2 text-lg font-bold text-navy">
-                  <CalendarCheck className="h-5 w-5" aria-hidden="true" /> Weekly check-in
-                </h2>
-                <p className="text-xs text-muted">
-                  Both of you submit one short reflection per week. We mark the week complete when
-                  both halves are in.
-                </p>
-                <form onSubmit={onSubmitCheckIn} className="space-y-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Highlight
-                    <textarea
-                      value={checkInDraft.highlight}
-                      onChange={(e) => setCheckInDraft({ ...checkInDraft, highlight: e.target.value })}
-                      rows={2}
-                      className="mt-1 w-full rounded-xl border border-border bg-background p-2 text-sm text-navy"
-                    />
-                  </label>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Challenge
-                    <textarea
-                      value={checkInDraft.challenge}
-                      onChange={(e) => setCheckInDraft({ ...checkInDraft, challenge: e.target.value })}
-                      rows={2}
-                      className="mt-1 w-full rounded-xl border border-border bg-background p-2 text-sm text-navy"
-                    />
-                  </label>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Goal for next week
-                    <textarea
-                      value={checkInDraft.goalNextWeek}
-                      onChange={(e) => setCheckInDraft({ ...checkInDraft, goalNextWeek: e.target.value })}
-                      rows={2}
-                      className="mt-1 w-full rounded-xl border border-border bg-background p-2 text-sm text-navy"
-                    />
-                  </label>
-                  <Button type="submit" disabled={busy === 'check-in'}>
-                    {busy === 'check-in' ? 'Saving…' : 'Submit check-in'}
+              <form onSubmit={onSendMessage} className="space-y-2" aria-label="Send a buddy message">
+                <label htmlFor="buddy-message" className="eyebrow block tabular-nums text-muted">
+                  Message · {sentToday}/{MESSAGES_PER_DAY} sent today
+                </label>
+                <textarea
+                  id="buddy-message"
+                  value={draftMessage}
+                  onChange={(e) => setDraftMessage(e.target.value)}
+                  maxLength={MESSAGE_MAX}
+                  rows={3}
+                  placeholder="Keep it short and supportive. Maximum 500 characters."
+                  className={textareaClassName}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={`text-xs tabular-nums ${charsRemaining < 0 ? 'text-danger-strong' : 'text-muted'}`}>
+                    {charsRemaining} characters remaining
+                  </span>
+                  <Button type="submit" disabled={busy === 'send' || !draftMessage.trim() || charsRemaining < 0}>
+                    {busy === 'send' ? 'Sending…' : 'Send'}
                   </Button>
-                </form>
-              </CardContent>
+                </div>
+              </form>
             </Card>
-          </div>
-        ) : null}
-      </div>
+          </MotionItem>
+
+          {/* Weekly check-in */}
+          <MotionItem delayIndex={1} className="min-w-0">
+            <Card padding="lg" className="h-full space-y-3">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-navy">
+                <CalendarCheck className="h-5 w-5 text-primary" aria-hidden="true" /> Weekly check-in
+              </h2>
+              <p className="text-xs text-muted">
+                Both of you submit one short reflection per week. We mark the week complete when
+                both halves are in.
+              </p>
+              <form onSubmit={onSubmitCheckIn} className="space-y-3">
+                <label className="block">
+                  <span className="eyebrow text-muted">Highlight</span>
+                  <textarea
+                    value={checkInDraft.highlight}
+                    onChange={(e) => setCheckInDraft({ ...checkInDraft, highlight: e.target.value })}
+                    rows={2}
+                    className={`mt-1 ${textareaClassName}`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="eyebrow text-muted">Challenge</span>
+                  <textarea
+                    value={checkInDraft.challenge}
+                    onChange={(e) => setCheckInDraft({ ...checkInDraft, challenge: e.target.value })}
+                    rows={2}
+                    className={`mt-1 ${textareaClassName}`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="eyebrow text-muted">Goal for next week</span>
+                  <textarea
+                    value={checkInDraft.goalNextWeek}
+                    onChange={(e) => setCheckInDraft({ ...checkInDraft, goalNextWeek: e.target.value })}
+                    rows={2}
+                    className={`mt-1 ${textareaClassName}`}
+                  />
+                </label>
+                <Button type="submit" disabled={busy === 'check-in'}>
+                  {busy === 'check-in' ? 'Saving…' : 'Submit check-in'}
+                </Button>
+              </form>
+            </Card>
+          </MotionItem>
+        </div>
+      ) : null}
     </>
   );
 }

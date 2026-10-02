@@ -56,10 +56,10 @@ export function StepMockReview() {
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
       <div className="grid gap-2 rounded-2xl border border-border bg-background-light p-4 sm:grid-cols-2">
-        <div><p className="text-3xs font-bold uppercase tracking-widest text-muted">Title</p><p className="truncate text-sm text-navy">{row.title || '—'}</p></div>
-        <div><p className="text-3xs font-bold uppercase tracking-widest text-muted">Profession / difficulty</p><p className="truncate text-sm text-navy">{row.professionId} · {row.difficulty}</p></div>
-        <div><p className="text-3xs font-bold uppercase tracking-widest text-muted">Role-play 1</p><p className="truncate text-sm text-navy">{row.rolePlay1?.title || '—'}</p></div>
-        <div><p className="text-3xs font-bold uppercase tracking-widest text-muted">Role-play 2</p><p className="truncate text-sm text-navy">{row.rolePlay2?.title || '—'}</p></div>
+        <div><p className="tile-label text-muted">Title</p><p className="truncate text-sm text-navy">{row.title || '—'}</p></div>
+        <div><p className="tile-label text-muted">Profession / difficulty</p><p className="truncate text-sm text-navy">{row.professionId} · {row.difficulty}</p></div>
+        <div><p className="tile-label text-muted">Role-play 1</p><p className="truncate text-sm text-navy">{row.rolePlay1?.title || '—'}</p></div>
+        <div><p className="tile-label text-muted">Role-play 2</p><p className="truncate text-sm text-navy">{row.rolePlay2?.title || '—'}</p></div>
       </div>
 
       <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">
@@ -67,8 +67,8 @@ export function StepMockReview() {
         <ul className="space-y-1.5">
           {checks.map((c) => (
             <li key={c.label} className="flex items-center gap-2 text-sm">
-              {c.ok ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-red-600" />}
-              <span className={c.ok ? 'text-navy' : 'text-red-700'}>{c.label}</span>
+              {c.ok ? <Check className="h-4 w-4 text-success-strong" /> : <X className="h-4 w-4 text-danger-strong" />}
+              <span className={c.ok ? 'text-navy' : 'text-danger-strong'}>{c.label}</span>
             </li>
           ))}
         </ul>

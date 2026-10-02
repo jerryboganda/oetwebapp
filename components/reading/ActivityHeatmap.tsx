@@ -51,16 +51,16 @@ export function ActivityHeatmap({ days }: ActivityHeatmapProps) {
 
   return (
     <div className="overflow-x-auto">
-      {/* Day-of-week row */}
-      <div className="flex gap-1 mb-1 pl-0">
-        {DAY_LABELS.map((label) => (
-          <div key={label} className="w-4 text-center text-xs text-muted" style={{ minWidth: '1rem' }}>
-            {label[0]}
-          </div>
-        ))}
-      </div>
-      {/* Grid: rows = day-of-week, columns = weeks */}
+      {/* Grid: rows = day-of-week, columns = weeks; the day labels are the first
+          column so each one sits beside its own row (they used to run across the top). */}
       <div className="flex gap-1">
+        <div className="flex flex-col gap-1 pe-1" aria-hidden>
+          {DAY_LABELS.map((label) => (
+            <div key={label} className="flex h-4 w-4 items-center justify-center text-3xs leading-none text-muted">
+              {label[0]}
+            </div>
+          ))}
+        </div>
         {weeks.map((week, wi) => (
           <div key={wi} className="flex flex-col gap-1">
             {week.map((cell, di) =>

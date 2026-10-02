@@ -78,7 +78,7 @@ export function StepRolePlays() {
         <Select label="Role-play 2" value={rolePlay2} onChange={(e) => setRolePlay2(e.target.value)} options={selectOptions} required />
       </div>
 
-      {duplicate ? <p className="text-xs text-danger">Role-play 1 and 2 must be different content items.</p> : null}
+      {duplicate ? <p className="text-xs text-danger-strong">Role-play 1 and 2 must be different content items.</p> : null}
     </div>
   );
 }

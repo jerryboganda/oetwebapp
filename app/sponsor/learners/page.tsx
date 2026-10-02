@@ -119,8 +119,8 @@ export default function SponsorLearnersPage() {
             Invite
           </Button>
         </form>
-        {inviteError && <p role="alert" className="mt-2 text-sm text-danger">{inviteError}</p>}
-        {inviteSuccess && <p role="status" className="mt-2 text-sm text-success">{inviteSuccess}</p>}
+        {inviteError && <p role="alert" className="mt-2 text-sm text-danger-strong">{inviteError}</p>}
+        {inviteSuccess && <p role="status" className="mt-2 text-sm text-success-strong">{inviteSuccess}</p>}
       </Card>
 
       {/* Learners list */}
@@ -157,7 +157,7 @@ export default function SponsorLearnersPage() {
                     <button
                       type="button"
                       onClick={() => handleRemove(learner.id)}
-                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-danger hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-danger-strong hover:bg-danger/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       title="Remove sponsorship"
                       aria-label={`Remove sponsorship for ${learner.learnerEmail}`}
                     >

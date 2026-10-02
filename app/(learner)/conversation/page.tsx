@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MotionItem, MotionPresence } from '@/components/ui/motion-primitives';
-import { MessageSquare, Clock, ChevronRight, Mic, Zap, History, Sparkles } from 'lucide-react';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { MessageSquare, Clock, ChevronRight, Mic, Zap, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
@@ -12,7 +11,10 @@ import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { cardClassName } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
 import { analytics } from '@/lib/analytics';
+import { cn } from '@/lib/utils';
 import {
   createConversation,
   getConversationHistory,
@@ -31,14 +33,14 @@ const TASK_ICONS: Record<string, LucideIcon> = {
   'oet-handover': Zap,
 };
 
-const STATE_LABELS: Record<string, { label: string; color: string }> = {
-  preparing: { label: 'Preparing', color: 'bg-background-light text-muted border border-border' },
-  active: { label: 'In Progress', color: 'bg-info/10 text-info border border-info/20' },
-  evaluating: { label: 'Evaluating…', color: 'bg-warning/10 text-warning border border-warning/20' },
-  evaluated: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
-  completed: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
-  abandoned: { label: 'Abandoned', color: 'bg-danger/10 text-danger border border-danger/20' },
-  failed: { label: 'Failed', color: 'bg-danger/10 text-danger border border-danger/20' },
+const STATE_LABELS: Record<string, { label: string; variant: 'slate' | 'info' | 'warning' | 'success' | 'danger' }> = {
+  preparing: { label: 'Preparing', variant: 'slate' },
+  active: { label: 'In Progress', variant: 'info' },
+  evaluating: { label: 'Evaluating…', variant: 'warning' },
+  evaluated: { label: 'Completed', variant: 'success' },
+  completed: { label: 'Completed', variant: 'success' },
+  abandoned: { label: 'Abandoned', variant: 'danger' },
+  failed: { label: 'Failed', variant: 'danger' },
 };
 
 export default function ConversationPage() {
@@ -91,11 +93,10 @@ export default function ConversationPage() {
     return `${entitlement.remaining}/${entitlement.limit} left`;
   })();
 
+  // Real values only: the fixed "Mode" and "Status" chips were labels, not data.
   const heroHighlights = [
     { icon: MessageSquare, label: 'Sessions', value: `${history.length}` },
-    { icon: Mic, label: 'Mode', value: 'AI partner' },
     { icon: Sparkles, label: 'Entitlement', value: remainingLabel },
-    { icon: History, label: 'Status', value: 'Live history' },
   ];
 
   const entitlementVariant: 'default' | 'success' | 'warning' | 'danger' =
@@ -106,158 +107,148 @@ export default function ConversationPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="AI Conversation"
-          title="Rehearse a real OET roleplay before exam day"
-          description="Speak with an AI patient partner. Every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
-          icon={MessageSquare}
-          accent="primary"
-          highlights={heroHighlights}
+      <LearnerPageHero
+        eyebrow="AI Conversation"
+        title="Rehearse a real OET roleplay before exam day"
+        description="Speak with an AI patient partner. Every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
+        icon={MessageSquare}
+        accent="primary"
+        highlights={heroHighlights}
+      />
+
+      <LearnerSkillSwitcher compact />
+
+      {entitlement && !entitlement.allowed && (
+        <InlineAlert variant="warning">
+          {entitlement.reason}
+          {entitlement.resetAt && (<> {' '}Quota resets at <strong>{new Date(entitlement.resetAt).toLocaleString()}</strong>.</>)}
+        </InlineAlert>
+      )}
+
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+
+      <section className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Session builder"
+          title="Start a new conversation"
+          description="Choose a scenario type to begin practising. Sessions are ~5 minutes and graded automatically."
+          action={entitlement ? (
+            <Badge variant={entitlementVariant} className="w-fit shrink-0">
+              {entitlement.tier.toUpperCase()} · {remainingLabel}
+            </Badge>
+          ) : undefined}
         />
 
-        <LearnerSkillSwitcher compact />
-
-        {entitlement && !entitlement.allowed && (
-          <InlineAlert variant="warning">
-            {entitlement.reason}
-            {entitlement.resetAt && (<> {' '}Quota resets at <strong>{new Date(entitlement.resetAt).toLocaleString()}</strong>.</>)}
-          </InlineAlert>
-        )}
-
-        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
-
-        <section>
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <LearnerSurfaceSectionHeader
-              eyebrow="Session builder"
-              title="Start a new conversation"
-              description="Choose a scenario type to begin practising. Sessions are ~5 minutes and graded automatically."
-            />
-            {entitlement && (
-              <Badge variant={entitlementVariant}>
-                {entitlement.tier.toUpperCase()} · {remainingLabel}
-              </Badge>
-            )}
+        {loading && !catalog ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="status" aria-busy="true" aria-label="Loading">
+            {Array.from({ length: 2 }).map((_, i) => (<Skeleton aria-hidden key={i} className="h-24 rounded-2xl" />))}
           </div>
-
-          {loading && !catalog ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-surface" />))}
-            </div>
-          ) : catalog && catalog.taskTypes.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {catalog.taskTypes.map((task, i) => {
-                const Icon = TASK_ICONS[task.code] ?? MessageSquare;
-                const isCreatingThis = creating === task.code;
-                const disabled = !!creating || (entitlement ? !entitlement.allowed : false);
-                return (
-                  <MotionItem key={task.code} delayIndex={i}>
-                    <button onClick={() => handleStart(task.code)} disabled={disabled}
-                      className="group w-full rounded-surface border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                          <Icon className="w-5 h-5" aria-hidden="true" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">
-                            {task.label}
-                          </h3>
-                          <p className="mt-1 text-xs text-muted">{task.description}</p>
-                          {isCreatingThis && (<p className="mt-2 text-xs text-primary" role="status">Creating session…</p>)}
-                        </div>
-                        <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" aria-hidden="true" />
+        ) : catalog && catalog.taskTypes.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {catalog.taskTypes.map((task, i) => {
+              const Icon = TASK_ICONS[task.code] ?? MessageSquare;
+              const isCreatingThis = creating === task.code;
+              const disabled = !!creating || (entitlement ? !entitlement.allowed : false);
+              return (
+                <MotionItem key={task.code} delayIndex={Math.min(i, 5)}>
+                  <button type="button" onClick={() => handleStart(task.code)} disabled={disabled}
+                    className={cn(cardClassName({ hoverable: true, interactive: true }), 'group h-full w-full text-start disabled:pointer-events-none disabled:opacity-50')}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                        <Icon className="h-5 w-5" aria-hidden="true" />
                       </div>
-                    </button>
-                  </MotionItem>
-                );
-              })}
-            </div>
-          ) : (
-            <LearnerEmptyState
-              icon={MessageSquare}
-              title="No scenario types are currently enabled"
-              description="AI conversation scenarios will appear here once they are published. Use speaking role plays or mocks while this module is being prepared."
-              primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
-              secondaryAction={{ label: 'Open Mocks', href: '/mocks' }}
-            />
-          )}
-        </section>
-
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="History"
-            title="Recent conversations"
-            description="Review and continue your previous practice sessions."
-            className="mb-4"
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-navy transition-colors group-hover:text-primary-dark">
+                          {task.label}
+                        </h3>
+                        <p className="mt-1 text-xs text-muted">{task.description}</p>
+                        {isCreatingThis && (<p className="mt-2 text-xs text-primary" role="status">Creating session…</p>)}
+                      </div>
+                      <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted transition-colors group-hover:text-primary rtl:rotate-180" aria-hidden="true" />
+                    </div>
+                  </button>
+                </MotionItem>
+              );
+            })}
+          </div>
+        ) : (
+          <LearnerEmptyState
+            icon={MessageSquare}
+            title="No scenario types are currently enabled"
+            description="AI conversation scenarios will appear here once they are published. Use speaking role plays or mocks while this module is being prepared."
+            primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
+            secondaryAction={{ label: 'Open Mocks', href: '/mocks' }}
           />
+        )}
+      </section>
 
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-surface" />))}
-            </div>
-          ) : history.length === 0 ? (
-            <LearnerEmptyState
-              compact
-              icon={MessageSquare}
-              title="No conversations yet"
-              description="Start your first AI conversation above, or use a speaking role play if you need a structured exam-style prompt."
-              primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
-              secondaryAction={{ label: 'Track Progress', href: '/progress' }}
-            />
-          ) : (
-            <MotionPresence>
-              <div className="space-y-3">
-                {history.map((session, i) => {
-                  const stateInfo = STATE_LABELS[session.state] ?? STATE_LABELS.preparing;
-                  const isViewable = session.state === 'evaluated' || session.state === 'completed';
-                  return (
-                    <MotionItem key={session.id} delayIndex={i}>
-                      <Link href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
-                        className="block rounded-surface border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                              <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="truncate text-sm font-semibold text-navy">
-                                  {session.taskTypeCode.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                                </span>
-                                <ExamTypeBadge examType={session.examTypeCode} size="sm" />
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-                                <span>{dateFormatter.format(new Date(session.createdAt))}</span>
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />{formatDuration(session.durationSeconds)}
-                                </span>
-                                <span>{session.turnCount} turns</span>
-                                {session.scaledScore != null && (
-                                  <span className="font-medium text-navy">
-                                    {formatScaledScore(session.scaledScore)}
-                                    {session.overallGrade ? ` · Grade ${session.overallGrade}` : ''}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateInfo.color}`}>
-                              {stateInfo.label}
+      <section className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="History"
+          title="Recent conversations"
+          description="Review and continue your previous practice sessions."
+        />
+
+        {loading ? (
+          <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
+            {Array.from({ length: 3 }).map((_, i) => (<Skeleton aria-hidden key={i} className="h-20 rounded-2xl" />))}
+          </div>
+        ) : history.length === 0 ? (
+          <LearnerEmptyState
+            compact
+            icon={MessageSquare}
+            title="No conversations yet"
+            description="Start your first AI conversation above, or use a speaking role play if you need a structured exam-style prompt."
+            primaryAction={{ label: 'Open Speaking', href: '/speaking' }}
+            secondaryAction={{ label: 'Track Progress', href: '/progress' }}
+          />
+        ) : (
+          <div className="space-y-3">
+            {history.map((session, i) => {
+              const stateInfo = STATE_LABELS[session.state] ?? STATE_LABELS.preparing;
+              const isViewable = session.state === 'evaluated' || session.state === 'completed';
+              return (
+                <MotionItem key={session.id} delayIndex={Math.min(i, 5)}>
+                  <CardLink href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`} prefetch={false}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                          <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="mb-0.5 flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-navy">
+                              {session.taskTypeCode.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                             </span>
-                            <ChevronRight className="h-4 w-4 text-muted" />
+                            <ExamTypeBadge examType={session.examTypeCode} size="sm" />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
+                            <span>{dateFormatter.format(new Date(session.createdAt))}</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" aria-hidden="true" />{formatDuration(session.durationSeconds)}
+                            </span>
+                            <span>{session.turnCount} turns</span>
+                            {session.scaledScore != null && (
+                              <span className="font-medium text-navy">
+                                {formatScaledScore(session.scaledScore)}
+                                {session.overallGrade ? ` · Grade ${session.overallGrade}` : ''}
+                              </span>
+                            )}
                           </div>
                         </div>
-                      </Link>
-                    </MotionItem>
-                  );
-                })}
-              </div>
-            </MotionPresence>
-          )}
-        </section>
-      </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Badge variant={stateInfo.variant}>{stateInfo.label}</Badge>
+                        <ChevronRight className="h-4 w-4 text-muted rtl:rotate-180" aria-hidden="true" />
+                      </div>
+                    </div>
+                  </CardLink>
+                </MotionItem>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </>
   );
 }

@@ -50,7 +50,7 @@ export function ConversationTimerBar({ elapsed, timeLimit, turns, scenarioTitle,
             {statusLabel(connectionState, sttMode)}
           </span>
           {fallbackReason && (
-            <span className="text-xs text-warning">{fallbackCopy(fallbackReason)}</span>
+            <span className="text-xs text-warning-strong">{fallbackCopy(fallbackReason)}</span>
           )}
         </div>
         <div className="flex items-center gap-2">

@@ -93,7 +93,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                     <button
                       type="button"
                       onClick={() => removeItem(item.code)}
-                      className="inline-flex items-center gap-1 text-xs text-danger hover:text-danger/80"
+                      className="inline-flex items-center gap-1 text-xs text-danger-strong hover:text-danger-strong/80"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
                     </button>

@@ -63,7 +63,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
           aria-label={`Current streak: ${streak} days`}
           className={cn('flex items-center gap-2.5 rounded-xl p-1.5 lg:pr-3.5', HEADER_CHIP, HEADER_CHIP_HOVER)}
         >
-          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning', streakUp && 'flame-pop')}>
+          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning-strong', streakUp && 'flame-pop')}>
             <Flame className="h-4 w-4" aria-hidden="true" />
           </span>
           <span className="leading-tight">

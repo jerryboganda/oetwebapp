@@ -1,4 +1,6 @@
 import { Gift, PlayCircle, Repeat, Ticket } from 'lucide-react';
+import { cardClassName } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 // Learner-facing explainer for how Reading / Listening credits are spent.
 // Billing rule (backend: paper is the unit — one credit per sample): opening any
@@ -8,34 +10,17 @@ import { Gift, PlayCircle, Repeat, Ticket } from 'lucide-react';
 
 type CreditModule = 'reading' | 'listening';
 
-const THEME: Record<
-  CreditModule,
-  {
-    unit: string;
-    container: string;
-    medallion: string;
-    eyebrow: string;
-    step: string;
-    stepIcon: string;
-  }
-> = {
+// Sub-test identity colours (DESIGN.md §2), not status.
+const THEME: Record<CreditModule, { unit: string; tile: string; accent: string }> = {
   reading: {
     unit: 'Reading',
-    container:
-      'border-blue-200 bg-gradient-to-br from-blue-50 to-surface dark:border-blue-900/40 dark:from-blue-950/40 dark:to-surface',
-    medallion: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200',
-    eyebrow: 'text-blue-600 dark:text-blue-300',
-    step: 'border-blue-200/70 bg-white/70 dark:border-blue-900/40 dark:bg-blue-950/30',
-    stepIcon: 'text-blue-600 dark:text-blue-300',
+    tile: 'bg-skill-reading/10 text-skill-reading',
+    accent: 'text-skill-reading',
   },
   listening: {
     unit: 'Listening',
-    container:
-      'border-violet-200 bg-gradient-to-br from-violet-50 to-surface dark:border-violet-900/40 dark:from-violet-950/40 dark:to-surface',
-    medallion: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-200',
-    eyebrow: 'text-violet-600 dark:text-violet-300',
-    step: 'border-violet-200/70 bg-white/70 dark:border-violet-900/40 dark:bg-violet-950/30',
-    stepIcon: 'text-violet-600 dark:text-violet-300',
+    tile: 'bg-skill-listening/10 text-skill-listening',
+    accent: 'text-skill-listening',
   },
 };
 
@@ -71,19 +56,17 @@ export function CreditUsageInfoCard({
     <section
       data-testid={`${module}-credit-usage-info`}
       aria-label={`How ${unit} credits are used`}
-      className={`rounded-2xl border p-5 shadow-sm sm:p-6 ${theme.container} ${className}`}
+      className={cn(cardClassName({ padding: 'lg' }), className)}
     >
       <div className="flex items-start gap-4">
         <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${theme.medallion}`}
+          className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', theme.tile)}
           aria-hidden
         >
           <Ticket className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className={`text-2xs font-bold uppercase tracking-widest ${theme.eyebrow}`}>
-            How your credits work
-          </p>
+          <p className={cn('eyebrow', theme.accent)}>How your credits work</p>
           <h3 className="mt-0.5 text-base font-bold text-navy">
             One {unit} credit unlocks the whole sample
           </h3>
@@ -94,17 +77,17 @@ export function CreditUsageInfoCard({
         </div>
       </div>
 
-      <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+      {/* Plain steps on the card's own surface: one surface level, no cards in cards. */}
+      <ol className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-3 sm:gap-4">
         {steps.map((step) => {
           const Icon = step.icon;
           return (
-            <li
-              key={step.title}
-              className={`flex flex-col gap-1.5 rounded-xl border p-3 ${theme.step}`}
-            >
-              <Icon className={`h-4 w-4 ${theme.stepIcon}`} aria-hidden />
-              <p className="text-xs font-bold text-navy">{step.title}</p>
-              <p className="text-xs leading-snug text-muted">{step.detail}</p>
+            <li key={step.title} className="flex min-w-0 items-start gap-2.5">
+              <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', theme.accent)} aria-hidden />
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-navy">{step.title}</p>
+                <p className="mt-0.5 text-xs leading-snug text-muted">{step.detail}</p>
+              </div>
             </li>
           );
         })}

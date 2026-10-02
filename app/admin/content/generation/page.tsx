@@ -333,8 +333,8 @@ export default function AdminContentGenerationPage() {
                     <div className="flex items-start gap-3 mb-2">
                       <div className="flex-shrink-0 mt-0.5">
                         {result.status === 'processing' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-success" />}
-                        {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger" />}
+                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-success-strong" />}
+                        {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger-strong" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm text-navy dark:text-navy truncate">{result.title}</div>
@@ -347,7 +347,7 @@ export default function AdminContentGenerationPage() {
                             <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" /> {new Date(result.createdAt).toLocaleString()}</span>
                           )}
                         </div>
-                        {result.error && <div className="text-xs text-danger mt-1">{result.error}</div>}
+                        {result.error && <div className="text-xs text-danger-strong mt-1">{result.error}</div>}
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-1.5">
                         <button
@@ -367,7 +367,7 @@ export default function AdminContentGenerationPage() {
                             title="Copy JSON"
                             aria-label="Copy JSON"
                           >
-                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-success-strong" /> : <Copy className="w-4 h-4" />}
                           </button>
                         )}
                       </div>

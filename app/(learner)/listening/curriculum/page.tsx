@@ -5,12 +5,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Lock, Map as MapIcon, Play } from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceCard } from '@/components/domain';
+import { ArrowRight, CheckCircle2, Lock, Map as MapIcon, Play } from 'lucide-react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { ErrorState } from '@/components/ui/empty-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { apiClient } from '@/lib/api';
 
 interface CurriculumStage {
@@ -60,83 +63,74 @@ export default function ListeningCurriculumPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          eyebrow="Listening · Skills Catalog"
-          icon={MapIcon}
-          title="The 12-stage Listening skills catalog"
-          description="What each Listening skill trains and which drill to open next. For your live progression status, open the Pathway dashboard instead."
-        />
+      <LearnerPageHero
+        eyebrow="Listening · Skills Catalog"
+        icon={MapIcon}
+        title="The 12-stage Listening skills catalog"
+        description="What each Listening skill trains and which drill to open next. For your live progression status, open the Pathway dashboard instead."
+      />
 
-        <InlineAlert variant="info">
-          Tracking actual progress lives on the{' '}
-          <Link href="/listening/pathway" className="font-semibold underline">
-            Listening Pathway
-          </Link>{' '}
-          page. This catalog is a skill reference. Every card jumps straight to the matching drill.
-        </InlineAlert>
+      <InlineAlert variant="info" live="polite">
+        Tracking actual progress lives on the{' '}
+        <Link href="/listening/pathway" className="font-semibold underline">
+          Listening Pathway
+        </Link>{' '}
+        page. This catalog is a skill reference. Every card jumps straight to the matching drill.
+      </InlineAlert>
 
-        {loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+      {loading && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        </div>
+      )}
+
+      {error && <ErrorState message={error} />}
+
+      {data && (
+        <MotionSection>
+          {/* A section header, not a header card: its sentence repeated the alert above. */}
+          <LearnerSurfaceSectionHeader title="Twelve Listening skills to drill, in order" className="mb-4" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {data.stages.map((stage, index) => (
+              <MotionItem key={stage.code} delayIndex={Math.min(index, 5)} className="h-full">
+                <StageCard stage={stage} />
+              </MotionItem>
+            ))}
           </div>
-        )}
-
-        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
-
-        {data && (
-          <>
-            <LearnerSurfaceCard
-              card={{
-                kind: 'insight',
-                sourceType: 'frontend_navigation',
-                accent: 'indigo',
-                title: 'Twelve Listening skills to drill, in order',
-                description: 'Browse below and open any unlocked skill to launch its drill. Progression lives on the Pathway page.',
-              }}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {data.stages.map((stage) => (
-                <MotionItem key={stage.code}>
-                  <StageCard stage={stage} />
-                </MotionItem>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+        </MotionSection>
+      )}
     </>
   );
 }
 
 function StageCard({ stage }: { stage: CurriculumStage }) {
   const stateBadge = stage.completed
-    ? <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1 inline" aria-hidden /> Done</Badge>
+    ? <Badge variant="success" className="gap-1"><CheckCircle2 className="h-3 w-3" aria-hidden /> Done</Badge>
     : stage.locked
-      ? <Badge variant="muted"><Lock className="w-3 h-3 mr-1 inline" aria-hidden /> Locked</Badge>
-      : <Badge variant="info"><Play className="w-3 h-3 mr-1 inline" aria-hidden /> Available</Badge>;
+      ? <Badge variant="muted" className="gap-1"><Lock className="h-3 w-3" aria-hidden /> Locked</Badge>
+      : <Badge variant="info" className="gap-1"><Play className="h-3 w-3" aria-hidden /> Available</Badge>;
 
   const body = (
-    <div className={'flex h-full flex-col gap-2 rounded-2xl border border-border bg-surface p-5 shadow-sm' + (stage.locked ? '' : ' transition-[border-color,box-shadow] duration-200 hover:border-border-hover hover:shadow-clinical')}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted">
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <span className="eyebrow min-w-0 text-muted">
           Stage {stage.order} · {stage.partHint}
         </span>
         {stateBadge}
       </div>
       <h3 className="font-semibold text-navy">{stage.title}</h3>
       <p className="text-sm text-muted">{stage.focus}</p>
-      <span className="mt-auto text-xs text-muted">≈ {stage.estimatedMinutes} min</span>
+      <span className="mt-auto text-xs tabular-nums text-muted">≈ {stage.estimatedMinutes} min</span>
       {!stage.locked && !stage.completed && stage.nextActionLabel && (
-        <span className="text-xs font-medium text-primary">
-          {stage.nextActionLabel} →
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+          {stage.nextActionLabel} <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
         </span>
       )}
-    </div>
+    </>
   );
 
-  if (stage.locked) return body;
+  // A locked stage is not a link, so it gets no hover lift.
+  if (stage.locked) return <Card className="flex h-full flex-col gap-2">{body}</Card>;
   const route = stage.nextActionRoute || '/listening';
-  return <Link href={route} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{body}</Link>;
+  return <CardLink href={route} className="flex h-full flex-col gap-2">{body}</CardLink>;
 }

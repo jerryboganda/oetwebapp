@@ -481,7 +481,7 @@ export function WaveformCuePointEditor({
           ) : null}
 
           {status === 'error' ? (
-            <p className="rounded-lg border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger" role="alert">
+            <p className="rounded-lg border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger-strong" role="alert">
               {errorMessage}
             </p>
           ) : null}
@@ -600,10 +600,10 @@ export function WaveformCuePointEditor({
           </div>
 
           {saveError ? (
-            <p className="text-xs text-danger" role="alert">{saveError}</p>
+            <p className="text-xs text-danger-strong" role="alert">{saveError}</p>
           ) : null}
           {saved && !saveError ? (
-            <p className="text-xs text-success" role="status">Cue points saved.</p>
+            <p className="text-xs text-success-strong" role="status">Cue points saved.</p>
           ) : null}
         </>
       )}

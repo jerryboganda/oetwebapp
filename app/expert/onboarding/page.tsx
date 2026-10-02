@@ -274,7 +274,7 @@ export default function ExpertOnboardingPage() {
       STEP_META.map((s) => ({
         id: s.id,
         label: s.label,
-        icon: completedSteps.has(s.id as WizardStep) ? <CheckCircle2 className="w-4 h-4 text-success" /> : s.icon,
+        icon: completedSteps.has(s.id as WizardStep) ? <CheckCircle2 className="w-4 h-4 text-success-strong" /> : s.icon,
       })),
     [completedSteps],
   );
@@ -429,7 +429,7 @@ function WelcomeStep() {
           'Review everything and go live',
         ].map((item) => (
           <li key={item} className="flex gap-3 items-start">
-            <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-5 h-5 text-success-strong flex-shrink-0 mt-0.5" />
             <span className="text-sm text-navy/80">{item}</span>
           </li>
         ))}

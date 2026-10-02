@@ -127,7 +127,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
         <div className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-muted">
           <BookOpen className="h-4 w-4" /> Full transcript
         </div>
-        <p className="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <p className="mt-3 rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning-strong">
           No time-coded transcript segment map is authored for this part yet. If an Audio Script PDF is attached it is shown above. Per-question evidence still works where authored excerpts exist.
         </p>
       </section>
@@ -160,7 +160,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
                 hl ? 'border-info/40 bg-info/10 ring-1 ring-info/30' : 'border-border bg-background-light hover:border-border-hover hover:bg-surface',
               )}
             >
-              <div className="flex flex-wrap items-center gap-2 text-2xs font-black uppercase tracking-widest text-muted">
+              <div className="flex flex-wrap items-center gap-2 eyebrow text-muted">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatMs(seg.startMs)}–{formatMs(seg.endMs)}
@@ -177,7 +177,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
                 </button>
               </div>
               <p className="mt-2 text-sm leading-6 text-navy">{seg.text}</p>
-              {hl ? <span className="absolute right-2 top-2 rounded-full bg-info px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-white">Highlighted · Q{highlightedEvidence?.questionNumber}</span> : null}
+              {hl ? <span className="absolute right-2 top-2 rounded-full bg-info px-2 py-0.5 tile-label text-white">Highlighted · Q{highlightedEvidence?.questionNumber}</span> : null}
             </div>
           );
         })}
@@ -189,7 +189,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
     <section ref={sectionRef} id="full-transcript-viewer" className="rounded-2xl border border-border bg-surface p-6 shadow-sm" aria-label="Full transcript by part">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript</p>
+          <p className="eyebrow text-muted">Full transcript</p>
           <h3 className="mt-1 text-lg font-black text-navy">Complete Listening script</h3>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
             Select any word or phrase to look it up. Parts A, B, and C are enabled according to this submitted attempt. Click <span className="font-semibold">Play</span> on a segment to replay that span. The relevant section for the question you are reviewing is highlighted.
@@ -233,13 +233,13 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
             {activeMain === 'A' ? (
               <>
                 <div>
-                  <h4 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                  <h4 className="mb-2 flex items-center gap-2 eyebrow text-muted">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary" /> A1 — Extract 1
                   </h4>
                   {renderSegments(grouped.A1, 'No A1 transcript segments authored for this paper.')}
                 </div>
                 <div>
-                  <h4 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                  <h4 className="mb-2 flex items-center gap-2 eyebrow text-muted">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary" /> A2 — Extract 2
                   </h4>
                   {renderSegments(grouped.A2, 'No A2 transcript segments authored for this paper.')}
@@ -248,7 +248,7 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
             ) : null}
             {activeMain === 'B' ? (
               <div>
-                <h4 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                <h4 className="mb-2 flex items-center gap-2 eyebrow text-muted">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Part B — Workplace extracts (B1–B6 share one audio)
                 </h4>
                 {renderSegments(grouped.B, 'No Part B transcript segments authored for this paper.')}
@@ -257,13 +257,13 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
             {activeMain === 'C' ? (
               <>
                 <div>
-                  <h4 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                  <h4 className="mb-2 flex items-center gap-2 eyebrow text-muted">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary" /> C1 — Extract 1
                   </h4>
                   {renderSegments(grouped.C1, 'No C1 transcript segments authored for this paper.')}
                 </div>
                 <div>
-                  <h4 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                  <h4 className="mb-2 flex items-center gap-2 eyebrow text-muted">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary" /> C2 — Extract 2
                   </h4>
                   {renderSegments(grouped.C2, 'No C2 transcript segments authored for this paper.')}

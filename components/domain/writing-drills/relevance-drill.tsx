@@ -42,26 +42,26 @@ export function RelevanceDrillComponent({ drill, onGraded }: RelevanceDrillProps
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <header>
             <h2 className="text-lg font-semibold text-navy">Scenario</h2>
             <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
               <div>
-                <dt className="text-muted text-xs uppercase">Patient</dt>
-                <dd className="font-medium">{drill.scenario.patient}</dd>
+                <dt className="eyebrow text-muted">Patient</dt>
+                <dd className="font-medium text-navy">{drill.scenario.patient}</dd>
               </div>
               <div>
-                <dt className="text-muted text-xs uppercase">Writer</dt>
-                <dd className="font-medium">{drill.scenario.writerRole}</dd>
+                <dt className="eyebrow text-muted">Writer</dt>
+                <dd className="font-medium text-navy">{drill.scenario.writerRole}</dd>
               </div>
               <div>
-                <dt className="text-muted text-xs uppercase">Recipient</dt>
-                <dd className="font-medium">{drill.scenario.recipientRole}</dd>
+                <dt className="eyebrow text-muted">Recipient</dt>
+                <dd className="font-medium text-navy">{drill.scenario.recipientRole}</dd>
               </div>
               <div>
-                <dt className="text-muted text-xs uppercase">Purpose</dt>
-                <dd className="font-medium">{drill.scenario.purpose}</dd>
+                <dt className="eyebrow text-muted">Purpose</dt>
+                <dd className="font-medium text-navy">{drill.scenario.purpose}</dd>
               </div>
             </dl>
           </header>
@@ -79,7 +79,7 @@ export function RelevanceDrillComponent({ drill, onGraded }: RelevanceDrillProps
                     className="rounded-lg border border-border p-3 flex flex-col sm:flex-row sm:items-center gap-3"
                   >
                     <div className="flex-1">
-                      <div className="text-xs text-muted uppercase tracking-wide">
+                      <div className="eyebrow text-muted">
                         {note.category}
                       </div>
                       <div className="text-sm">{note.text}</div>

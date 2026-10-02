@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
 import {
+  ArrowRight,
   PlayCircle,
   Calendar,
   RefreshCw,
@@ -20,12 +20,15 @@ import {
   ChevronUp,
   Target,
 } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { Button, Card } from '@/components/ui';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionCollapse, MotionItem } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchStudyPlan, updateStudyPlanTask } from '@/lib/api';
 import type { StudyPlanTask, SubTest } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Reading: BookOpen,
@@ -34,21 +37,21 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Speaking: Mic,
 };
 
-// Subtest accents — DESIGN palette tier-2 tints.
+// Sub-test identity (DESIGN.md §2 skill tokens), never a status colour.
 const SUBTEST_COLORS: Record<SubTest, string> = {
-  Reading: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
-  Listening: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800',
-  Writing: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
-  Speaking: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
+  Reading: 'bg-skill-reading/10 text-skill-reading border-skill-reading/20',
+  Listening: 'bg-skill-listening/10 text-skill-listening border-skill-listening/20',
+  Writing: 'bg-skill-writing/10 text-skill-writing border-skill-writing/20',
+  Speaking: 'bg-skill-speaking/10 text-skill-speaking border-skill-speaking/20',
 };
 
 type SectionType = 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';
 
-const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; eyebrow: string; description: string }[] = [
-  { type: 'today', title: 'Today', icon: Calendar, eyebrow: 'Today', description: 'These are the tasks scheduled for today. Complete them in the order shown to keep momentum.' },
-  { type: 'thisWeek', title: 'This Week', icon: Calendar, eyebrow: 'This Week', description: 'Upcoming work for the rest of this week. Start any of these early if today is light.' },
-  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, eyebrow: 'Next Checkpoint', description: 'Work that leads into your next progress checkpoint or mock attempt.' },
-  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, eyebrow: 'Weak-Skill Focus', description: 'Targeted drills on the skills your recent attempts show need the most work.' },
+const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; description: string }[] = [
+  { type: 'today', title: 'Today', icon: Calendar, description: 'These are the tasks scheduled for today. Complete them in the order shown to keep momentum.' },
+  { type: 'thisWeek', title: 'This Week', icon: Calendar, description: 'Upcoming work for the rest of this week. Start any of these early if today is light.' },
+  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, description: 'Work that leads into your next progress checkpoint or mock attempt.' },
+  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, description: 'Targeted drills on the skills your recent attempts show need the most work.' },
 ];
 
 export default function StudyPlanPage() {
@@ -107,94 +110,80 @@ export default function StudyPlanPage() {
     router.push(target);
   };
 
-  const renderTaskCard = (task: StudyPlanTask) => {
+  const renderTaskCard = (task: StudyPlanTask, index: number) => {
     const isCompleted = task.status === 'completed';
     const SubIcon = SUBTEST_ICONS[task.subTest];
+    const rationaleId = `study-plan-rationale-${task.id}`;
+    const rationaleOpen = expandedRationale === task.id;
 
     return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        key={task.id}
-        className={`bg-surface border border-border rounded-2xl overflow-hidden shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-          isCompleted ? 'opacity-60' : 'hover:shadow-md'
-        }`}
-      >
-        <div className="p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      <MotionItem key={task.id} delayIndex={Math.min(index, 5)}>
+        <Card className={`transition-[border-color,box-shadow,opacity] duration-200 ${isCompleted ? 'opacity-60' : 'hover:border-border-hover hover:shadow-clinical'}`}>
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border ${SUBTEST_COLORS[task.subTest]}`}>
-                  <SubIcon className="w-3.5 h-3.5" />
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className={`tile-label inline-flex items-center gap-1.5 rounded-control border px-2.5 py-1 ${SUBTEST_COLORS[task.subTest]}`}>
+                  <SubIcon className="h-3.5 w-3.5" aria-hidden="true" />
                   {task.subTest}
                 </span>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-success/10 text-success border border-success/20">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Done
+                  <span className="tile-label inline-flex items-center gap-1 rounded-control border border-success/20 bg-success/10 px-2 py-1 text-success-strong">
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Done
                   </span>
                 )}
               </div>
 
-              <h3 className={`text-base font-bold text-navy mb-1.5 ${isCompleted ? 'line-through text-muted' : ''}`}>
+              <h3 className={`mb-1.5 text-base font-bold ${isCompleted ? 'text-muted line-through' : 'text-navy'}`}>
                 {task.title}
               </h3>
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-                <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{task.duration}</span>
-                <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{task.dueDate}</span>
+                <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{task.duration}</span>
+                <span className="flex items-center gap-1 tabular-nums"><Calendar className="h-3.5 w-3.5" aria-hidden="true" />{task.dueDate}</span>
               </div>
 
               {/* Rationale */}
               <div className="mt-2">
                 <button
-                  onClick={() => setExpandedRationale(expandedRationale === task.id ? null : task.id)}
-                  aria-expanded={expandedRationale === task.id}
-                  className="flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+                  type="button"
+                  onClick={() => setExpandedRationale(rationaleOpen ? null : task.id)}
+                  aria-expanded={rationaleOpen}
+                  aria-controls={rationaleId}
+                  className="-mx-1 flex min-h-11 items-center gap-1 rounded-control px-1 text-sm font-semibold text-primary transition-colors hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 sm:py-1"
                 >
-                  <Info className="w-3.5 h-3.5" />
+                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   Why this is recommended
-                  {expandedRationale === task.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  {rationaleOpen ? <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
                 </button>
-                <AnimatePresence>
-                  {expandedRationale === task.id && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <p className="mt-2 p-3 bg-info/5 border border-info/20 rounded-lg text-sm text-navy/80 leading-relaxed">
-                        {task.rationale}
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <MotionCollapse open={rationaleOpen} id={rationaleId}>
+                  <p className="mt-2 max-w-prose rounded-lg border border-info/20 bg-info/5 p-3 text-sm leading-relaxed text-navy">
+                    {task.rationale}
+                  </p>
+                </MotionCollapse>
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex flex-row sm:flex-col items-center sm:items-stretch justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-border">
+            <div className="flex shrink-0 flex-row items-center justify-end gap-2 border-t border-border pt-3 sm:flex-col sm:items-stretch sm:border-t-0 sm:pt-0">
               {!isCompleted ? (
                 <>
                   <Button variant="primary" size="sm" onClick={() => handleStart(task)} className="flex-1 sm:flex-none">
-                    <PlayCircle className="w-4 h-4 mr-1" /> Start
+                    <PlayCircle className="h-4 w-4" aria-hidden="true" /> Start
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
-                    <CheckCircle2 className="w-4 h-4" />
+                  <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete" aria-label="Mark Complete">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </>
               ) : (
                 <Button variant="ghost" size="sm" onClick={() => handleUndo(task.id)}>
-                  <RefreshCw className="w-4 h-4 mr-1" /> Undo
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> Undo
                 </Button>
               )}
             </div>
           </div>
-        </div>
-      </motion.div>
+        </Card>
+      </MotionItem>
     );
   };
 
@@ -202,60 +191,63 @@ export default function StudyPlanPage() {
   const todayTasks = tasks.filter((task) => task.section === 'today');
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextCheckpointCount = tasks.filter((task) => task.section === 'nextCheckpoint').length;
+  // The hero stays mounted in every state (one h1 per page); its counts wait for real data.
+  const pendingCount = asyncStatus === 'loading' ? 'Loading...' : asyncStatus === 'error' ? '—' : null;
 
   return (
     <>
+      <LearnerPageHero
+        eyebrow="Action Plan"
+        icon={Calendar}
+        accent="primary"
+        title="Keep today's study sequence visible"
+        description="Use this plan to see what to do now, what comes next, and why each task is here."
+        highlights={[
+          { icon: Calendar, label: 'Today', value: pendingCount ?? `${todayTasks.length} scheduled` },
+          { icon: CheckCircle2, label: 'Completed', value: pendingCount ?? `${completedToday} done` },
+          { icon: Target, label: 'Next checkpoint', value: pendingCount ?? `${nextCheckpointCount} tasks` },
+        ]}
+        aside={(
+          <Link
+            href="/readiness"
+            prefetch={false}
+            className="inline-flex items-center gap-1.5 rounded-control text-xs font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            See how this plan moves your readiness
+            <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden="true" />
+          </Link>
+        )}
+      />
+
       <AsyncStateWrapper
         status={asyncStatus}
         onRetry={loadData}
         errorMessage={error ?? undefined}
+        loadingContent={<LearnerSkeleton variant="list" />}
         emptyContent={
-          <div className="py-12 text-center space-y-3">
-            <p className="text-sm font-bold text-navy">No study plan yet</p>
-            <p className="text-xs text-muted">Set your goals to generate your personalised study plan.</p>
-            <Button size="sm" onClick={() => router.push('/goals')}>Set goals</Button>
-          </div>
+          <EmptyState
+            icon={<Calendar className="h-8 w-8" />}
+            title="No study plan yet"
+            description="Set your goals to generate your personalised study plan."
+            action={{ label: 'Set goals', href: '/goals' }}
+          />
         }
       >
-        <div className="space-y-5 sm:space-y-8">
-          <LearnerPageHero
-            eyebrow="Action Plan"
-            icon={Calendar}
-            accent="primary"
-            title="Keep today's study sequence visible"
-            description="Use this plan to see what to do now, what comes next, and why each task is here."
-            highlights={[
-              { icon: Calendar, label: 'Today', value: `${todayTasks.length} scheduled` },
-              { icon: CheckCircle2, label: 'Completed', value: `${completedToday} done` },
-              { icon: Target, label: 'Next checkpoint', value: `${nextCheckpointCount} tasks` },
-            ]}
-          />
-
-          <Link
-            href="/readiness"
-            className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:underline"
-          >
-            See how this plan moves your readiness →
-          </Link>
-
-          {/* Sections */}
-          {SECTIONS.map(({ type, title, icon: SectionIcon, eyebrow, description }) => {
+        <div className="learner-page-flow">
+          {SECTIONS.map(({ type, title, icon: SectionIcon, description }) => {
             const sectionTasks = tasks.filter((t) => t.section === type);
             if (sectionTasks.length === 0) return null;
 
             return (
               <section key={type}>
                 <LearnerSurfaceSectionHeader
-                  eyebrow={eyebrow}
                   title={`${title} (${sectionTasks.length})`}
                   description={description}
                   icon={SectionIcon}
                   className="mb-4"
                 />
                 <div className="space-y-3">
-                  <AnimatePresence mode="popLayout">
-                    {sectionTasks.map(renderTaskCard)}
-                  </AnimatePresence>
+                  {sectionTasks.map(renderTaskCard)}
                 </div>
               </section>
             );

@@ -1,12 +1,19 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { Brain, CalendarCheck, PieChart as PieChartIcon, Sigma } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from '@/components/charts/dynamic-recharts';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatCard } from '@/components/ui/stat-card';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
 
+// Chart series keep their meaning: mastered is good, struggling needs work.
 const CHART_COLORS = {
   mastered:   'var(--color-success)',
   learning:   'var(--color-info)',
@@ -44,42 +51,34 @@ export default function VocabStatsPage() {
       ].filter((d) => d.value > 0)
     : [];
 
+  // The breadcrumb's "Vocab" crumb is the way back, so no back link in the header.
   return (
     <>
-      <div className="space-y-6 sm:space-y-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-primary-500">
-              Spaced Repetition
-            </p>
-            <h1 className="text-2xl font-bold text-navy">
-              Vocabulary Stats
-            </h1>
-          </div>
-          <Link
-            href="/reading/vocab"
-            className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-          >
-            ← Back
-          </Link>
-        </div>
+      <LearnerPageHero
+        eyebrow="Spaced Repetition"
+        icon={PieChartIcon}
+        title="Vocabulary Stats"
+        description=""
+      />
 
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-72 w-full rounded-2xl" />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
-              ))}
-            </div>
+      {loading ? (
+        <>
+          <Skeleton className="h-72 w-full rounded-2xl" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
           </div>
-        ) : (
-          <>
-            {/* Donut chart */}
-            <section className="rounded-2xl border border-border bg-surface px-4 py-5 shadow-sm sm:px-6 sm:py-6">
-              <h2 className="mb-4 text-base font-semibold text-navy">
-                Word Breakdown
-              </h2>
+        </>
+      ) : !stats ? (
+        // A failed load used to show a zero deck; say it failed instead.
+        <ErrorState />
+      ) : (
+        <>
+          {/* Donut chart */}
+          <MotionSection>
+            <Card padding="lg">
+              <LearnerSurfaceSectionHeader title="Word Breakdown" className="mb-4" />
               {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
@@ -114,54 +113,34 @@ export default function VocabStatsPage() {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-muted">
-                  No words in your deck yet. Add some words to see the breakdown.
-                </p>
+                <EmptyState
+                  className="py-8"
+                  icon={<PieChartIcon className="h-7 w-7" aria-hidden />}
+                  title="No words in your deck yet."
+                  description="Add some words to see the breakdown."
+                />
               )}
-            </section>
+            </Card>
+          </MotionSection>
 
-            {/* Stat cards */}
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatCard
-                label="Total Words"
-                value={stats?.total ?? 0}
-                colorClass="text-primary-700 dark:text-primary-300"
-              />
+          {/* Stat cards: counts, not statuses, so one neutral tile style. */}
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <MotionItem delayIndex={0}>
+              <StatCard label="Total Words" value={<CountUp value={stats.total} />} icon={<Sigma />} />
+            </MotionItem>
+            <MotionItem delayIndex={1}>
               <StatCard
                 label="Average Retention"
-                value={stats ? `${Math.round(stats.averageRetention)}%` : '–'}
-                colorClass="text-blue-700 dark:text-blue-300"
+                value={<CountUp value={Math.round(stats.averageRetention)} suffix="%" />}
+                icon={<Brain />}
               />
-              <StatCard
-                label="Due Today"
-                value={stats?.dueToday ?? 0}
-                colorClass="text-amber-700 dark:text-amber-300"
-              />
-            </section>
-
-            {/* Retention chart placeholder */}
-            <section className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-8 text-center">
-              <p className="text-sm font-medium text-muted">
-                Retention chart coming soon
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                Daily retention trends will appear here once you complete more review sessions.
-              </p>
-            </section>
-          </>
-        )}
-      </div>
+            </MotionItem>
+            <MotionItem delayIndex={2}>
+              <StatCard label="Due Today" value={<CountUp value={stats.dueToday} />} icon={<CalendarCheck />} />
+            </MotionItem>
+          </section>
+        </>
+      )}
     </>
-  );
-}
-
-function StatCard({ label, value, colorClass }: { label: string; value: number | string; colorClass: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface px-5 py-4">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-        {label}
-      </p>
-      <p className={`text-3xl font-bold ${colorClass}`}>{value}</p>
-    </div>
   );
 }

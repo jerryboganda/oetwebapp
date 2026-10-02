@@ -51,9 +51,9 @@ function DivergenceBanner({
   const tone = agreementBandTone(divergence.agreementBand);
   const topDelta = pickLargestDelta(divergence.perCriterion);
   const toneClasses = {
-    success: 'border-emerald-200/60 bg-emerald-50/60 text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200',
-    warning: 'border-amber-200/60 bg-amber-50/60 text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200',
-    danger: 'border-red-200/60 bg-red-50/60 text-red-900 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-200',
+    success: 'border-success/20 bg-success/10 text-success-strong',
+    warning: 'border-warning/20 bg-warning/10 text-warning-strong',
+    danger: 'border-danger/20 bg-danger/10 text-danger-strong',
   }[tone];
 
   let directionIcon: ReactNode = <Equal className="h-4 w-4" aria-hidden />;
@@ -160,7 +160,7 @@ export function DualAssessmentLayout({
         role="note"
         aria-label="Speaking assessment advisory"
       >
-        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
         <div>
           <p className="font-bold">Both estimates are advisory, not an official OET score.</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted">

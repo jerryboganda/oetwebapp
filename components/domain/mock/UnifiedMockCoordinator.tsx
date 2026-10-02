@@ -197,7 +197,7 @@ export function UnifiedMockCoordinator({
 
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1 font-mono text-xs">
-              <Shield className="h-3.5 w-3.5 text-emerald-600" />
+              <Shield className="h-3.5 w-3.5 text-success-strong" />
               Clock Sync: {Math.abs(clockDriftMs) < 1000 ? 'Synchronized' : `${clockDriftMs}ms offset`}
             </Badge>
             <Badge
@@ -248,7 +248,7 @@ export function UnifiedMockCoordinator({
               className={cn(
                 'relative flex flex-col justify-between p-5 transition-all',
                 isInProgress && 'ring-2 ring-primary border-primary bg-primary/5',
-                isDone && 'border-emerald-200 bg-emerald-50/20',
+                isDone && 'border-success/20 bg-success/10',
               )}
             >
               <div className="space-y-3">
@@ -260,7 +260,7 @@ export function UnifiedMockCoordinator({
                     variant={isDone ? 'success' : isInProgress ? 'info' : 'outline'}
                     className={cn(
                       'text-2xs font-semibold uppercase',
-                      isDone && 'bg-emerald-600 text-white',
+                      isDone && 'bg-success-strong text-white',
                     )}
                   >
                     {isDone ? 'Completed' : isInProgress ? 'In Progress' : 'Not Started'}
@@ -268,7 +268,7 @@ export function UnifiedMockCoordinator({
                 </div>
 
                 <div>
-                  <span className="text-2xs font-bold uppercase tracking-wider text-muted">
+                  <span className="eyebrow text-muted">
                     Sub-Test {idx + 1}
                   </span>
                   <h3 className="text-base font-bold text-navy">{section.title || meta.title}</h3>
@@ -286,7 +286,7 @@ export function UnifiedMockCoordinator({
               <div className="mt-5 pt-3 border-t border-border/60">
                 {isDone ? (
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success-strong">
                       <CheckCircle2 className="h-4 w-4" /> Ready for scoring
                     </span>
                     <Button
@@ -325,8 +325,8 @@ export function UnifiedMockCoordinator({
 
       {/* Completion Actions */}
       {isAllCompleted ? (
-        <Card className="border-emerald-300 bg-emerald-50/50 p-6 text-center shadow-sm">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+        <Card className="border-success/30 bg-success/10 p-6 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10 text-success-strong">
             <CheckCircle2 className="h-7 w-7" />
           </div>
           <h3 className="mt-3 text-lg font-bold text-navy">All 4 Sub-Tests Completed</h3>
@@ -402,7 +402,7 @@ export function UnifiedMockCoordinator({
                 </div>
 
                 <div className="space-y-2 rounded-xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">
+                  <p className="eyebrow text-muted">
                     Sub-Test Protocol & Invariants
                   </p>
                   <ul className="list-disc space-y-1.5 pl-4 text-xs text-foreground">

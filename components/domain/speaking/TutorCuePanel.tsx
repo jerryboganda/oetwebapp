@@ -65,19 +65,19 @@ function describeResistance(level: ResistanceLevelCode | string | undefined): {
     case 'high':
       return {
         label: 'High resistance',
-        className: 'bg-rose-100 text-rose-800 border-rose-200',
+        className: 'bg-danger/10 text-danger-strong border-danger/20',
         description: lookup?.description ?? '',
       };
     case 'medium':
       return {
         label: 'Medium resistance',
-        className: 'bg-amber-100 text-amber-800 border-amber-200',
+        className: 'bg-warning/10 text-warning-strong border-warning/20',
         description: lookup?.description ?? '',
       };
     default:
       return {
         label: 'Low resistance',
-        className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        className: 'bg-success/10 text-success-strong border-success/20',
         description: lookup?.description ?? '',
       };
   }
@@ -197,13 +197,13 @@ export function TutorCuePanel({
       {/* Timer header */}
       <header className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-rose-600' : 'text-muted')} aria-hidden />
+          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-danger-strong' : 'text-muted')} aria-hidden />
           <span className="font-medium text-foreground">Role-play time</span>
         </div>
         <span
           className={cn(
             'rounded-md px-2 py-0.5 font-mono text-base tabular-nums',
-            isTimerWarning ? 'bg-rose-50 text-rose-700' : 'bg-background-light text-foreground',
+            isTimerWarning ? 'bg-danger/10 text-danger-strong' : 'bg-background-light text-foreground',
           )}
           aria-live="polite"
         >
@@ -218,7 +218,7 @@ export function TutorCuePanel({
       ) : forbidden ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900"
+          className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-warning-strong"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <p className="text-xs">
@@ -229,7 +229,7 @@ export function TutorCuePanel({
       ) : error ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border border-rose-300 bg-rose-50 p-3 text-rose-700"
+          className="flex items-start gap-2 rounded-md border border-danger/30 bg-danger/10 p-3 text-danger-strong"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <p className="text-xs">{error}</p>
@@ -239,7 +239,7 @@ export function TutorCuePanel({
           <ResistancePill resistance={resistance} />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Opening response
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
@@ -266,7 +266,7 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Cue prompts
             </h4>
             <p className="mt-1 text-xs text-muted">
@@ -288,7 +288,7 @@ export function TutorCuePanel({
                       className={cn(
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                          ? 'border-success/30 bg-success/10 text-success-strong'
                           : 'border-border bg-surface hover:border-primary/50 hover-primary disabled:cursor-not-allowed disabled:opacity-50',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
@@ -296,7 +296,7 @@ export function TutorCuePanel({
                       <MessageSquareQuote
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          delivered ? 'text-emerald-600' : 'text-muted group-hover:text-primary',
+                          delivered ? 'text-success-strong' : 'text-muted group-hover:text-primary',
                         )}
                         aria-hidden
                       />
@@ -334,7 +334,7 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h4 className="eyebrow text-muted">
               Closing cue
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-background-light p-3 leading-relaxed text-foreground">
@@ -346,7 +346,7 @@ export function TutorCuePanel({
 
           {script.layLanguageTriggers && script.layLanguageTriggers.length > 0 ? (
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              <h4 className="eyebrow text-muted">
                 Lay-language triggers
               </h4>
               <ul className="mt-1 flex flex-wrap gap-1.5">

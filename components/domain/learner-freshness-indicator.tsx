@@ -68,7 +68,7 @@ export function LearnerFreshnessIndicator({
         'inline-flex items-center gap-1 text-xs font-medium',
         date
           ? isStale
-            ? 'text-amber-600'
+            ? 'text-warning-strong'
             : 'text-muted'
           : 'text-muted/70',
         className,

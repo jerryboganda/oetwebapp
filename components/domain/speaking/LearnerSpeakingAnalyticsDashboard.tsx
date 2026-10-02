@@ -196,7 +196,7 @@ export function LearnerSpeakingAnalyticsDashboard({
       <Card className="bg-surface p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">
+            <p className="eyebrow text-muted">
               Estimated speaking band
             </p>
             <p className="mt-2 text-4xl font-bold text-navy dark:text-white">
@@ -362,7 +362,7 @@ export function LearnerSpeakingAnalyticsDashboard({
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <header className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-warning" />
+            <AlertTriangle className="h-4 w-4 text-warning-strong" />
             <h2 className="text-base font-semibold text-navy dark:text-white">
               Recurring issues
             </h2>
@@ -379,7 +379,7 @@ export function LearnerSpeakingAnalyticsDashboard({
                   className="flex items-start gap-2 rounded-lg border border-border bg-surface/60 p-3"
                 >
                   <AlertTriangle
-                    className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+                    className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong"
                     aria-hidden="true"
                   />
                   <span className="text-sm text-navy dark:text-white">{issue}</span>

@@ -5,10 +5,13 @@ import { useEffect, useState } from 'react';
 import { CalendarDays, PlayCircle, Video } from 'lucide-react';
 
 import { LearnerPageHero } from '@/components/domain/learner-surface';
-import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonClassName } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ClassesTabs } from '../classes-tabs';
 import {
   fetchMyPastLiveClasses,
   type LiveClassListItem,
@@ -48,72 +51,41 @@ export default function MyPastClassesPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <LearnerPageHero
-          title="My Past Classes"
-          description="Replay recordings and review AI summaries from completed sessions."
-          icon={Video}
-        />
+      <LearnerPageHero
+        title="My Past Classes"
+        description="Replay recordings and review AI summaries from completed sessions."
+        icon={Video}
+      />
 
-        {error ? (
-          <InlineAlert variant="warning" className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)}>
-              Dismiss
-            </Button>
-          </InlineAlert>
-        ) : null}
+      <ClassesTabs active="past" />
 
-        <div className="flex gap-3 border-b border-border pb-1 text-sm">
-          <Link
-            href="/me/classes/upcoming"
-            className="border-b-2 border-transparent pb-2 text-muted hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Upcoming
-          </Link>
-          <Link
-            href="/me/classes/past"
-            aria-current="page"
-            className="border-b-2 border-primary pb-2 font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Past
-          </Link>
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-32 rounded-2xl" />
         </div>
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : classes.length === 0 ? (
+        <EmptyState
+          icon={<Video className="h-8 w-8" />}
+          title="No past classes yet"
+          description="Completed classes and their recordings will appear here."
+          action={{ label: 'View upcoming classes', href: '/me/classes/upcoming' }}
+        />
+      ) : (
+        <div className="space-y-4">
+          {classes.map((item, index) => {
+            const session = lastCompletedSession(item);
+            if (!session) return null;
 
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-32 rounded-xl" />
-            <Skeleton className="h-32 rounded-xl" />
-            <Skeleton className="h-32 rounded-xl" />
-          </div>
-        ) : classes.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-            <Video className="mx-auto mb-3 h-8 w-8 text-muted/50" aria-hidden="true" />
-            <p className="text-sm font-medium text-navy">No past classes yet</p>
-            <p className="mt-1 text-sm text-muted">
-              Completed classes and their recordings will appear here.
-            </p>
-            <Link
-              href="/me/classes/upcoming"
-              className={buttonClassName({ variant: 'outline', size: 'sm' }) + ' mt-4 inline-flex'}
-            >
-              View upcoming classes
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {classes.map((item) => {
-              const session = lastCompletedSession(item);
-              if (!session) return null;
+            const hasRecording = session.status === 'Completed';
+            const recordingReady = hasRecording; // recording availability comes from the recording endpoint
 
-              const hasRecording = session.status === 'Completed';
-              const recordingReady = hasRecording; // recording availability comes from the recording endpoint
-
-              return (
-                <article
-                  key={`${item.id}-${session.id}`}
-                  className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
-                >
+            return (
+              <MotionItem key={`${item.id}-${session.id}`} delayIndex={Math.min(index, 5)}>
+                <article className={cardClassName({})}>
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -122,7 +94,7 @@ export default function MyPastClassesPage() {
                         <Badge variant="muted">{item.level}</Badge>
                       </div>
                       <h2 className="text-lg font-semibold text-navy">{item.title}</h2>
-                      <p className="flex items-center gap-1.5 text-sm text-muted">
+                      <p className="flex flex-wrap items-center gap-1.5 text-sm tabular-nums text-muted">
                         <CalendarDays className="h-4 w-4" aria-hidden="true" />
                         {formatDate(session.scheduledStartAt)}
                         {item.tutorDisplayName ? ` · ${item.tutorDisplayName}` : null}
@@ -131,31 +103,26 @@ export default function MyPastClassesPage() {
 
                     <div className="shrink-0">
                       {recordingReady ? (
-                        <Link
-                          href={`/me/classes/recordings/${session.id}`}
-                          className={buttonClassName({ variant: 'secondary', size: 'sm' })}
-                        >
-                          <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                          Watch recording
-                        </Link>
+                        <Button asChild variant="secondary" size="sm">
+                          <Link href={`/me/classes/recordings/${session.id}`}>
+                            <PlayCircle className="h-4 w-4" aria-hidden="true" />
+                            Watch recording
+                          </Link>
+                        </Button>
                       ) : (
-                        <button
-                          type="button"
-                          disabled
-                          className={buttonClassName({ variant: 'ghost', size: 'sm' }) + ' cursor-not-allowed opacity-50'}
-                        >
+                        <Button type="button" variant="ghost" size="sm" disabled>
                           <PlayCircle className="h-4 w-4" aria-hidden="true" />
                           Recording pending
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
                 </article>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </MotionItem>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

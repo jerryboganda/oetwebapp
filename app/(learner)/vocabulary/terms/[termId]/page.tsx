@@ -9,7 +9,9 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, RecallTierBadge, type BadgeProps } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   fetchVocabularyTerm,
   fetchMyVocabulary,
@@ -24,11 +26,11 @@ import { cleanExampleSentence } from '@/lib/vocabulary-example-sentence';
 import { PracticeSpelling } from '@/components/domain/recalls/practice-spelling';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
-const MASTERY_COLORS: Record<string, string> = {
-  new: 'bg-background-light text-navy',
-  learning: 'bg-info/10 text-info',
-  reviewing: 'bg-warning/10 text-warning',
-  mastered: 'bg-success/10 text-success',
+const MASTERY_BADGES: Record<string, BadgeProps['variant']> = {
+  new: 'slate',
+  learning: 'info',
+  reviewing: 'warning',
+  mastered: 'success',
 };
 
 export default function VocabularyTermDetailPage() {
@@ -125,12 +127,7 @@ export default function VocabularyTermDetailPage() {
   if (loading) {
     return (
       <>
-        <div className="mb-6 flex items-center gap-3">
-          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-          </Link>
-          <Skeleton className="h-8 w-48 rounded" />
-        </div>
+        <Skeleton className="h-36 rounded-2xl" />
         <Skeleton className="h-40 rounded-2xl" />
       </>
     );
@@ -138,10 +135,12 @@ export default function VocabularyTermDetailPage() {
 
   if (!term) {
     return (
-      <>
-        <InlineAlert variant="warning" className="mb-4">Term not found.</InlineAlert>
-        <Button onClick={() => router.back()}>Go back</Button>
-      </>
+      <EmptyState
+        icon={<BookOpen className="h-7 w-7" aria-hidden="true" />}
+        title="Term not found."
+        description={error ?? undefined}
+        action={{ label: 'Go back', onClick: () => router.back() }}
+      />
     );
   }
 
@@ -151,89 +150,86 @@ export default function VocabularyTermDetailPage() {
   if (term.isLocked) {
     return (
       <>
-        <div className="mb-6 flex items-center gap-3">
-          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-          </Link>
-          <LearnerPageHero
-            eyebrow="Vocabulary"
-            title={term.term}
-            description="Locked recall word"
-            icon={Lock}
-          />
-        </div>
-        <Card className="border-border bg-surface p-8 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Lock className="h-6 w-6" />
-          </div>
-          <h2 className="mt-4 text-lg font-bold text-navy">
-            Subscribe to unlock the full Recall Vocabulary Bank.
-          </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-            Free learners can preview a curated selection of recall words. Subscribe to reveal this term&apos;s
-            definition, examples, British clinical pronunciation, and the full Recalls drill set.
-          </p>
-          <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
-            <Button asChild>
-              <Link href="/catalog">View upgrade options</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/vocabulary/browse">Back to browse</Link>
-            </Button>
-          </div>
-        </Card>
+        <LearnerPageHero
+          eyebrow="Vocabulary"
+          title={term.term}
+          description="Locked recall word"
+          icon={Lock}
+        />
+        <MotionSection>
+          <Card padding="lg" className="flex flex-col items-center text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Lock className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <h2 className="mt-4 text-lg font-bold text-navy">
+              Subscribe to unlock the full Recall Vocabulary Bank.
+            </h2>
+            <p className="mt-2 max-w-md text-sm text-muted">
+              Free learners can preview a curated selection of recall words. Subscribe to reveal this term&apos;s
+              definition, examples, British clinical pronunciation, and the full Recalls drill set.
+            </p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+              <Button asChild>
+                <Link href="/catalog">View upgrade options</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/vocabulary/browse">Back to browse</Link>
+              </Button>
+            </div>
+          </Card>
+        </MotionSection>
       </>
     );
   }
 
   return (
     <>
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/vocabulary" aria-label="Back to vocabulary" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </Link>
-        <LearnerPageHero
-          eyebrow="Vocabulary"
-          title={spellingOpen ? 'Listen and spell the word' : term.term}
-          description={
-            spellingOpen
-              ? 'Practice spelling'
-              : (term.ipaPronunciation ?? term.category.replace(/_/g, ' '))
-          }
-          icon={BookOpen}
-          highlights={[
-            { icon: BookOpen, label: 'Category', value: term.category.replace(/_/g, ' ') },
-          ]}
-        />
-      </div>
+      <LearnerPageHero
+        eyebrow="Vocabulary"
+        title={spellingOpen ? 'Listen and spell the word' : term.term}
+        description={
+          spellingOpen
+            ? 'Practice spelling'
+            : (term.ipaPronunciation ?? term.category.replace(/_/g, ' '))
+        }
+        icon={BookOpen}
+        highlights={[
+          { icon: BookOpen, label: 'Category', value: term.category.replace(/_/g, ' ') },
+        ]}
+        aside={(
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/vocabulary">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+              Back to vocabulary
+            </Link>
+          </Button>
+        )}
+      />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
       {audioUpgradeModal}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          {/* Definition */}
-          <Card className="border-border bg-surface p-6">
-            <LearnerSurfaceSectionHeader
-              eyebrow="Definition"
-              title={spellingOpen ? 'Listen and spell the word' : term.term}
-              description={spellingOpen ? undefined : (term.ipaPronunciation ?? undefined)}
-              className="mb-3"
-            />
+      <MotionSection className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          {/* Definition — the hero already names the term, so this card is titled by its role. */}
+          <Card padding="lg">
+            <LearnerSurfaceSectionHeader title="Definition" className="mb-3" />
             <div className="flex flex-wrap items-center gap-3">
               <button
+                type="button"
                 onClick={() => void playAudio()}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-label={`Play pronunciation of ${term.term}`}
+                className="pressable inline-flex min-h-11 items-center gap-2 rounded-full bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                // While practising, the accessible name must not give the answer away.
+                aria-label={spellingOpen ? 'Play pronunciation' : `Play pronunciation of ${term.term}`}
               >
-                <Volume2 className="h-4 w-4" /> Play audio
+                <Volume2 className="h-4 w-4" aria-hidden="true" /> Play audio
               </button>
               <RecallTierBadge count={term.examFrequencyCount ?? 0} occurrences={term.recallSetOccurrences} />
             </div>
             {!spellingOpen && <p className="mt-4 text-base text-navy">{term.definition}</p>}
             {!spellingOpen && term.contextNotes && (
-              <div className="mt-4 rounded-2xl bg-info/10 p-4 text-sm text-info">
-                <div className="mb-1 text-xs font-semibold uppercase text-info">Usage notes</div>
+              <div className="mt-4 rounded-xl border border-info/20 bg-info/10 p-4 text-sm text-info">
+                <div className="mb-1 eyebrow text-info">Usage notes</div>
                 {term.contextNotes}
               </div>
             )}
@@ -247,7 +243,7 @@ export default function VocabularyTermDetailPage() {
           {/* Example — §3A: only rendered when the sentence actually demonstrates
               the term; template/filler copy is suppressed by the shared guard. */}
           {!spellingOpen && exampleText && (
-            <Card className="border-border bg-surface p-6">
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow="Example"
                 title="In clinical context"
@@ -262,7 +258,7 @@ export default function VocabularyTermDetailPage() {
 
           {/* Synonyms / Collocations / Related */}
           {(term.synonyms?.length > 0 || term.collocations?.length > 0 || term.relatedTerms?.length > 0) && (
-            <Card className="border-border bg-surface p-6">
+            <Card padding="lg">
               <LearnerSurfaceSectionHeader
                 eyebrow="Context"
                 title="Synonyms, collocations, and related terms"
@@ -272,7 +268,7 @@ export default function VocabularyTermDetailPage() {
               <div className="space-y-4">
                 {term.synonyms?.length > 0 && (
                   <div>
-                    <div className="mb-2 text-xs font-semibold uppercase text-muted">Synonyms</div>
+                    <div className="mb-2 eyebrow text-muted">Synonyms</div>
                     <div className="flex flex-wrap gap-2">
                       {term.synonyms.map((s, i) => (
                         <span key={i} className="rounded-full bg-background-light px-3 py-1 text-sm text-navy">{s}</span>
@@ -282,7 +278,7 @@ export default function VocabularyTermDetailPage() {
                 )}
                 {term.collocations?.length > 0 && (
                   <div>
-                    <div className="mb-2 text-xs font-semibold uppercase text-muted">Collocations</div>
+                    <div className="mb-2 eyebrow text-muted">Collocations</div>
                     <div className="flex flex-wrap gap-2">
                       {term.collocations.map((s, i) => (
                         <span key={i} className="rounded-full bg-info/10 px-3 py-1 text-sm text-info">{s}</span>
@@ -292,7 +288,7 @@ export default function VocabularyTermDetailPage() {
                 )}
                 {term.relatedTerms?.length > 0 && (
                   <div>
-                    <div className="mb-2 text-xs font-semibold uppercase text-muted">Related terms</div>
+                    <div className="mb-2 eyebrow text-muted">Related terms</div>
                     <div className="flex flex-wrap gap-2">
                       {term.relatedTerms.map((s, i) => (
                         <span key={i} className="rounded-full border border-border bg-surface px-3 py-1 text-sm text-navy">{s}</span>
@@ -307,27 +303,28 @@ export default function VocabularyTermDetailPage() {
 
         {/* Sidebar: My list card */}
         <div className="space-y-4">
-          <Card className="border-border bg-surface p-6">
-            <div className="mb-3 text-xs font-semibold uppercase text-muted">My word bank</div>
+          <Card padding="lg">
+            <div className="mb-3 eyebrow text-muted">My word bank</div>
             {myEntry ? (
               <>
                 <div className="mb-4">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${MASTERY_COLORS[myEntry.mastery] ?? ''}`}>
+                  <Badge variant={MASTERY_BADGES[myEntry.mastery] ?? 'muted'} className="capitalize">
                     {myEntry.mastery}
-                  </span>
+                  </Badge>
                   <div className="mt-3 space-y-1 text-sm text-muted">
-                    <div>Review count: <span className="font-medium text-navy">{myEntry.reviewCount}</span></div>
-                    <div>Correct: <span className="font-medium text-navy">{myEntry.correctCount}</span></div>
-                    <div>Next review: <span className="font-medium text-navy">{myEntry.nextReviewDate ?? '–'}</span></div>
-                    <div>Interval: <span className="font-medium text-navy">{myEntry.intervalDays}d</span></div>
+                    <div>Review count: <span className="font-medium tabular-nums text-navy">{myEntry.reviewCount}</span></div>
+                    <div>Correct: <span className="font-medium tabular-nums text-navy">{myEntry.correctCount}</span></div>
+                    <div>Next review: <span className="font-medium tabular-nums text-navy">{myEntry.nextReviewDate ?? '–'}</span></div>
+                    <div>Interval: <span className="font-medium tabular-nums text-navy">{myEntry.intervalDays}d</span></div>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleRemove}
                   disabled={saving}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
+                  className="pressable inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger-strong hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
                 >
-                  <Trash2 className="h-4 w-4" /> Remove from my list
+                  <Trash2 className="h-4 w-4" aria-hidden="true" /> Remove from my list
                 </button>
               </>
             ) : (
@@ -341,20 +338,20 @@ export default function VocabularyTermDetailPage() {
           </Card>
 
           {/* Metadata card */}
-          <Card className="border-border bg-surface p-6 text-sm">
-            <div className="mb-3 text-xs font-semibold uppercase text-muted">About</div>
+          <Card padding="lg" className="text-sm">
+            <div className="mb-3 eyebrow text-muted">About</div>
             <div className="space-y-2 text-muted">
               <div>Exam: <span className="font-medium text-navy">{term.examTypeCode.toUpperCase()}</span></div>
               {term.professionId && <div>Profession: <span className="font-medium text-navy capitalize">{term.professionId}</span></div>}
-              <div className="flex items-center gap-2">Category: <CategoryBadge category={term.category} size="sm" /></div>
+              <div className="flex flex-wrap items-center gap-2">Category: <CategoryBadge category={term.category} size="sm" /></div>
             </div>
           </Card>
         </div>
-      </div>
+      </MotionSection>
 
       {/* Added confirmation */}
       {myEntry && (
-        <div className="mt-6 flex justify-center">
+        <div className="flex justify-center">
           <Button asChild>
             <Link href="/vocabulary/flashcards">
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Practice with flashcards

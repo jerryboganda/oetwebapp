@@ -87,7 +87,7 @@ function ExpertReviewRequestContent() {
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <MotionPage className="max-w-md w-full">
             <div className="w-24 h-24 bg-success/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 className="w-12 h-12 text-success" />
+              <CheckCircle2 className="w-12 h-12 text-success-strong" />
             </div>
             <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
             <p className="text-muted mb-10 leading-relaxed">
@@ -213,7 +213,7 @@ function ExpertReviewRequestContent() {
                 >
                   <h3 className="text-sm font-bold text-navy mb-1">{opt.label}</h3>
                   <p className="text-xs text-primary font-bold mb-2">{opt.time}</p>
-                  <p className="text-xs text-muted font-bold uppercase tracking-widest">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
+                  <p className="eyebrow text-muted">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
                 </button>
               ))}
             </div>
@@ -231,7 +231,7 @@ function ExpertReviewRequestContent() {
                 <h3 className="text-sm font-bold text-navy">Use Review Credits</h3>
                 <p className="text-xs text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
               </div>
-              <div className="text-xs font-bold text-primary uppercase tracking-widest">
+              <div className="eyebrow text-primary">
                 -{selectedCost} Credit{selectedCost > 1 ? 's' : ''}
               </div>
             </div>
@@ -260,7 +260,7 @@ function ExpertReviewRequestContent() {
           </Button>
 
           {selectedFocus.length === 0 && (
-            <p className="text-center text-xs font-bold text-warning uppercase tracking-widest">
+            <p className="text-center eyebrow text-warning-strong">
               Please select at least one focus area
             </p>
           )}

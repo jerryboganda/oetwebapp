@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import {
-  ArrowLeft,
   BarChart2,
   ChevronDown,
   ChevronUp,
@@ -11,12 +9,16 @@ import {
   Plus,
   Users,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { apiClient } from '@/lib/api';
@@ -111,7 +113,7 @@ function CreateClassDialog({ open, onClose, onCreate }: CreateClassDialogProps) 
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSubmit} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
             Create
           </Button>
         </div>
@@ -138,15 +140,15 @@ function AnalyticsPanel({
   return (
     <div className="mt-3 space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+        <div className="min-w-0 rounded-xl bg-background-light p-3">
+          <p className="eyebrow break-words text-muted">
             Attempts (last {analytics.days}d)
           </p>
-          <p className="mt-1 text-2xl font-bold text-navy">{analytics.attemptCount}</p>
+          <p className="mt-1 text-2xl font-bold text-navy"><CountUp value={analytics.attemptCount} /></p>
         </div>
-        <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Avg Score</p>
-          <p className="mt-1 text-2xl font-bold text-navy">
+        <div className="min-w-0 rounded-xl bg-background-light p-3">
+          <p className="eyebrow text-muted">Avg Score</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-navy">
             {analytics.averageScore !== null && analytics.averageScore !== undefined
               ? analytics.averageScore.toFixed(1)
               : '-'}
@@ -156,20 +158,21 @@ function AnalyticsPanel({
 
       {analytics.learners && analytics.learners.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="mb-2 eyebrow text-muted">
             Per-learner breakdown
           </p>
+          {/* Wide table: scrolls inside its frame on a phone. */}
           <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[360px] text-left text-sm">
+            <table className="w-full min-w-[360px] text-start text-sm">
               <thead>
                 <tr className="border-b border-border bg-background-light">
-                  <th className="py-2 pl-3 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 ps-3 pe-3 text-start eyebrow text-muted">
                     Learner
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pe-3 text-end eyebrow text-muted">
                     Attempts
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pe-3 text-end eyebrow text-muted">
                     Avg Score
                   </th>
                 </tr>
@@ -177,11 +180,11 @@ function AnalyticsPanel({
               <tbody>
                 {analytics.learners.map((l) => (
                   <tr key={l.userId} className="border-b border-border last:border-0">
-                    <td className="py-2 pl-3 pr-3 text-sm text-navy">
+                    <td className="py-2 ps-3 pe-3 text-sm text-navy">
                       {l.displayName ?? <em className="text-muted">Anonymous</em>}
                     </td>
-                    <td className="py-2 pr-3 text-sm text-navy">{l.attemptCount}</td>
-                    <td className="py-2 pr-3 text-sm text-navy">
+                    <td className="py-2 pe-3 text-end text-sm tabular-nums text-navy">{l.attemptCount}</td>
+                    <td className="py-2 pe-3 text-end text-sm tabular-nums text-navy">
                       {l.averageScore !== null && l.averageScore !== undefined
                         ? l.averageScore.toFixed(1)
                         : '-'}
@@ -233,15 +236,16 @@ function ClassCard({ cls }: ClassCardProps) {
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle>{cls.name}</CardTitle>
+          <div className="min-w-0 space-y-1">
+            {/* h2: the class cards sit straight under the page h1 (CardTitle is an h3). */}
+            <h2 className="text-lg font-bold text-navy">{cls.name}</h2>
             {cls.description && (
               <p className="text-sm text-muted">{cls.description}</p>
             )}
           </div>
           {cls.memberCount !== undefined && (
-            <Badge variant="info">
-              <Users className="mr-1 h-3 w-3" />
+            <Badge variant="muted" className="shrink-0 gap-1 tabular-nums">
+              <Users className="h-3 w-3" aria-hidden />
               {cls.memberCount} {cls.memberCount === 1 ? 'member' : 'members'}
             </Badge>
           )}
@@ -252,15 +256,16 @@ function ClassCard({ cls }: ClassCardProps) {
           variant="outline"
           size="sm"
           onClick={loadAnalytics}
+          aria-expanded={analyticsOpen}
         >
-          <BarChart2 className="h-4 w-4" />
+          <BarChart2 className="h-4 w-4" aria-hidden />
           {analyticsOpen ? (
             <>
-              Hide Analytics <ChevronUp className="h-4 w-4" />
+              Hide Analytics <ChevronUp className="h-4 w-4" aria-hidden />
             </>
           ) : (
             <>
-              View Analytics <ChevronDown className="h-4 w-4" />
+              View Analytics <ChevronDown className="h-4 w-4" aria-hidden />
             </>
           )}
         </Button>
@@ -322,86 +327,60 @@ export default function ListeningTeacherClassesPage() {
     await loadClasses();
   };
 
+  // The breadcrumb's "Listening" crumb is the way back, so no back button above the header.
   return (
     <>
-      <div className="space-y-6 pb-24">
-        {/* Back nav */}
-        <Button variant="ghost" size="sm" className="gap-2 -ml-2" asChild>
-          <Link href="/listening">
-            <ArrowLeft className="h-4 w-4" />
-            Listening home
-          </Link>
-        </Button>
+      <LearnerPageHero
+        icon={Users}
+        accent="listening"
+        title="Teacher Class Analytics"
+        description="View class progress and learner breakdowns."
+        aside={pageState === 'ready' ? (
+          <Button variant="primary" onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Create Class
+          </Button>
+        ) : undefined}
+      />
 
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-navy">Teacher Class Analytics</h1>
-            <p className="mt-1 text-sm text-muted">
-              View class progress and learner breakdowns.
-            </p>
-          </div>
-          {pageState === 'ready' && (
-            <Button variant="primary" onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" />
-              Create Class
-            </Button>
-          )}
+      {/* Content */}
+      {(isLoading || pageState === 'loading') && (
+        <div className="space-y-4">
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-32 rounded-2xl" />
         </div>
+      )}
 
-        {/* Content */}
-        {(isLoading || pageState === 'loading') && (
-          <div className="space-y-4">
-            <Skeleton className="h-32 rounded-2xl" />
-            <Skeleton className="h-32 rounded-2xl" />
-          </div>
-        )}
+      {pageState === 'unauthorized' && (
+        <InlineAlert variant="error">
+          This page is only accessible to teaching staff (expert or admin role).
+        </InlineAlert>
+      )}
 
-        {pageState === 'unauthorized' && (
-          <InlineAlert variant="error">
-            This page is only accessible to teaching staff (expert or admin role).
-          </InlineAlert>
-        )}
+      {pageState === 'error' && fetchError && (
+        <ErrorState message={fetchError} onRetry={() => void loadClasses()} retryLabel="Retry" />
+      )}
 
-        {pageState === 'error' && fetchError && (
-          <div className="space-y-3">
-            <InlineAlert variant="error">{fetchError}</InlineAlert>
-            <Button variant="outline" onClick={loadClasses}>
-              Retry
-            </Button>
-          </div>
-        )}
+      {pageState === 'ready' && classes.length === 0 && (
+        <EmptyState
+          icon={<Users className="h-8 w-8" aria-hidden />}
+          title="No classes yet"
+          description="Create your first class to start tracking learner progress."
+          action={{ label: 'Create Class', onClick: () => setShowCreate(true) }}
+        />
+      )}
 
-        {pageState === 'ready' && classes.length === 0 && (
-          <Card>
-            <CardContent>
-              <div className="py-8 text-center">
-                <Users className="mx-auto mb-3 h-10 w-10 text-muted" />
-                <p className="font-semibold text-navy">No classes yet</p>
-                <p className="mt-1 text-sm text-muted">
-                  Create your first class to start tracking learner progress.
-                </p>
-                <Button
-                  variant="primary"
-                  className="mt-4"
-                  onClick={() => setShowCreate(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Class
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {pageState === 'ready' && classes.length > 0 && (
-          <div className="space-y-4">
-            {classes.map((cls) => (
-              <ClassCard key={cls.id} cls={cls} />
-            ))}
-          </div>
-        )}
-      </div>
+      {pageState === 'ready' && classes.length > 0 && (
+        <ul className="space-y-4">
+          {classes.map((cls, index) => (
+            <li key={cls.id}>
+              <MotionItem delayIndex={Math.min(index, 5)}>
+                <ClassCard cls={cls} />
+              </MotionItem>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <CreateClassDialog
         open={showCreate}

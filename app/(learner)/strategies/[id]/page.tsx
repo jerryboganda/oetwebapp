@@ -12,11 +12,10 @@ import {
   ChevronRight,
   Clock,
   Lightbulb,
-  Lock,
   Sparkles,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
+import { Badge, Button, Card, CardLink, EmptyState, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
 import { fetchStrategyGuide, isApiError, setStrategyGuideBookmark, updateStrategyGuideProgress } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -107,11 +106,22 @@ function parseStructuredContent(json: string | null): StrategyGuideStructuredCon
 function LoadingState() {
   return (
     <>
-      <div className="space-y-5">
-        <Skeleton className="h-36 rounded-surface" />
-        <Skeleton className="h-96 rounded-2xl" />
-      </div>
+      <Skeleton className="h-36 rounded-2xl" />
+      <Skeleton className="h-96 rounded-2xl" />
     </>
+  );
+}
+
+function BackToStrategies() {
+  return (
+    <div>
+      <Button variant="outline" asChild>
+        <Link href="/strategies">
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          Back to strategies
+        </Link>
+      </Button>
+    </div>
   );
 }
 
@@ -123,15 +133,8 @@ function DisabledState() {
         description="This learner strategy guide is behind a release flag right now."
         icon={Lightbulb}
         accent="amber"
-        highlights={[
-          { label: 'Status', value: 'Coming soon', icon: Sparkles },
-          { label: 'Access', value: 'Learner only', icon: Lock },
-        ]}
       />
-      <Link href="/strategies" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Back to strategies
-      </Link>
+      <BackToStrategies />
     </>
   );
 }
@@ -252,10 +255,7 @@ export default function StrategyGuidePage() {
     return (
       <>
         <InlineAlert variant="error" title="Strategy guide did not load">{error ?? 'Strategy guide not found.'}</InlineAlert>
-        <Link href="/strategies" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Back to strategies
-        </Link>
+        <BackToStrategies />
       </>
     );
   }
@@ -265,172 +265,170 @@ export default function StrategyGuidePage() {
   const sections = content?.sections ?? [];
   const takeaways = content?.keyTakeaways ?? [];
 
+  // The shell breadcrumb (Dashboard › Strategies › …) is the way back.
   return (
     <>
-      <div className="space-y-7">
-        <Link href="/strategies" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Back to strategies
-        </Link>
-
-        <LearnerPageHero
-          title={guide.title}
-          description={guide.summary ?? 'A guided OET strategy article for learner practice.'}
-          icon={Lightbulb}
-          accent="amber"
-          highlights={[
-            { label: 'Subtest', value: formatLabel(guide.subtestCode), icon: CheckCircle2 },
-            { label: 'Category', value: formatLabel(guide.category), icon: Sparkles },
-            { label: 'Reading time', value: `${guide.readingTimeMinutes} min`, icon: Clock },
-          ]}
-          aside={
-            <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
-              <ProgressBar value={guide.progress.readPercent} showValue label="Reading progress" color={guide.progress.completed ? 'success' : 'primary'} />
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <Button type="button" variant="outline" onClick={toggleBookmark} loading={bookmarking} disabled={locked}>
-                  <Bookmark className={cn('h-4 w-4', guide.bookmarked && 'fill-primary text-primary')} aria-hidden="true" />
-                  {guide.bookmarked ? 'Bookmarked' : 'Bookmark'}
-                </Button>
-                <Button type="button" onClick={markComplete} loading={completing} disabled={!readable || guide.progress.completed}>
-                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                  {guide.progress.completed ? 'Completed' : 'Mark read'}
-                </Button>
-              </div>
-            </div>
-          }
-        />
-
-        {actionError ? <InlineAlert variant="warning">{actionError}</InlineAlert> : null}
-
-        {locked ? (
-          <InlineAlert
-            variant="warning"
-            title="Upgrade required"
-            action={
-              <Button asChild>
-                <Link href="/subscriptions">
-                  View plans
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
+      <LearnerPageHero
+        title={guide.title}
+        description={guide.summary ?? 'A guided OET strategy article for learner practice.'}
+        icon={Lightbulb}
+        accent="amber"
+        highlights={[
+          { label: 'Subtest', value: formatLabel(guide.subtestCode), icon: CheckCircle2 },
+          { label: 'Category', value: formatLabel(guide.category), icon: Sparkles },
+          { label: 'Reading time', value: `${guide.readingTimeMinutes} min`, icon: Clock },
+        ]}
+        aside={
+          <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
+            <ProgressBar value={guide.progress.readPercent} showValue label="Reading progress" color={guide.progress.completed ? 'success' : 'primary'} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <Button type="button" variant="outline" onClick={toggleBookmark} loading={bookmarking} disabled={locked}>
+                <Bookmark className={cn('h-4 w-4', guide.bookmarked && 'fill-primary text-primary')} aria-hidden="true" />
+                {guide.bookmarked ? 'Bookmarked' : 'Bookmark'}
               </Button>
-            }
-          >
-            This guide is attached to package content that is not included in your current access.
-          </InlineAlert>
-        ) : null}
+              <Button type="button" onClick={markComplete} loading={completing} disabled={!readable || guide.progress.completed}>
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                {guide.progress.completed ? 'Completed' : 'Mark read'}
+              </Button>
+            </div>
+          </div>
+        }
+      />
 
-        {!guide.isAccessible && guide.isPreviewEligible ? (
-          <InlineAlert variant="info" title="Preview access">You can preview this strategy guide. Upgrade when you are ready to unlock its linked module content.</InlineAlert>
-        ) : null}
+      {actionError ? <InlineAlert variant="warning">{actionError}</InlineAlert> : null}
 
-        <MotionSection className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <article className="space-y-6">
-            {content?.overview ? (
-              <Card>
-                <p className="text-base leading-8 text-navy">{content.overview}</p>
-              </Card>
-            ) : null}
+      {locked ? (
+        <InlineAlert
+          variant="warning"
+          title="Upgrade required"
+          action={
+            <Button asChild>
+              <Link href="/subscriptions">
+                View plans
+                <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+              </Link>
+            </Button>
+          }
+        >
+          This guide is attached to package content that is not included in your current access.
+        </InlineAlert>
+      ) : null}
 
-            {sections.map((section, index) => (
-              <MotionItem key={`${section.heading ?? 'section'}-${index}`} delayIndex={index}>
-                <Card className="space-y-4">
-                  {section.heading ? <h2 className="text-xl font-bold text-navy">{section.heading}</h2> : null}
-                  {section.body ? <p className="text-sm leading-7 text-muted">{section.body}</p> : null}
-                  {section.bullets && section.bullets.length > 0 ? (
-                    <ul className="space-y-2">
-                      {section.bullets.map((bullet) => (
-                        <li key={bullet} className="flex gap-2 text-sm leading-6 text-muted">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                          <span>{bullet}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </Card>
-              </MotionItem>
-            ))}
+      {!guide.isAccessible && guide.isPreviewEligible ? (
+        <InlineAlert variant="info" title="Preview access">You can preview this strategy guide. Upgrade when you are ready to unlock its linked module content.</InlineAlert>
+      ) : null}
 
-            {takeaways.length > 0 ? (
-              <Card className="border-success/30 bg-success/10">
-                <h2 className="text-lg font-bold text-success">Key takeaways</h2>
-                <ul className="mt-3 space-y-2">
-                  {takeaways.map((item) => (
-                    <li key={item} className="flex gap-2 text-sm leading-6 text-success">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : null}
-
-            {!content && fallbackParagraphs.length > 0 ? (
-              <Card className="space-y-4">
-                {fallbackParagraphs.map((paragraph) => (
-                  <p key={paragraph} className="text-sm leading-7 text-muted">{paragraph}</p>
-                ))}
-              </Card>
-            ) : null}
-
-            {!content && fallbackParagraphs.length === 0 ? (
-              <Card className="border-dashed bg-background-light text-sm text-muted">Content for this guide is being prepared.</Card>
-            ) : null}
-          </article>
-
-          <aside className="space-y-5">
-            <Card className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-bold text-navy">Guide status</span>
-                <Badge variant={guide.progress.completed ? 'success' : guide.progress.readPercent > 0 ? 'info' : 'muted'}>
-                  {guide.progress.completed ? 'Completed' : guide.progress.readPercent > 0 ? 'In progress' : 'Not started'}
-                </Badge>
-              </div>
-              <div className="text-sm leading-6 text-muted">
-                {guide.programTitle ? <p>Program: {guide.programTitle}</p> : null}
-                {guide.moduleTitle ? <p>Module: {guide.moduleTitle}</p> : null}
-                {guide.sourceProvenance ? <p>Source: {guide.sourceProvenance}</p> : null}
-              </div>
+      <MotionSection className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <article className="min-w-0 space-y-6">
+          {content?.overview ? (
+            <Card>
+              <p className="text-base leading-8 text-navy">{content.overview}</p>
             </Card>
+          ) : null}
 
-            {(guide.previousGuideId || guide.nextGuideId) ? (
-              <Card className="space-y-3">
-                <h2 className="text-sm font-bold text-navy">Reading path</h2>
-                <div className="grid gap-2">
-                  {guide.previousGuideId ? (
-                    <Link href={`/strategies/${encodeURIComponent(guide.previousGuideId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-navy hover:bg-surface">
-                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          {sections.map((section, index) => (
+            <MotionItem key={`${section.heading ?? 'section'}-${index}`} delayIndex={Math.min(index, 5)}>
+              <Card className="space-y-4">
+                {section.heading ? <h2 className="text-xl font-bold text-navy">{section.heading}</h2> : null}
+                {section.body ? <p className="text-sm leading-7 text-muted">{section.body}</p> : null}
+                {section.bullets && section.bullets.length > 0 ? (
+                  <ul className="space-y-2">
+                    {section.bullets.map((bullet) => (
+                      <li key={bullet} className="flex gap-2 text-sm leading-6 text-muted">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </Card>
+            </MotionItem>
+          ))}
+
+          {takeaways.length > 0 ? (
+            <Card className="border-success/30 bg-success/10">
+              <h2 className="text-lg font-bold text-success-strong">Key takeaways</h2>
+              <ul className="mt-3 space-y-2">
+                {takeaways.map((item) => (
+                  <li key={item} className="flex gap-2 text-sm leading-6 text-success-strong">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+
+          {!content && fallbackParagraphs.length > 0 ? (
+            <Card className="space-y-4">
+              {fallbackParagraphs.map((paragraph) => (
+                <p key={paragraph} className="text-sm leading-7 text-muted">{paragraph}</p>
+              ))}
+            </Card>
+          ) : null}
+
+          {!content && fallbackParagraphs.length === 0 ? (
+            <EmptyState className="py-8" icon={<Lightbulb className="h-7 w-7" aria-hidden="true" />} title="Content for this guide is being prepared." />
+          ) : null}
+        </article>
+
+        <aside className="space-y-5">
+          <Card className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold text-navy">Guide status</span>
+              <Badge variant={guide.progress.completed ? 'success' : guide.progress.readPercent > 0 ? 'info' : 'muted'}>
+                {guide.progress.completed ? 'Completed' : guide.progress.readPercent > 0 ? 'In progress' : 'Not started'}
+              </Badge>
+            </div>
+            <div className="text-sm leading-6 text-muted">
+              {guide.programTitle ? <p>Program: {guide.programTitle}</p> : null}
+              {guide.moduleTitle ? <p>Module: {guide.moduleTitle}</p> : null}
+              {guide.sourceProvenance ? <p>Source: {guide.sourceProvenance}</p> : null}
+            </div>
+          </Card>
+
+          {(guide.previousGuideId || guide.nextGuideId) ? (
+            <Card className="space-y-3">
+              <h2 className="text-sm font-bold text-navy">Reading path</h2>
+              <div className="grid grid-cols-1 gap-2">
+                {guide.previousGuideId ? (
+                  <Button variant="outline" fullWidth asChild className="justify-start">
+                    <Link href={`/strategies/${encodeURIComponent(guide.previousGuideId)}`}>
+                      <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                       Previous guide
                     </Link>
-                  ) : null}
-                  {guide.nextGuideId ? (
-                    <Link href={`/strategies/${encodeURIComponent(guide.nextGuideId)}`} className="inline-flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-navy hover:bg-surface">
+                  </Button>
+                ) : null}
+                {guide.nextGuideId ? (
+                  <Button variant="outline" fullWidth asChild className="justify-between">
+                    <Link href={`/strategies/${encodeURIComponent(guide.nextGuideId)}`}>
                       Next guide
-                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                     </Link>
-                  ) : null}
-                </div>
-              </Card>
-            ) : null}
-          </aside>
-        </MotionSection>
+                  </Button>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+        </aside>
+      </MotionSection>
 
-        {guide.relatedGuides.length > 0 ? (
-          <MotionSection className="space-y-4">
-            <LearnerSurfaceSectionHeader title="Related Guides" icon={Lightbulb} />
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {guide.relatedGuides.map((related) => (
-                <Link key={related.id} href={`/strategies/${encodeURIComponent(related.id)}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-2xl">
-                  <Card hoverable className="h-full">
-                    <Badge variant="outline">{formatLabel(related.subtestCode)}</Badge>
-                    <h3 className="mt-3 text-base font-bold text-navy">{related.title}</h3>
-                    {related.summary ? <p className="mt-2 text-sm leading-6 text-muted">{related.summary}</p> : null}
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </MotionSection>
-        ) : null}
-      </div>
+      {guide.relatedGuides.length > 0 ? (
+        <MotionSection className="space-y-4">
+          <LearnerSurfaceSectionHeader title="Related Guides" icon={Lightbulb} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {guide.relatedGuides.map((related, index) => (
+              <MotionItem key={related.id} delayIndex={Math.min(index, 5)} className="h-full">
+                <CardLink href={`/strategies/${encodeURIComponent(related.id)}`} className="h-full">
+                  <Badge variant="outline">{formatLabel(related.subtestCode)}</Badge>
+                  <h3 className="mt-3 text-base font-bold text-navy">{related.title}</h3>
+                  {related.summary ? <p className="mt-2 text-sm leading-6 text-muted">{related.summary}</p> : null}
+                </CardLink>
+              </MotionItem>
+            ))}
+          </div>
+        </MotionSection>
+      ) : null}
     </>
   );
 }

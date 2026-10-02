@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, UserCheck, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/empty-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchWritingDualAssessment,
   type WritingDualAssessment,
@@ -105,18 +107,14 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
   }, [data]);
 
   if (error) {
-    return (
-      <Card className="border-danger/40 bg-danger/5 p-6 text-sm text-danger">
-        <p className="font-semibold">Failed to load dual assessment.</p>
-        <p className="mt-1 text-xs">{error}</p>
-      </Card>
-    );
+    return <ErrorState title="Failed to load dual assessment." message={error} />;
   }
 
   if (!data) {
     return (
-      <Card className="border-border bg-surface p-6">
-        <p className="text-sm text-muted">Loading AI and tutor assessment…</p>
+      <Card padding="lg" role="status" aria-busy="true" aria-label="Loading AI and tutor assessment…">
+        <Skeleton className="h-5 w-56 max-w-full" aria-hidden />
+        <Skeleton lines={4} className="mt-4" aria-hidden />
       </Card>
     );
   }
@@ -128,10 +126,10 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
     : 'default';
 
   return (
-    <Card className="border-border bg-surface p-6">
+    <Card padding="lg">
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Dual assessment</p>
+        <div className="min-w-0">
+          <p className="eyebrow text-muted">Dual assessment</p>
           <h2 className="mt-1 text-lg font-bold text-navy">AI estimate vs. tutor (expert) score</h2>
           <p className="mt-1 text-xs text-muted">
             Both are advisory. Only an OET test centre can issue an official score.
@@ -150,8 +148,8 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
       <div className="overflow-x-auto rounded-2xl border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-background-light text-xs uppercase tracking-wider text-muted">
-              <th scope="col" className="px-4 py-2 text-left font-semibold">Criterion</th>
+            <tr className="bg-background-light eyebrow text-muted">
+              <th scope="col" className="px-4 py-2 text-start font-semibold">Criterion</th>
               <th scope="col" className="px-4 py-2 text-center font-semibold">
                 <span className="inline-flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> AI estimate
@@ -176,19 +174,19 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
                 <td className="px-4 py-2 text-center">
                   {row.tutor ? (
                     <>
-                      <span className="font-bold tabular-nums text-success">{row.tutor.score}</span>
+                      <span className="font-bold tabular-nums text-success-strong">{row.tutor.score}</span>
                       <span className="text-muted">/{row.tutor.maxScore}</span>
                     </>
                   ) : (
                     <span className="text-xs text-muted">Pending</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-center text-xs">
+                <td className="px-4 py-2 text-center text-xs tabular-nums">
                   {row.delta === null
                     ? <span className="text-muted">-</span>
                     : row.delta === 0
                       ? <span className="text-muted">0</span>
-                      : <span className={row.delta > 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
+                      : <span className={row.delta > 0 ? 'text-success-strong font-semibold' : 'text-danger-strong font-semibold'}>
                           {row.delta > 0 ? `+${row.delta}` : row.delta}
                         </span>}
                 </td>
@@ -200,7 +198,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
 
       {data.tutor && data.tutor.overallFeedback && (
         <div className="mt-4 rounded-xl border border-success/30 bg-success/10 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-success">
+          <p className="eyebrow text-success-strong">
             Tutor feedback: {data.tutor.tutorName}
           </p>
           <p className="mt-2 whitespace-pre-line text-sm text-navy">{data.tutor.overallFeedback}</p>
@@ -208,8 +206,8 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
       )}
 
       {!data.tutor && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-border bg-background-light p-4 text-sm text-muted">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="mt-4 flex items-start gap-2 rounded-xl bg-background-light p-4 text-sm text-muted">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
             Tutor (expert) score is pending. Once an expert reviewer submits, their assessment will appear
             here alongside the AI estimate so you can compare both.

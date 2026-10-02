@@ -10,31 +10,34 @@ import {
   XCircle,
   Search,
   FileText,
-  MessageSquare,
+  RotateCcw,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero } from '@/components/domain';
 import { fetchEscalationDetails } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
 
-const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
-  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },
-  InReview: { label: 'In Review', icon: Search,       classes: 'bg-info/10 text-info' },
-  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-success/10 text-success' },
-  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-danger/10 text-danger' },
+const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; variant: 'warning' | 'info' | 'success' | 'danger' }> = {
+  Pending:  { label: 'Pending',   icon: Clock,        variant: 'warning' },
+  InReview: { label: 'In Review', icon: Search,       variant: 'info' },
+  Resolved: { label: 'Resolved',  icon: CheckCircle2, variant: 'success' },
+  Rejected: { label: 'Rejected',  icon: XCircle,      variant: 'danger' },
 };
 
 function StatusBadge({ status }: { status: EscalationStatus }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.Pending;
   const Icon = config.icon;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${config.classes}`}>
-      <Icon className="w-3.5 h-3.5" />
+    <Badge variant={config.variant} size="md" className="gap-1.5">
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       {config.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -69,82 +72,57 @@ export default function EscalationDetailPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
-        <Button variant="ghost" className="gap-2" onClick={() => router.push('/escalations')}>
-          <ArrowLeft className="h-4 w-4" />
+      <div>
+        <Button variant="ghost" size="sm" onClick={() => router.push('/escalations')}>
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
           Back to escalations
         </Button>
-
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
-          </div>
-        ) : null}
-
-        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-
-        {!loading && escalation ? (
-          <>
-            <LearnerPageHero
-              eyebrow="Escalation"
-              icon={AlertTriangle}
-              accent="amber"
-              title={`Dispute for Submission ${escalation.submissionId}`}
-              description={escalation.reason}
-              highlights={[
-                { icon: FileText, label: 'Submission', value: escalation.submissionId },
-                { icon: Clock, label: 'Submitted', value: formatDate(escalation.createdAt) },
-                { icon: MessageSquare, label: 'Status', value: STATUS_CONFIG[escalation.status]?.label ?? escalation.status },
-              ]}
-            />
-
-            <div className="space-y-6">
-              {/* Status */}
-              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Status</h3>
-                <StatusBadge status={escalation.status} />
-              </div>
-
-              {/* Reason */}
-              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Reason</h3>
-                <p className="text-navy">{escalation.reason}</p>
-              </div>
-
-              {/* Details */}
-              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Details</h3>
-                <p className="text-navy whitespace-pre-wrap">{escalation.details}</p>
-              </div>
-
-              {/* Dates */}
-              <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Timeline</h3>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <dt className="text-muted">Submitted</dt>
-                    <dd className="text-navy font-medium">{formatDate(escalation.createdAt)}</dd>
-                  </div>
-                  {escalation.updatedAt ? (
-                    <div>
-                      <dt className="text-muted">Last Updated</dt>
-                      <dd className="text-navy font-medium">{formatDate(escalation.updatedAt)}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </div>
-
-              {/* Resolution Note */}
-              {escalation.resolutionNote ? (
-                <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Resolution Note</h3>
-                  <p className="text-navy whitespace-pre-wrap">{escalation.resolutionNote}</p>
-                </div>
-              ) : null}
-            </div>
-          </>
-        ) : null}
       </div>
+
+      {loading ? (
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading">
+          {[1, 2, 3].map((i) => <Skeleton aria-hidden key={i} className="h-32 rounded-2xl" />)}
+        </div>
+      ) : null}
+
+      {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+      {/* The reason is the hero description, the status is the hero badge and the
+          dates are hero chips, so the separate Status, Reason and Timeline cards
+          that repeated them are gone. */}
+      {!loading && escalation ? (
+        <>
+          <LearnerPageHero
+            eyebrow="Escalation"
+            icon={AlertTriangle}
+            accent="amber"
+            title={`Dispute for Submission ${escalation.submissionId}`}
+            description={escalation.reason}
+            aside={<StatusBadge status={escalation.status} />}
+            highlights={[
+              { icon: FileText, label: 'Submission', value: escalation.submissionId },
+              { icon: Clock, label: 'Submitted', value: formatDate(escalation.createdAt) },
+              ...(escalation.updatedAt ? [{ icon: RotateCcw, label: 'Last Updated', value: formatDate(escalation.updatedAt) }] : []),
+            ]}
+          />
+
+          <MotionSection>
+            <Card padding="lg" className="space-y-2">
+              <h2 className="text-base font-bold text-navy">Details</h2>
+              <p className="max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-navy">{escalation.details}</p>
+            </Card>
+          </MotionSection>
+
+          {escalation.resolutionNote ? (
+            <MotionSection delayIndex={1}>
+              <Card padding="lg" className="space-y-2">
+                <h2 className="text-base font-bold text-navy">Resolution Note</h2>
+                <p className="max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-navy">{escalation.resolutionNote}</p>
+              </Card>
+            </MotionSection>
+          ) : null}
+        </>
+      ) : null}
     </>
   );
 }

@@ -8,6 +8,9 @@ import { ArrowLeft, MessageSquare } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { FeedbackForm } from '@/components/class/FeedbackForm';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { submitClassFeedback, type ClassFeedbackSubmitPayload } from '@/lib/api';
 
 export default function ClassFeedbackPage() {
@@ -35,31 +38,33 @@ export default function ClassFeedbackPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <Link
-          href="/me/classes/past"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to past classes
-        </Link>
-
-        <LearnerPageHero
-          title="Rate your class"
-          description="Your feedback helps tutors improve and other learners pick the right class."
-          icon={MessageSquare}
-        />
-
-        {!sessionId ? (
-          <InlineAlert variant="warning">Invalid session id.</InlineAlert>
-        ) : (
-          <FeedbackForm
-            onSubmit={handleSubmit}
-            submitting={submitting}
-            apiError={apiError}
-            apiSuccess={apiSuccess}
-          />
+      <LearnerPageHero
+        title="Rate your class"
+        description="Your feedback helps tutors improve and other learners pick the right class."
+        icon={MessageSquare}
+        aside={(
+          <Button asChild variant="outline" size="sm">
+            <Link href="/me/classes/past">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back to past classes
+            </Link>
+          </Button>
         )}
-      </div>
+      />
+
+      {!sessionId ? (
+        <InlineAlert variant="warning">Invalid session id.</InlineAlert>
+      ) : (
+        <MotionSection>
+          <Card padding="lg">
+            <FeedbackForm
+              onSubmit={handleSubmit}
+              submitting={submitting}
+              apiError={apiError}
+              apiSuccess={apiSuccess}
+            />
+          </Card>
+        </MotionSection>
+      )}
     </>
   );
 }

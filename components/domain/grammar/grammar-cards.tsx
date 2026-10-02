@@ -1,10 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Clock3, LayoutGrid, Sparkles, Target, Trophy, XCircle } from 'lucide-react';
 import { useMemo, type ElementType } from 'react';
+import { LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
 import { RadioGroup, Select, Textarea } from '@/components/ui/form-controls';
 import { cn } from '@/lib/utils';
@@ -50,47 +52,43 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
     : 0;
 
   return (
-    <Link href={href} className="block h-full focus-visible:outline-none">
-      <Card hoverable className="h-full overflow-hidden border-border bg-surface p-0 shadow-sm">
-        <div className="flex h-full flex-col p-5">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner">
-              {topic.iconEmoji ? <span className="text-xl" aria-hidden>{topic.iconEmoji}</span> : <LayoutGrid className="h-5 w-5" aria-hidden />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-2xs font-black uppercase tracking-[0.18em] text-muted">{titleCase(topic.levelHint || 'OET')}</p>
-              <h3 className="mt-1 text-lg font-bold leading-tight text-navy">{topic.name}</h3>
-            </div>
-            <Badge variant="info">{topic.lessonCount} lessons</Badge>
-          </div>
-
-          {topic.description ? (
-            <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted">{topic.description}</p>
-          ) : null}
-
-          <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,6.5rem),1fr))] gap-2">
-            <StatPill icon={LayoutGrid} label="Lessons" value={topic.lessonCount} />
-            <StatPill icon={CheckCircle2} label="Done" value={topic.completedLessonCount} />
-            <StatPill icon={Trophy} label="Mastered" value={topic.masteredLessonCount} />
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-1.5 flex items-center justify-between text-xs text-muted">
-              <span>Mastery</span>
-              <span className="font-black text-navy">{masteryPct}%</span>
-            </div>
-            <ProgressBar value={masteryPct} ariaLabel={`${topic.name} mastery ${masteryPct}%`} color="primary" />
-          </div>
-
-          <div className="mt-auto pt-5">
-            <div className="flex items-center justify-between rounded-2xl border border-primary/15 bg-primary/10 px-4 py-3 text-sm font-black text-primary">
-              <span>Explore topic</span>
-              <ArrowRight className="h-4 w-4" />
-            </div>
-          </div>
+    <CardLink href={href} className="group flex h-full flex-col">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner">
+          {topic.iconEmoji ? <span className="text-xl" aria-hidden>{topic.iconEmoji}</span> : <LayoutGrid className="h-5 w-5" aria-hidden />}
         </div>
-      </Card>
-    </Link>
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow text-muted">{titleCase(topic.levelHint || 'OET')}</p>
+          <h3 className="mt-1 text-lg font-bold leading-tight text-navy">{topic.name}</h3>
+        </div>
+        <Badge variant="info" className="shrink-0 tabular-nums">{topic.lessonCount} lessons</Badge>
+      </div>
+
+      {topic.description ? (
+        <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted">{topic.description}</p>
+      ) : null}
+
+      <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,6.5rem),1fr))] gap-2">
+        <StatPill icon={LayoutGrid} label="Lessons" value={topic.lessonCount} />
+        <StatPill icon={CheckCircle2} label="Done" value={topic.completedLessonCount} />
+        <StatPill icon={Trophy} label="Mastered" value={topic.masteredLessonCount} />
+      </div>
+
+      <div className="mt-5">
+        <div className="mb-1.5 flex items-center justify-between text-xs text-muted">
+          <span>Mastery</span>
+          <span className="font-bold tabular-nums text-navy">{masteryPct}%</span>
+        </div>
+        <ProgressBar value={masteryPct} ariaLabel={`${topic.name} mastery ${masteryPct}%`} color="primary" />
+      </div>
+
+      <div className="mt-auto pt-5">
+        <div className="flex items-center justify-between rounded-xl border border-primary/15 bg-primary/10 px-4 py-3 text-sm font-bold text-primary">
+          <span>Explore topic</span>
+          <ArrowRight className="h-4 w-4 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
+        </div>
+      </div>
+    </CardLink>
   );
 }
 
@@ -107,65 +105,63 @@ export function GrammarLessonCard({ lesson }: { lesson: GrammarLessonSummary }) 
         : { label: 'New', variant: 'muted' as const };
 
   return (
-    <Link href={`/grammar/${encodeURIComponent(lesson.id)}`} className="block focus-visible:outline-none">
-      <Card hoverable className="h-full">
-        <div className="flex h-full flex-col">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-2xs font-semibold uppercase tracking-[0.16em] text-muted">{titleCase(topicLabel)}</p>
-              <h3 className="mt-0.5 text-base font-bold leading-snug text-navy">{lesson.title}</h3>
-            </div>
-            <Badge variant={status.variant}>{status.label}</Badge>
-          </div>
-
-          {lesson.description ? (
-            <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{lesson.description}</p>
-          ) : null}
-
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold text-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <Clock3 className="h-4 w-4" />
-              {lesson.estimatedMinutes} min
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Target className="h-4 w-4" />
-              {titleCase(lesson.level)}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4" />
-              {lesson.exerciseCount} exercises
-            </span>
-          </div>
-
-          {lesson.progress ? (
-            <div className="mt-4">
-              <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                <span>Mastery</span>
-                <span className="font-semibold text-navy">{progressPct}%</span>
-              </div>
-              <ProgressBar
-                value={progressPct}
-                ariaLabel={`${lesson.title} mastery ${progressPct}%`}
-                color={progressPct >= 80 ? 'success' : 'primary'}
-              />
-            </div>
-          ) : null}
-
-          <div className="mt-4 flex items-center justify-end border-t border-border/60 pt-3 text-sm font-semibold text-primary">
-            Open lesson <ArrowRight className="ml-1 h-4 w-4" />
-          </div>
+    <CardLink href={`/grammar/${encodeURIComponent(lesson.id)}`} className="group flex h-full flex-col">
+      <div className="flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Sparkles className="h-5 w-5" aria-hidden="true" />
         </div>
-      </Card>
-    </Link>
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow text-muted">{titleCase(topicLabel)}</p>
+          <h3 className="mt-0.5 text-base font-bold leading-snug text-navy">{lesson.title}</h3>
+        </div>
+        <Badge variant={status.variant} className="shrink-0">{status.label}</Badge>
+      </div>
+
+      {lesson.description ? (
+        <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{lesson.description}</p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold text-muted">
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Clock3 className="h-4 w-4" aria-hidden="true" />
+          {lesson.estimatedMinutes} min
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Target className="h-4 w-4" aria-hidden="true" />
+          {titleCase(lesson.level)}
+        </span>
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          {lesson.exerciseCount} exercises
+        </span>
+      </div>
+
+      {lesson.progress ? (
+        <div className="mt-4">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted">
+            <span>Mastery</span>
+            <span className="font-semibold tabular-nums text-navy">{progressPct}%</span>
+          </div>
+          <ProgressBar
+            value={progressPct}
+            ariaLabel={`${lesson.title} mastery ${progressPct}%`}
+            color={progressPct >= 80 ? 'success' : 'primary'}
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-auto pt-4">
+        <div className="flex items-center justify-end border-t border-border/60 pt-3 text-sm font-semibold text-primary">
+          Open lesson <ArrowRight className="ms-1 h-4 w-4 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
+        </div>
+      </div>
+    </CardLink>
   );
 }
 
 // ─── GrammarRecommendationStrip ──────────────────────────────────────────
-// Light cream card, violet eyebrow, inner cards on `bg-surface` so the
-// composition feels like the dashboard "Next action" rail — not a dark panel.
+// A page section like the dashboard "Next action" rail: a section header over
+// one row of hoverable recommendation cards (one surface level, no outer card).
 export function GrammarRecommendationStrip({
   recommendations,
   onOpen,
@@ -178,74 +174,69 @@ export function GrammarRecommendationStrip({
   if (recommendations.length === 0) return null;
 
   return (
-    <Card padding="md" className="overflow-hidden border-border bg-surface shadow-sm">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-inner">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-2xs font-black uppercase tracking-[0.18em] text-muted">Recommended next</p>
-            <h3 className="text-lg font-bold text-navy">Pick up where you left off</h3>
-          </div>
-        </div>
-        <Badge variant="info">{recommendations.length} ready</Badge>
-      </div>
+    <section aria-label="Recommended next" className="space-y-4">
+      <LearnerSurfaceSectionHeader
+        eyebrow="Recommended next"
+        icon={Sparkles}
+        title="Pick up where you left off"
+        action={<Badge variant="info" className="self-start tabular-nums sm:self-auto">{recommendations.length} ready</Badge>}
+      />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {recommendations.slice(0, 3).map((rec) => (
-          <div key={rec.id} className="relative">
-            <Link
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {recommendations.slice(0, 3).map((rec, index) => (
+          <MotionItem key={rec.id} delayIndex={index} className="relative h-full">
+            <CardLink
               href={`/grammar/${encodeURIComponent(rec.lessonId)}`}
               onClick={() => onOpen?.(rec)}
-              className="block h-full focus-visible:outline-none"
+              className="group flex h-full flex-col border-primary/15 hover:border-primary/35"
             >
-              <div className="flex h-full flex-col rounded-2xl border border-primary/15 bg-surface p-4 shadow-sm transition-transform hoverable:-translate-y-0.5 hover:border-primary/35">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-                    <Target className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-2xs font-black uppercase tracking-[0.16em] text-muted">
-                      {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
-                    </p>
-                    <h4 className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h4>
-                  </div>
-                  <Badge variant="info">{titleCase(rec.level)}</Badge>
+              {/* pe-10 keeps the level badge clear of the dismiss button. */}
+              <div className={cn('flex items-start gap-3', onDismiss && 'pe-10')}>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                  <Target className="h-4 w-4" aria-hidden="true" />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate eyebrow text-muted">
+                    {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
+                  </p>
+                  <h3 className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h3>
+                </div>
+                <Badge variant="info" className="shrink-0">{titleCase(rec.level)}</Badge>
+              </div>
 
-                {rec.reason ? (
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{rec.reason}</p>
-                ) : null}
+              {rec.reason ? (
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{rec.reason}</p>
+              ) : null}
 
-                <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5 font-bold">
-                    <Clock3 className="h-3.5 w-3.5" /> {rec.estimatedMinutes} min
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted">
+                  <span className="inline-flex items-center gap-1.5 font-bold tabular-nums">
+                    <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> {rec.estimatedMinutes} min
                   </span>
-                  <span className="inline-flex items-center gap-1 font-black text-primary">
-                    Start <ArrowRight className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 font-bold text-primary">
+                    Start <ArrowRight className="h-3.5 w-3.5 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
                   </span>
                 </div>
               </div>
-            </Link>
+            </CardLink>
             {onDismiss ? (
               <button
                 type="button"
                 aria-label="Dismiss recommendation"
-                className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:border-border-hover hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="absolute end-1.5 top-1.5 inline-flex size-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:size-9"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   onDismiss(rec);
                 }}
               >
-                <XCircle className="h-4 w-4" />
+                <XCircle className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : null}
-          </div>
+          </MotionItem>
         ))}
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -278,7 +269,7 @@ export function GrammarExerciseRunner({
             <Badge variant="muted">{exercise.type.replace(/_/g, ' ')}</Badge>
             <span className="text-xs font-semibold text-muted">{exercise.points} pts</span>
           </div>
-          <SafeRichText markdown={exercise.promptMarkdown} className="text-sm leading-6 text-navy" />
+          <SafeRichText markdown={exercise.promptMarkdown} className="max-w-3xl text-sm leading-6 text-navy" />
         </div>
         {result ? (
           <Badge variant={result.isCorrect ? 'success' : 'danger'}>
@@ -290,9 +281,9 @@ export function GrammarExerciseRunner({
       <ExerciseInput exercise={exercise} answer={answer} disabled={disabled || isResultMode} onAnswer={onAnswer} result={result} />
 
       {result ? (
-        <div className="space-y-3 rounded-2xl border border-border/60 bg-surface p-4 text-sm shadow-sm">
+        <div className="space-y-3 border-t border-border pt-4 text-sm">
           <div className="flex flex-wrap gap-2">
-            <Badge variant={result.isCorrect ? 'success' : 'danger'}>
+            <Badge variant={result.isCorrect ? 'success' : 'danger'} className="tabular-nums">
               {result.pointsAwarded}/{result.pointsPossible} points
             </Badge>
             {result.reviewItemCreated ? <Badge variant="warning">Added to review</Badge> : null}
@@ -302,7 +293,7 @@ export function GrammarExerciseRunner({
             <ResultPanel title="Correct answer" value={formatAnswer(result.correctAnswer, exercise.type)} accent="success" />
           </div>
           {result.explanationMarkdown ? (
-            <SafeRichText markdown={result.explanationMarkdown} className="text-sm leading-6 text-muted" />
+            <SafeRichText markdown={result.explanationMarkdown} className="max-w-3xl text-sm leading-6 text-muted" />
           ) : null}
         </div>
       ) : null}
@@ -346,11 +337,11 @@ function ExerciseInput({
       return (
         <div className="space-y-3">
           {pairs.map((pair, index) => (
-            <div key={`${pair.left}-${index}`} className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
-              <div className="rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
+            <div key={`${pair.left}-${index}`} className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+              <div className="rounded-xl border border-border bg-background-light px-4 py-3 text-sm text-navy">
                 {pair.left}
               </div>
-              <div className="hidden justify-center text-muted md:flex">→</div>
+              <div className="hidden justify-center text-muted rtl:rotate-180 md:flex" aria-hidden="true">→</div>
               <Select
                 label=""
                 value={typeof selected[pair.left] === 'string' ? selected[pair.left] : ''}
@@ -391,13 +382,13 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
   return (
     <div
       className={cn(
-        'rounded-2xl border px-4 py-3 text-sm shadow-sm',
+        'rounded-xl border px-4 py-3 text-sm',
         accent === 'success'
           ? 'border-success/30 bg-success/10 text-navy'
-          : 'border-border/70 bg-surface text-navy',
+          : 'border-border bg-background-light text-navy',
       )}
     >
-      <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
+      <p className="eyebrow text-muted">{title}</p>
       <p className="mt-1 whitespace-pre-wrap leading-6">{value || '-'}</p>
     </div>
   );
@@ -405,9 +396,9 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
 
 function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-border/60 bg-surface px-3 py-2 shadow-sm">
-      <div className="eyebrow flex min-w-0 items-center gap-1.5 text-muted">
-        <Icon className="h-3.5 w-3.5 shrink-0" /> {label}
+    <div className="min-w-0 rounded-xl border border-border bg-background-light px-3 py-2">
+      <div className="tile-label flex min-w-0 items-center gap-1.5 text-muted">
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {label}
       </div>
       <div className="mt-0.5 text-base font-bold tabular-nums text-navy">{value}</div>
     </div>

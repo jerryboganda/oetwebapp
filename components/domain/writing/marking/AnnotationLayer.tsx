@@ -338,7 +338,7 @@ export function AnnotationLayer({
             className="absolute z-30 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-3 shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150"
           >
             <div className="mb-2 flex items-start justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
+              <p className="flex items-center gap-1.5 eyebrow text-muted">
                 <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden="true" /> New annotation
               </p>
               <button
@@ -355,7 +355,7 @@ export function AnnotationLayer({
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+              <label className="flex flex-col gap-1 eyebrow text-muted">
                 Criterion
                 <select
                   ref={firstFieldRef}
@@ -368,7 +368,7 @@ export function AnnotationLayer({
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+              <label className="flex flex-col gap-1 eyebrow text-muted">
                 Severity
                 <select
                   value={draft.severity}
@@ -382,7 +382,7 @@ export function AnnotationLayer({
               </label>
             </div>
 
-            <label className="mt-2 flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+            <label className="mt-2 flex flex-col gap-1 eyebrow text-muted">
               Feedback
               <textarea
                 rows={2}
@@ -392,7 +392,7 @@ export function AnnotationLayer({
                 className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm font-normal normal-case text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             </label>
-            <label className="mt-2 flex flex-col gap-1 text-2xs font-bold uppercase tracking-wider text-muted">
+            <label className="mt-2 flex flex-col gap-1 eyebrow text-muted">
               Suggestion <span className="font-normal normal-case text-muted">(optional)</span>
               <input
                 type="text"
@@ -421,7 +421,7 @@ export function AnnotationLayer({
       {/* Side list */}
       <aside aria-label="Annotations list" className="space-y-2">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-muted">
+          <h4 className="eyebrow text-muted">
             Annotations ({sortedAnnotations.length})
           </h4>
         </div>
@@ -456,10 +456,10 @@ export function AnnotationLayer({
                     )}
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-bold uppercase tracking-wide', style.badgeClass)}>
+                      <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 tile-label', style.badgeClass)}>
                         <span aria-hidden="true">{style.glyph}</span> {style.tag}
                       </span>
-                      <span className="text-3xs font-semibold uppercase tracking-wide text-muted">
+                      <span className="tile-label text-muted">
                         {a.criterion ? CRITERION_LABEL[a.criterion] : 'General'}
                       </span>
                     </div>
@@ -468,7 +468,7 @@ export function AnnotationLayer({
                     </p>
                     <p className="mt-1 text-sm text-navy">{a.feedbackText}</p>
                     {a.suggestion ? (
-                      <p className="mt-1 text-xs text-success">
+                      <p className="mt-1 text-xs text-success-strong">
                         <span className="font-semibold">Suggestion:</span> {a.suggestion}
                       </p>
                     ) : null}

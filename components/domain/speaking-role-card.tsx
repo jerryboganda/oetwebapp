@@ -66,7 +66,7 @@ export function roleCardPropsFrom(card: LearnerRoleCardSource): SpeakingRoleCard
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[100px_1fr] gap-3 px-4 py-3 sm:grid-cols-[130px_1fr]">
-      <div className="text-xs font-bold uppercase tracking-wide text-slate-600">{label}</div>
+      <div className="eyebrow text-muted">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -100,12 +100,12 @@ export function SpeakingRoleCard({
         </div>
       )}
 
-      <article className="overflow-hidden rounded-lg border border-border bg-white text-slate-900 shadow-sm dark:bg-slate-50">
+      <article className="overflow-hidden rounded-lg border border-border bg-white text-navy shadow-sm dark:bg-slate-50">
         <header className="flex items-center justify-between gap-3 bg-slate-800 px-4 py-2 text-white">
           <h3 className="text-sm font-bold uppercase tracking-wide">{heading}</h3>
         </header>
 
-        <div className="divide-y divide-slate-200">
+        <div className="divide-y divide-border">
           <Row label="Profession">
             <p className="text-sm font-medium">{role}</p>
           </Row>
@@ -116,7 +116,7 @@ export function SpeakingRoleCard({
 
           <Row label="Background">
             {patient && (
-              <p className="mb-1 text-sm font-medium text-slate-700">{patient}</p>
+              <p className="mb-1 text-sm font-medium text-navy">{patient}</p>
             )}
             {background && (
               <p className="whitespace-pre-line text-sm leading-relaxed">&quot;{background}&quot;</p>
@@ -135,7 +135,7 @@ export function SpeakingRoleCard({
         </div>
 
         {disclaimer && (
-          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-2xs italic text-slate-500">
+          <footer className="border-t border-border bg-background-light px-4 py-2 text-2xs italic text-muted">
             {disclaimer}
           </footer>
         )}

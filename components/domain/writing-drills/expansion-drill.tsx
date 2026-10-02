@@ -32,21 +32,21 @@ export function ExpansionDrillComponent({ drill, onGraded }: ExpansionDrillProps
 
   return (
     <div>
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <Card padding="lg">
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted">
             Convert each note-form line into a complete, professional sentence.
           </p>
           <div className="space-y-4">
             {drill.targets.map((target) => (
               <div key={target.id} className="rounded-lg border border-border p-3">
-                <div className="text-xs uppercase tracking-wide text-muted mb-1">Note form</div>
+                <div className="eyebrow text-muted mb-1">Note form</div>
                 <p className="text-sm font-mono bg-background-light px-2 py-1 rounded mb-3">
                   {target.noteForm}
                 </p>
                 <label
                   htmlFor={`expansion-${target.id}`}
-                  className="block text-xs uppercase tracking-wide text-muted mb-1"
+                  className="block eyebrow text-muted mb-1"
                 >
                   Your sentence
                 </label>

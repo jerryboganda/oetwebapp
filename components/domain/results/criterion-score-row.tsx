@@ -24,9 +24,9 @@ const shellTint: Record<PerfTone, string> = {
 };
 
 const scoreText: Record<PerfTone, string> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  danger: 'text-danger',
+  success: 'text-success-strong',
+  warning: 'text-warning-strong',
+  danger: 'text-danger-strong',
 };
 
 /**
@@ -61,7 +61,7 @@ export function CriterionScoreRow({
       </div>
       {feedback ? <p className="mt-2 text-xs leading-5 text-muted" dir="ltr">{feedback}</p> : null}
       {exemplar ? (
-        <div className="mt-2 rounded-lg bg-emerald-50 p-2 text-xs leading-5 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200" dir="ltr">
+        <div className="mt-2 rounded-lg bg-success/10 p-2 text-xs leading-5 text-success-strong" dir="ltr">
           {exemplar}
         </div>
       ) : null}

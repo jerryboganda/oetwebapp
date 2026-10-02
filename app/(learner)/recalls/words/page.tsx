@@ -9,7 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, cardClassName } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Modal } from '@/components/ui/modal';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { cn } from '@/lib/utils';
 import {
   fetchRecallsToday,
   fetchRecallsQueue,
@@ -60,16 +64,18 @@ function formatCategoryLabel(category: string, count: number) {
 /**
  * Animated three-bar equalizer shown while a term's pronunciation is playing.
  * Falls back to a static volume glyph when idle (handled by the caller).
+ * Bars scale (transform only) and stop with the audio; reduced motion keeps
+ * them still.
  */
 function PlayingBars() {
   return (
-    <span className="flex h-3.5 items-end gap-[2px]" aria-hidden="true">
+    <span className="flex h-3.5 items-end gap-0.5" aria-hidden="true">
       {[0, 1, 2].map((bar) => (
         <motion.span
           key={bar}
-          className="w-[2px] rounded-full bg-current"
-          initial={{ height: 4 }}
-          animate={{ height: [4, 13, 6, 11, 4] }}
+          className="h-full w-0.5 origin-bottom rounded-full bg-current"
+          initial={{ scaleY: 0.3 }}
+          animate={{ scaleY: [0.3, 1, 0.45, 0.85, 0.3] }}
           transition={{
             duration: 0.9,
             repeat: Infinity,
@@ -79,6 +85,20 @@ function PlayingBars() {
         />
       ))}
     </span>
+  );
+}
+
+// Toggle pills: a tint plus a border when pressed, never a solid fill; 44px
+// tall on touch layouts.
+const CHIP_BASE =
+  'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8';
+
+function chipClass(active: boolean) {
+  return cn(
+    CHIP_BASE,
+    active
+      ? 'border-primary/30 bg-primary/10 text-primary'
+      : 'border-border bg-surface text-muted hover:border-primary/30 hover:text-primary',
   );
 }
 
@@ -401,103 +421,96 @@ export default function RecallsWordsPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Recalls / Words"
-          title="Your active vocabulary"
-          description="Every term you've added, every card seeded from your drills, all in one favouritable, drillable list."
-          icon={Star}
-          highlights={[
-            { icon: Heart, label: 'Favourites', value: `${today?.starred ?? 0}` },
-            { icon: Star, label: 'Due today', value: `${today?.dueToday ?? 0}` },
-            { icon: Star, label: 'Mastered', value: `${today?.mastered ?? 0}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Recalls / Words"
+        title="Your active vocabulary"
+        description="Every term you've added, every card seeded from your drills, all in one favouritable, drillable list."
+        icon={Star}
+        highlights={[
+          { icon: Heart, label: 'Favourites', value: `${today?.starred ?? 0}` },
+          { icon: Star, label: 'Due today', value: `${today?.dueToday ?? 0}` },
+          { icon: Star, label: 'Mastered', value: `${today?.mastered ?? 0}` },
+        ]}
+      />
 
-        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
+      <MotionSection className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Catalog matrix"
           title="Browse active vocabulary by category"
           description="Use the functional category filter to inspect the active recall vocabulary catalog."
         />
 
-        <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
-          <div className="space-y-3">
+        <Card className="space-y-3">
+          <fieldset>
+            <legend className="mb-2 eyebrow text-muted">Saved</legend>
+            <button
+              type="button"
+              aria-pressed={favouritesOnly}
+              onClick={handleFavouritesToggle}
+              className={cn(
+                CHIP_BASE,
+                favouritesOnly
+                  ? 'border-warning bg-warning/10 text-warning-strong'
+                  : 'border-border bg-surface text-muted hover:border-warning hover:text-warning-strong',
+              )}
+            >
+              <Heart size={13} className={favouritesOnly ? 'fill-current' : undefined} aria-hidden="true" />
+              Favourites only
+            </button>
+          </fieldset>
+          {!favouritesOnly && (recallSets.length > 0 || freePreviewCount > 0) && (
             <fieldset>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Saved</legend>
-              <button
-                type="button"
-                aria-pressed={favouritesOnly}
-                onClick={handleFavouritesToggle}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  favouritesOnly
-                    ? 'border-warning bg-warning/10 text-warning'
-                    : 'border-border text-muted hover:border-warning hover:text-warning'
-                }`}
-              >
-                <Heart size={13} className={favouritesOnly ? 'fill-current' : undefined} aria-hidden="true" />
-                Favourites only
-              </button>
-            </fieldset>
-            {!favouritesOnly && (recallSets.length > 0 || freePreviewCount > 0) && (
-              <fieldset>
-                <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recall set</legend>
-                <div className="flex flex-wrap gap-2">
+              <legend className="mb-2 eyebrow text-muted">Recall set</legend>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={selectedRecallSet === '' && !freePreviewOnly}
+                  onClick={() => handleRecallSetChange('')}
+                  className={chipClass(selectedRecallSet === '' && !freePreviewOnly)}
+                >
+                  All
+                </button>
+                {/* Free Preview Recalls — the admin-flagged free subset, fully
+                    usable (view + audio + drill) on ANY plan. Success accent so
+                    it reads as "the free set", distinct from the violet chips.
+                    Only shown when the team has actually marked terms as free. */}
+                {freePreviewCount > 0 && (
                   <button
                     type="button"
-                    aria-pressed={selectedRecallSet === '' && !freePreviewOnly}
-                    onClick={() => handleRecallSetChange('')}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      selectedRecallSet === '' && !freePreviewOnly
-                        ? 'border-primary bg-primary text-white dark:bg-primary-700'
-                        : 'border-border text-muted hover:border-primary hover:text-primary'
-                    }`}
+                    aria-pressed={freePreviewOnly}
+                    onClick={handleFreePreviewChange}
+                    title="Recalls marked Free by the team — fully usable on any plan"
+                    className={cn(
+                      CHIP_BASE,
+                      freePreviewOnly
+                        ? 'border-success bg-success/15 text-success-strong'
+                        : 'border-success/40 bg-surface text-success-strong hover:border-success',
+                    )}
                   >
-                    All
+                    <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />
+                    Free Preview Recalls ({freePreviewCount})
                   </button>
-                  {/* Free Preview Recalls — the admin-flagged free subset, fully
-                      usable (view + audio + drill) on ANY plan. Emerald accent so
-                      it reads as "the free set", distinct from the violet chips.
-                      Only shown when the team has actually marked terms as free. */}
-                  {freePreviewCount > 0 && (
-                    <button
-                      type="button"
-                      aria-pressed={freePreviewOnly}
-                      onClick={handleFreePreviewChange}
-                      title="Recalls marked Free by the team — fully usable on any plan"
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
-                        freePreviewOnly
-                          ? 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-600 dark:bg-emerald-600'
-                          : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
-                      }`}
-                    >
-                      <Sparkles size={12} aria-hidden="true" className={freePreviewOnly ? 'fill-current' : undefined} />
-                      Free Preview Recalls ({freePreviewCount})
-                    </button>
-                  )}
-                  {recallSets.map((s) => (
-                    <button
-                      key={s.code}
-                      type="button"
-                      aria-pressed={selectedRecallSet === s.code}
-                      onClick={() => handleRecallSetChange(s.code)}
-                      title={s.description}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                        selectedRecallSet === s.code
-                          ? 'border-primary bg-primary text-white dark:bg-primary-700'
-                          : 'border-border text-muted hover:border-primary hover:text-primary'
-                      }`}
-                    >
-                      {s.shortLabel} ({s.termCount})
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-            {!favouritesOnly && (
+                )}
+                {recallSets.map((s) => (
+                  <button
+                    key={s.code}
+                    type="button"
+                    aria-pressed={selectedRecallSet === s.code}
+                    onClick={() => handleRecallSetChange(s.code)}
+                    title={s.description}
+                    className={chipClass(selectedRecallSet === s.code)}
+                  >
+                    {s.shortLabel} ({s.termCount})
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {!favouritesOnly && (
             <fieldset>
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Functional category</legend>
+              <legend className="mb-2 eyebrow text-muted">Functional category</legend>
               <div className="flex flex-wrap gap-2">
                 {categoryFilters.map((filter) => (
                   <button
@@ -505,41 +518,37 @@ export default function RecallsWordsPage() {
                     type="button"
                     aria-pressed={selectedCategory === filter.key}
                     onClick={() => handleCategoryChange(filter.key)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      selectedCategory === filter.key
-                        ? 'border-primary bg-primary text-white dark:bg-primary-700'
-                        : 'border-border text-muted hover:border-primary hover:text-primary'
-                    }`}
+                    className={chipClass(selectedCategory === filter.key)}
                   >
                     {filter.label}
                   </button>
                 ))}
               </div>
             </fieldset>
-            )}
+          )}
+        </Card>
+
+        {catalogError && <InlineAlert variant="warning">{catalogError}</InlineAlert>}
+
+        {catalogLoading ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-2xl" />
+            ))}
           </div>
-
-          {catalogError && <InlineAlert variant="warning">{catalogError}</InlineAlert>}
-
-          {catalogLoading ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
-              ))}
-            </div>
-          ) : catalogTerms.length > 0 ? (
-            <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                {catalogTerms.map((term, termIndex) => {
-                  const definitionText =
-                    term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
-                  const exampleText = catalogExampleSentences.get(term.id) ?? '';
-                  const spellingPracticeOpen = spellingOpenFor === term.id;
-                  const nextTerm = catalogTerms[termIndex + 1];
-                  if (term.isLocked) {
-                    return (
+        ) : catalogTerms.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {catalogTerms.map((term, termIndex) => {
+                const definitionText =
+                  term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
+                const exampleText = catalogExampleSentences.get(term.id) ?? '';
+                const spellingPracticeOpen = spellingOpenFor === term.id;
+                const nextTerm = catalogTerms[termIndex + 1];
+                if (term.isLocked) {
+                  return (
+                    <MotionItem key={term.id} delayIndex={Math.min(termIndex, 5)} className="h-full">
                       <article
-                        key={term.id}
                         role="group"
                         tabIndex={0}
                         onClick={() => setShowLockedModal(true)}
@@ -551,7 +560,7 @@ export default function RecallsWordsPage() {
                           }
                         }}
                         aria-label={`${term.term} — locked. Subscribe to unlock the full Recall Vocabulary Bank.`}
-                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow] duration-200 hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className={cn(cardClassName({ hoverable: true, interactive: true }), 'group relative h-full overflow-hidden')}
                       >
                         <div className="pointer-events-none select-none blur-sm" aria-hidden="true">
                           <div className="flex flex-wrap items-center gap-2">
@@ -566,18 +575,19 @@ export default function RecallsWordsPage() {
                         </div>
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/40 text-center backdrop-blur-[2px]">
                           <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <Lock size={16} strokeWidth={2} />
+                            <Lock size={16} strokeWidth={2} aria-hidden="true" />
                           </span>
                           <span className="px-4 text-xs font-semibold text-navy">
                             Subscribe to unlock the full Recall Vocabulary Bank.
                           </span>
                         </div>
                       </article>
-                    );
-                  }
-                  return (
+                    </MotionItem>
+                  );
+                }
+                return (
+                  <MotionItem key={term.id} delayIndex={Math.min(termIndex, 5)} className="h-full">
                     <article
-                      key={term.id}
                       role="group"
                       tabIndex={0}
                       onKeyDown={(event) => {
@@ -590,7 +600,10 @@ export default function RecallsWordsPage() {
                           playTerm(term);
                         }
                       }}
-                      className="group rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md hoverable:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className={cn(
+                        cardClassName({}),
+                        'h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                      )}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         {/* §3B: while Practice Spelling is open the target word is
@@ -608,12 +621,12 @@ export default function RecallsWordsPage() {
                           aria-label={spellingPracticeOpen ? 'Play pronunciation' : `Play pronunciation of ${term.term}`}
                           aria-pressed={playingId === term.id}
                           title="Play pronunciation"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 group-hover:bg-primary/15"
+                          className="pressable inline-flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:size-8"
                         >
                           {playingId === term.id ? (
                             <PlayingBars />
                           ) : (
-                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
+                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" aria-hidden="true" />
                           )}
                         </button>
                         {/* Repeat tag: N = how many times this word appeared
@@ -635,11 +648,12 @@ export default function RecallsWordsPage() {
                                 : `Favourite ${term.term}`
                           }
                           title={favTermIds.has(term.id) ? 'Remove from favourites' : 'Favourite'}
-                          className={`ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                          className={cn(
+                            'pressable ms-auto inline-flex size-11 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:size-8',
                             favTermIds.has(term.id)
-                              ? 'bg-warning/10 text-warning'
-                              : 'text-muted hover:bg-warning/10 hover:text-warning'
-                          }`}
+                              ? 'bg-warning/10 text-warning-strong'
+                              : 'text-muted hover:bg-warning/10 hover:text-warning-strong',
+                          )}
                         >
                           <Heart size={15} className={favTermIds.has(term.id) ? 'fill-current' : undefined} aria-hidden="true" />
                         </button>
@@ -654,7 +668,7 @@ export default function RecallsWordsPage() {
                         <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>
                       )}
                       {!spellingPracticeOpen && exampleText && (
-                        <p className="mt-2 text-xs italic leading-relaxed text-muted/80">{exampleText}</p>
+                        <p className="mt-2 text-xs italic leading-relaxed text-muted">{exampleText}</p>
                       )}
                       <PracticeSpelling
                         termId={term.id}
@@ -664,48 +678,55 @@ export default function RecallsWordsPage() {
                         onNext={nextTerm ? () => setSpellingOpenFor(nextTerm.id) : undefined}
                       />
                     </article>
-                  );
-                })}
-              </div>
-              {!favouritesOnly && catalogPageCount > 1 && (
-                <Pagination
-                  page={catalogPage}
-                  pageSize={catalogPageSize}
-                  total={catalogTotal}
-                  onPageChange={(p) => goToCatalogPage(p)}
-                  onPageSizeChange={(size) => { setCatalogPageSize(size); setCatalogPage(1); setCatalogLoading(true); }}
-                  pageSizeOptions={[10, 24, 50, 100, 500]}
-                  itemLabel="term"
-                  resetOnPageSizeChange={false}
-                />
-              )}
+                  </MotionItem>
+                );
+              })}
             </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">
-              {favouritesOnly
+            {!favouritesOnly && catalogPageCount > 1 && (
+              <Pagination
+                page={catalogPage}
+                pageSize={catalogPageSize}
+                total={catalogTotal}
+                onPageChange={(p) => goToCatalogPage(p)}
+                onPageSizeChange={(size) => { setCatalogPageSize(size); setCatalogPage(1); setCatalogLoading(true); }}
+                pageSizeOptions={[10, 24, 50, 100, 500]}
+                itemLabel="term"
+                resetOnPageSizeChange={false}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyState
+            icon={favouritesOnly ? <Heart className="h-7 w-7" aria-hidden="true" /> : <Star className="h-7 w-7" aria-hidden="true" />}
+            title={
+              favouritesOnly
                 ? 'No favourites yet — tap the heart on any word to save it here.'
                 : freePreviewOnly
                   ? 'No free preview recalls are available yet — check back soon.'
-                  : 'No active terms match this category yet.'}
-            </div>
-          )}
-        </section>
+                  : 'No active terms match this category yet.'
+            }
+          />
+        )}
+      </MotionSection>
 
-        {/* §3C / §3D — the mini spelling test and the persisted Review Mistakes
-            list. Both reuse the stored recall audio and grade server-side against
-            the canonical word, so neither consumes AI credits. */}
+      {/* §3C / §3D — the mini spelling test and the persisted Review Mistakes
+          list. Both reuse the stored recall audio and grade server-side against
+          the canonical word, so neither consumes AI credits. */}
+      <MotionSection>
         <section className="space-y-4" aria-label="Spelling">
           <LearnerSurfaceSectionHeader
             eyebrow="Spelling"
             title="Spelling test and review mistakes"
             description="Hear a word, type it, get an instant result. Missed words are saved to your account so you can review them on any device."
           />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <SpellingTest onMistakesChanged={() => setMistakesVersion((v) => v + 1)} />
             <ReviewMistakesList refreshToken={mistakesVersion} />
           </div>
         </section>
+      </MotionSection>
 
+      <MotionSection className="space-y-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Queue"
           title="Today's recall queue"
@@ -719,129 +740,134 @@ export default function RecallsWordsPage() {
             ))}
           </div>
         ) : items && items.length > 0 ? (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
-            {items.map((it) => (
-              <li key={`${it.kind}:${it.id}`} className="flex items-center gap-3 p-3">
-                {it.kind === 'vocab' ? (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={() => handlePlay(it)}
-                    aria-label={`Play ${it.title}`}
-                    aria-pressed={playingId === it.termId}
-                    className="flex h-10 w-10 items-center justify-center rounded-full p-0"
-                  >
-                    {playingId === it.termId ? <PlayingBars /> : <Volume2 className="h-4 w-4" />}
-                  </Button>
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">
-                    <Star className="h-4 w-4" aria-hidden="true" />
-                  </div>
-                )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+          <Card padding="none">
+            <ul className="divide-y divide-border">
+              {items.map((it, i) => (
+                <li key={`${it.kind}:${it.id}`}>
+                  <MotionItem delayIndex={Math.min(i, 5)} className="flex items-center gap-3 p-3 sm:px-4">
                     {it.kind === 'vocab' ? (
-                      // PRD Phase 2 §2: clicking the word itself plays audio.
-                      <button
+                      <Button
                         type="button"
+                        variant="primary"
                         onClick={() => handlePlay(it)}
-                        className="rounded font-semibold text-navy hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        aria-label={`Play pronunciation of ${it.title}`}
+                        aria-label={`Play ${it.title}`}
+                        aria-pressed={playingId === it.termId}
+                        className="size-11 shrink-0 rounded-full p-0"
                       >
-                        {it.title}
-                      </button>
+                        {playingId === it.termId ? <PlayingBars /> : <Volume2 className="h-4 w-4" aria-hidden="true" />}
+                      </Button>
                     ) : (
-                      <span className="font-semibold text-navy">{it.title}</span>
+                      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-info/10 text-info">
+                        <Star className="h-4 w-4" aria-hidden="true" />
+                      </div>
                     )}
-                    {it.kind === 'vocab' && (
-                      <RecallTierBadge
-                        count={it.examFrequencyCount ?? 0}
-                        occurrences={it.recallSetOccurrences}
-                        lastUpdatedAt={it.updatedAt}
-                      />
-                    )}
-                    <Badge variant={it.kind === 'vocab' ? 'info' : 'default'}>{it.kind}</Badge>
-                    {it.starred && (
-                      <Badge variant="warning">
-                        {it.starReason ? `Favourite · ${it.starReason}` : 'Favourite'}
-                      </Badge>
-                    )}
-                  </div>
-                  {it.subtitle && <div className="text-xs text-muted">{it.subtitle}</div>}
-                </div>
-                <div className="relative">
-                  {it.starred ? (
-                    <button
-                      type="button"
-                      onClick={() => handleUnstar(it)}
-                      aria-label={`Remove ${it.title} from favourites`}
-                      className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning"
-                    >
-                      <Heart size={13} className="fill-current" aria-hidden="true" />
-                      Favourited
-                    </button>
-                  ) : (
-                    <div className="inline-flex items-center overflow-hidden rounded-full border border-border">
-                      {/* Primary action: one tap favourites with no reason. */}
-                      <button
-                        type="button"
-                        onClick={() => handleStar(it)}
-                        aria-label={`Favourite ${it.title}`}
-                        className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-muted hover:bg-warning/10 hover:text-warning"
-                      >
-                        <Heart size={13} aria-hidden="true" />
-                        Favourite
-                      </button>
-                      {/* Optional: add a difficulty reason. */}
-                      <button
-                        type="button"
-                        onClick={() => setStarOpenFor((cur) => (cur === it.id ? null : it.id))}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') setStarOpenFor(null);
-                        }}
-                        aria-haspopup="menu"
-                        aria-expanded={starOpenFor === it.id}
-                        aria-controls={`star-reason-menu-${it.id}`}
-                        aria-label={`Add a reason for favouriting ${it.title}`}
-                        title="Add a reason (optional)"
-                        className="border-l border-border px-2 py-1 text-muted hover:bg-warning/10 hover:text-warning"
-                      >
-                        <ChevronDown size={13} aria-hidden="true" />
-                      </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {it.kind === 'vocab' ? (
+                          // PRD Phase 2 §2: clicking the word itself plays audio.
+                          <button
+                            type="button"
+                            onClick={() => handlePlay(it)}
+                            className="rounded font-semibold text-navy hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            aria-label={`Play pronunciation of ${it.title}`}
+                          >
+                            {it.title}
+                          </button>
+                        ) : (
+                          <span className="font-semibold text-navy">{it.title}</span>
+                        )}
+                        {it.kind === 'vocab' && (
+                          <RecallTierBadge
+                            count={it.examFrequencyCount ?? 0}
+                            occurrences={it.recallSetOccurrences}
+                            lastUpdatedAt={it.updatedAt}
+                          />
+                        )}
+                        <Badge variant={it.kind === 'vocab' ? 'info' : 'default'}>{it.kind}</Badge>
+                        {it.starred && (
+                          <Badge variant="warning">
+                            {it.starReason ? `Favourite · ${it.starReason}` : 'Favourite'}
+                          </Badge>
+                        )}
+                      </div>
+                      {it.subtitle && <div className="text-xs text-muted">{it.subtitle}</div>}
                     </div>
-                  )}
-                  {starOpenFor === it.id && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      id={`star-reason-menu-${it.id}`}
-                      role="menu"
-                      className="absolute right-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
-                    >
-                      {STAR_REASONS.map((r) => (
+                    <div className="relative shrink-0">
+                      {it.starred ? (
                         <button
-                          key={r.key}
                           type="button"
-                          role="menuitem"
-                          onClick={() => handleStar(it, r.key)}
-                          className="block w-full px-3 py-2 text-left text-sm text-navy hover:bg-lavender/40"
+                          onClick={() => handleUnstar(it)}
+                          aria-label={`Remove ${it.title} from favourites`}
+                          className={cn(CHIP_BASE, 'border-warning/40 bg-warning/10 text-warning-strong hover:border-warning')}
                         >
-                          {r.label}
+                          <Heart size={13} className="fill-current" aria-hidden="true" />
+                          Favourited
                         </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                      ) : (
+                        <div className="inline-flex items-center overflow-hidden rounded-full border border-border bg-surface">
+                          {/* Primary action: one tap favourites with no reason. */}
+                          <button
+                            type="button"
+                            onClick={() => handleStar(it)}
+                            aria-label={`Favourite ${it.title}`}
+                            className="inline-flex min-h-11 items-center gap-1 px-3 py-1 text-xs font-semibold text-muted transition-colors hover:bg-warning/10 hover:text-warning-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary lg:min-h-8"
+                          >
+                            <Heart size={13} aria-hidden="true" />
+                            Favourite
+                          </button>
+                          {/* Optional: add a difficulty reason. */}
+                          <button
+                            type="button"
+                            onClick={() => setStarOpenFor((cur) => (cur === it.id ? null : it.id))}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape') setStarOpenFor(null);
+                            }}
+                            aria-haspopup="menu"
+                            aria-expanded={starOpenFor === it.id}
+                            aria-controls={`star-reason-menu-${it.id}`}
+                            aria-label={`Add a reason for favouriting ${it.title}`}
+                            title="Add a reason (optional)"
+                            className="inline-flex min-h-11 items-center border-s border-border px-2 py-1 text-muted transition-colors hover:bg-warning/10 hover:text-warning-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary lg:min-h-8"
+                          >
+                            <ChevronDown size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      )}
+                      {starOpenFor === it.id && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          id={`star-reason-menu-${it.id}`}
+                          role="menu"
+                          className="absolute end-0 top-full z-10 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface shadow-md"
+                        >
+                          {STAR_REASONS.map((r) => (
+                            <button
+                              key={r.key}
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleStar(it, r.key)}
+                              className="hover-primary block w-full px-3 py-2 text-start text-sm text-navy focus-visible:bg-primary/10 focus-visible:outline-none"
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </div>
+                  </MotionItem>
+                </li>
+              ))}
+            </ul>
+          </Card>
         ) : (
-          <div className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted">
-            Nothing in your recall queue yet. Add words from the vocabulary library or complete a Listening drill; wrong
-            free-text answers seed cards automatically.
-          </div>
+          <EmptyState
+            icon={<Star className="h-7 w-7" aria-hidden="true" />}
+            title="Nothing in your recall queue yet."
+            description="Add words from the vocabulary library or complete a Listening drill; wrong free-text answers seed cards automatically."
+          />
         )}
-      </div>
+      </MotionSection>
 
       <Modal
         open={showUpgradeModal}
@@ -851,7 +877,7 @@ export default function RecallsWordsPage() {
       >
         <div className="space-y-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Lock className="h-5 w-5" />
+            <Lock className="h-5 w-5" aria-hidden="true" />
           </div>
           <p className="text-sm text-muted">
             Pronunciation audio for recall words is part of the paid plan. Upgrade to listen to every term in your recall
@@ -861,13 +887,11 @@ export default function RecallsWordsPage() {
             <Button variant="secondary" onClick={() => setShowUpgradeModal(false)}>
               Not now
             </Button>
-            <Link
-              href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
-              onClick={() => setShowUpgradeModal(false)}
-            >
-              View upgrade options
-            </Link>
+            <Button asChild>
+              <Link href="/catalog" onClick={() => setShowUpgradeModal(false)}>
+                View upgrade options
+              </Link>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -880,7 +904,7 @@ export default function RecallsWordsPage() {
       >
         <div className="space-y-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Lock className="h-5 w-5" />
+            <Lock className="h-5 w-5" aria-hidden="true" />
           </div>
           <p className="text-sm font-semibold text-navy">
             Subscribe to unlock the full Recall Vocabulary Bank.
@@ -893,13 +917,11 @@ export default function RecallsWordsPage() {
             <Button variant="secondary" onClick={() => setShowLockedModal(false)}>
               Not now
             </Button>
-            <Link
-              href="/catalog"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-primary-700 dark:hover:bg-primary-600"
-              onClick={() => setShowLockedModal(false)}
-            >
-              View upgrade options
-            </Link>
+            <Button asChild>
+              <Link href="/catalog" onClick={() => setShowLockedModal(false)}>
+                View upgrade options
+              </Link>
+            </Button>
           </div>
         </div>
       </Modal>

@@ -69,6 +69,13 @@
   --color-success: #10b981;
   --color-warning: #d97706;
   --color-warning-strong: #b45309; /* AA for small warning text on light surfaces */
+  --color-success-strong: #047857; /* AA for small success text and icons on light surfaces */
+  --color-danger-strong: #b91c1c; /* AA for small danger text and icons on light surfaces */
+  /* Sub-test identity (chips, icons, dots): the chart-palette hues, never status. */
+  --color-skill-listening: #156082;
+  --color-skill-reading: #2563eb;
+  --color-skill-writing: #e11d48;
+  --color-skill-speaking: #7c3aed;
   --color-danger: #ef4444;
   --color-info: #2563eb;
   --color-disabled: #94a3b8;
@@ -590,6 +597,12 @@
       --color-surface: #0f172a;
       --color-muted: #94a3b8;
       --color-warning-strong: #fbbf24;
+      --color-success-strong: #34d399;
+      --color-danger-strong: #f87171;
+      --color-skill-listening: #4fb3d3;
+      --color-skill-reading: #60a5fa;
+      --color-skill-writing: #fb7185;
+      --color-skill-speaking: #a78bfa;
       --color-border: #1f2937;
       --color-border-hover: #334155;
       --shadow-xs: 0 1px 1px 0 rgb(2 6 23 / 0.3);

@@ -727,7 +727,7 @@ export default function SpeakingReviewWorkspace() {
                       <div key={comment.id} className="ml-4 mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-sm flex justify-between items-start gap-3 dark:bg-amber-950/40 dark:border-amber-800/60">
                         <p className="text-navy">{comment.text}</p>
                         {!workspaceMeta?.isReadOnly && (
-                          <button type="button" onClick={() => { setTimestampComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-danger text-xs shrink-0" aria-label="Remove comment">&times;</button>
+                          <button type="button" onClick={() => { setTimestampComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-danger-strong text-xs shrink-0" aria-label="Remove comment">&times;</button>
                         )}
                       </div>
                     ))}
@@ -767,7 +767,7 @@ export default function SpeakingReviewWorkspace() {
                         <p className="text-sm font-black text-navy">Hidden interlocutor card</p>
                         <Badge variant="warning">Tutor only</Badge>
                       </div>
-                      <p className="mt-2 text-xs leading-relaxed text-warning/80">
+                      <p className="mt-2 text-xs leading-relaxed text-warning-strong/80">
                         This card is intentionally hidden from learner task endpoints and is used only for expert/tutor context.
                       </p>
                       <div className="mt-4 space-y-3 text-sm text-navy">
@@ -972,7 +972,7 @@ export default function SpeakingReviewWorkspace() {
                               type="button"
                               onClick={() => void handleDeleteVoiceNote(note.id)}
                               disabled={deletingVoiceNoteId === note.id}
-                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-2xs font-semibold text-danger hover:border-danger hover:bg-danger/5 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-2xs font-semibold text-danger-strong hover:border-danger hover:bg-danger/5 disabled:opacity-50"
                               aria-label={`Delete voice note ${note.fileName}`}
                             >
                               <Trash2 className="h-3 w-3" /> {deletingVoiceNoteId === note.id ? 'Deleting...' : 'Delete'}

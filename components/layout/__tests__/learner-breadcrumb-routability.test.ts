@@ -15,9 +15,9 @@ const APP_DIR = path.join(process.cwd(), 'app');
 // Mirrors LEARNER_WORKSPACE_ROUTE_ROOTS: breadcrumbs only render under these.
 const LEARNER_ROOTS = [
   '/dashboard', '/achievements', '/billing', '/conversation', '/goals', '/grammar',
-  '/videos', '/listening', '/mocks', '/onboarding', '/progress', '/readiness',
-  '/reading', '/recalls', '/settings', '/speaking', '/strategies', '/study-plan',
-  '/submissions', '/writing',
+  '/videos', '/listening', '/materials', '/mocks', '/onboarding', '/progress', '/pronunciation',
+  '/readiness', '/reading', '/recalls', '/settings', '/speaking', '/strategies', '/study-plan',
+  '/submissions', '/vocabulary', '/writing',
 ];
 
 function collectRoutes(dir: string, url: string, out: Set<string>) {

@@ -265,7 +265,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
         </div>
       )}
       {attachError && (
-        <p role="alert" className="mb-2 text-xs text-red-600">
+        <p role="alert" className="mb-2 text-xs text-danger-strong">
           {attachError}
         </p>
       )}
@@ -293,7 +293,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
           onClick={recording ? stopRecording : () => void startRecording()}
           disabled={disabled || isStreaming || extracting}
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border disabled:opacity-50 ${
-            recording ? 'bg-red-500 text-white' : 'hover:bg-background-light'
+            recording ? 'bg-danger text-white' : 'hover:bg-background-light'
           }`}
           aria-label={recording ? 'Stop recording' : 'Record a voice message'}
           aria-pressed={recording}
@@ -316,7 +316,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
         {isStreaming ? (
           <button
             onClick={onCancel}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-white hover:bg-red-600"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-danger text-white hover:bg-danger-strong"
             aria-label="Cancel"
           >
             <Square className="h-4 w-4" />

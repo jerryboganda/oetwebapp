@@ -99,12 +99,12 @@ export function DashboardAddonsWidget({
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider text-gold-fg">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 tile-label text-gold-fg">
                     <Tag className="h-2.5 w-2.5" aria-hidden="true" />
                     {ELIGIBILITY_LABELS[addon.eligibilityFlag] ?? addon.eligibilityFlag.replace(/_/g, ' ')}
                   </span>
                   {hasDiscount && savings > 0 && (
-                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-3xs font-bold uppercase tracking-wider text-success">
+                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 tile-label text-success-strong">
                       Save £{savings.toFixed(0)}
                     </span>
                   )}

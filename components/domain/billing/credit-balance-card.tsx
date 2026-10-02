@@ -144,45 +144,45 @@ export function CreditBalanceCard({ snapshot }: { snapshot: AiPackageCreditSnaps
   return (
     <section aria-label="AI credits" className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm">
       <header className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-gray-900">AI Credits</h2>
+        <h2 className="text-base font-semibold text-navy">AI Credits</h2>
         {expired ? (
-          <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+          <span className="rounded-full bg-danger/10 px-2 py-0.5 text-xs font-medium text-danger-strong">
             Expired — passed OET
           </span>
         ) : (
           snapshot.expiresAt && (
-            <span className="text-xs text-gray-500">{formatValidityWindow(null, snapshot.expiresAt)}</span>
+            <span className="text-xs text-muted">{formatValidityWindow(null, snapshot.expiresAt)}</span>
           )
         )}
       </header>
 
       {buckets.length === 0 ? (
-        <p className="text-sm text-gray-500">No active AI credit balances.</p>
+        <p className="text-sm text-muted">No active AI credit balances.</p>
       ) : (
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {buckets.map((bucket) => (
             <li
               key={bucket.key}
-              className="rounded-xl border border-black/5 bg-gray-50/60 px-3 py-2"
+              className="rounded-xl border border-black/5 bg-background-light px-3 py-2"
               data-testid={`credit-bucket-${bucket.key}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-gray-800">{bucket.label}</span>
+                <span className="text-sm font-medium text-navy">{bucket.label}</span>
                 {bucket.unlimited ? (
-                  <span className="text-sm font-semibold text-emerald-700">Unlimited</span>
+                  <span className="text-sm font-semibold text-success-strong">Unlimited</span>
                 ) : (
-                  <span className="text-sm font-semibold text-gray-900 tabular-nums">
-                    {bucket.remaining} <span className="font-normal text-gray-500">remaining</span>
+                  <span className="text-sm font-semibold text-navy tabular-nums">
+                    {bucket.remaining} <span className="font-normal text-muted">remaining</span>
                   </span>
                 )}
               </div>
               {!bucket.unlimited && (bucket.totalGranted > 0 || bucket.used > 0) && (
-                <p className="mt-0.5 text-xs text-gray-500 tabular-nums">
+                <p className="mt-0.5 text-xs text-muted tabular-nums">
                   Total {bucket.totalGranted} · Used {bucket.used}
                 </p>
               )}
               {(bucket.sourcePackages || bucket.validFrom || bucket.daysLeft >= 0) && (
-                <p className="mt-0.5 truncate text-xs text-gray-400" title={bucket.sourcePackages ?? undefined}>
+                <p className="mt-0.5 truncate text-xs text-muted" title={bucket.sourcePackages ?? undefined}>
                   {bucket.sourcePackages ? `${bucket.sourcePackages} · ` : ''}
                   {formatValidityWindow(bucket.validFrom, bucket.expiresAt)}
                 </p>

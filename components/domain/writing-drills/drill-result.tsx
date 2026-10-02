@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
 import type { Drill, DrillGradeResult } from '@/lib/writing-drills/types';
 
 interface DrillResultPanelProps {
@@ -32,15 +33,15 @@ function findItemLabel(drill: Drill, itemId: string): string {
 
 export function DrillResultPanel({ drill, result }: DrillResultPanelProps) {
   return (
-    <Card className="mt-6">
-      <CardContent className="p-6 space-y-5">
+    <Card padding="lg" className="mt-6">
+      <CardContent className="space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-semibold text-navy">Result</h2>
             <p className="text-sm text-muted">{result.summary}</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-3xl font-bold tabular-nums">{result.scorePercent}%</span>
+            <CountUp value={result.scorePercent} suffix="%" className="text-3xl font-bold text-navy" />
             <Badge variant={result.passed ? 'success' : 'danger'}>
               {result.passed ? 'Pass' : 'Review needed'}
             </Badge>
@@ -49,7 +50,7 @@ export function DrillResultPanel({ drill, result }: DrillResultPanelProps) {
 
         {result.errorTags.length > 0 && (
           <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
-            <p className="text-xs uppercase tracking-wide font-semibold text-warning mb-2">
+            <p className="eyebrow text-warning-strong mb-2">
               Areas to work on
             </p>
             <div className="flex flex-wrap gap-2">

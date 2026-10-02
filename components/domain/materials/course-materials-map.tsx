@@ -87,7 +87,7 @@ export function CourseMaterialsMap({
         {error ? <EmptyState illustration={<FileText />} title="Course map unavailable" description={error} /> : null}
         {data ? (
           <>
-            {data.unmapped.folderIds.length + data.unmapped.fileIds.length > 0 ? <div role="alert" className="rounded-admin border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">{data.unmapped.folderIds.length} folder(s) and {data.unmapped.fileIds.length} file(s) still need a structured course scope. They remain preserved and available in Advanced.</div> : null}
+            {data.unmapped.folderIds.length + data.unmapped.fileIds.length > 0 ? <div role="alert" className="rounded-admin border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-strong">{data.unmapped.folderIds.length} folder(s) and {data.unmapped.fileIds.length} file(s) still need a structured course scope. They remain preserved and available in Advanced.</div> : null}
             <div role="list" aria-label="Course material areas" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
               {data.professions.map((profession) => (
                 <div key={profession.id} role="listitem">

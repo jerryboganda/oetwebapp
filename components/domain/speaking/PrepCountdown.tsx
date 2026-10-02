@@ -124,7 +124,7 @@ export function PrepCountdown({
       cn(
         'tabular-nums font-bold tracking-tight transition-colors duration-300',
         size === 'lg' ? 'text-6xl md:text-7xl' : 'text-4xl md:text-5xl',
-        isWarning ? 'text-rose-600' : 'text-foreground',
+        isWarning ? 'text-danger-strong' : 'text-foreground',
       ),
     [isWarning, size],
   );
@@ -183,7 +183,7 @@ export function PrepCountdown({
             strokeDashoffset={dashOffset}
             className={cn(
               'transition-[stroke-dashoffset,color] duration-500 ease-linear',
-              isWarning ? 'text-rose-500' : 'text-emerald-500',
+              isWarning ? 'text-danger-strong' : 'text-success-strong',
             )}
           />
         </svg>
@@ -208,7 +208,7 @@ export function PrepCountdown({
           >
             {formatTime(remaining)}
           </span>
-          <span className="mt-1 text-xs uppercase tracking-wide text-muted">
+          <span className="mt-1 eyebrow text-muted">
             {isWarning ? 'Wrap up' : 'minutes:seconds'}
           </span>
         </motion.div>

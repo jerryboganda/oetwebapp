@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ArrowLeft, ClipboardCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cardClassName } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { cn } from '@/lib/utils';
 import { completeWritingOnboarding, saveWritingV2Profile } from '@/lib/writing/api';
 import { writingProfileSchema } from '@/lib/writing/zod';
 import { clearWizardState, readWizardState, type WritingProfileWizardState } from '../wizard-state';
@@ -80,91 +82,88 @@ export default function ProfileSetupConfirmPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Step 4 of 4"
-          icon={ClipboardCheck}
-          accent="amber"
-          title="Review and confirm"
-          description="One last check before we generate your personalised writing pathway."
-          highlights={[]}
-        />
+      <LearnerPageHero
+        eyebrow="Step 4 of 4"
+        icon={ClipboardCheck}
+        accent="writing"
+        title="Review and confirm"
+        description="One last check before we generate your personalised writing pathway."
+      />
 
-        <StepperNav currentStep="confirm" />
+      <StepperNav currentStep="confirm" />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <form
-          onSubmit={onSubmit}
-          aria-labelledby="confirm-step-heading"
-          className="space-y-6 rounded-2xl border border-border bg-surface p-5 shadow-sm"
-        >
-          <h2 id="confirm-step-heading" className="text-base font-bold text-navy">
-            Your answers
-          </h2>
+      <form
+        onSubmit={onSubmit}
+        aria-labelledby="confirm-step-heading"
+        className={cn(cardClassName({ padding: 'lg' }), 'space-y-6')}
+      >
+        <h2 id="confirm-step-heading" className="text-base font-bold text-navy">
+          Your answers
+        </h2>
 
-          {state ? (
-            <dl className="grid gap-3 sm:grid-cols-2" aria-label="Review summary">
-              <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Profession</dt>
-                <dd className="mt-1 text-sm font-semibold text-navy capitalize">
-                  {state.profession}{state.subDiscipline ? ` · ${state.subDiscipline}` : ''}
-                  {typeof state.yearsExperience === 'number' ? ` · ${state.yearsExperience}y experience` : ''}
-                </dd>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Target</dt>
-                <dd className="mt-1 text-sm font-semibold text-navy">
-                  Band {state.targetBand}{state.targetCountry ? ` · ${state.targetCountry}` : ''}
-                  {state.examDate ? ` · Exam ${state.examDate}` : ''}
-                </dd>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Weekly budget</dt>
-                <dd className="mt-1 text-sm font-semibold text-navy">
-                  {state.daysPerWeek} days/week · {state.minutesPerDay} min/day
-                </dd>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Letter focus</dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {state.letterTypeFocus.map((code) => (
-                    <Badge key={code} variant="info" size="sm">{code}</Badge>
-                  ))}
-                </dd>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3 sm:col-span-2">
-                <dt className="text-xs font-bold uppercase tracking-wider text-muted">Preferences</dt>
-                <dd className="mt-1 flex flex-wrap gap-1 text-sm">
-                  <Badge variant={state.optInCommunity ? 'success' : 'muted'} size="sm">
-                    Community {state.optInCommunity ? 'on' : 'off'}
-                  </Badge>
-                  <Badge variant={state.optInLeaderboard ? 'success' : 'muted'} size="sm">
-                    Leaderboard {state.optInLeaderboard ? 'on' : 'off'}
-                  </Badge>
-                  <Badge variant={state.optInDataForTraining ? 'success' : 'muted'} size="sm">
-                    Data for training {state.optInDataForTraining ? 'on' : 'off'}
-                  </Badge>
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="text-sm text-muted">Loading your answers…</p>
-          )}
+        {state ? (
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Review summary">
+            <div className="rounded-xl bg-background-light p-3">
+              <dt className="eyebrow text-muted">Profession</dt>
+              <dd className="mt-1 text-sm font-semibold text-navy capitalize">
+                {state.profession}{state.subDiscipline ? ` · ${state.subDiscipline}` : ''}
+                {typeof state.yearsExperience === 'number' ? ` · ${state.yearsExperience}y experience` : ''}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-background-light p-3">
+              <dt className="eyebrow text-muted">Target</dt>
+              <dd className="mt-1 text-sm font-semibold text-navy">
+                Band {state.targetBand}{state.targetCountry ? ` · ${state.targetCountry}` : ''}
+                {state.examDate ? ` · Exam ${state.examDate}` : ''}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-background-light p-3">
+              <dt className="eyebrow text-muted">Weekly budget</dt>
+              <dd className="mt-1 text-sm font-semibold text-navy">
+                {state.daysPerWeek} days/week · {state.minutesPerDay} min/day
+              </dd>
+            </div>
+            <div className="rounded-xl bg-background-light p-3">
+              <dt className="eyebrow text-muted">Letter focus</dt>
+              <dd className="mt-1 flex flex-wrap gap-1">
+                {state.letterTypeFocus.map((code) => (
+                  <Badge key={code} variant="info" size="sm">{code}</Badge>
+                ))}
+              </dd>
+            </div>
+            <div className="rounded-xl bg-background-light p-3 sm:col-span-2">
+              <dt className="eyebrow text-muted">Preferences</dt>
+              <dd className="mt-1 flex flex-wrap gap-1 text-sm">
+                <Badge variant={state.optInCommunity ? 'success' : 'muted'} size="sm">
+                  Community {state.optInCommunity ? 'on' : 'off'}
+                </Badge>
+                <Badge variant={state.optInLeaderboard ? 'success' : 'muted'} size="sm">
+                  Leaderboard {state.optInLeaderboard ? 'on' : 'off'}
+                </Badge>
+                <Badge variant={state.optInDataForTraining ? 'success' : 'muted'} size="sm">
+                  Data for training {state.optInDataForTraining ? 'on' : 'off'}
+                </Badge>
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm text-muted">Loading your answers…</p>
+        )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button asChild variant="outline" size="md">
-              <Link href="/writing/profile-setup/focus" aria-label="Back to focus step">
-                <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
-              </Link>
-            </Button>
-            <Button type="submit" size="md" loading={submitting} disabled={!state}>
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              Save and continue
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button asChild variant="outline" size="md">
+            <Link href="/writing/profile-setup/focus" aria-label="Back to focus step">
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Back
+            </Link>
+          </Button>
+          <Button type="submit" size="md" loading={submitting} disabled={!state}>
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            Save and continue
+          </Button>
+        </div>
+      </form>
     </>
   );
 }

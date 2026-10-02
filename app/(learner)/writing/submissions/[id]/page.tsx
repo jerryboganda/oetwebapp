@@ -8,8 +8,10 @@ import { ArrowRight, Clock, FileText, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { cardClassName } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { getWritingSubmission } from '@/lib/writing/api';
 import type { WritingSubmissionDto, WritingSubmissionStatus } from '@/lib/writing/types';
 
@@ -41,37 +43,39 @@ export default function WritingSubmissionDetailPage() {
 
   return (
     <>
-      <div className="space-y-6" aria-busy={!submission}>
-        <LearnerPageHero
-          eyebrow={t('writing.submissions.detail.eyebrow')}
-          icon={FileText}
-          accent="amber"
-          title={submission ? t('writing.submissions.detail.heroTitle', { mode: submission.mode }) : t('writing.submissions.detail.heroTitleFallback')}
-          description={t('writing.submissions.detail.heroDescription')}
-          highlights={submission ? [
-            { icon: Clock, label: t('writing.submissions.detail.highlights.submitted'), value: new Date(submission.submittedAt).toLocaleString() },
-            { icon: FileText, label: t('writing.submissions.detail.highlights.words'), value: `${submission.wordCount}` },
-            { icon: RefreshCw, label: t('writing.submissions.detail.highlights.revision'), value: submission.isRevision ? t('writing.submissions.detail.highlights.revisionYes') : t('writing.submissions.detail.highlights.revisionNo') },
-          ] : []}
-        />
+      <LearnerPageHero
+        eyebrow={t('writing.submissions.detail.eyebrow')}
+        icon={FileText}
+        accent="writing"
+        title={submission ? t('writing.submissions.detail.heroTitle', { mode: submission.mode }) : t('writing.submissions.detail.heroTitleFallback')}
+        description={t('writing.submissions.detail.heroDescription')}
+        highlights={submission ? [
+          { icon: Clock, label: t('writing.submissions.detail.highlights.submitted'), value: new Date(submission.submittedAt).toLocaleString() },
+          { icon: FileText, label: t('writing.submissions.detail.highlights.words'), value: `${submission.wordCount}` },
+          { icon: RefreshCw, label: t('writing.submissions.detail.highlights.revision'), value: submission.isRevision ? t('writing.submissions.detail.highlights.revisionYes') : t('writing.submissions.detail.highlights.revisionNo') },
+        ] : []}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {submission ? (
-          <section aria-labelledby="status-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      {!submission && !error ? <LearnerSkeleton variant="list" /> : null}
+
+      {submission ? (
+        <MotionSection delayIndex={0}>
+          <section aria-labelledby="status-heading" className={cardClassName({ padding: 'lg' })}>
             <header className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="status-heading" className="text-base font-bold text-navy">{t('writing.submissions.detail.statusHeading')}</h2>
               {statusVariant && statusLabel ? <Badge variant={statusVariant} size="sm">{statusLabel}</Badge> : null}
             </header>
             <p className="mt-2 text-sm text-muted">
-              {t('writing.submissions.detail.tierLabel')} <span className="font-bold text-navy capitalize">{submission.gradingTier}</span>{' '}
-              · {t('writing.submissions.detail.sourceLabel')} <span className="font-bold text-navy capitalize">{submission.inputSource}</span>
+              {t('writing.submissions.detail.tierLabel')} <span className="font-bold capitalize text-navy">{submission.gradingTier}</span>{' '}
+              · {t('writing.submissions.detail.sourceLabel')} <span className="font-bold capitalize text-navy">{submission.inputSource}</span>
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {submission.status === 'graded' ? (
                 <Button asChild>
                   <Link href={`/writing/submissions/${encodeURIComponent(submission.id)}/results`}>
-                    {t('writing.submissions.detail.openResults')} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    {t('writing.submissions.detail.openResults')} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                   </Link>
                 </Button>
               ) : null}
@@ -91,22 +95,20 @@ export default function WritingSubmissionDetailPage() {
               ) : null}
             </div>
           </section>
-        ) : null}
+        </MotionSection>
+      ) : null}
 
-        {submission ? (
-          <section aria-labelledby="letter-heading">
-            <Card padding="lg">
-              <CardContent>
-                <h2 id="letter-heading" className="text-base font-bold text-navy">{t('writing.submissions.detail.letterHeading')}</h2>
-                {/* The submitted letter text is learner-authored English content. */}
-                <pre className="mt-3 whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-sm leading-relaxed font-sans" dir="ltr">
-                  {submission.letterContent}
-                </pre>
-              </CardContent>
-            </Card>
+      {submission ? (
+        <MotionSection delayIndex={1}>
+          <section aria-labelledby="letter-heading" className={cardClassName({ padding: 'lg' })}>
+            <h2 id="letter-heading" className="text-base font-bold text-navy">{t('writing.submissions.detail.letterHeading')}</h2>
+            {/* The submitted letter text is learner-authored English content. */}
+            <pre className="mt-3 max-w-3xl whitespace-pre-wrap break-words rounded-control border border-border bg-background p-3 font-sans text-sm leading-relaxed sm:p-4" dir="ltr">
+              {submission.letterContent}
+            </pre>
           </section>
-        ) : null}
-      </div>
+        </MotionSection>
+      ) : null}
     </>
   );
 }

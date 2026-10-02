@@ -229,7 +229,7 @@ export function PartAPdfOverlayEditor({ pdfDownloadPath, value, onChange, disabl
           </Button>
         </div>
       </div>
-      {error ? <p className="p-4 text-sm text-danger">{error}</p> : null}
+      {error ? <p className="p-4 text-sm text-danger-strong">{error}</p> : null}
       {loading ? <p className="p-4 text-sm text-muted">Loading document…</p> : null}
       <div className="max-h-[72vh] space-y-4 overflow-auto bg-background-light p-4">
         {pages.map((page) => {

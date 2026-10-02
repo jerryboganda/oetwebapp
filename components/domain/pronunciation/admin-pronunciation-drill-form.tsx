@@ -29,7 +29,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
       <Card className="p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Metadata</h2>
         <label className="block">
-          <span className="text-sm text-navy">Label <span className="text-danger">*</span></span>
+          <span className="text-sm text-navy">Label <span className="text-danger-strong">*</span></span>
           <input
             type="text"
             value={form.word}
@@ -40,7 +40,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy">Target phoneme (IPA) <span className="text-danger">*</span></span>
+          <span className="text-sm text-navy">Target phoneme (IPA) <span className="text-danger-strong">*</span></span>
           <input
             type="text"
             value={form.phoneticTranscription}

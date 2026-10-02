@@ -183,7 +183,7 @@ export default function AnnotationTemplatesPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => handleDelete(t.id)} disabled={isMutating}>
-                    <Trash2 className="w-3.5 h-3.5 text-danger" />
+                    <Trash2 className="w-3.5 h-3.5 text-danger-strong" />
                   </Button>
                 </div>
               </div>

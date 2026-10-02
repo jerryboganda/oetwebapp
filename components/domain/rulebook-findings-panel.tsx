@@ -113,12 +113,12 @@ export function RulebookFindingsPanel({
           <InlineAlert variant="info">{inactiveMessage}</InlineAlert>
         </div>
       ) : findings.length === 0 ? (
-        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+        <div className="mt-4 rounded-2xl border border-success/20 bg-success/10 p-4">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-strong" />
             <div>
-              <p className="text-sm font-bold text-emerald-900">No rulebook issues detected</p>
-              <p className="mt-1 text-sm leading-6 text-emerald-800">
+              <p className="text-sm font-bold text-success-strong">No rulebook issues detected</p>
+              <p className="mt-1 text-sm leading-6 text-success-strong">
                 This draft currently respects the active rules that the engine can check automatically.
               </p>
             </div>
@@ -138,7 +138,7 @@ export function RulebookFindingsPanel({
                 {finding.ruleId}
               </Link>
             ) : (
-              <span className="text-xs font-black uppercase tracking-widest text-primary">{finding.ruleId}</span>
+              <span className="eyebrow text-primary">{finding.ruleId}</span>
             );
 
             return (

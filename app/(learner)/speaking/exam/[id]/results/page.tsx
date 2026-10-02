@@ -230,7 +230,7 @@ export default function SpeakingExamResultsPage() {
               </Button>
             ) : null}
             {retryError && retryError.sessionId === card.sessionId ? (
-              <p className="mt-2 font-medium text-danger">{retryError.message}</p>
+              <p className="mt-2 font-medium text-danger-strong">{retryError.message}</p>
             ) : null}
           </div>
         );
@@ -257,7 +257,7 @@ export default function SpeakingExamResultsPage() {
   if (error && !results) {
     return (
       <div className="mx-auto max-w-lg py-6 text-center">
-        <p className="text-sm text-danger">{error}</p>
+        <p className="text-sm text-danger-strong">{error}</p>
         <Button className="mt-4" variant="outline" onClick={() => void refresh()}>
           Retry
         </Button>
@@ -395,8 +395,8 @@ export default function SpeakingExamResultsPage() {
                 className={cn(
                   'rounded-full px-2.5 py-0.5 text-xs font-medium',
                   card.status === 'scored'
-                    ? 'bg-success/10 text-success'
-                    : 'bg-warning/10 text-warning',
+                    ? 'bg-success/10 text-success-strong'
+                    : 'bg-warning/10 text-warning-strong',
                 )}
               >
                 {card.status === 'scored'
@@ -414,7 +414,7 @@ export default function SpeakingExamResultsPage() {
                     {card.assessment.estimatedScaledScore}
                   </span>
                   <span className="text-sm text-muted">/ 500</span>
-                  <span className="ml-auto text-xs uppercase tracking-wide text-muted">
+                  <span className="ml-auto eyebrow text-muted">
                     Band: {bandLabel(card.assessment.readinessBand)}
                   </span>
                 </div>

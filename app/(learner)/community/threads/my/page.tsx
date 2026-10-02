@@ -4,15 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { CardLink } from '@/components/ui/card-link';
 import { Pagination } from '@/components/ui/pagination';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton, EmptyState } from '@/components/ui';
-import { useAuth } from '@/contexts/auth-context';
-import { apiClient, fetchForumThreads, fetchForumCategories } from '@/lib/api';
+import { fetchForumThreads, fetchForumCategories } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 interface ForumCategory {
@@ -57,7 +56,6 @@ function formatRelativeDate(dateStr: string) {
 
 export default function MyThreadsPage() {
   const router = useRouter();
-  const { user } = useAuth();
 
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
@@ -80,20 +78,17 @@ export default function MyThreadsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchForumThreads(undefined, p, pageSize) as ThreadsResponse;
-      const allThreads = res.threads ?? [];
-      // Filter client-side by author display name match
-      const myThreads = user?.displayName
-        ? allThreads.filter(t => t.authorDisplayName === user.displayName)
-        : [];
-      setThreads(myThreads);
-      setTotal(myThreads.length);
+      // The caller's own threads, matched by user id on the server across every page
+      // (a display-name match on page 1 missed later pages and took in namesakes).
+      const res = await fetchForumThreads(undefined, p, pageSize, true) as ThreadsResponse;
+      setThreads(res.threads ?? []);
+      setTotal(res.total ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load threads');
     } finally {
       setLoading(false);
     }
-  }, [user, pageSize]);
+  }, [pageSize]);
 
   useEffect(() => {
     loadCategories();
@@ -115,22 +110,22 @@ export default function MyThreadsPage() {
         ]}
       />
 
-      <MotionSection className="space-y-4">
-        <div className="flex items-center justify-between">
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
-            <ArrowLeft className="mr-1.5 h-4 w-4" /> All Threads
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> All Threads
           </Button>
           <Button onClick={() => router.push('/community/threads/new')}>
-            <Plus className="mr-1.5 h-4 w-4" /> New Thread
+            <Plus className="h-4 w-4" aria-hidden="true" /> New Thread
           </Button>
         </div>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+              <Skeleton aria-hidden key={i} className="h-24 w-full rounded-2xl" />
             ))}
           </div>
         ) : threads.length === 0 ? (
@@ -141,67 +136,58 @@ export default function MyThreadsPage() {
             action={{ label: 'Create Thread', onClick: () => router.push('/community/threads/new') }}
           />
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {threads.map((thread, idx) => (
-              <MotionItem key={thread.id} delayIndex={idx}>
-                <Card className="p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div
-                      className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => router.push(`/community/threads/${thread.id}`)}
-                    >
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        {thread.isPinned && (
-                          <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
-                            <Pin className="mr-1 h-3 w-3" /> Pinned
-                          </Badge>
-                        )}
-                        {thread.isLocked && (
-                          <Badge variant="outline" className="text-muted border-border-hover">
-                            <Lock className="mr-1 h-3 w-3" /> Locked
-                          </Badge>
-                        )}
-                        {categoryMap.get(thread.categoryId) && (
-                          <Badge variant="outline">{categoryMap.get(thread.categoryId)}</Badge>
-                        )}
-                      </div>
-                      <h3 className="font-semibold text-navy truncate">{thread.title}</h3>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted">
-                        <span className="flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3" /> {thread.replyCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" /> {thread.viewCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <ThumbsUp className="h-3 w-3" /> {thread.likeCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {formatRelativeDate(thread.lastActivityAt)}
-                        </span>
-                      </div>
-                    </div>
+              <MotionItem key={thread.id} delayIndex={Math.min(idx, 5)}>
+                <CardLink href={`/community/threads/${thread.id}`} prefetch={false}>
+                  <div className="mb-1.5 flex flex-wrap items-center gap-2 empty:hidden">
+                    {thread.isPinned && (
+                      <Badge variant="warning" className="gap-1">
+                        <Pin className="h-3 w-3" aria-hidden="true" /> Pinned
+                      </Badge>
+                    )}
+                    {thread.isLocked && (
+                      <Badge variant="muted" className="gap-1">
+                        <Lock className="h-3 w-3" aria-hidden="true" /> Locked
+                      </Badge>
+                    )}
+                    {categoryMap.get(thread.categoryId) && (
+                      <Badge variant="outline">{categoryMap.get(thread.categoryId)}</Badge>
+                    )}
                   </div>
-                </Card>
+                  <h2 className="truncate text-base font-bold text-navy">{thread.title}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3" aria-hidden="true" /> {thread.replyCount}<span className="sr-only"> replies</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" aria-hidden="true" /> {thread.viewCount}<span className="sr-only"> views</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <ThumbsUp className="h-3 w-3" aria-hidden="true" /> {thread.likeCount}<span className="sr-only"> likes</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" aria-hidden="true" /> {formatRelativeDate(thread.lastActivityAt)}
+                    </span>
+                  </div>
+                </CardLink>
               </MotionItem>
             ))}
           </div>
         )}
 
         {!loading && (
-          <div className="pt-2">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={(next) => { setPage(next); loadThreads(next); }}
-              onPageSizeChange={(next) => { setPageSize(next); }}
-              itemLabel="thread"
-              itemLabelPlural="threads"
-            />
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={(next) => { setPage(next); loadThreads(next); }}
+            onPageSizeChange={(next) => { setPageSize(next); }}
+            itemLabel="thread"
+            itemLabelPlural="threads"
+          />
         )}
-      </MotionSection>
+      </section>
     </>
   );
 }

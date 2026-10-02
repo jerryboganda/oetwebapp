@@ -329,7 +329,7 @@ function WritingMockSessionInner() {
           <div className="flex items-center gap-3">
             <Award className="h-5 w-5 text-amber-600" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.mocks.session.eyebrow')}</p>
+              <p className="eyebrow text-muted">{t('writing.mocks.session.eyebrow')}</p>
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.mocks.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -393,7 +393,7 @@ function WritingMockSessionInner() {
                   aria-live="polite"
                   className="mb-3 flex items-start gap-2 rounded-xl border border-success/40 bg-success/10 px-4 py-3"
                 >
-                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden="true" />
                   <div>
                     <p className="text-sm font-bold text-navy">Submitted — awaiting tutor review</p>
                     <p className="mt-0.5 text-xs text-muted">

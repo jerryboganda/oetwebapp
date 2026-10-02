@@ -30,7 +30,7 @@ export function WritingStage({ sessionId, onComplete }: { sessionId: string; onC
   if (!tasks) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted" role="status">
-        {loadError ? <span className="text-danger">{loadError}</span> : <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing writing tasks…</>}
+        {loadError ? <span className="text-danger-strong">{loadError}</span> : <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing writing tasks…</>}
       </div>
     );
   }
@@ -229,7 +229,7 @@ export function WritingTaskEditor({
           </span>
         </div>
         {error ? (
-          <p role="alert" className="text-sm text-danger">
+          <p role="alert" className="text-sm text-danger-strong">
             {error}
           </p>
         ) : null}

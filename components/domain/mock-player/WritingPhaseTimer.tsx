@@ -53,7 +53,7 @@ export function WritingPhaseTimer({ phase, durationSeconds, startedAt, onExpire 
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" aria-hidden />
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-primary">{label(phase)}</p>
+            <p className="eyebrow text-primary">{label(phase)}</p>
             <p className="text-sm text-muted">
               {phase === 'reading'
                 ? 'Read the case notes only. The editor unlocks after this phase.'

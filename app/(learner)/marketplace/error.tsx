@@ -1,29 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { LearnerRouteError, type LearnerRouteErrorProps } from '@/components/domain/learner-route-error';
 
-export default function MarketplaceError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  useEffect(() => {
-    console.error('[Marketplace Error]', error);
-  }, [error]);
-
+export default function MarketplaceError(props: LearnerRouteErrorProps) {
   return (
-    <div className="flex min-h-[calc(var(--app-viewport-height,100dvh)-9rem)] flex-col items-center justify-center gap-4 p-6 text-center" role="alert">
-      <div className="rounded-full bg-danger/10 p-4">
-        <svg className="h-8 w-8 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-        </svg>
-      </div>
-      <h2 className="text-lg font-semibold text-navy">Something went wrong</h2>
-      <p className="max-w-md text-sm text-muted">An unexpected error occurred in Marketplace. Please try again.</p>
-      <Button variant="primary" onClick={reset}>Try Again</Button>
-    </div>
+    <LearnerRouteError
+      {...props}
+      title="Something went wrong"
+      message="An unexpected error occurred in Marketplace. Please try again."
+    />
   );
 }

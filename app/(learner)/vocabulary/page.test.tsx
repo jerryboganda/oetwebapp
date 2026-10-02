@@ -40,6 +40,8 @@ vi.mock('@/components/ui/card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
   ),
+  // CardLink (the quick-access tiles) builds its classes from this.
+  cardClassName: () => '',
 }));
 
 vi.mock('@/components/ui/skeleton', () => ({

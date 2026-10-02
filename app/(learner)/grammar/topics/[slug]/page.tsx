@@ -2,14 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookMarked, CheckCircle2, LayoutGrid, Sparkles, Trophy } from 'lucide-react';
+import { BookMarked, CheckCircle2, LayoutGrid, Sparkles, Trophy } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
 import { GrammarLessonCard } from '@/components/domain/grammar';
 import { fetchGrammarTopicDetail } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -66,13 +63,11 @@ export default function GrammarTopicPage() {
   if (loading) {
     return (
       <>
-        <div className="space-y-6">
-          <Skeleton className="h-40 rounded-2xl" />
-          <div className="grid gap-4 md:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-52 rounded-2xl" />
-            ))}
-          </div>
+        <Skeleton className="h-40 rounded-2xl" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-52 rounded-2xl" />
+          ))}
         </div>
       </>
     );
@@ -81,12 +76,11 @@ export default function GrammarTopicPage() {
   // ── error / not found ────────────────────────────────────────────────
   if (error || !data) {
     return (
-      <>
-        <div className="space-y-4">
-          <BackLink />
-          <InlineAlert variant="warning">{error ?? 'Topic not found.'}</InlineAlert>
-        </div>
-      </>
+      <EmptyState
+        icon={<BookMarked className="h-7 w-7" aria-hidden="true" />}
+        title={error ?? 'Topic not found.'}
+        action={{ label: 'Back to grammar', href: '/grammar' }}
+      />
     );
   }
 
@@ -102,71 +96,44 @@ export default function GrammarTopicPage() {
   ];
 
   // ── render ────────────────────────────────────────────────────────────
+  // The shell breadcrumb (Dashboard › Grammar › …) is the way back.
   return (
     <>
-      <div className="space-y-5 sm:space-y-8">
+      {/* ── Hero — same visual contract as every learner page ── */}
+      <LearnerPageHero
+        eyebrow={titleCase(topic.levelHint || 'Grammar topic')}
+        icon={BookMarked}
+        accent="primary"
+        title={topic.name}
+        description={topic.description ?? `Build mastery on ${topic.name} patterns through guided practice.`}
+        highlights={heroHighlights}
+      />
 
-        {/* Back nav — sits above hero as a lightweight ghost link, matching dashboard back-nav convention. */}
-        <BackLink />
-
-        {/* ── Hero — same visual contract as every learner page ── */}
-        <LearnerPageHero
-          eyebrow={titleCase(topic.levelHint || 'Grammar topic')}
-          icon={BookMarked}
-          accent="primary"
-          title={topic.name}
-          description={topic.description ?? `Build mastery on ${topic.name} patterns through guided practice.`}
-          highlights={heroHighlights}
+      {/* ── Lesson grid ── */}
+      <MotionSection className="space-y-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Lessons"
+          title={`${topic.name} lessons`}
+          description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'}. Every completed lesson improves your readiness score.`}
         />
 
-        {/* ── Lesson grid ── */}
-        <MotionSection className="space-y-5">
-          <LearnerSurfaceSectionHeader
-            eyebrow="Lessons"
-            title={`${topic.name} lessons`}
-            description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'}. Every completed lesson improves your readiness score.`}
+        {lessons.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles className="h-7 w-7 text-primary" aria-hidden="true" />}
+            title="No published lessons yet"
+            description="Content is being finalised for this topic. Check back soon, or explore the full grammar library."
+            action={{ label: 'Browse other topics', href: '/grammar' }}
           />
-
-          {lessons.length === 0 ? (
-            <Card className="border-dashed border-border p-10 text-center shadow-sm">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <h3 className="mt-4 text-lg font-bold text-navy">No published lessons yet</h3>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                Content is being finalised for this topic. Check back soon, or explore the full grammar library.
-              </p>
-              <div className="mt-6 flex justify-center">
-                <Button variant="outline" size="sm" asChild>
-<Link href="/grammar">Browse other topics</Link>
-</Button>
-              </div>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {lessons.map((lesson, i) => (
-                <MotionItem key={lesson.id} delayIndex={i}>
-                  <GrammarLessonCard lesson={lesson} />
-                </MotionItem>
-              ))}
-            </div>
-          )}
-        </MotionSection>
-
-      </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {lessons.map((lesson, i) => (
+              <MotionItem key={lesson.id} delayIndex={Math.min(i, 5)} className="h-full">
+                <GrammarLessonCard lesson={lesson} />
+              </MotionItem>
+            ))}
+          </div>
+        )}
+      </MotionSection>
     </>
-  );
-}
-
-/** Lightweight back-to-grammar breadcrumb. */
-function BackLink() {
-  return (
-    <Link
-      href="/grammar"
-      className="inline-flex items-center gap-2 text-sm font-semibold text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-    >
-      <ArrowLeft className="h-4 w-4" />
-      Back to grammar
-    </Link>
   );
 }

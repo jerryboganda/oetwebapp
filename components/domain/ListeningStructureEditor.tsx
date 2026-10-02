@@ -273,7 +273,7 @@ function CountsPill({
   return (
     <div className={`rounded-lg border px-3 py-2 text-sm ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
       <div className="text-xs text-muted">{label}</div>
-      <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-emerald-600" /> : <AlertTriangle className="inline w-4 h-4 text-amber-600" />}</div>
+      <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-success-strong" /> : <AlertTriangle className="inline w-4 h-4 text-warning-strong" />}</div>
     </div>
   );
 }
@@ -481,7 +481,7 @@ function QuestionRow({
       {/* Phase 4: per-option distractor analysis (MCQ only). */}
       {isMcq && (
         <div className="mt-3 rounded-lg border border-border bg-surface p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+          <p className="eyebrow text-muted-foreground mb-2">
             Per-option distractor analysis
           </p>
           <div className="space-y-2">

@@ -145,9 +145,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-success">Payment received</h2>
+                <h2 className="text-lg font-semibold text-success-strong">Payment received</h2>
                 <p className="mt-1 text-sm text-navy">
                   Thanks for your purchase. We have added the new entitlements to your account.
                 </p>
@@ -175,9 +175,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-success">Payment received</h2>
+                <h2 className="text-lg font-semibold text-success-strong">Payment received</h2>
                 <p className="mt-1 text-sm text-navy">
                   Thanks for your purchase — your payment went through and your order is
                   confirmed. Your billing page has the details of what you bought.
@@ -204,9 +204,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6">
             <div className="flex items-start gap-3">
-              <Hourglass className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
+              <Hourglass className="mt-0.5 h-6 w-6 flex-none text-warning-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-warning">
+                <h2 className="text-lg font-semibold text-warning-strong">
                   Payment recorded — Pending admin approval
                 </h2>
                 <p className="mt-1 text-sm text-navy">
@@ -232,9 +232,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-success">Tutor Book delivered</h2>
+                <h2 className="text-lg font-semibold text-success-strong">Tutor Book delivered</h2>
                 <p className="mt-1 text-sm text-navy">
                   Your manual delivery has been recorded. The Tutor Book is supplied through WhatsApp
                   and this purchase does not unlock course or subtest access in the platform.
@@ -254,9 +254,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-danger/30 bg-danger/10 p-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-6 w-6 flex-none text-danger" aria-hidden="true" />
+              <AlertCircle className="mt-0.5 h-6 w-6 flex-none text-danger-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-danger">Checkout did not complete</h2>
+                <h2 className="text-lg font-semibold text-danger-strong">Checkout did not complete</h2>
                 <p className="mt-1 text-sm text-navy">{state.reason}</p>
               </div>
             </div>
@@ -277,9 +277,9 @@ export function CheckoutSuccessPoller({
         <div className="space-y-6">
           <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6">
             <div className="flex items-start gap-3">
-              <Mail className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
+              <Mail className="mt-0.5 h-6 w-6 flex-none text-warning-strong" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold text-warning">We will email when ready</h2>
+                <h2 className="text-lg font-semibold text-warning-strong">We will email when ready</h2>
                 <p className="mt-1 text-sm text-navy">
                   Your payment may still be processing. You will receive a confirmation email as
                   soon as your purchase is fulfilled - usually within a few minutes.

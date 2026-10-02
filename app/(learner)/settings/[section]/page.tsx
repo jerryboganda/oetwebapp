@@ -41,13 +41,16 @@ import {
   Wifi,
   type LucideIcon,
 } from 'lucide-react';
-import { NotificationPreferencesPanel } from '@/components/layout/notification-preferences-panel';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button, buttonClassName } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { ApiError, fetchSettingsSection, updateMyAvatar, updateSettingsSection, uploadMedia } from '@/lib/api';
 import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
@@ -92,105 +95,31 @@ interface SectionConfig {
   fields: FieldConfig[];
 }
 
-const accentStyles: Record<LearnerSurfaceAccent, {
-  icon: string;
-  badge: string;
-  softBadge: string;
-  helperSurface: string;
-  helperGlow: string;
-  inputFocus: string;
-  toggleOn: string;
-}> = {
-  primary: {
-    icon: 'bg-primary/10 text-primary',
-    badge: 'border-primary/20 bg-primary/10 text-primary',
-    softBadge: 'border-primary/15 bg-primary/10 text-primary',
-    helperSurface: 'border-primary/15 bg-surface',
-    helperGlow: 'from-primary/10 via-white to-white',
-    inputFocus: 'focus:border-primary focus:ring-2 focus:ring-primary/10',
-    toggleOn: 'bg-primary',
-  },
-  navy: {
-    icon: 'bg-navy/10 text-navy',
-    badge: 'border-navy/20 bg-navy/10 text-navy',
-    softBadge: 'border-navy/15 bg-navy/10 text-navy',
-    helperSurface: 'border-navy/15 bg-surface',
-    helperGlow: 'from-navy/10 via-white to-white',
-    inputFocus: 'focus:border-navy focus:ring-2 focus:ring-navy/10',
-    toggleOn: 'bg-navy',
-  },
-  amber: {
-    icon: 'bg-amber-50 text-amber-700',
-    badge: 'border-amber-200 bg-amber-50 text-amber-700',
-    softBadge: 'border-amber-100 bg-amber-50 text-amber-700',
-    helperSurface: 'border-amber-200/70 bg-surface',
-    helperGlow: 'from-amber-50 via-white to-white',
-    inputFocus: 'focus:border-amber-400 focus:ring-2 focus:ring-amber-100',
-    toggleOn: 'bg-amber-500',
-  },
-  blue: {
-    icon: 'bg-blue-50 text-blue-700',
-    badge: 'border-blue-200 bg-blue-50 text-blue-700',
-    softBadge: 'border-blue-100 bg-blue-50 text-blue-700',
-    helperSurface: 'border-blue-200/70 bg-surface',
-    helperGlow: 'from-blue-50 via-white to-white',
-    inputFocus: 'focus:border-blue-400 focus:ring-2 focus:ring-blue-100',
-    toggleOn: 'bg-blue-600',
-  },
-  indigo: {
-    icon: 'bg-indigo-50 text-indigo-700',
-    badge: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-    softBadge: 'border-indigo-100 bg-indigo-50 text-indigo-700',
-    helperSurface: 'border-indigo-200/70 bg-surface',
-    helperGlow: 'from-indigo-50 via-white to-white',
-    inputFocus: 'focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100',
-    toggleOn: 'bg-indigo-600',
-  },
-  purple: {
-    icon: 'bg-purple-50 text-purple-700',
-    badge: 'border-purple-200 bg-purple-50 text-purple-700',
-    softBadge: 'border-purple-100 bg-purple-50 text-purple-700',
-    helperSurface: 'border-purple-200/70 bg-surface',
-    helperGlow: 'from-purple-50 via-white to-white',
-    inputFocus: 'focus:border-purple-400 focus:ring-2 focus:ring-purple-100',
-    toggleOn: 'bg-purple-600',
-  },
-  rose: {
-    icon: 'bg-rose-50 text-rose-700',
-    badge: 'border-rose-200 bg-rose-50 text-rose-700',
-    softBadge: 'border-rose-100 bg-rose-50 text-rose-700',
-    helperSurface: 'border-rose-200/70 bg-surface',
-    helperGlow: 'from-rose-50 via-white to-white',
-    inputFocus: 'focus:border-rose-400 focus:ring-2 focus:ring-rose-100',
-    toggleOn: 'bg-rose-600',
-  },
-  emerald: {
-    icon: 'bg-emerald-50 text-emerald-700',
-    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    softBadge: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    helperSurface: 'border-emerald-200/70 bg-surface',
-    helperGlow: 'from-emerald-50 via-white to-white',
-    inputFocus: 'focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100',
-    toggleOn: 'bg-emerald-600',
-  },
-  slate: {
-    icon: 'bg-background-light text-navy',
-    badge: 'border-border bg-background-light text-navy',
-    softBadge: 'border-border bg-background-light text-navy',
-    helperSurface: 'border-border bg-surface',
-    helperGlow: 'from-slate-100 via-white to-white',
-    inputFocus: 'focus:border-slate-400 focus:ring-2 focus:ring-slate-100',
-    toggleOn: 'bg-slate-700',
-  },
+/** Section accent: the icon tiles and the section-toned field tags. */
+const accentStyles: Record<LearnerSurfaceAccent, { icon: string; badge: string }> = {
+  primary: { icon: 'bg-primary/10 text-primary', badge: 'border-primary/20 bg-primary/10 text-primary' },
+  navy: { icon: 'bg-navy/10 text-navy', badge: 'border-navy/20 bg-navy/10 text-navy' },
+  amber: { icon: 'bg-warning/10 text-warning-strong', badge: 'border-warning/20 bg-warning/10 text-warning-strong' },
+  blue: { icon: 'bg-info/10 text-info', badge: 'border-info/20 bg-info/10 text-info' },
+  indigo: { icon: 'bg-lavender text-primary-dark', badge: 'border-primary/20 bg-lavender text-primary-dark' },
+  purple: { icon: 'bg-lavender text-primary-dark', badge: 'border-primary/20 bg-lavender text-primary-dark' },
+  rose: { icon: 'bg-danger/10 text-danger-strong', badge: 'border-danger/20 bg-danger/10 text-danger-strong' },
+  emerald: { icon: 'bg-success/10 text-success-strong', badge: 'border-success/20 bg-success/10 text-success-strong' },
+  slate: { icon: 'bg-background-light text-navy', badge: 'border-border bg-background-light text-navy' },
+  listening: { icon: 'bg-skill-listening/10 text-skill-listening', badge: 'border-skill-listening/20 bg-skill-listening/10 text-skill-listening' },
+  reading: { icon: 'bg-skill-reading/10 text-skill-reading', badge: 'border-skill-reading/20 bg-skill-reading/10 text-skill-reading' },
+  writing: { icon: 'bg-skill-writing/10 text-skill-writing', badge: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing' },
+  speaking: { icon: 'bg-skill-speaking/10 text-skill-speaking', badge: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking' },
 };
 
+/** Sub-test tags wear their skill identity colour, never a status colour. */
 const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
   muted: 'border-border bg-background-light text-muted',
-  writing: 'border-rose-200 bg-rose-50 text-rose-700',
-  speaking: 'border-purple-200 bg-purple-50 text-purple-700',
-  reading: 'border-blue-200 bg-blue-50 text-blue-700',
-  listening: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  study: 'border-amber-200 bg-amber-50 text-amber-700',
+  writing: 'border-skill-writing/20 bg-skill-writing/10 text-skill-writing',
+  speaking: 'border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking',
+  reading: 'border-skill-reading/20 bg-skill-reading/10 text-skill-reading',
+  listening: 'border-skill-listening/20 bg-skill-listening/10 text-skill-listening',
+  study: 'border-warning/20 bg-warning/10 text-warning-strong',
 };
 
 const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
@@ -601,9 +530,9 @@ function renderTag(label: string, accent: LearnerSurfaceAccent, tone: FieldTagTo
   const className = tone === 'section' ? accentStyles[accent].badge : tagToneStyles[tone];
 
   return (
-    <Badge key={`${label}-${tone}`} className={cn('rounded-full px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.14em]', className)}>
+    <span key={`${label}-${tone}`} className={cn('inline-flex items-center rounded-full border px-2 py-0.5 tile-label', className)}>
       {label}
-    </Badge>
+    </span>
   );
 }
 
@@ -619,19 +548,6 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
     label: isFieldConfigured(field, value) ? 'Set' : 'Not set',
     variant: isFieldConfigured(field, value) ? 'info' : 'muted',
   };
-}
-
-function inputClasses(accent: LearnerSurfaceAccent) {
-  return cn(
-    'w-full rounded-2xl border border-border bg-surface px-5 py-4 text-base font-bold text-navy outline-none transition-[border-color,box-shadow] duration-200 shadow-inner focus:border-primary focus:ring-4 focus:ring-primary/20',
-    accentStyles[accent].inputFocus,
-  );
-}
-
-function toggleFocusClasses(accent: LearnerSurfaceAccent) {
-  return accentStyles[accent].inputFocus
-    .replace('focus:border-', 'focus-visible:border-')
-    .replace('focus:ring-', 'focus-visible:ring-');
 }
 
 interface SelectOption {
@@ -687,14 +603,14 @@ function ProfessionLockNotice() {
   )}`;
 
   return (
-    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5 shadow-sm">
+    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 sm:p-5">
       <div className="flex items-start gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-warning/30 bg-warning/15">
-          <Lock className="h-5 w-5 text-warning" aria-hidden="true" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-warning/30 bg-warning/15">
+          <Lock className="h-5 w-5 text-warning-strong" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-3">
-          <p className="text-sm font-black uppercase tracking-widest text-navy">Profession locked</p>
-          <p className="max-w-2xl text-sm font-medium leading-relaxed text-navy/80">
+          <p className="eyebrow text-warning-strong">Profession locked</p>
+          <p className="max-w-2xl text-sm leading-relaxed text-navy">
             Your videos and materials are tied to the profession you registered with, so changing it now would
             re-point every package on your account. That is why it locks after your first purchase — our team can
             move you across and re-point your access for you.
@@ -703,7 +619,7 @@ function ProfessionLockNotice() {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-[#25D366] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             <MessageCircle className="h-4 w-4" aria-hidden="true" />
             Request a change on WhatsApp
@@ -711,52 +627,6 @@ function ProfessionLockNotice() {
         </div>
       </div>
     </div>
-  );
-}
-
-function SettingsSectionHelperCard({
-  accent,
-  helperBadge,
-  icon: Icon,
-  title,
-  body,
-  configuredFieldCount,
-  totalFieldCount,
-}: {
-  accent: LearnerSurfaceAccent;
-  helperBadge: string;
-  icon: LucideIcon;
-  title: string;
-  body: string;
-  configuredFieldCount: number;
-  totalFieldCount: number;
-}) {
-  const palette = accentStyles[accent];
-
-  return (
-    <section className={cn('overflow-hidden rounded-surface border shadow-sm bg-surface relative', palette.helperSurface)}>
-      <div className="p-6 sm:p-8 relative z-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-5">
-            <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
-              <Icon className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className={cn('rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest shadow-sm', palette.badge)}>
-                  {helperBadge}
-                </Badge>
-                <Badge variant="muted" className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest">
-                  {configuredFieldCount}/{totalFieldCount} configured
-                </Badge>
-              </div>
-              <h2 className="mt-4 text-xl font-black text-navy tracking-tight">{title}</h2>
-              <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-muted font-bold">{body}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -793,232 +663,144 @@ function SettingsSectionForm({
   const { options: professionOptions } = useProfessions();
   const config = SECTION_CONFIG[data.section];
   const palette = accentStyles[accent];
-
-  if (data.section === 'profile') {
-    return (
-      <div className="rounded-surface border border-border bg-surface shadow-sm relative overflow-hidden">
-        <div className="relative z-10 flex flex-col">
-          {config.fields.map((field, i) => {
-            const value = fieldValue(data.values, field);
-            const status = fieldStatus(field, value);
-            const FieldIcon = field.icon;
-            const isProfessionField = field.key === 'professionId';
-            const isLocked = isProfessionField && professionLocked;
-            const selectOptions: SelectOption[] = isProfessionField
-              ? professionSelectOptions(professionOptions, String(value))
-              : (field.options ?? []);
-            // H1 (security): an email change is re-authenticated with the current
-            // password (see LearnerService.PatchSettingsSectionAsync) — reveal the
-            // confirmation field only once the learner has actually edited it away
-            // from the stored value, so every other profile field stays password-free.
-            const isEmailField = field.key === 'email';
-            const emailChanged = isEmailField
-              && originalEmail !== undefined
-              && String(value).trim().toLowerCase() !== originalEmail.trim().toLowerCase();
-            const fieldInvalid = isNativeFieldInvalid(field, value, invalid);
-            const passwordInvalid = emailChanged && !emailPassword.trim();
-
-            return (
-              <div key={field.key} className={cn('transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
-                <div className="p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6">
-                  <div className="flex min-w-0 flex-1 items-start gap-5">
-                    <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
-                      <FieldIcon className={cn('h-7 w-7', status.label === 'Set' ? 'text-primary' : '')} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        <label className="text-xl font-black text-navy tracking-tight" htmlFor={field.key}>{field.label}</label>
-                        <Badge className={cn('rounded-full px-3 py-1 font-bold text-3xs uppercase tracking-widest', palette.badge)}>
-                          Personal Info
-                        </Badge>
-                        <Badge variant={isLocked ? 'muted' : status.variant} className="rounded-full px-2.5 py-1 text-3xs font-black uppercase tracking-widest shadow-sm">
-                          {isLocked ? 'Locked' : status.label}
-                        </Badge>
-                      </div>
-                      <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
-                    </div>
-                  </div>
-                  <div className="w-full xl:w-96 shrink-0">
-                    {field.type === 'select' ? (
-                      <select
-                        id={field.key}
-                        className={cn(
-                          inputClasses(accent),
-                          'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold h-14',
-                          isLocked && 'cursor-not-allowed opacity-60',
-                        )}
-                        value={String(value)}
-                        disabled={isLocked}
-                        aria-invalid={fieldInvalid}
-                        aria-describedby={isLocked ? `${field.key}-lock` : undefined}
-                        onChange={(event) => onChange(field.key, event.target.value)}
-                      >
-                        <option value="" disabled className="text-navy/30">Select an option…</option>
-                        {selectOptions.map((option) => (
-                          <option key={option.value} value={option.value} disabled={option.disabled} className="text-navy font-bold">{option.label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        id={field.key}
-                        type={field.type}
-                        className={cn(inputClasses(accent), 'font-bold h-14')}
-                        value={String(value)}
-                        aria-invalid={fieldInvalid}
-                        onChange={(event) => onChange(field.key, event.target.value)}
-                        placeholder={`Enter your ${field.label.toLowerCase()}`}
-                      />
-                    )}
-                  </div>
-                </div>
-                {emailChanged ? (
-                  <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5">
-                      <label htmlFor="email-current-password" className="block text-sm font-bold text-navy">
-                        Confirm your current password
-                      </label>
-                      <p className="mt-1 text-xs font-medium text-muted">
-                        For your security, changing your email requires your current password.
-                      </p>
-                      <input
-                        id="email-current-password"
-                        type="password"
-                        autoComplete="current-password"
-                        value={emailPassword}
-                        aria-invalid={passwordInvalid}
-                        onChange={(event) => onEmailPasswordChange?.(event.target.value)}
-                        placeholder="Current password"
-                        className={cn(inputClasses(accent), 'mt-3 h-12 font-bold')}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                {isLocked ? (
-                  <div id={`${field.key}-lock`} className="px-6 pb-6 sm:px-8 sm:pb-8">
-                    <ProfessionLockNotice />
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  const isProfile = data.section === 'profile';
 
   return (
-    <div className="space-y-6">
+    <Card padding="none" className="divide-y divide-border overflow-hidden">
       {config.fields.map((field) => {
         const value = fieldValue(data.values, field);
         const status = fieldStatus(field, value);
         const FieldIcon = field.icon;
+        const isToggle = field.type === 'toggle';
+        const isProfessionField = field.key === 'professionId';
+        const isLocked = isProfessionField && professionLocked;
+        const selectOptions: SelectOption[] = isProfessionField
+          ? professionSelectOptions(professionOptions, String(value))
+          : (field.options ?? []);
+        // H1 (security): an email change is re-authenticated with the current
+        // password (see LearnerService.PatchSettingsSectionAsync) — reveal the
+        // confirmation field only once the learner has actually edited it away
+        // from the stored value, so every other profile field stays password-free.
+        const isEmailField = field.key === 'email';
+        const emailChanged = isEmailField
+          && originalEmail !== undefined
+          && String(value).trim().toLowerCase() !== originalEmail.trim().toLowerCase();
         const fieldInvalid = isNativeFieldInvalid(field, value, invalid);
+        const passwordInvalid = emailChanged && !emailPassword.trim();
 
         return (
-          <div key={field.key} className={cn('rounded-surface bg-surface p-6 sm:p-8 shadow-sm border transition-[box-shadow,border-color,transform] duration-300 hover:shadow-clinical hover:border-border-hover hoverable:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border' : 'border-border')}>
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
-              <div className="flex min-w-0 flex-1 items-start gap-5">
-                <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 ease-out group-hoverable:scale-110', palette.softBadge)}>
-                  <FieldIcon className={cn('h-6 w-6 transition-colors duration-300', Boolean(value) || status.label === 'Set' ? 'text-primary' : '')} />
+          <div key={field.key} className="p-4 sm:p-5">
+            <div className={cn('flex flex-col gap-4', field.type !== 'textarea' && 'xl:flex-row xl:items-start')}>
+              <div className="flex min-w-0 flex-1 items-start gap-4">
+                <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', palette.icon)}>
+                  <FieldIcon className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-xl font-black text-navy tracking-tight group-hover:text-primary transition-colors" htmlFor={field.key}>{field.label}</label>
-                    <div className="inline-flex overflow-hidden rounded-full shadow-sm border border-border">
-                      {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
-                    </div>
-                    {field.secondaryTag ? (
-                      <div className="inline-flex overflow-hidden rounded-full shadow-sm border border-border">
-                        {renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted')}
-                      </div>
+                    {isToggle ? (
+                      <p className="text-base font-semibold text-navy">{field.label}</p>
+                    ) : (
+                      <label className="text-base font-semibold text-navy" htmlFor={field.key}>{field.label}</label>
+                    )}
+                    {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
+                    {/* Only "Required" carries meaning; the other secondary tags repeated the label. */}
+                    {field.secondaryTag === 'Required' ? renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted') : null}
+                    {!isToggle ? (
+                      <Badge variant={isLocked ? 'muted' : status.variant}>
+                        {isLocked ? 'Locked' : status.label}
+                      </Badge>
                     ) : null}
                   </div>
-                  <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-muted font-medium">{field.description}</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">{field.description}</p>
                 </div>
+                {isToggle ? (
+                  <Switch
+                    checked={Boolean(value)}
+                    onChange={() => onChange(field.key, !Boolean(value))}
+                    label={`Toggle ${field.label}`}
+                  />
+                ) : null}
               </div>
 
-              {field.type === 'toggle' ? (
-                <button
-                  id={field.key}
-                  type="button"
-                  onClick={() => onChange(field.key, !Boolean(value))}
-                  className={cn(
-                    'relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 overflow-hidden shadow-inner border border-border',
-                    Boolean(value) ? palette.toggleOn : 'bg-navy/10 hover:bg-navy/15',
-                    toggleFocusClasses(accent),
+              {!isToggle ? (
+                <div className={cn('w-full', field.type !== 'textarea' && 'xl:w-96 xl:shrink-0')}>
+                  {field.type === 'select' ? (
+                    <Select
+                      id={field.key}
+                      value={String(value)}
+                      disabled={isLocked}
+                      aria-invalid={fieldInvalid}
+                      aria-describedby={isLocked ? `${field.key}-lock` : undefined}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                      options={[{ value: '', label: 'Select an option…', disabled: true }, ...selectOptions]}
+                      className={cn('w-full cursor-pointer', isLocked && 'cursor-not-allowed opacity-60')}
+                    />
+                  ) : field.type === 'textarea' ? (
+                    <Textarea
+                      id={field.key}
+                      value={String(value)}
+                      aria-invalid={fieldInvalid}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                      className="min-h-32"
+                    />
+                  ) : (
+                    <Input
+                      id={field.key}
+                      type={field.type}
+                      min={field.min}
+                      max={field.max}
+                      value={String(value)}
+                      aria-invalid={fieldInvalid}
+                      onChange={(event) => onChange(field.key, event.target.value)}
+                      placeholder={isProfile ? `Enter your ${field.label.toLowerCase()}` : undefined}
+                      className="w-full"
+                    />
                   )}
-                  aria-checked={Boolean(value)}
-                  aria-label={`Toggle ${field.label}`}
-                  role="switch"
-                >
-                  <span className={cn('inline-block h-8 w-8 transform rounded-full bg-surface shadow-sm transition-transform duration-200 ease-out', Boolean(value) ? 'translate-x-10' : 'translate-x-1')} />
-                </button>
+                </div>
               ) : null}
             </div>
 
-            {field.type !== 'toggle' ? (
-              <div className="mt-8 relative z-10">
-                {field.type === 'select' ? (
-                  <select
-                    id={field.key}
-                    className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold')}
-                    value={String(value)}
-                    aria-invalid={fieldInvalid}
-                    onChange={(event) => onChange(field.key, event.target.value)}
-                  >
-                    <option value="" disabled className="text-navy/30">Select an option…</option>
-                    {(field.key === 'professionId'
-                      ? professionSelectOptions(professionOptions, String(value))
-                      : (field.options ?? [])
-                    ).map((option) => (
-                      <option key={option.value} value={option.value} disabled={option.disabled} className="text-navy font-bold">{option.label}</option>
-                    ))}
-                  </select>
-                ) : field.type === 'textarea' ? (
-                  <textarea
-                    id={field.key}
-                    className={cn('min-h-32 resize-y font-bold p-6', inputClasses(accent))}
-                    value={String(value)}
-                    aria-invalid={fieldInvalid}
-                    onChange={(event) => onChange(field.key, event.target.value)}
+            {emailChanged ? (
+              <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 sm:p-5">
+                <label htmlFor="email-current-password" className="block text-sm font-bold text-navy">
+                  Confirm your current password
+                </label>
+                <p className="mt-1 text-xs text-muted">
+                  For your security, changing your email requires your current password.
+                </p>
+                <div className="mt-3">
+                  <Input
+                    id="email-current-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={emailPassword}
+                    aria-invalid={passwordInvalid}
+                    onChange={(event) => onEmailPasswordChange?.(event.target.value)}
+                    placeholder="Current password"
                   />
-                ) : (
-                  <input
-                    id={field.key}
-                    type={field.type}
-                    min={field.min}
-                    max={field.max}
-                    className={cn(inputClasses(accent), 'font-bold h-14')}
-                    value={String(value)}
-                    aria-invalid={fieldInvalid}
-                    onChange={(event) => onChange(field.key, event.target.value)}
-                  />
-                )}
+                </div>
+              </div>
+            ) : null}
+            {isLocked ? (
+              <div id={`${field.key}-lock`} className="mt-4">
+                <ProfessionLockNotice />
               </div>
             ) : null}
           </div>
         );
       })}
-    </div>
+    </Card>
   );
 }
 
-/**
- * Privacy section body. The learner's recordings, consent, and reviewer access
- * are governed by the compliance system (consent records + retention workers +
- * audited access), so instead of disconnected preference toggles this points to
- * the real controls: the My-Recordings page (review + delete individual
- * recordings) and account deletion (full erasure).
- */
 const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 const AVATAR_ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 
 /** Profile photo upload/remove control. Uploads to /v1/media/upload, then points
  * the account at it via PUT /v1/me/avatar; refreshSession() pulls the new
  * avatarUrl into AuthContext so the header updates immediately. */
-function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
+function AvatarUploadCard() {
   const { user, refreshSession } = useAuth();
-  const palette = accentStyles[accent];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1061,31 +843,26 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
   };
 
   return (
-    <div className="rounded-surface border border-border bg-surface shadow-sm relative overflow-hidden">
-      <div className="relative z-10 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-6">
-        <div className="flex min-w-0 flex-1 items-center gap-5">
-          <UserAvatar avatarUrl={user?.avatarUrl} displayName={user?.displayName} className="h-16 w-16 text-base" />
+    <Card padding="none">
+      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <UserAvatar avatarUrl={user?.avatarUrl} displayName={user?.displayName} className="h-14 w-14 text-base" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className="text-xl font-black text-navy tracking-tight">Profile photo</span>
-              <Badge className={cn('rounded-full px-3 py-1 font-bold text-3xs uppercase tracking-widest', palette.badge)}>
-                Personal Info
-              </Badge>
-            </div>
-            <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">
+            <p className="text-base font-semibold text-navy">Profile photo</p>
+            <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">
               Shown across your account. JPG, PNG, GIF, or WEBP up to 10 MB. Optional — a picture isn&apos;t required.
             </p>
-            {error ? <p id="avatar-upload-error" className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+            {error ? <p id="avatar-upload-error" className="mt-2 text-sm font-semibold text-danger-strong">{error}</p> : null}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
           <label
             className={cn(
-              buttonClassName({ className: 'cursor-pointer rounded-full font-bold focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2' }),
+              buttonClassName({ className: 'pressable cursor-pointer focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2' }),
               busy && 'pointer-events-none opacity-60',
             )}
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {user?.avatarUrl ? 'Change photo' : 'Upload photo'}
             <input
               type="file"
@@ -1101,44 +878,51 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
             <Button
               type="button"
               variant="ghost"
-              className="gap-2 rounded-full font-bold text-danger hover:bg-danger/10"
+              className="text-danger-strong hover:bg-danger/10"
               disabled={busy}
               onClick={() => { void handleRemove(); }}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
               Remove
             </Button>
           ) : null}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
+/**
+ * Privacy section body. The learner's recordings, consent, and reviewer access
+ * are governed by the compliance system (consent records + retention workers +
+ * audited access), so instead of disconnected preference toggles this points to
+ * the real controls: the My-Recordings page (review + delete individual
+ * recordings) and account deletion (full erasure).
+ */
 function PrivacyControlsCard() {
   return (
-    <div className="rounded-surface border border-border bg-surface p-6 sm:p-8 shadow-sm relative overflow-hidden">
-      <div className="flex items-start gap-5 relative z-10">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-rose-50">
-          <ShieldCheck className="h-6 w-6 text-rose-700" />
+    <Card padding="lg">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-danger/10 text-danger-strong">
+          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1 space-y-4">
           <div>
-            <h3 className="text-xl font-black tracking-tight text-navy">Your recordings &amp; data</h3>
-            <p className="mt-1.5 max-w-2xl text-sm font-medium leading-relaxed text-muted">
+            <h3 className="text-lg font-bold tracking-tight text-navy">Your recordings &amp; data</h3>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">
               Speaking recordings from live tutor sessions are automatically deleted on a retention schedule, and
               any reviewer access is logged with a reason. You can review or delete individual recordings yourself,
               and request full erasure of your account and data whenever you like.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild className="rounded-full font-bold">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button asChild>
               <Link href="/speaking/recordings">
                 <Database className="h-4 w-4" aria-hidden="true" />
                 Manage my recordings
               </Link>
             </Button>
-            <Button asChild variant="outline" className="rounded-full border-danger/30 bg-danger/10 font-bold text-danger hover:border-danger/40 hover:bg-danger/20">
+            <Button asChild variant="outline" className="border-danger/30 bg-danger/10 text-danger-strong hover:border-danger/40 hover:bg-danger/20">
               <Link href="/settings/danger-zone">
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 Delete my account &amp; data
@@ -1147,7 +931,7 @@ function PrivacyControlsCard() {
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -1183,80 +967,76 @@ function DangerZoneDeleteSection() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border-2 border-danger/30 bg-danger/10 p-6 shadow-sm">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10">
-            <Trash2 className="h-5 w-5 text-danger" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-danger">Delete your account</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-danger">
-              This action cannot be undone. After 30 days, your account and all associated data will be permanently deleted. During the grace period you can contact support to cancel the deletion.
-            </p>
-          </div>
+    <Card padding="lg" className="border-danger/30 bg-danger/10">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-danger/30 bg-danger/10">
+          <Trash2 className="h-5 w-5 text-danger-strong" aria-hidden="true" />
         </div>
-
-        <div className="mt-6 space-y-4">
-          <div>
-            <label htmlFor="delete-password" className="block text-sm font-semibold text-danger">
-              Confirm your password
-            </label>
-            <input
-              id="delete-password"
-              type="password"
-              required
-              autoComplete="current-password"
-              placeholder="Enter your password to confirm"
-              value={password}
-              aria-invalid={Boolean(deleteError)}
-              aria-describedby={deleteError ? 'delete-account-error' : undefined}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1.5 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="delete-reason" className="block text-sm font-semibold text-danger">
-              Reason for leaving <span className="font-normal text-danger">(optional)</span>
-            </label>
-            <textarea
-              id="delete-reason"
-              placeholder="Why are you leaving? (optional)"
-              value={reason}
-              aria-invalid={false}
-              onChange={(e) => setReason(e.target.value)}
-              className="mt-1.5 min-h-24 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
-            />
-          </div>
-
-          {deleteError ? (
-            <div id="delete-account-error">
-              <InlineAlert variant="error">{deleteError}</InlineAlert>
-            </div>
-          ) : null}
-
-          <Button
-            type="button"
-            variant="destructive"
-            size="lg"
-            loading={deleting}
-            disabled={!password.trim()}
-            onClick={handleDelete}
-            className="font-bold"
-          >
-            {deleting ? null : <Trash2 className="h-4 w-4" aria-hidden="true" />}
-            {deleting ? 'Deleting account...' : 'Delete my account'}
-          </Button>
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-danger-strong">Delete your account</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-danger-strong">
+            This action cannot be undone. After 30 days, your account and all associated data will be permanently deleted. During the grace period you can contact support to cancel the deletion.
+          </p>
         </div>
       </div>
-    </div>
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <label htmlFor="delete-password" className="block text-sm font-semibold text-danger-strong">
+            Confirm your password
+          </label>
+          <input
+            id="delete-password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Enter your password to confirm"
+            value={password}
+            aria-invalid={Boolean(deleteError)}
+            aria-describedby={deleteError ? 'delete-account-error' : undefined}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1.5 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="delete-reason" className="block text-sm font-semibold text-danger-strong">
+            Reason for leaving <span className="font-normal text-danger-strong">(optional)</span>
+          </label>
+          <textarea
+            id="delete-reason"
+            placeholder="Why are you leaving? (optional)"
+            value={reason}
+            aria-invalid={false}
+            onChange={(e) => setReason(e.target.value)}
+            className="mt-1.5 min-h-24 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
+          />
+        </div>
+
+        {deleteError ? (
+          <div id="delete-account-error">
+            <InlineAlert variant="error">{deleteError}</InlineAlert>
+          </div>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="destructive"
+          size="lg"
+          loading={deleting}
+          disabled={!password.trim()}
+          onClick={handleDelete}
+        >
+          {deleting ? null : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+          {deleting ? 'Deleting account...' : 'Delete my account'}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
 export default function LearnerSettingsSectionPage() {
   const params = useParams<{ section: string }>();
-  const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const section = toSectionId(params?.section);
@@ -1393,133 +1173,95 @@ export default function LearnerSettingsSectionPage() {
     }
   };
 
+  const backLink = (
+    <Button asChild variant="outline" size="sm">
+      <Link href="/settings">
+        <ArrowLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+        Back to Settings
+      </Link>
+    </Button>
+  );
+
+  const sectionHeader = config ? (
+    <LearnerSurfaceSectionHeader
+      eyebrow={config.helperBadge}
+      icon={config.icon}
+      title={config.helperCardTitle}
+      description={config.helperCardBody}
+      action={config.fields.length > 0 ? (
+        <Badge variant="muted" className="self-start tabular-nums sm:self-auto">
+          {configuredFieldCount}/{config.fields.length} configured
+        </Badge>
+      ) : undefined}
+    />
+  ) : null;
+
   return (
     <>
-      <div className="relative min-h-[calc(100dvh-4rem)]">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-70" />
-        
-        <div className="space-y-4 sm:space-y-5 relative z-10 px-4 sm:px-0 pb-12">
-          <Button variant="ghost" className="gap-2 rounded-full hover:bg-navy/5 font-bold mt-4" onClick={() => router.push('/settings')}>
-            <ArrowLeft className="h-4 w-4" />
-            Back to Settings
-          </Button>
+      {config ? (
+        <LearnerPageHero
+          eyebrow={config.eyebrow}
+          icon={config.icon}
+          accent={config.accent}
+          title={config.heroTitle ?? config.title}
+          description={`Review and update your ${config.title.toLowerCase()} settings.`}
+          aside={backLink}
+        />
+      ) : backLink}
 
-          {config ? (
-            <div className="bg-surface p-2 sm:p-2 border border-border shadow-sm overflow-hidden relative rounded-3xl">
-              <LearnerPageHero
-                eyebrow={config.eyebrow}
-                icon={config.icon}
-                accent={config.accent}
-                title={config.heroTitle ?? config.title}
-                description={`Review and update your ${config.title.toLowerCase()} settings.`}
-                highlights={[
-                  { icon: config.icon, label: 'Controls', value: `${config.fields.length} settings` },
-                  { icon: Save, label: 'Configured', value: `${configuredFieldCount} set` },
-                  { icon: Settings2, label: 'Save state', value: saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to edit' },
-                ]}
-              />
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-3xl" />)}
-            </div>
-          ) : null}
-
-          {!loading && error ? <InlineAlert variant="error" className="shadow-sm">{error}</InlineAlert> : null}
-          {!loading && successMessage ? <InlineAlert variant="success" className="shadow-sm">{successMessage}</InlineAlert> : null}
-
-          {!loading && section === 'notifications' && config ? (
-            <div className="relative z-20">
-              <NotificationPreferencesPanel
-                description="Manage delivery channels, quiet hours, browser push, and per-event overrides for this account."
-              />
-            </div>
-          ) : null}
-
-          {!loading && section === 'danger-zone' && config ? (
-            <div className="space-y-5 sm:space-y-8 relative z-20">
-              <SettingsSectionHelperCard
-                accent={config.accent}
-                helperBadge={config.helperBadge}
-                icon={config.icon}
-                title={config.helperCardTitle}
-                body={config.helperCardBody}
-                configuredFieldCount={0}
-                totalFieldCount={0}
-              />
-
-              <DangerZoneDeleteSection />
-            </div>
-          ) : null}
-
-          {!loading && section === 'privacy' && config ? (
-            <div className="space-y-5 sm:space-y-8 relative z-20">
-              <SettingsSectionHelperCard
-                accent={config.accent}
-                helperBadge={config.helperBadge}
-                icon={config.icon}
-                title={config.helperCardTitle}
-                body={config.helperCardBody}
-                configuredFieldCount={0}
-                totalFieldCount={0}
-              />
-
-              <PrivacyControlsCard />
-            </div>
-          ) : null}
-
-          {!loading && data && config ? (
-            <div className="space-y-5 sm:space-y-8 relative z-20">
-              <SettingsSectionHelperCard
-                accent={config.accent}
-                helperBadge={config.helperBadge}
-                icon={config.icon}
-                title={config.helperCardTitle}
-                body={config.helperCardBody}
-                configuredFieldCount={configuredFieldCount}
-                totalFieldCount={config.fields.length}
-              />
-
-              {section === 'profile' ? <AvatarUploadCard accent={config.accent} /> : null}
-
-              <SettingsSectionForm
-                accent={config.accent}
-                data={data}
-                onChange={handleChange}
-                professionLocked={professionLocked}
-                originalEmail={section === 'profile' ? storedEmail : undefined}
-                emailPassword={emailPassword}
-                onEmailPasswordChange={setEmailPassword}
-                invalid={Boolean(actionError)}
-              />
-
-              <div className="rounded-surface border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Badge className={cn('rounded-full px-3 py-1.5 text-3xs font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
-                        {configuredFieldCount}/{config.fields.length} configured
-                      </Badge>
-                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-3xs font-black uppercase tracking-[0.14em] bg-surface shadow-sm border border-border">
-                        {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm font-medium text-muted leading-relaxed max-w-xl">
-                      Save when you are ready. Low-bandwidth, transcript, and reminder preferences will be used by the learner app after this update.
-                    </p>
-                  </div>
-                  <Button onClick={handleSave} loading={saving} size="lg" className="gap-2 rounded-full font-black px-8 shadow-sm hoverable:scale-105 transition-[background-color,box-shadow,transform] duration-200 shrink-0">
-                    <Save className="h-4 w-4" />
-                    Save changes
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : null}
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
         </div>
-      </div>
+      ) : null}
+
+      {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {!loading && successMessage ? <InlineAlert variant="success">{successMessage}</InlineAlert> : null}
+
+      {!loading && (section === 'privacy' || section === 'danger-zone') && config ? (
+        <MotionSection className="space-y-4">
+          {sectionHeader}
+          {section === 'privacy' ? <PrivacyControlsCard /> : <DangerZoneDeleteSection />}
+        </MotionSection>
+      ) : null}
+
+      {!loading && data && config ? (
+        <>
+          <MotionSection className="space-y-4">
+            {sectionHeader}
+            {section === 'profile' ? <AvatarUploadCard /> : null}
+            <SettingsSectionForm
+              accent={config.accent}
+              data={data}
+              onChange={handleChange}
+              professionLocked={professionLocked}
+              originalEmail={section === 'profile' ? storedEmail : undefined}
+              emailPassword={emailPassword}
+              onEmailPasswordChange={setEmailPassword}
+              invalid={Boolean(actionError)}
+            />
+          </MotionSection>
+
+          <MotionSection delayIndex={1}>
+            <Card>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-2">
+                  <Badge variant={successMessage ? 'success' : 'muted'}>
+                    {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
+                  </Badge>
+                  <p className="max-w-xl text-sm leading-relaxed text-muted">
+                    Save when you are ready. Low-bandwidth, transcript, and reminder preferences will be used by the learner app after this update.
+                  </p>
+                </div>
+                <Button onClick={handleSave} loading={saving} size="lg" className="shrink-0">
+                  <Save className="h-4 w-4" aria-hidden="true" />
+                  Save changes
+                </Button>
+              </div>
+            </Card>
+          </MotionSection>
+        </>
+      ) : null}
     </>
   );
 }

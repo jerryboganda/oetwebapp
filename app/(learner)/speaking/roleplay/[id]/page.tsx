@@ -130,7 +130,7 @@ export default function RoleCardPreview() {
     <>
       <div className="space-y-4">
         <header>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted">
+          <p className="eyebrow text-muted">
             {isFreeCard ? 'Free Speaking Mock' : 'Practice Library'} · 3 min prep · 5 min role-play
           </p>
           <h1 className="mt-1 text-xl font-bold text-navy sm:text-2xl">{card.title}</h1>

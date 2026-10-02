@@ -160,13 +160,13 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
   return (
     <div className="mt-3 rounded-xl border border-border bg-background-light p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xs font-semibold uppercase tracking-wide text-muted">
+        <span className="eyebrow text-muted">
           Practice spelling
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="text-xs text-muted underline-offset-2 hover:underline"
+          className="-me-2 inline-flex min-h-11 items-center rounded-control px-2 text-xs text-muted underline-offset-2 hover:text-navy hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8"
         >
           Close
         </button>
@@ -178,7 +178,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
         type="button"
         onClick={() => void replay()}
         aria-label="Replay audio"
-        className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+        className="pressable mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:min-h-8"
       >
         <Volume2 size={13} strokeWidth={2} className="h-3.5 w-3.5" aria-hidden="true" />
         {playing ? 'Playing…' : 'Replay audio'}
@@ -214,7 +214,7 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
       </form>
 
       {error && (
-        <p role="alert" className="mt-2 text-xs text-danger">
+        <p role="alert" className="mt-2 text-xs text-danger-strong">
           {error}
         </p>
       )}
@@ -222,12 +222,12 @@ function PracticeSpellingPanel({ termId, onClose, onAnswered, onNext }: Practice
       {result && (
         <div role="status" className="mt-3 rounded-lg border border-border bg-surface p-3">
           {result.correct ? (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-success">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-success-strong">
               <CheckCircle2 size={15} className="h-4 w-4" aria-hidden="true" />
               Correct spelling
             </p>
           ) : (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-danger-strong">
               <XCircle size={15} className="h-4 w-4" aria-hidden="true" />
               Incorrect
             </p>

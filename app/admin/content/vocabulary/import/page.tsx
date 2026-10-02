@@ -479,7 +479,7 @@ export default function AdminVocabularyImportPage() {
                 ))}
               </select>
               {!recallSetCode ? (
-                <p className="mt-2 text-xs text-danger">
+                <p className="mt-2 text-xs text-danger-strong">
                   Selection required. Upload + preview + dry-run + commit are all blocked until you pick a label.
                 </p>
               ) : null}
@@ -717,7 +717,7 @@ export default function AdminVocabularyImportPage() {
                                   ? row.mismatches.map((m) => `${m.field}: expected ${m.expected ?? 'blank'} / stored ${m.actual ?? 'blank'}`).join('; ')
                                   : '-'}
                               </td>
-                              <td className="px-3 py-1.5 text-xs text-danger">{row.error ?? ''}</td>
+                              <td className="px-3 py-1.5 text-xs text-danger-strong">{row.error ?? ''}</td>
                             </tr>
                           );
                         })}
@@ -812,7 +812,7 @@ export default function AdminVocabularyImportPage() {
                           <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '-'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.americanSpelling ?? '-'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.category ?? '-'}</td>
-                          <td className={`px-3 py-1.5 text-xs ${kind === 'error' ? 'text-danger' : kind === 'tag' ? 'text-success' : 'text-muted'}`}>{err}</td>
+                          <td className={`px-3 py-1.5 text-xs ${kind === 'error' ? 'text-danger-strong' : kind === 'tag' ? 'text-success-strong' : 'text-muted'}`}>{err}</td>
                         </tr>
                         );
                       })}

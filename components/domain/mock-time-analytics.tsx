@@ -2,6 +2,9 @@
 
 import React from 'react';
 import { Clock, Hourglass, Timer, AlertCircle } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
+import { cn } from '@/lib/utils';
 
 export interface TimeAnalyticsSection {
   sectionId: string;
@@ -124,30 +127,21 @@ export function TimeAnalyticsBreakdown({
 
   if (usableRows.length === 0 && longestQuestions.length === 0) {
     return (
-      <div
-        className={
-          'rounded-2xl border border-border bg-background-light p-6 text-center ' +
-          (className ?? '')
-        }
-      >
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-border/40">
-          <Hourglass className="h-5 w-5 text-muted" />
-        </div>
-        <p className="mt-3 text-sm font-bold text-navy">Timing analysis pending</p>
-        <p className="mt-1 text-xs leading-5 text-muted">
-          Per-section timing will appear here once your mock sections have been
-          submitted and processed.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Hourglass className="h-7 w-7" aria-hidden="true" />}
+        title="Timing analysis pending"
+        description="Per-section timing will appear here once your mock sections have been submitted and processed."
+        className={cn('py-8', className)}
+      />
     );
   }
 
   return (
-    <div className={'space-y-4 ' + (className ?? '')}>
-      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <div className={cn('space-y-4', className)}>
+      <Card>
         <div className="mb-4 flex items-center gap-2">
-          <Clock className="h-5 w-5 text-primary" />
-          <h3 className="text-sm font-black uppercase tracking-widest text-muted">
+          <Clock className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+          <h3 className="text-base font-bold text-navy">
             Time per section
           </h3>
         </div>
@@ -178,7 +172,7 @@ export function TimeAnalyticsBreakdown({
                         {row.subtest ? `${row.subtest} section` : 'Section'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted">
+                    <div className="flex items-center gap-2 text-xs tabular-nums text-muted">
                       <span className="font-bold text-navy">
                         {formatDuration(row.usedSeconds)}
                       </span>
@@ -191,11 +185,11 @@ export function TimeAnalyticsBreakdown({
                       {row.utilisationPct != null ? (
                         <span
                           className={
-                            'font-black ' +
+                            'font-bold ' +
                             (row.overran
-                              ? 'text-danger'
+                              ? 'text-danger-strong'
                               : row.utilisationPct >= 90
-                                ? 'text-warning'
+                                ? 'text-warning-strong'
                                 : 'text-primary')
                           }
                         >
@@ -224,15 +218,15 @@ export function TimeAnalyticsBreakdown({
                     ) : null}
                     {overranWidthPct != null ? (
                       <div
-                        className="absolute right-0 top-0 h-full border-l border-surface bg-danger/50"
+                        className="absolute end-0 top-0 h-full border-s border-surface bg-danger/50"
                         style={{ width: `${overranWidthPct}%` }}
                         aria-hidden="true"
                       />
                     ) : null}
                   </div>
                   {row.overran ? (
-                    <p className="mt-1 flex items-center gap-1 text-2xs font-bold text-danger">
-                      <AlertCircle className="h-3 w-3" />
+                    <p className="mt-1 flex items-center gap-1 text-2xs font-bold tabular-nums text-danger-strong">
+                      <AlertCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
                       Ran past the deadline by{' '}
                       {formatDuration(
                         (row.usedSeconds ?? 0) - (row.allottedSeconds ?? 0),
@@ -244,18 +238,18 @@ export function TimeAnalyticsBreakdown({
             })}
           </ul>
         )}
-      </div>
+      </Card>
 
       {longestQuestions.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <Card>
           <div className="mb-3 flex items-center gap-2">
-            <Timer className="h-5 w-5 text-warning" />
-            <h3 className="text-sm font-black uppercase tracking-widest text-muted">
+            <Timer className="h-5 w-5 shrink-0 text-warning-strong" aria-hidden="true" />
+            <h3 className="text-base font-bold text-navy">
               Longest {longestQuestions.length} question
               {longestQuestions.length === 1 ? '' : 's'}
             </h3>
           </div>
-          <ul className="grid gap-2 sm:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {longestQuestions.map((q, idx) => {
               const correct = q.correct === true;
               const wrong = q.correct === false;
@@ -267,24 +261,24 @@ export function TimeAnalyticsBreakdown({
               return (
                 <li
                   key={`${q.sectionId || 'section'}-${q.itemId || idx}`}
-                  className={`rounded-xl border p-3 ${toneClasses}`}
+                  className={`min-w-0 rounded-xl border p-3 ${toneClasses}`}
                 >
-                  <p className="text-3xs font-black uppercase tracking-widest text-muted">
+                  <p className="tile-label text-muted">
                     {q.subtest || 'Question'}
                   </p>
-                  <p className="mt-1 text-sm font-black text-navy truncate">
+                  <p className="mt-1 truncate text-sm font-bold text-navy">
                     {q.itemId || `#${idx + 1}`}
                   </p>
                   <div className="mt-2 flex items-center justify-between text-xs">
-                    <span className="font-bold text-navy">
+                    <span className="font-bold tabular-nums text-navy">
                       {formatDuration(q.secondsSpent)}
                     </span>
                     {correct ? (
-                      <span className="text-3xs font-black uppercase tracking-widest text-success">
+                      <span className="tile-label text-success-strong">
                         Correct
                       </span>
                     ) : wrong ? (
-                      <span className="text-3xs font-black uppercase tracking-widest text-danger">
+                      <span className="tile-label text-danger-strong">
                         Incorrect
                       </span>
                     ) : null}
@@ -293,7 +287,7 @@ export function TimeAnalyticsBreakdown({
               );
             })}
           </ul>
-        </div>
+        </Card>
       ) : null}
     </div>
   );

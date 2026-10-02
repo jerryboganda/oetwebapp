@@ -20,7 +20,9 @@ import {
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/form-controls';
 import {
@@ -271,10 +273,26 @@ export default function NewMockBookingPage() {
 
   const noSlotsBecauseOfDate = !slotsLoading && slots.length === 0 && !error && !roomsUnavailable;
 
+  const hero = (
+    <LearnerPageHero
+      eyebrow="Mock Booking"
+      icon={CalendarDays}
+      accent="navy"
+      title="Book a live mock with a tutor"
+      description="Pick a date in the next two weeks and choose an available Speaking tutor slot. The session is recorded for tutor review."
+      highlights={[
+        { icon: Clock, label: 'Timezone', value: timezone },
+        { icon: Layers, label: 'Bundles', value: `${speakingBundles.length} published` },
+        { icon: Mic, label: 'Mode', value: 'Live + recorded' },
+      ]}
+    />
+  );
+
   if (!speakingAccess) {
     return (
       <>
-        <InlineAlert variant={speakingAccessError ? 'error' : 'info'}>
+        {hero}
+        <InlineAlert variant={speakingAccessError ? 'error' : 'info'} live={speakingAccessError ? 'assertive' : 'polite'}>
           {speakingAccessError ?? 'Checking whether tutor booking is available...'}
         </InlineAlert>
       </>
@@ -283,29 +301,18 @@ export default function NewMockBookingPage() {
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-8 pb-24">
-        <LearnerPageHero
-          eyebrow="Mock Booking"
-          icon={CalendarDays}
-          accent="navy"
-          title="Book a live mock with a tutor"
-          description="Pick a date in the next two weeks and choose an available Speaking tutor slot. The session is recorded for tutor review."
-          highlights={[
-            { icon: Clock, label: 'Timezone', value: timezone },
-            { icon: Layers, label: 'Bundles', value: `${speakingBundles.length} published` },
-            { icon: Mic, label: 'Mode', value: 'Live + recorded' },
-          ]}
-        />
+      {hero}
 
-        {roomsUnavailable ? (
-          <InlineAlert variant="warning" data-testid="tutor-rooms-unavailable">
-            {TUTOR_ROOMS_UNAVAILABLE_MESSAGE}
-          </InlineAlert>
-        ) : null}
+      {roomsUnavailable ? (
+        <InlineAlert variant="warning" data-testid="tutor-rooms-unavailable">
+          {TUTOR_ROOMS_UNAVAILABLE_MESSAGE}
+        </InlineAlert>
+      ) : null}
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Choose a bundle">
+      <MotionSection>
+        <Card padding="lg" role="region" aria-label="Choose a bundle">
           <LearnerSurfaceSectionHeader
             eyebrow="1. Bundle"
             title="Choose the mock you'd like to book"
@@ -314,20 +321,20 @@ export default function NewMockBookingPage() {
             className="mb-4"
           />
           {optionsLoading ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="status" aria-busy="true" aria-label="Loading bookable bundles">
               <Skeleton className="h-24 rounded-2xl" />
               <Skeleton className="h-24 rounded-2xl" />
             </div>
           ) : !options || options.availableBundles.length === 0 ? (
-            <InlineAlert variant="info">
+            <InlineAlert variant="info" live="polite">
               No published bundles are bookable right now. Ask an admin to publish a Speaking mock bundle.
             </InlineAlert>
           ) : (
             <div className="space-y-4">
               {speakingBundles.length > 0 ? (
                 <div>
-                  <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">Speaking bundles</p>
-                  <div className="grid gap-3 lg:grid-cols-2">
+                  <p className="mb-2 eyebrow text-muted">Speaking bundles</p>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     {speakingBundles.map((bundle) => (
                       <button
                         key={bundle.bundleId}
@@ -336,7 +343,7 @@ export default function NewMockBookingPage() {
                           setBundleId(bundle.bundleId);
                           setSelectedSlot(null);
                         }}
-                        className={`rounded-2xl border p-4 text-left transition-colors ${
+                        className={`rounded-2xl border p-4 text-start transition-colors ${
                           bundleId === bundle.bundleId
                             ? 'border-primary bg-primary/5'
                             : 'border-border bg-surface hover:border-border-hover'
@@ -344,16 +351,16 @@ export default function NewMockBookingPage() {
                         aria-pressed={bundleId === bundle.bundleId}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-base font-black text-navy">{bundle.title}</p>
-                            <p className="mt-1 text-xs text-muted">
+                          <div className="min-w-0">
+                            <p className="text-base font-bold text-navy">{bundle.title}</p>
+                            <p className="mt-1 text-xs tabular-nums text-muted">
                               {bundle.sections.length} section{bundle.sections.length === 1 ? '' : 's'} / {bundle.estimatedDurationMinutes} min
                             </p>
                           </div>
-                          {bundleId === bundle.bundleId ? <CheckCircle2 className="h-5 w-5 text-primary" /> : null}
+                          {bundleId === bundle.bundleId ? <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" /> : null}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <Badge variant="info">Speaking</Badge>
+                          <Badge className="border-skill-speaking/20 bg-skill-speaking/10 text-skill-speaking">Speaking</Badge>
                           {bundle.releasePolicy ? (
                             <Badge variant="warning">{bundle.releasePolicy.replace(/_/g, ' ')}</Badge>
                           ) : null}
@@ -365,9 +372,11 @@ export default function NewMockBookingPage() {
               ) : null}
             </div>
           )}
-        </section>
+        </Card>
+      </MotionSection>
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Pick a date">
+      <MotionSection delayIndex={1}>
+        <Card padding="lg" role="region" aria-label="Pick a date">
           <LearnerSurfaceSectionHeader
             eyebrow="2. Date"
             title="Pick the day you'd like to book"
@@ -377,11 +386,11 @@ export default function NewMockBookingPage() {
           />
           <div className="flex items-center justify-between gap-2 sm:hidden">
             <Button variant="outline" onClick={() => shiftDate(-1)} disabled={!canShiftBackward}>
-              <ChevronLeft className="h-4 w-4" /> Prev
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" aria-hidden="true" /> Prev
             </Button>
-            <p className="text-sm font-bold text-navy">{date}</p>
+            <p className="text-sm font-bold tabular-nums text-navy">{date}</p>
             <Button variant="outline" onClick={() => shiftDate(1)} disabled={!canShiftForward}>
-              Next <ChevronRight className="h-4 w-4" />
+              Next <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
             </Button>
           </div>
           <div className="mt-4 hidden flex-wrap gap-2 sm:flex">
@@ -396,7 +405,7 @@ export default function NewMockBookingPage() {
                     setDate(value);
                     setSelectedSlot(null);
                   }}
-                  className={`rounded-xl border px-3 py-2 text-center text-xs font-bold transition-colors ${
+                  className={`rounded-control border px-3 py-2 text-center text-xs font-bold tabular-nums transition-colors ${
                     isSelected
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border bg-surface text-navy hover:border-border-hover hover:bg-background-light'
@@ -408,9 +417,11 @@ export default function NewMockBookingPage() {
               );
             })}
           </div>
-        </section>
+        </Card>
+      </MotionSection>
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Pick a time slot">
+      <MotionSection delayIndex={2}>
+        <Card padding="lg" role="region" aria-label="Pick a time slot">
           <LearnerSurfaceSectionHeader
             eyebrow="3. Time"
             title="Pick an available slot"
@@ -419,18 +430,18 @@ export default function NewMockBookingPage() {
             className="mb-4"
           />
           {slotsLoading ? (
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6" role="status" aria-busy="true" aria-label="Loading available slots">
               {Array.from({ length: 12 }).map((_, index) => (
-                <Skeleton key={index} className="h-10 rounded-xl" />
+                <Skeleton key={index} className="h-11 rounded-control" />
               ))}
             </div>
           ) : noSlotsBecauseOfDate ? (
-            <InlineAlert variant="info">
+            <InlineAlert variant="info" live="polite">
               No slots are published for {date}. Pick another day or check back soon.
             </InlineAlert>
           ) : (
             <div
-              className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
+              className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
               role="radiogroup"
               aria-label="Available time slots"
             >
@@ -451,7 +462,7 @@ export default function NewMockBookingPage() {
                     }}
                     disabled={disabled}
                     title={disabled ? slot.blockedReason ?? 'Not available' : undefined}
-                    className={`rounded-xl border px-3 py-2 text-sm font-bold transition-colors ${
+                    className={`min-h-11 rounded-control border px-3 py-2 text-sm font-bold tabular-nums transition-colors ${
                       isSelected
                         ? 'border-primary bg-primary/10 text-primary'
                         : disabled
@@ -465,9 +476,11 @@ export default function NewMockBookingPage() {
               })}
             </div>
           )}
-        </section>
+        </Card>
+      </MotionSection>
 
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8" aria-label="Consent and confirmation">
+      <MotionSection delayIndex={3}>
+        <Card padding="lg" role="region" aria-label="Consent and confirmation">
           <LearnerSurfaceSectionHeader
             eyebrow="4. Confirm"
             title="Confirm and book"
@@ -481,33 +494,33 @@ export default function NewMockBookingPage() {
             onChange={(event) => setConsent(event.target.checked)}
           />
           {selectedBundle && selectedSlot ? (
-            <div className="mt-4 rounded-2xl border border-border bg-background-light p-4 text-sm">
+            <div className="mt-4 rounded-xl border border-border bg-background-light p-4 text-sm">
               <p className="font-bold text-navy">{selectedBundle.title}</p>
-              <p className="mt-1 text-muted">
+              <p className="mt-1 tabular-nums text-muted">
                 {formatLongDate(new Date(selectedSlot))} / {formatTimeSlot(selectedSlot, timezone)} ({timezone})
               </p>
             </div>
           ) : null}
-        </section>
+        </Card>
+      </MotionSection>
 
-        <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
-          <Button
-            onClick={handleSubmit}
-            disabled={roomsUnavailable || submitting || !selectedBundle || !selectedSlot || !selectedTutorProfileId || !consent}
-            loading={submitting}
-            size="lg"
-            className="w-full gap-2 py-5 text-base font-black"
-          >
-            {submitting ? 'Booking…' : 'Book this slot'}
-          </Button>
-          {!selectedBundle ? (
-            <p className="mt-3 text-center text-xs text-muted">Pick a bundle to continue.</p>
-          ) : !selectedSlot ? (
-            <p className="mt-3 text-center text-xs text-muted">Pick an available slot to continue.</p>
-          ) : !consent ? (
-            <p className="mt-3 text-center text-xs text-muted">Confirm the recording consent to enable booking.</p>
-          ) : null}
-        </div>
+      <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
+        <Button
+          onClick={handleSubmit}
+          disabled={roomsUnavailable || submitting || !selectedBundle || !selectedSlot || !selectedTutorProfileId || !consent}
+          loading={submitting}
+          size="lg"
+          fullWidth
+        >
+          {submitting ? 'Booking…' : 'Book this slot'}
+        </Button>
+        {!selectedBundle ? (
+          <p className="mt-3 text-center text-xs text-muted">Pick a bundle to continue.</p>
+        ) : !selectedSlot ? (
+          <p className="mt-3 text-center text-xs text-muted">Pick an available slot to continue.</p>
+        ) : !consent ? (
+          <p className="mt-3 text-center text-xs text-muted">Confirm the recording consent to enable booking.</p>
+        ) : null}
       </div>
 
       {toast ? (

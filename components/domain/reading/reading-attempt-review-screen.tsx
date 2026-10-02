@@ -49,7 +49,7 @@ export function ReadingAttemptReviewScreen({ attemptId, area }: ReadingAttemptRe
     return (
       <div
         role="status"
-        className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-16 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+        className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white py-16 text-sm text-muted dark:bg-slate-900"
       >
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
         Loading attempt review…
@@ -61,14 +61,14 @@ export function ReadingAttemptReviewScreen({ attemptId, area }: ReadingAttemptRe
     return (
       <div
         role="alert"
-        className="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-red-50 py-16 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+        className="flex flex-col items-center gap-3 rounded-xl border border-danger/20 bg-danger/10 py-16 text-center text-sm text-danger-strong"
       >
         <AlertCircle className="h-6 w-6" aria-hidden="true" />
         <p>{error ?? 'Attempt not found.'}</p>
         <button
           type="button"
           onClick={() => void load()}
-          className="rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/60"
+          className="rounded-lg border border-danger/30 px-4 py-2 font-medium text-danger-strong transition-colors hover:bg-danger/10"
         >
           Retry
         </button>

@@ -35,17 +35,17 @@ export interface AnswerComparisonCardProps {
 type ItemState = 'correct' | 'incorrect' | 'unanswered' | 'invalid';
 
 const shellTint: Record<ItemState, string> = {
-  correct: 'border-success/30 bg-success/10 border-l-4 border-l-success',
-  incorrect: 'border-danger/30 bg-danger/10 border-l-4 border-l-danger',
-  unanswered: 'border-warning/30 bg-warning/10 border-l-4 border-l-warning',
-  invalid: 'border-warning/40 bg-warning/10 border-l-4 border-l-warning',
+  correct: 'border-success/30 bg-success/10 border-s-4 border-s-success',
+  incorrect: 'border-danger/30 bg-danger/10 border-s-4 border-s-danger',
+  unanswered: 'border-warning/30 bg-warning/10 border-s-4 border-s-warning',
+  invalid: 'border-warning/40 bg-warning/10 border-s-4 border-s-warning',
 };
 
 const iconColor: Record<ItemState, string> = {
-  correct: 'text-success',
-  incorrect: 'text-danger',
-  unanswered: 'text-warning',
-  invalid: 'text-warning',
+  correct: 'text-success-strong',
+  incorrect: 'text-danger-strong',
+  unanswered: 'text-warning-strong',
+  invalid: 'text-warning-strong',
 };
 
 const statusMeta: Record<ItemState, { label: string; variant: 'success' | 'danger' | 'warning' }> = {
@@ -63,10 +63,10 @@ const yourCellTint: Record<ItemState, string> = {
 };
 
 const yourLabelColor: Record<ItemState, string> = {
-  correct: 'text-success',
-  incorrect: 'text-danger',
+  correct: 'text-success-strong',
+  incorrect: 'text-danger-strong',
   unanswered: 'text-muted',
-  invalid: 'text-warning',
+  invalid: 'text-warning-strong',
 };
 
 /**
@@ -107,18 +107,18 @@ export function AnswerComparisonCard({
 
   return (
     <details
-      className={cn('group rounded-2xl border shadow-sm transition-shadow open:shadow-md', shellTint[state], className)}
+      className={cn('group rounded-2xl border shadow-sm', shellTint[state], className)}
       data-testid={testId}
       open={open}
     >
-      <summary className="flex cursor-pointer list-none items-start gap-3 p-4 sm:p-5">
+      <summary className="flex cursor-pointer list-none items-start gap-3 rounded-2xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:p-5 [&::-webkit-details-marker]:hidden">
         <StatusIcon className={cn('mt-0.5 h-6 w-6 shrink-0', iconColor[state])} aria-hidden />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-black uppercase tracking-[0.14em] text-muted">{label}</span>
+            <span className="eyebrow text-muted">{label}</span>
             <Badge variant={status.variant} size="sm">{status.label}</Badge>
             {typeof pointsEarned === 'number' && typeof maxPoints === 'number' ? (
-              <Badge variant="muted" size="sm">{pointsEarned}/{maxPoints}</Badge>
+              <Badge variant="muted" size="sm" className="tabular-nums">{pointsEarned}/{maxPoints}</Badge>
             ) : null}
             {typeof timeMs === 'number' && timeMs > 0 ? (
               <Badge variant="muted" size="sm" className="inline-flex items-center gap-1">
@@ -127,7 +127,7 @@ export function AnswerComparisonCard({
               </Badge>
             ) : null}
           </div>
-          {stem ? <p className="mt-1.5 text-sm leading-6 text-navy/90 dark:text-white/80">{stem}</p> : null}
+          {stem ? <p className="mt-1.5 text-sm leading-6 text-navy/90">{stem}</p> : null}
         </div>
         <ChevronDown
           className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform duration-200 group-open:rotate-180"
@@ -138,19 +138,19 @@ export function AnswerComparisonCard({
       <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className={cn('rounded-xl border p-3', yourCellTint[state])}>
-            <p className={cn('text-2xs font-black uppercase tracking-[0.14em]', yourLabelColor[state])}>Your answer</p>
-            <p className="mt-1 break-words text-sm font-semibold text-navy dark:text-white">{yourAnswer}</p>
+            <p className={cn('eyebrow', yourLabelColor[state])}>Your answer</p>
+            <p className="mt-1 break-words text-sm font-semibold text-navy">{yourAnswer}</p>
           </div>
           {correctAnswer ? (
             <div className="rounded-xl border border-success/30 bg-success/10 p-3">
-              <p className="text-2xs font-black uppercase tracking-[0.14em] text-success">Correct answer</p>
-              <p className="mt-1 break-words text-sm font-semibold text-navy dark:text-white">{correctAnswer}</p>
+              <p className="eyebrow text-success-strong">Correct answer</p>
+              <p className="mt-1 break-words text-sm font-semibold text-navy">{correctAnswer}</p>
             </div>
           ) : null}
         </div>
 
         {missReason ? (
-          <div data-testid={missReasonTestId} className="flex items-start gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <div data-testid={missReasonTestId} className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-strong">
             <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <span>
               <span className="font-bold">{missReason.title}</span>
@@ -161,15 +161,15 @@ export function AnswerComparisonCard({
 
         {distractor ? (
           <div className="rounded-xl border border-border bg-background-light p-3">
-            <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Distractor type you chose</p>
-            <p className="mt-1 text-sm font-semibold text-navy dark:text-white">{distractor}</p>
+            <p className="eyebrow text-muted">Distractor type you chose</p>
+            <p className="mt-1 text-sm font-semibold text-navy">{distractor}</p>
           </div>
         ) : null}
 
         {explanation ? (
           <div className="rounded-xl border border-border bg-background-light p-3">
-            <p className="text-2xs font-black uppercase tracking-[0.14em] text-muted">Explanation</p>
-            <div className="mt-1 text-sm leading-6 text-navy dark:text-white/90">{explanation}</div>
+            <p className="eyebrow text-muted">Explanation</p>
+            <div className="mt-1 text-sm leading-6 text-navy">{explanation}</div>
           </div>
         ) : null}
 

@@ -5,8 +5,12 @@ import { ClipboardList, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { CaseNoteHighlighter, type CaseNoteSentence } from '@/components/domain/writing/CaseNoteHighlighter';
 import { listCaseNoteDrills, submitCaseNoteDrillAttempt } from '@/lib/writing/api';
 import type {
@@ -30,6 +34,9 @@ export default function WritingCaseNoteDrillsPage() {
   const [error, setError] = useState<string | null>(null);
   const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The filter whose list last settled; anything else is still loading.
+  const [settledFilter, setSettledFilter] = useState<WritingProfession | 'all' | null>(null);
+  const loadingDrills = settledFilter !== (profession ?? 'all');
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +49,9 @@ export default function WritingCaseNoteDrillsPage() {
       .catch((err) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Could not load case-note drills.');
+      })
+      .finally(() => {
+        if (!cancelled) setSettledFilter(profession ?? 'all');
       });
     return () => {
       cancelled = true;
@@ -73,121 +83,112 @@ export default function WritingCaseNoteDrillsPage() {
     }
   };
 
+  const pillClassName = (selected: boolean) => `pressable min-h-11 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'hover-primary border-border bg-background text-navy hover:border-primary/40'}`;
+
   return (
     <>
-      <div className="space-y-6">
-        <LearnerPageHero
-          eyebrow="Selection drills"
-          icon={ClipboardList}
-          accent="amber"
-          title="Train relevance triage on real case notes"
-          description="Picking the right notes is half of W1 mastery. These drills score every sentence against the gold-standard tag."
-          highlights={[
-            { icon: Layers, label: 'Drills', value: `${drills.length}` },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Selection drills"
+        icon={ClipboardList}
+        accent="writing"
+        title="Train relevance triage on real case notes"
+        description="Picking the right notes is half of W1 mastery. These drills score every sentence against the gold-standard tag."
+        highlights={[
+          { icon: Layers, label: 'Drills', value: `${drills.length}` },
+        ]}
+      />
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <fieldset className="flex flex-wrap items-center gap-2" aria-label="Filter by profession">
-          <legend className="sr-only">Filter drills</legend>
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">Profession:</span>
+      <fieldset className="flex flex-wrap items-center gap-2" aria-label="Filter by profession">
+        <legend className="sr-only">Filter drills</legend>
+        <span className="eyebrow text-muted">Profession:</span>
+        <button
+          type="button"
+          onClick={() => setProfession(null)}
+          aria-pressed={profession === null}
+          className={pillClassName(profession === null)}
+        >
+          All
+        </button>
+        {PROFESSIONS.map((p) => (
           <button
+            key={p.id}
             type="button"
-            onClick={() => setProfession(null)}
-            aria-pressed={profession === null}
-            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === null ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+            onClick={() => setProfession(p.id)}
+            aria-pressed={profession === p.id}
+            className={pillClassName(profession === p.id)}
           >
-            All
+            {p.label}
           </button>
-          {PROFESSIONS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setProfession(p.id)}
-              aria-pressed={profession === p.id}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === p.id ? 'border-primary bg-primary text-white dark:bg-primary-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </fieldset>
+        ))}
+      </fieldset>
 
-        <div className="grid gap-4 lg:grid-cols-12">
-          <aside className="lg:col-span-4" aria-label="Drill list">
-            <LearnerSurfaceSectionHeader eyebrow="Drills" title="Pick one" description="The runner appears on the right." className="mb-3" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <aside className="min-w-0 lg:col-span-4" aria-label="Drill list" aria-busy={loadingDrills}>
+          <LearnerSurfaceSectionHeader eyebrow="Drills" title="Pick one" className="mb-3" />
+          {loadingDrills && drills.length === 0 ? (
+            <LearnerSkeleton variant="list" />
+          ) : drills.length === 0 ? (
+            error ? null : <EmptyState icon={<ClipboardList className="h-8 w-8" />} title="No drills available for this filter yet." className="py-8" />
+          ) : (
             <ul className="space-y-2">
-              {drills.length === 0 ? (
-                <li>
-                  <Card padding="md">
-                    <CardContent>
-                      <p className="text-sm text-muted">No drills available for this filter yet.</p>
-                    </CardContent>
-                  </Card>
-                </li>
-              ) : null}
-              {drills.map((drill) => {
+              {drills.map((drill, index) => {
                 const isActive = drill.id === active?.id;
                 return (
                   <li key={drill.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActive(drill);
-                        setResult(null);
-                        setLastSelected([]);
-                      }}
-                      aria-pressed={isActive}
-                      className={`flex w-full items-start gap-2 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isActive ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-primary/40'}`}
-                    >
-                      <span className="flex-1">
-                        <span className="flex flex-wrap items-center gap-1">
-                          <Badge variant="muted" size="sm">{drill.format}</Badge>
-                          <Badge variant="info" size="sm" className="capitalize">{drill.profession}</Badge>
+                    <MotionItem delayIndex={Math.min(index, 5)}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActive(drill);
+                          setResult(null);
+                          setLastSelected([]);
+                        }}
+                        aria-pressed={isActive}
+                        className={`flex w-full items-start gap-2 rounded-xl border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isActive ? 'border-primary bg-primary/10' : 'hover-primary border-border bg-background hover:border-primary/40'}`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-1">
+                            <Badge variant="muted" size="sm">{drill.format}</Badge>
+                            <Badge variant="info" size="sm" className="capitalize">{drill.profession}</Badge>
+                          </span>
+                          <span className="mt-1 block line-clamp-2 text-sm font-bold text-navy">{drill.promptMarkdown.slice(0, 120)}</span>
                         </span>
-                        <span className="mt-1 block text-sm font-bold text-navy line-clamp-2">{drill.promptMarkdown.slice(0, 120)}</span>
-                      </span>
-                    </button>
+                      </button>
+                    </MotionItem>
                   </li>
                 );
               })}
             </ul>
-          </aside>
+          )}
+        </aside>
 
-          <section className="lg:col-span-8" aria-label="Drill runner">
-            {active ? (
-              <>
-                <Card padding="md" className="mb-3">
-                  <CardContent>
-                    <p className="text-sm text-navy whitespace-pre-line">{active.promptMarkdown}</p>
-                  </CardContent>
-                </Card>
-                <CaseNoteHighlighter
-                  caseNotes={sentences}
-                  onSubmit={(indices) => void onSubmit(indices)}
-                  scored={!!result}
-                  initialSelectedIndices={lastSelected}
-                />
-                {submitting ? <p className="mt-2 text-xs text-muted">Submitting…</p> : null}
-                {result ? (
-                  <Card padding="md" className="mt-3">
-                    <CardContent>
-                      <p className="text-sm font-bold text-navy">
-                        Score: <span className="text-lg">{Math.round(result.scorePercent)}%</span>
-                      </p>
-                    </CardContent>
-                  </Card>
-                ) : null}
-              </>
-            ) : (
-              <Card padding="lg">
-                <CardContent>
-                  <p className="text-sm text-muted">Select a drill from the list to start.</p>
-                </CardContent>
+        <section className="min-w-0 space-y-3 lg:col-span-8" aria-label="Drill runner">
+          {active ? (
+            <>
+              <Card padding="md">
+                <p className="whitespace-pre-line text-sm text-navy">{active.promptMarkdown}</p>
               </Card>
-            )}
-          </section>
-        </div>
+              <CaseNoteHighlighter
+                caseNotes={sentences}
+                onSubmit={(indices) => void onSubmit(indices)}
+                scored={!!result}
+                initialSelectedIndices={lastSelected}
+              />
+              {submitting ? <p role="status" className="text-xs text-muted">Submitting…</p> : null}
+              {result ? (
+                <Card padding="md">
+                  <p className="text-sm font-bold text-navy">
+                    Score: <CountUp value={Math.round(result.scorePercent)} suffix="%" className="text-lg" />
+                  </p>
+                </Card>
+              ) : null}
+            </>
+          ) : (
+            <EmptyState icon={<ClipboardList className="h-8 w-8" />} title="Select a drill from the list to start." />
+          )}
+        </section>
       </div>
     </>
   );

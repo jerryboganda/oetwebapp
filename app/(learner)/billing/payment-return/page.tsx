@@ -271,10 +271,10 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint,
 }
 
 function StatusIcon({ phase }: { phase: Phase }) {
-  if (phase === 'completed') return <CheckCircle2 className="mt-1 h-7 w-7 flex-none text-success" />;
+  if (phase === 'completed') return <CheckCircle2 className="mt-1 h-7 w-7 flex-none text-success-strong" />;
   if (phase === 'polling') return <Loader2 className="mt-1 h-7 w-7 flex-none animate-spin text-primary" />;
-  if (phase === 'timeout') return <Clock className="mt-1 h-7 w-7 flex-none text-warning" />;
-  return <AlertCircle className="mt-1 h-7 w-7 flex-none text-danger" />;
+  if (phase === 'timeout') return <Clock className="mt-1 h-7 w-7 flex-none text-warning-strong" />;
+  return <AlertCircle className="mt-1 h-7 w-7 flex-none text-danger-strong" />;
 }
 
 function messageFor(phase: Phase, status?: BillingPaymentStatus | null, cancelledHint?: boolean, successHint?: boolean) {

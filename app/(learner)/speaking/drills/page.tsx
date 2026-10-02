@@ -79,7 +79,7 @@ export default function SpeakingDrillsPage() {
 
         <Card className="space-y-4 p-4 sm:p-6">
           <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
+            <label className="flex flex-col gap-1 eyebrow text-muted">
               Drill kind
               <select
                 value={kindFilter}
@@ -94,7 +94,7 @@ export default function SpeakingDrillsPage() {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
+            <label className="flex flex-col gap-1 eyebrow text-muted">
               Criterion focus
               <select
                 value={criterionFilter}
@@ -146,7 +146,7 @@ function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
       <Card className="flex h-full flex-col gap-3 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-2xs font-bold uppercase tracking-widest text-primary">
+            <p className="eyebrow text-primary">
               {kindLabel(drill.kind)}
             </p>
             <h3 className="text-base font-black leading-tight text-navy">{drill.title}</h3>

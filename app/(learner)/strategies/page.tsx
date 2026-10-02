@@ -16,7 +16,7 @@ import {
   Target,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
+import { Badge, Button, Card, CardLink, EmptyState, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
 import { fetchStrategyGuides, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -67,50 +67,49 @@ function StrategyCard({ guide, compact = false }: { guide: StrategyGuideListItem
   const locked = !guide.isAccessible && guide.requiresUpgrade && !guide.isPreviewEligible;
 
   return (
-    <Link href={`/strategies/${encodeURIComponent(guide.id)}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-2xl">
-      <Card hoverable className={cn('h-full transition-transform hoverable:-translate-y-0.5', locked && 'opacity-85')}>
-        <div className="flex h-full flex-col justify-between gap-5">
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Badge variant={status.variant}>{status.label}</Badge>
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted">
-                  <Clock className="h-3.5 w-3.5" />
-                  {guide.readingTimeMinutes} min
-                </span>
-              </div>
-              {locked ? <Lock className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
-              {!locked && guide.bookmarked ? <Bookmark className="h-4 w-4 shrink-0 fill-primary text-primary" aria-hidden="true" /> : null}
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-                {formatLabel(guide.subtestCode)} / {formatLabel(guide.category)}
-              </p>
-              <h3 className={cn('mt-2 font-bold text-navy', compact ? 'text-base' : 'text-lg')}>{guide.title}</h3>
-              {guide.summary ? <p className="mt-2 text-sm leading-6 text-muted">{guide.summary}</p> : null}
-            </div>
-
-            {guide.recommendedReason ? (
-              <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-navy">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-                <span>{guide.recommendedReason}</span>
-              </div>
-            ) : null}
-
-            <ProgressBar value={guide.progress.readPercent} showValue ariaLabel={`${guide.title} reading progress`} color={guide.progress.completed ? 'success' : 'primary'} />
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-4 text-sm font-semibold text-navy">
-            <span>{progressLabel(guide)}</span>
-            <span className="inline-flex items-center gap-1 text-primary">
-              {locked ? 'View access' : guide.isPreviewEligible && !guide.isAccessible ? 'Preview' : 'Open'}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+    <CardLink
+      href={`/strategies/${encodeURIComponent(guide.id)}`}
+      className={cn('group flex h-full flex-col justify-between gap-5', locked && 'opacity-85')}
+    >
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge variant={status.variant}>{status.label}</Badge>
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums text-muted">
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              {guide.readingTimeMinutes} min
             </span>
           </div>
+          {locked ? <Lock className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
+          {!locked && guide.bookmarked ? <Bookmark className="h-4 w-4 shrink-0 fill-primary text-primary" aria-hidden="true" /> : null}
         </div>
-      </Card>
-    </Link>
+
+        <div>
+          <p className="eyebrow text-primary">
+            {formatLabel(guide.subtestCode)} / {formatLabel(guide.category)}
+          </p>
+          <h3 className={cn('mt-2 font-bold text-navy', compact ? 'text-base' : 'text-lg')}>{guide.title}</h3>
+          {guide.summary ? <p className="mt-2 text-sm leading-6 text-muted">{guide.summary}</p> : null}
+        </div>
+
+        {guide.recommendedReason ? (
+          <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-navy">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden="true" />
+            <span>{guide.recommendedReason}</span>
+          </div>
+        ) : null}
+
+        <ProgressBar value={guide.progress.readPercent} showValue ariaLabel={`${guide.title} reading progress`} color={guide.progress.completed ? 'success' : 'primary'} />
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-border pt-4 text-sm font-semibold text-navy">
+        <span>{progressLabel(guide)}</span>
+        <span className="inline-flex items-center gap-1 text-primary">
+          {locked ? 'View access' : guide.isPreviewEligible && !guide.isAccessible ? 'Preview' : 'Open'}
+          <ArrowRight className="h-4 w-4 transition-transform group-hoverable:translate-x-0.5 rtl:rotate-180 rtl:group-hoverable:-translate-x-0.5" aria-hidden="true" />
+        </span>
+      </div>
+    </CardLink>
   );
 }
 
@@ -135,15 +134,15 @@ function GuideSection({
     <MotionSection className="space-y-4">
       <LearnerSurfaceSectionHeader title={title} description={description} icon={Icon} />
       {guides.length > 0 ? (
-        <div className={cn('grid gap-4', compact ? 'md:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-2 xl:grid-cols-3')}>
+        <div className={cn('grid grid-cols-1 gap-4', compact ? 'md:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-2 xl:grid-cols-3')}>
           {guides.map((guide, index) => (
-            <MotionItem key={guide.id} delayIndex={index}>
+            <MotionItem key={guide.id} delayIndex={Math.min(index, 5)} className="h-full">
               <StrategyCard guide={guide} compact={compact} />
             </MotionItem>
           ))}
         </div>
       ) : (
-        <Card className="border-dashed bg-background-light text-sm text-muted">{empty}</Card>
+        <EmptyState className="py-8" icon={<Icon className="h-7 w-7" aria-hidden="true" />} title={empty} />
       )}
     </MotionSection>
   );
@@ -152,8 +151,8 @@ function GuideSection({
 function LoadingState() {
   return (
     <div className="space-y-5">
-      <Skeleton className="h-36 rounded-surface" />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <Skeleton className="h-36 rounded-2xl" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {[0, 1, 2].map((item) => (
           <Skeleton key={item} className="h-64 rounded-2xl" />
         ))}
@@ -170,12 +169,8 @@ function DisabledState() {
         description="The guided OET strategy library is not available to learners yet. Your study plan, lessons, and practice tasks are still ready."
         icon={Lightbulb}
         accent="amber"
-        highlights={[
-          { label: 'Status', value: 'Coming soon', icon: Sparkles },
-          { label: 'Access', value: 'Learner only', icon: Lock },
-        ]}
       />
-      <Card className="mt-6 border-dashed bg-background-light">
+      <Card className="border-dashed bg-background-light">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-navy">Use practice modules while this opens</h2>
@@ -184,7 +179,7 @@ function DisabledState() {
           <Button asChild>
             <Link href="/dashboard">
               Back to dashboard
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
             </Link>
           </Button>
         </div>
@@ -265,105 +260,103 @@ export default function StrategiesPage() {
 
   return (
     <>
-      <div className="space-y-7">
-        <LearnerPageHero
-          eyebrow="Strategy Library"
-          title="Use the right strategy at the right moment"
-          description="Practical reading, listening, writing, and speaking strategy articles matched to your weak subtests and study progress."
-          icon={Lightbulb}
-          accent="amber"
-          highlights={[
-            { label: 'Guides', value: loading ? 'Loading' : `${library?.items.length ?? 0} available`, icon: BookOpenCheck },
-            { label: 'Recommended', value: `${library?.recommended.length ?? 0} for you`, icon: Target },
-            { label: 'Saved', value: `${library?.bookmarked.length ?? 0} bookmarks`, icon: Bookmark },
-          ]}
-        />
+      <LearnerPageHero
+        eyebrow="Strategy Library"
+        title="Use the right strategy at the right moment"
+        description="Practical reading, listening, writing, and speaking strategy articles matched to your weak subtests and study progress."
+        icon={Lightbulb}
+        accent="amber"
+        highlights={[
+          { label: 'Guides', value: loading ? 'Loading' : `${library?.items.length ?? 0} available`, icon: BookOpenCheck },
+          { label: 'Recommended', value: `${library?.recommended.length ?? 0} for you`, icon: Target },
+          { label: 'Saved', value: `${library?.bookmarked.length ?? 0} bookmarks`, icon: Bookmark },
+        ]}
+      />
 
-        <Card className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_210px]">
-            <label className="relative block">
-              <span className="sr-only">Search strategy guides</span>
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by skill, timing, case notes, roleplay..."
-                className="min-h-11 w-full rounded-lg border border-border bg-background px-10 py-2.5 text-sm text-navy outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
-
-            <label>
-              <span className="sr-only">Filter by subtest</span>
-              <select
-                value={subtestCode}
-                onChange={(event) => setSubtestCode(event.target.value)}
-                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                {SUBTEST_FILTERS.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span className="sr-only">Filter by category</span>
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                {categoryOptions.map((item) => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </Card>
-
-        {error ? (
-          <InlineAlert variant="error" title="Strategy guides did not load">{error}</InlineAlert>
-        ) : null}
-
-        {loading ? (
-          <LoadingState />
-        ) : library ? (
-          <div className="space-y-5 sm:space-y-8">
-            <GuideSection
-              title="Recommended Next"
-              description="Matched to your OET focus areas and high-impact guide order."
-              icon={Sparkles}
-              guides={library.recommended}
-              empty="No recommendations match the current filters yet."
+      <Card>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_180px_210px]">
+          <label className="relative block">
+            <span className="sr-only">Search strategy guides</span>
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by skill, timing, case notes, roleplay..."
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-10 py-2.5 text-sm text-navy outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
+          </label>
 
-            <GuideSection
-              title="Continue Reading"
-              description="Guides you have started but not finished."
-              icon={Clock}
-              guides={library.continueReading}
-              empty="Start any guide and it will appear here."
-              compact
-            />
+          <label>
+            <span className="sr-only">Filter by subtest</span>
+            <select
+              value={subtestCode}
+              onChange={(event) => setSubtestCode(event.target.value)}
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              {SUBTEST_FILTERS.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
 
-            <GuideSection
-              title="Bookmarked"
-              description="Saved strategy guides for quick review."
-              icon={Bookmark}
-              guides={library.bookmarked}
-              empty="Bookmark a guide to keep it close during revision."
-              compact
-            />
+          <label>
+            <span className="sr-only">Filter by category</span>
+            <select
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold text-navy outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              {categoryOptions.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </Card>
 
-            <GuideSection
-              title="All Strategy Guides"
-              description="Searchable OET strategy articles for every subtest."
-              icon={CheckCircle2}
-              guides={library.items}
-              empty="No strategy guides match these filters. Try another subtest or clear the search."
-            />
-          </div>
-        ) : null}
-      </div>
+      {error ? (
+        <InlineAlert variant="error" title="Strategy guides did not load">{error}</InlineAlert>
+      ) : null}
+
+      {loading ? (
+        <LoadingState />
+      ) : library ? (
+        <>
+          <GuideSection
+            title="Recommended Next"
+            description="Matched to your OET focus areas and high-impact guide order."
+            icon={Sparkles}
+            guides={library.recommended}
+            empty="No recommendations match the current filters yet."
+          />
+
+          <GuideSection
+            title="Continue Reading"
+            description="Guides you have started but not finished."
+            icon={Clock}
+            guides={library.continueReading}
+            empty="Start any guide and it will appear here."
+            compact
+          />
+
+          <GuideSection
+            title="Bookmarked"
+            description="Saved strategy guides for quick review."
+            icon={Bookmark}
+            guides={library.bookmarked}
+            empty="Bookmark a guide to keep it close during revision."
+            compact
+          />
+
+          <GuideSection
+            title="All Strategy Guides"
+            description="Searchable OET strategy articles for every subtest."
+            icon={CheckCircle2}
+            guides={library.items}
+            empty="No strategy guides match these filters. Try another subtest or clear the search."
+          />
+        </>
+      ) : null}
     </>
   );
 }

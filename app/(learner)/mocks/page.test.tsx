@@ -38,7 +38,9 @@ vi.mock('@/components/ui/motion-primitives', () => ({
 }));
 
 vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, ...rest }: { children: React.ReactNode }) => <button {...rest}>{children}</button>,
+  // `asChild` renders its child (a Link) itself, as the real Button does.
+  Button: ({ children, asChild, ...rest }: { children: React.ReactNode; asChild?: boolean }) =>
+    asChild ? <>{children}</> : <button {...rest}>{children}</button>,
 }));
 
 vi.mock('@/components/ui/alert', () => ({
@@ -56,8 +58,16 @@ vi.mock('@/components/domain', () => ({
   LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
 }));
 
+type EmptyStateAction = { label: string; href?: string };
 vi.mock('@/components/domain/learner-empty-state', () => ({
-  LearnerEmptyState: ({ title }: { title: string }) => <section>{title}</section>,
+  LearnerEmptyState: ({ title, primaryAction, secondaryAction }: { title: string; primaryAction?: EmptyStateAction; secondaryAction?: EmptyStateAction }) => (
+    <section>
+      {title}
+      {[primaryAction, secondaryAction].map((action) =>
+        action?.href ? <a key={action.label} href={action.href}>{action.label}</a> : null,
+      )}
+    </section>
+  ),
 }));
 
 vi.mock('@/components/domain/learner-skill-switcher', () => ({
@@ -157,6 +167,38 @@ describe('Mock Center subtest/type scoping', () => {
     expect(await screen.findByText(/No Full Listening Mock bundles are published yet/i)).toBeInTheDocument();
     const practiseLink = screen.getByRole('link', { name: /Practise Listening part-by-part/i });
     expect(practiseLink).toHaveAttribute('href', '/listening');
+  });
+
+  it('shows a single no-bundles empty state and never the admin-facing backend copy', async () => {
+    mockFetchMocksHome.mockResolvedValue({
+      ...buildHome({ subTestMocks: [], fullMocks: [] }),
+      emptyState: {
+        title: 'No mock bundles are published yet',
+        description: 'Ask an admin to publish a full or sub-test mock bundle from the content mock bundle console.',
+        route: '/admin/content/mocks',
+      },
+    });
+    render(<MockCenter />);
+
+    expect(await screen.findAllByText('No mock bundles are published yet')).toHaveLength(1);
+    expect(screen.queryByText(/ask an admin/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /go to dashboard/i })).not.toBeInTheDocument();
+  });
+
+  it('uses the backend empty-state copy when it points at a learner route', async () => {
+    mockFetchMocksHome.mockResolvedValue({
+      ...buildHome({ subTestMocks: [], fullMocks: [] }),
+      emptyState: {
+        title: 'Your learner profile is not fully initialised yet',
+        description: 'Open your dashboard once to finish setup, then come back here to pick a mock.',
+        route: '/dashboard',
+      },
+    });
+    render(<MockCenter />);
+
+    expect(await screen.findByText('Your learner profile is not fully initialised yet')).toBeInTheDocument();
+    expect(screen.queryByText('No mock bundles are published yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /go to dashboard/i })).toHaveAttribute('href', '/dashboard');
   });
 
   it('clears the scope when "View all mocks" is followed', async () => {

@@ -67,10 +67,10 @@ export function LearnerEmptyState({
       role="region"
       aria-label={title}
     >
-      <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', compact ? '' : 'text-left')}>
+      <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', compact ? '' : 'text-start')}>
         <div className="flex w-full min-w-0 items-start gap-3 sm:w-auto">
           {Icon ? (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
+            <div className="pop-in flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
               <Icon className="h-4.5 w-4.5" aria-hidden="true" />
             </div>
           ) : null}

@@ -123,9 +123,9 @@ export function WritingTimerV2({
     phase === 'completed'
       ? 'text-muted'
       : seconds <= 60
-        ? 'text-danger'
+        ? 'text-danger-strong'
         : seconds <= 300
-          ? 'text-warning'
+          ? 'text-warning-strong'
           : 'text-navy dark:text-white';
 
   const phaseLabel =
@@ -139,7 +139,7 @@ export function WritingTimerV2({
       aria-atomic="true"
       aria-label={`${phaseLabel}: ${formatHms(seconds)} remaining`}
     >
-      <span className="text-xs uppercase tracking-wider font-bold text-muted">{phaseLabel}</span>
+      <span className="eyebrow text-muted">{phaseLabel}</span>
       <span className={cn('font-bold tabular-nums text-2xl', tone)}>
         {phase === 'completed' ? '--:--' : formatHms(seconds)}
       </span>

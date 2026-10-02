@@ -245,7 +245,7 @@ function SearchPanel({
           {groups.map((group, groupIndex) => (
             <li key={group.label} role="none">
               <ul role="group" aria-labelledby={`${listboxId}-group-${groupIndex}`}>
-                <li role="none" id={`${listboxId}-group-${groupIndex}`} className="px-3 pb-1 pt-2.5 text-2xs font-bold uppercase tracking-[0.16em] text-muted">
+                <li role="none" id={`${listboxId}-group-${groupIndex}`} className="px-3 pb-1 pt-2.5 eyebrow text-muted">
                   {group.label}
                 </li>
                 {group.rows.map((row) => {

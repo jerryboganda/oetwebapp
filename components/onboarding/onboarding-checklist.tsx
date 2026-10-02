@@ -124,7 +124,7 @@ export function OnboardingChecklist() {
               >
                 <span className="flex items-center gap-2.5">
                   {item.done ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success-strong" aria-hidden="true" />
                   ) : (
                     <Circle className="h-5 w-5 shrink-0 text-muted/50" aria-hidden="true" />
                   )}

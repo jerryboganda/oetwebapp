@@ -18,13 +18,13 @@ const SEVERITY_META: Record<WritingSeverity, { label: string; icon: typeof Alert
   high: {
     label: 'High severity',
     icon: AlertOctagon,
-    tone: 'text-danger',
+    tone: 'text-danger-strong',
     ring: 'border-danger/30 bg-danger/10',
   },
   medium: {
     label: 'Medium severity',
     icon: AlertTriangle,
-    tone: 'text-warning',
+    tone: 'text-warning-strong',
     ring: 'border-warning/30 bg-warning/10',
   },
   low: {
@@ -82,7 +82,7 @@ export function CanonViolationCard({ violation, onDispute, className }: CanonVio
                 {violation.ruleId}
                 <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
               </Link>
-              <span className={cn('text-3xs uppercase tracking-wider font-bold', meta.tone)}>
+              <span className={cn('tile-label', meta.tone)}>
                 {meta.label}
               </span>
             </div>

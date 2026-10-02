@@ -130,7 +130,7 @@ function BetterPhrasingContent() {
                   <div className="w-8 h-8 rounded-lg bg-background-light flex items-center justify-center">
                     <MessageSquare className="w-4 h-4 text-muted" />
                   </div>
-                  <h2 className="text-xs font-bold text-muted uppercase tracking-widest">Your Original Phrase</h2>
+                  <h2 className="eyebrow text-muted">Your Original Phrase</h2>
                 </div>
                 <p className="text-xl font-medium text-navy italic leading-relaxed">
                   &quot;{currentSegment.originalPhrase}&quot;
@@ -138,9 +138,9 @@ function BetterPhrasingContent() {
 
                 <div className="mt-8 pt-8 border-t border-border">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden />
+                    <AlertCircle className="w-5 h-5 text-warning-strong shrink-0 mt-0.5" aria-hidden />
                     <div>
-                      <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-1">Issue Explanation</h3>
+                      <h3 className="eyebrow text-warning-strong mb-1">Issue Explanation</h3>
                       <p className="text-sm text-muted leading-relaxed">{currentSegment.issueExplanation}</p>
                     </div>
                   </div>
@@ -155,7 +155,7 @@ function BetterPhrasingContent() {
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-6">
                     <Zap className="w-5 h-5 text-primary shrink-0" aria-hidden />
-                    <h2 className="text-xs font-bold text-primary uppercase tracking-widest">Stronger Alternative</h2>
+                    <h2 className="eyebrow text-primary">Stronger Alternative</h2>
                   </div>
                   <p className="text-2xl font-black mb-8 leading-tight tracking-tight">
                     {currentSegment.strongerAlternative}
@@ -163,7 +163,7 @@ function BetterPhrasingContent() {
                   <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
                     <div className="flex items-center gap-3 mb-3">
                       <Volume2 className="w-4 h-4 text-primary" />
-                      <h3 className="text-xs font-bold text-white/60 uppercase tracking-widest">Drill Prompt</h3>
+                      <h3 className="eyebrow text-white/60">Drill Prompt</h3>
                     </div>
                     <p className="text-sm text-white/80 leading-relaxed">{currentSegment.drillPrompt}</p>
                   </div>
@@ -195,7 +195,7 @@ function BetterPhrasingContent() {
                     </motion.button>
                   )}
                 </div>
-                <p className="text-xs font-bold text-muted uppercase tracking-widest">
+                <p className="eyebrow text-muted">
                   {isRecording ? 'Recording your drill...' : hasRecorded ? 'Drill complete! Review or move to next.' : 'Tap to start repeat drill'}
                 </p>
               </Card>

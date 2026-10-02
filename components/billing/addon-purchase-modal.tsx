@@ -89,14 +89,14 @@ export function AddonPurchaseModal({
           )}
 
           {status === 'error' && (
-            <div className="rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+            <div className="rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm text-danger-strong">
               {errorMessage ?? 'Unable to verify eligibility.'}
             </div>
           )}
 
           {status === 'ineligible' && quote && isTutorBook && quote.reason === 'addon_already_owned' && (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success">
+              <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success-strong">
                 <Check className="mt-0.5 h-4 w-4 flex-none" />
                 <p className="font-medium text-navy">You already have The Tutor Book.</p>
               </div>
@@ -134,13 +134,13 @@ export function AddonPurchaseModal({
 
           {status === 'ineligible' && quote && !isTutorBook && (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-strong">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
                 <div>
                   <p className="font-medium text-navy">You need an eligible course first.</p>
                   <p className="mt-1 text-xs text-muted">
                     This add-on requires a parent enrolment with{' '}
-                    <code className="rounded bg-warning/15 text-warning px-1">{quote.requiredFlag ?? 'required flag'}</code> set.
+                    <code className="rounded bg-warning/15 text-warning-strong px-1">{quote.requiredFlag ?? 'required flag'}</code> set.
                   </p>
                 </div>
               </div>
@@ -179,7 +179,7 @@ export function AddonPurchaseModal({
                 </>
               ) : quote.eligibleParents.length === 1 ? (
                 <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm">
-                  <div className="flex items-center gap-2 font-medium text-success">
+                  <div className="flex items-center gap-2 font-medium text-success-strong">
                     <Check className="h-4 w-4" /> {isTutorBook ? 'Eligible through:' : 'Will apply to:'}
                   </div>
                   <div className="mt-1 text-sm text-navy">

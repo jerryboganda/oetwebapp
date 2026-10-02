@@ -196,7 +196,7 @@ export function AiFeatureRoutesPanel() {
       </div>
 
       {!copilotActive && (
-        <p className="mb-4 rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning">
+        <p className="mb-4 rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-warning-strong">
           Copilot provider is not registered or not active. Add a row in the Providers table above to
           enable bulk-route.
         </p>
