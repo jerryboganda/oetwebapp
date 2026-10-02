@@ -511,6 +511,65 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.True(recorder.LastCostEstimateUsd > 0m);
     }
 
+    [Theory]
+    [InlineData(AiFeatureCodes.ReadingExplanation, AiAssessmentContext.None)]
+    [InlineData(AiFeatureCodes.ListeningExplanation, AiAssessmentContext.None)]
+    [InlineData(AiFeatureCodes.WritingGrade, AiAssessmentContext.None)]
+    [InlineData(AiFeatureCodes.SpeakingGrade, AiAssessmentContext.None)]
+    [InlineData(AiFeatureCodes.MockRemediationDraft, AiAssessmentContext.Mock)]
+    public async Task ResponseReview_ProducesValidGovernedWireRequest(string featureCode, AiAssessmentContext assessmentContext)
+    {
+        var options = EnabledOptions();
+        options.ResponseVerifyEnabled = true;
+        var recorder = new FakeRecorder();
+        var transportCalls = 0;
+        var handler = new StubHandler(async (request, ct) =>
+        {
+            transportCalls++;
+            using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            var questions = payload.RootElement.GetProperty("questions");
+            foreach (var questionId in new[] { "addresses_task", "unsafe_recommendation" })
+            {
+                var question = questions.GetProperty(questionId);
+                Assert.Equal("noul", question.GetProperty("type").GetString());
+                Assert.True(question.GetProperty("criteria").TryGetProperty("true", out _));
+                Assert.True(question.GetProperty("criteria").TryGetProperty("false", out _));
+            }
+            Assert.Equal(featureCode, payload.RootElement.GetProperty("state").GetProperty("feature").GetString());
+            return JsonResponse("""
+                {"model":"jev-1.13.0","answers":{
+                  "evidence_relation":{"type":"choice","choice":"supported","probabilities":{"supported":1,"contradicted":0,"insufficient_evidence":0},"confidence":1},
+                  "addresses_task":{"type":"noul","noul":1},
+                  "unsafe_recommendation":{"type":"noul","noul":0}},
+                 "usage":{"input_tokens":500,"output_tokens":85}}
+                """);
+        });
+        var service = new TypeSafeJudgmentService(
+            new TypeSafeJudgmentClient(new SingleClientFactory(new HttpClient(handler)), Options.Create(options)),
+            recorder, Options.Create(options), TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+        var completion = """{"score":350,"feedback":"The source supports this finding."}""";
+
+        var advisory = await JevWorkflowAdvisor.ReviewResponseAsync(service, options,
+            new AiGatewayRequest
+            {
+                FeatureCode = featureCode,
+                UserId = "user-1",
+                UserInput = "Explain the finding supported by this source; the native score is 350.",
+                AssessmentContext = assessmentContext,
+            }, completion, CancellationToken.None);
+
+        Assert.NotNull(advisory);
+        Assert.Equal("ok", advisory.Status);
+        Assert.False(advisory.RequiresHumanReview);
+        Assert.Equal(1, transportCalls);
+        Assert.Equal(1, recorder.BeginCalls);
+        Assert.Equal(1, recorder.SuccessCalls);
+        Assert.Equal(1, recorder.CompleteCalls);
+        Assert.Equal(500 * options.CostPerInputTokenUsd, recorder.LastCostEstimateUsd);
+        using var original = JsonDocument.Parse(completion);
+        Assert.Equal(350, original.RootElement.GetProperty("score").GetInt32());
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static JevCallMetadata Call() => new()
