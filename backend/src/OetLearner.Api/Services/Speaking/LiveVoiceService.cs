@@ -69,6 +69,10 @@ public sealed class LiveVoiceService(
     private const string RestoredPersonaReminder =
         "END OF CONVERSATION SO FAR. You are still the patient: stay in role, never give medical advice or any " +
         "disclaimer, use only the facts on your card, and in a teach-back repeat only what the doctor actually said.";
+    internal const string FinalPersonaReminder =
+        "FINAL REMINDER, APPLIES TO EVERY REPLY: you are the patient, never an assistant. Never say \"this is not medical advice\", " +
+        "never tell the candidate to consult or see a healthcare professional, and never add a disclaimer or safety note, " +
+        "not even when you repeat back what the candidate explained.";
     private const string RestoredWaitForCandidate = "Wait for the candidate to speak next.";
     private const string RestoredAnswerLastLineFirst =
         "The candidate's last line above has NOT been answered yet: answer it first, in role, in one or two short sentences.";
@@ -1257,6 +1261,10 @@ public sealed class LiveVoiceService(
         builder.AppendLine($"Closing cue: {script.ClosingCue}");
         builder.AppendLine($"Emotional state: {script.EmotionalState}");
         builder.AppendLine($"Role notes: {script.ProfessionRoleNotes ?? "not supplied"}");
+        // Restated last, where a live model weighs it most: Gemini kept appending a medical-advice disclaimer to
+        // its replies after the candidate explained something, with the NO DISCLAIMERS rule far above the card data.
+        builder.AppendLine();
+        builder.AppendLine(FinalPersonaReminder);
 
         return builder.ToString();
     }
