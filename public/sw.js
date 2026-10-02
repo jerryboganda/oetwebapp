@@ -19,9 +19,10 @@
  * Bump CACHE_VERSION whenever a deploy must invalidate previously-cached data:
  * `activate` deletes every `oet-*` cache that is not one of the current names.
  * v6 purges the v5 page cache that held pre-rebrand HTML.
+ * v7 purges cached Writing draft bodies (letter text) now that drafts bypass the SW.
  */
 
-const CACHE_VERSION = 'oet-v6';
+const CACHE_VERSION = 'oet-v7';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const CURRENT_CACHES = [STATIC_CACHE, API_CACHE];
@@ -55,6 +56,11 @@ const MEDIA_CDN_HOST = /\.b-cdn\.net$/i;
 // Both are large one-play-only bodies; caching them is a quota cost with no
 // offline benefit, because an attempt cannot be scored offline anyway.
 const EXAM_MEDIA_API = /^\/v1\/(media\/[^/]+\/content|listening\/audio\/)/i;
+
+// Writing drafts must always come from the server: a cached GET (up to 24 h
+// old) could restore older text and a stale version over newer work. Unanchored
+// because the browser reaches the API through the /api/backend proxy.
+const WRITING_DRAFT_API = /\/v1\/writing\/drafts\//i;
 
 // ---------- Install ----------
 self.addEventListener('install', (event) => {
@@ -101,7 +107,8 @@ self.addEventListener('fetch', (event) => {
     MEDIA_CDN_HOST.test(url.hostname) ||
     STREAMING_MEDIA.test(url.pathname) ||
     VIDEO_PLAYBACK_API.test(url.pathname) ||
-    EXAM_MEDIA_API.test(url.pathname)
+    EXAM_MEDIA_API.test(url.pathname) ||
+    WRITING_DRAFT_API.test(url.pathname)
   ) {
     return;
   }
