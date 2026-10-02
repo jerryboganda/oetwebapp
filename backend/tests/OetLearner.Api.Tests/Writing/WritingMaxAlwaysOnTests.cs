@@ -112,7 +112,8 @@ public sealed class WritingMaxAlwaysOnTests : IAsyncDisposable
 
         var selectorFile = File.ReadAllText(Path.Combine(apiRoot, "Services", "Writing", "WritingSubscriptionSelector.cs"));
         var selectorClass = selectorFile[selectorFile.IndexOf("public sealed class WritingSubscriptionSelector", StringComparison.Ordinal)..];
-        foreach (var forbidden in new[] { "Codex", "ProviderMode", "QuotaExceeded", "Utiliz", "FailoverPct", "GetSnapshotAsync", "Readiness", "ClaudeApi" })
+        // Utilisation can only come from the quota snapshot, so "Snapshot" covers the weekly estimate.
+        foreach (var forbidden in new[] { "Codex", "ProviderMode", "QuotaExceeded", "Snapshot", "FailoverPct", "WarnPct", "Readiness", "ClaudeApi", "RuntimeSettings", "IRuntimeSettingsProvider" })
         {
             if (selectorClass.Contains(forbidden, StringComparison.Ordinal))
                 violations.Add($"WritingSubscriptionSelector routes on {forbidden}");
