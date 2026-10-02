@@ -189,11 +189,119 @@ public sealed class AiCircuitBreakerTests : IDisposable
         Assert.Equal("quota_exhausted", row.LastFailureCode);
     }
 
-    private sealed class QuotaExhaustedProvider : IAiModelProvider
+    // ── RULE MAX-ALWAYS-ON (owner, 2 Oct 2026): the Claude Max subscription route is never skipped ──
+
+    [Theory]
+    [InlineData("401")]
+    [InlineData("403")]
+    [InlineData("quota_exhausted")]
+    [InlineData("auth")]
+    [InlineData("invalid_model")]
+    [InlineData("provider_5xx")]
+    public async Task MaxSubscriptionProvider_CircuitNeverOpens_WhateverTheFailure(string failureCode)
+    {
+        for (var i = 0; i < 12; i++)
+        {
+            await _store.RecordFailureAsync(AiCircuitBreakerStore.KindProvider, "writing-claude-sub", failureCode, default);
+            Assert.True(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, "writing-claude-sub", default));
+        }
+
+        // Also when the caller spells it differently.
+        await _store.RecordFailureAsync(" provider ", " Writing-Claude-Sub ", failureCode, default);
+        Assert.True(await _store.AllowAsync(" provider ", " Writing-Claude-Sub ", default));
+
+        using var scope = _provider.CreateScope();
+        Assert.False(await scope.ServiceProvider.GetRequiredService<LearnerDbContext>()
+            .AiCircuitStates.AsNoTracking()
+            .AnyAsync(s => s.Key.ToLower() == "writing-claude-sub"));
+    }
+
+    [Fact]
+    public async Task MaxSubscriptionProvider_AStaleOpenRow_NeverBlocksIt()
+    {
+        using (var scope = _provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.AiCircuitStates.Add(new AiCircuitState
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Kind = AiCircuitBreakerStore.KindProvider,
+                Key = "writing-claude-sub",
+                State = AiCircuitBreakerStore.StateOpen,
+                OpenedAt = DateTimeOffset.UtcNow,
+                OpenUntil = DateTimeOffset.UtcNow.AddHours(6),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True(await _store.AllowAsync(AiCircuitBreakerStore.KindProvider, "writing-claude-sub", default));
+    }
+
+    [Fact]
+    public async Task MaxSubscriptionProvider_IsAllowedEvenWhenTheStoreIsDown_ButOtherProvidersFailClosed()
+    {
+        var broken = new AiCircuitBreakerStore(new ThrowingScopeFactory(), NullLogger<AiCircuitBreakerStore>.Instance);
+
+        Assert.True(await broken.AllowAsync(AiCircuitBreakerStore.KindProvider, "writing-claude-sub", default));
+        Assert.False(await broken.AllowAsync(AiCircuitBreakerStore.KindProvider, "anthropic", default));
+    }
+
+    [Fact]
+    public void AlwaysOn_CoversOnlyTheMaxProviderKey()
+    {
+        Assert.True(AiCircuitBreakerStore.IsAlwaysOn(AiCircuitBreakerStore.KindProvider, "writing-claude-sub"));
+        Assert.False(AiCircuitBreakerStore.IsAlwaysOn(AiCircuitBreakerStore.KindProvider, "anthropic"));
+        Assert.False(AiCircuitBreakerStore.IsAlwaysOn(AiCircuitBreakerStore.KindProvider, "writing-codex-sub"));
+        Assert.False(AiCircuitBreakerStore.IsAlwaysOn(AiCircuitBreakerStore.KindCredential, "writing-claude-sub"));
+        Assert.False(AiCircuitBreakerStore.IsAlwaysOn(null, null));
+    }
+
+    [Fact]
+    public async Task Gateway_MaxSubscriptionFailures_NeverShortCircuitTheNextCall()
+    {
+        var provider = new QuotaExhaustedProvider("writing-claude-sub");
+        var gateway = new AiGatewayService(
+            new RulebookLoader(), new IAiModelProvider[] { provider }, circuitBreaker: _store);
+        var request = new AiGatewayRequest
+        {
+            Prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                LetterType = "routine_referral",
+            }),
+            Provider = "writing-claude-sub",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        };
+
+        // Every call reaches the Max provider (it errors each time, and fails over inside ITS grade);
+        // none is ever refused by an open circuit.
+        for (var call = 1; call <= 4; call++)
+        {
+            var ex = await Assert.ThrowsAsync<AiProviderHttpException>(() => gateway.CompleteAsync(request));
+            Assert.Equal(AiProviderErrorClass.QuotaExhausted, ex.ErrorClass);
+            Assert.Equal(call, provider.Calls);
+        }
+
+        using var scope = _provider.CreateScope();
+        Assert.False(await scope.ServiceProvider.GetRequiredService<LearnerDbContext>()
+            .AiCircuitStates.AsNoTracking()
+            .AnyAsync(s => s.Key == "writing-claude-sub"));
+    }
+
+    private sealed class ThrowingScopeFactory : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope() => throw new InvalidOperationException("store is down");
+    }
+
+    private sealed class QuotaExhaustedProvider(string name = "quota-provider") : IAiModelProvider
     {
         public int Calls { get; private set; }
 
-        public string Name => "quota-provider";
+        public string Name => name;
 
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
         {

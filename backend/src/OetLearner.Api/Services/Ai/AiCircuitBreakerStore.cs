@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Services.Ai;
 
@@ -45,8 +46,21 @@ public sealed class AiCircuitBreakerStore(
         "401", "403", "402", "invalid_model", "invalid_config", "quota_exhausted", "auth",
     };
 
+    /// <summary>
+    /// RULE MAX-ALWAYS-ON (owner, 2 Oct 2026): the Claude Max subscription route
+    /// (<see cref="WritingSubscriptionProviders.Claude"/>) is never switched off or
+    /// skipped, so its provider circuit can never open. <see cref="AllowAsync"/>
+    /// always allows it — even while this store is down — and failures are never
+    /// recorded against it. A failed call still fails over inside its own grade;
+    /// the next grade starts on Max again. Do not widen or remove this exemption.
+    /// </summary>
+    public static bool IsAlwaysOn(string? kind, string? key)
+        => string.Equals(kind?.Trim(), KindProvider, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(key?.Trim(), WritingSubscriptionProviders.Claude, StringComparison.OrdinalIgnoreCase);
+
     public async Task<bool> AllowAsync(string kind, string key, CancellationToken ct)
     {
+        if (IsAlwaysOn(kind, key)) return true;
         if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(key)) return false;
 
         try
@@ -133,6 +147,7 @@ public sealed class AiCircuitBreakerStore(
     public async Task RecordFailureAsync(string kind, string key, string? failureCode, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(key)) return;
+        if (IsAlwaysOn(kind, key)) return; // RULE MAX-ALWAYS-ON: never record, never open.
 
         try
         {

@@ -149,6 +149,29 @@ Before ANY Writing task, Model Answer, or Writing validator work, load
 - **Cross-model audit (17 Sep 2026, OA6-01..OA6-02; active validator `writing-rules.cross-model-audit.2026-09-17.1`, rule pack `2.5.0-cross-model-audit`):** HARD GLOBAL RULE — the same functional request never appears in both the introduction and the closure, judged by request concept not wording (`no_duplicated_request` branch `DetectCmaDuplicatedRequestConcept`); a closure request to monitor/check/repeat/test a clinical parameter must be planned by a case-note line (new check id `request_action_unsupported`). Both Model Answer only (`WritingRuleEngine.CrossModelAudit.cs`); regression + the 55 final Medicine answers in `WritingCrossModelAuditRegressionTests`.
 - Targeted repair only; never regenerate a good letter for one small defect. Do not expand to further professions/cells without explicit owner approval. STOP after the Medicine owner-review pack — Nursing/Track B/224 need owner say-so.
 
+## Claude Max subscription is NEVER turned off — COMPULSORY (owner directive 2026-10-02; HARD ENFORCED, never bypass)
+
+The Claude Max subscription route (provider code `writing-claude-sub`, model `claude-opus-5-5`) is the owner's paid
+primary for Writing (and Speaking) grading. **Nothing may switch it off, skip it or route around it — not code, not
+config, not an admin toggle, not a "temporary" workaround.** Incident: the old pipeline wrote a 7-day
+`WritingAiClaudeQuotaExceededUntil` marker after any two Max failures (a sidecar redeploy blip), so Max was skipped
+from 30 Sep to 7 Oct and the paid API served every grade.
+
+- Every Writing grade, auto-retry and requeued run **starts on Max**. Failover to L2 (Anthropic API) / L3 (Codex) is
+  allowed ONLY inside the same grade AFTER Max actually returned an error; the next grade starts on Max again.
+- **Forbidden:** any persisted or computed "Max is off/exhausted/cooling down" state; sticky or timed markers
+  (`WritingAiClaudeQuotaExceededUntil` is retired — never assign it); utilisation / weekly-estimate / threshold
+  failover; forced-Codex or forced-API modes; skipping Max because a sidecar `/readyz` or health probe said no
+  (probes are display only); an open circuit for the Max provider (`AiCircuitBreakerStore.IsAlwaysOn` exempts it);
+  deactivating or deleting the `writing-claude-sub` provider row (admin endpoints refuse it, the seeder re-activates it
+  at boot); a sidecar that persistently refuses work.
+- Enforced by tests that fail the build: the selector matrix (`WritingMaxAlwaysOnTests`), the source-scan guard, the
+  circuit-store exemption tests (`AiCircuitBreakerTests`), the admin endpoint refusals, and the live QA harness
+  (`writing-prod-qa.yml`: first hop of every graded letter is `writing-claude-sub`, marker stays null).
+- Not covered on purpose: the global emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only
+  emergency lever. Do not weaken or "fix" the tests above to make something else pass; change the owner's rule only
+  on the owner's explicit say-so.
+
 ## Official Reading uploads — COMPULSORY
 
 Before any Reading import / attach / publish, load
