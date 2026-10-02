@@ -19,7 +19,7 @@ import type { WritingSubmissionDto } from '@/lib/writing/types';
 const STEPS = [
   { code: 'preflight', labelKey: 'writing.submissions.grading.steps.reading', icon: FileSearch },
   { code: 'grading', labelKey: 'writing.submissions.grading.steps.scoring', icon: Sparkles },
-  { code: 'exemplar', labelKey: 'writing.submissions.grading.steps.exemplar', icon: CircleDot },
+  { code: 'modelAnswer', labelKey: 'writing.submissions.grading.steps.modelAnswer', icon: CircleDot },
   { code: 'ready', labelKey: 'writing.submissions.grading.steps.finalising', icon: Award },
 ] as const;
 
@@ -70,10 +70,15 @@ export default function WritingSubmissionGradingPage() {
     };
   }, [submissionId, router, t]);
 
-  // A transient provider/rate-limit failure leaves the submission in `failed`
-  // with the letter preserved server-side. Offer a controlled resume that
-  // re-grades the SAME submission — no retyping, no duplicate paid workflow.
+  // The server decides whether Retry can help (`canRetry`: a failed run, or a
+  // run stuck past its lease). An older API without the field: any `failed` row.
+  // Retry re-grades the SAME submission — no retyping, no duplicate charge.
   const failed = submission?.status === 'failed';
+  const canRetry = submission ? (submission.canRetry ?? failed) : false;
+  const failureCode = submission?.failureCode ?? null;
+  const showFailure = failed || canRetry;
+  // The server re-queued a failed run by itself and keeps retrying.
+  const delayed = !showFailure && submission?.autoRetrying === true;
   const handleRetry = () => {
     if (retrying || !submissionId) return;
     setRetrying(true);
@@ -151,38 +156,80 @@ export default function WritingSubmissionGradingPage() {
         title={t('writing.submissions.grading.title')}
         description={t('writing.submissions.grading.description')}
         highlights={[
-          { icon: Award, label: t('writing.submissions.grading.highlights.status'), value: submission?.status ?? 'queued' },
+          {
+            icon: Award,
+            label: t('writing.submissions.grading.highlights.status'),
+            value: t(`writing.submissions.detail.status.${submission?.status ?? 'queued'}`),
+          },
         ]}
       />
 
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-      {failed ? (
-        <Card padding="lg" aria-live="polite" role="alert">
-          <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.failedTitle')}</p>
-          <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.failedDescription')}</p>
+      {showFailure ? (
+        <Card padding="lg" aria-live="polite" role="alert" data-testid="writing-grading-failed">
+          {canRetry && failureCode === 'credits_insufficient' ? (
+            <>
+              <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.creditsTitle')}</p>
+              <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.creditsDescription')}</p>
+            </>
+          ) : canRetry ? (
+            <>
+              <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.failedTitle')}</p>
+              <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.failedDescription')}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.notGradableTitle')}</p>
+              <p className="mt-1 text-sm text-muted">
+                {failureCode === 'manual_review'
+                  ? t('writing.submissions.grading.notGradable.manualReview')
+                  : failureCode === 'letter_invalid'
+                    ? t('writing.submissions.grading.notGradable.letterInvalid')
+                    : t('writing.submissions.grading.notGradable.taskNotReady')}
+              </p>
+            </>
+          )}
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             <Button asChild variant="outline" size="sm">
               <Link href="/writing/practice/library">
                 {t('writing.submissions.grading.backToLibrary')}
               </Link>
             </Button>
-            <Button size="sm" onClick={handleRetry} disabled={retrying}>
-              {retrying
-                ? t('writing.submissions.grading.retrying')
-                : t('writing.submissions.grading.retry')}
-            </Button>
+            {canRetry && failureCode === 'credits_insufficient' ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/ai-packages">{t('writing.submissions.grading.buyCredits')}</Link>
+              </Button>
+            ) : null}
+            {canRetry ? (
+              <Button size="sm" onClick={handleRetry} disabled={retrying} data-testid="writing-grading-retry">
+                {retrying
+                  ? t('writing.submissions.grading.retrying')
+                  : t('writing.submissions.grading.retry')}
+              </Button>
+            ) : null}
           </div>
+        </Card>
+      ) : null}
+
+      {delayed ? (
+        <Card padding="lg" aria-live="polite" role="status">
+          <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.delayedTitle')}</p>
+          <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.delayedDescription')}</p>
         </Card>
       ) : null}
 
       {/* No looping pulse on the active step (WCAG 2.2.2): its tint and
           "In progress" badge carry the state. */}
-      {!failed ? (
+      {!showFailure ? (
         <MotionSection delayIndex={0}>
           <Card padding="lg" aria-live="polite" role="status" aria-busy={submission?.status !== 'graded'}>
             <p className="text-sm text-muted">{statusMessage}</p>
-            <ol className="mt-4 space-y-3" aria-label={t('writing.submissions.grading.pipelineLabel')}>
+            <ol
+              className="mt-4 space-y-3"
+              aria-label={t('writing.submissions.grading.pipelineLabel')}
+              data-testid="writing-grading-steps"
+            >
               {STEPS.map((step, idx) => {
                 const Icon = step.icon;
                 const active = idx === currentStepIdx;
