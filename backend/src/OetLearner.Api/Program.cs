@@ -2311,6 +2311,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEva
 builder.Services.Configure<OetLearner.Api.Services.Writing.WritingGradeChainOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Services.Writing.WritingGradeChainOptions.SectionName));
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.WritingGradeShutdownRequeue>();
+// WAI-05: QA-only per-learner grade fault switch (FeatureFlags rows; off by default).
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingQaFault>();
 // Writing AI subscription routing (owner directive 2026-09-29): quota gauge +
 // Claude-5x→Codex selector behind the six writing feature codes.
 builder.Services.AddSingleton<OetLearner.Api.Services.Writing.IWritingSubscriptionQuotaService,

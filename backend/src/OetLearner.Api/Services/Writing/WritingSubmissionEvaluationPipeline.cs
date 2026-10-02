@@ -111,7 +111,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
     WritingCalibrationReleaseService? calibrationReleaseService = null,
     IAiCreditReservationService? creditReservations = null,
     IJevWritingPilot? writingPilot = null,
-    Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null) : IWritingSubmissionEvaluationPipeline
+    Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null,
+    WritingQaFault? qaFault = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
 
@@ -718,7 +719,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 code = failure.Code;
                 retryable = failure.Retryable;
                 lastFailureAt = now;
-                if (failure.AutoRetry && autoRetries < _chainOptions.MaxAutoRetries)
+                // A QA-faulted learner is never re-queued: the harness proves the real
+                // failed row and its Retry (WAI-05).
+                if (failure.AutoRetry
+                    && autoRetries < _chainOptions.MaxAutoRetries
+                    && (qaFault is null || await qaFault.ReadAsync(submission.UserId, CancellationToken.None) is null))
                 {
                     var backoff = _chainOptions.BackoffMinutes is { Length: > 0 } steps
                         ? steps[Math.Min(autoRetries, steps.Length - 1)]
@@ -1463,6 +1468,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 // Owner rule MAX-ALWAYS-ON: the run starts on Max; the chain fails over
                 // to the API and then Codex only inside this run.
                 var decision = await subscriptionSelector.DecideAsync(ct);
+                // WAI-05 QA-only fault switch: off unless an admin flagged this learner.
+                var fault = qaFault is null ? null : await qaFault.ReadAsync(submission.UserId, ct);
                 return await WritingGradeChain.RunAsync(
                     aiGateway,
                     template,
@@ -1472,7 +1479,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     _chainOptions,
                     clock,
                     logger,
-                    injectFault: null,
+                    injectFault: fault is { } active ? hop => active.ShouldFailHop(hop, submission.GradeEpoch) : null,
                     ct);
             }
 
