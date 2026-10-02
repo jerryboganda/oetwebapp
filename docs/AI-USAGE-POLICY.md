@@ -236,6 +236,17 @@ provider row cannot be deactivated or deleted (its other fields stay editable).
 The Anthropic API and Codex are used only inside a single grade after Max
 actually errors.
 
+**Credit-funded Writing grades skip the plan gate (WAI-01, 2026-10-02).** A
+Writing grade that holds a learner credit reservation (or a verified free
+sample) is sent with `FreeSampleGrant=true`, exactly as a credit-funded Speaking
+grade is: `AiQuotaService` then skips plan resolution, the plan feature list and
+the plan token caps, and the grade's tokens are not committed to the learner's
+plan counters, because the learner already paid with credits (live 1 Oct 2026:
+`feature_not_in_plan` refused paid grades on the default plan). The per-feature
+kill list, the kill switch, the platform budget (while `EnforceSpendCaps` is on)
+and per-user AI disable still apply. The grant is server-derived only; it is
+never read from a request.
+
 **Admin-side AI carries no day or class-month ceilings (owner directive,
 2026-09-23).** `AdminBatch`-class calls — `admin.*` content drafts,
 listening Part A/B/C extraction, OCR content-PDF fallback, AI-assistant
@@ -579,9 +590,12 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
 - **Still under this policy (§0, §12):** the call goes through the coordinator and the gateway:
   grounding enforced, one `AiUsageRecord` per physical call (priced `0.00` on the sidecar row),
   kill switch, feature policy, platform budget reservation (spend booked; it refuses a call only
-  while `EnforceSpendCaps` is on, off by default since 2026-10-02, see §7) and the provider circuit
-  breaker all apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
-  taken at card reveal is committed once, after a grade exists.
+  while `EnforceSpendCaps` is on, off by default since 2026-10-02, see §7) all apply. The provider
+  circuit breaker does NOT: `writing-claude-sub` is exempt by owner rule MAX-ALWAYS-ON
+  (`AiCircuitBreakerStore.IsAlwaysOn`), so its circuit never opens and failures are not counted
+  against it; a failed call falls back inside the same grade only. Learner credit accounting is
+  unchanged: the gateway never debits Speaking; the hold taken at card reveal is committed once,
+  after a grade exists.
 - **Shared allowance and lane:** the sidecar runs one request at a time and shares the Claude
   Max allowance (and the `oet_agent_home` login) with Writing and the console, so Speaking and
   Writing grades queue behind each other. Anthropic sizes Max limits for ordinary individual

@@ -239,6 +239,29 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
             r => Assert.Equal(("free_sample", 0), (r.BucketKind, r.Units)));
     }
 
+    /// <summary>T-C6b — a free-sample letter whose grade failed stays free on Retry even after
+    /// the free-sample programme is switched off (zero credits: a regression would 402 or debit).</summary>
+    [Fact]
+    public async Task TC6b_FreeSampleRetry_StaysFree_AfterTheProgrammeIsSwitchedOff()
+    {
+        await EnableFreeSamplesAsync();
+        var gateway = new ScriptedGateway(failFirst: 1);
+        var pipeline = Pipeline(gateway, new WritingGradeChainOptions { MaxAutoRetries = 0 });
+        var submissionId = await SubmitAsync(pipeline);
+        await Assert.ThrowsAsync<ApiException>(() => pipeline.EvaluateAsync(submissionId, default));
+        Assert.Equal(WritingSubmissionStatuses.Failed, await StatusAsync(submissionId));
+
+        var flag = await _db.FeatureFlags.SingleAsync(f => f.Key == FreeSampleService.FeatureFlagKey);
+        flag.Enabled = false;
+        await _db.SaveChangesAsync();
+        await Service(pipeline).RetryGradeAsync(UserId, submissionId, default);
+
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(submissionId));
+        Assert.Empty(await _db.AiPackageCreditTransactions.AsNoTracking().ToListAsync());
+        var hold = await HoldAsync(submissionId);
+        Assert.Equal(("free_sample", 0, AiCreditReservationState.Committed), (hold.BucketKind, hold.Units, hold.State));
+    }
+
     /// <summary>T-C7 — Unlimited Writing: open and grade write zero ledger rows; the hold is 0 units.</summary>
     [Fact]
     public async Task TC7_Unlimited_WritesNoLedgerRows()
@@ -406,6 +429,27 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         Assert.Equal(AiCreditReservationState.Reserved, ticket.State);
         Assert.Equal(0, ticket.Units);
         Assert.Single(await LedgerRowsAsync(AiPackageCreditReason.GradingDeduct));
+    }
+
+    /// <summary>FindGradingDebitAsync has a default (null) body so test fakes compile. A PRODUCTION
+    /// ledger relying on that default would never adopt the start debit: a paid resume could be
+    /// refused and the grade could be charged again. Every production ledger must override it.</summary>
+    [Fact]
+    public void EveryProductionLedger_OverridesFindGradingDebitAsync()
+    {
+        var contract = typeof(IAiPackageCreditService);
+        var method = contract.GetMethod(nameof(IAiPackageCreditService.FindGradingDebitAsync))!;
+        var ledgers = typeof(AiPackageCreditService).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && contract.IsAssignableFrom(t))
+            .ToList();
+
+        Assert.Contains(typeof(AiPackageCreditService), ledgers);
+        foreach (var ledger in ledgers)
+        {
+            var map = ledger.GetInterfaceMap(contract);
+            var target = map.TargetMethods[Array.IndexOf(map.InterfaceMethods, method)];
+            Assert.True(target.DeclaringType == ledger, $"{ledger.FullName} must implement FindGradingDebitAsync.");
+        }
     }
 
     // ── Harness ────────────────────────────────────────────────────────────────

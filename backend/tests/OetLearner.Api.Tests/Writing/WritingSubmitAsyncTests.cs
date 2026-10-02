@@ -615,13 +615,14 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task CanonFailure_MarksFailed_KeepsReservation_Retryable()
+    public async Task CanonFailure_RequeuesForAutoRetry_KeepsReservation()
     {
         var credits = new CountingReservations();
         var pipeline = BuildRealPreflightPipeline(new CountingGateway(CanonicalCompletion), credits);
         // Swap in a canon engine that explodes AFTER a successful rubric call:
-        // the grade must not persist half-built, the row must land in failed
-        // (never wedge in grading), and the uncommitted hold stays on the letter.
+        // the grade must not persist half-built, the row must be re-queued for
+        // the automatic retry (never wedge in grading), and the uncommitted hold
+        // stays on the letter.
         var throwingPipeline = BuildThrowingCanonPipeline(new CountingGateway(CanonicalCompletion), credits);
         var submit = await throwingPipeline.SubmitAsync(
             SampleAttempt("matrix-canon-1", LetterA, scenarioId: ScenarioReadyId), default);
