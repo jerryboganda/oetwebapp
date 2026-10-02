@@ -530,9 +530,29 @@ public sealed class LiveClassService(
                 .ToList();
         }
 
+        // The same rules as GetRecordingForLearnerAsync, so the past list never
+        // offers a recording that answers 403/404 (no-show, processing, expired).
+        HashSet<string> watchableSessionIds = upcoming
+            ? []
+            : await db.LiveClassRecordings.AsNoTracking()
+                .Where(recording => recording.Status == LiveClassRecordingStatus.Ready
+                    && recording.S3VideoKey != null && recording.S3VideoKey != ""
+                    && (recording.ExpiresAt == null || recording.ExpiresAt > now)
+                    && db.LiveClassEnrollments.Any(enrollment => enrollment.ClassSessionId == recording.ClassSessionId
+                        && enrollment.UserId == learnerUserId
+                        && (enrollment.Status == LiveClassEnrollmentStatus.Active || enrollment.Status == LiveClassEnrollmentStatus.Attended)))
+                .Select(recording => recording.ClassSessionId)
+                .ToHashSetAsync(ct);
+
         return classes
             .OrderBy(liveClass => classOrder.GetValueOrDefault(liveClass.Id, int.MaxValue))
             .Select(liveClass => MapListItem(liveClass, enrolledSessionIds, now))
+            .Select(item => item with
+            {
+                Sessions = item.Sessions
+                    .Select(session => session with { RecordingReady = watchableSessionIds.Contains(session.Id) })
+                    .ToList(),
+            })
             .ToList();
     }
 

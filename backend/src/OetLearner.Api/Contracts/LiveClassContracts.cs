@@ -18,7 +18,9 @@ public sealed record LiveClassSessionSummaryDto(
     string Status,
     bool IsEnrolled,
     bool IsJoinAvailable,
-    int CreditCost);
+    int CreditCost,
+    // Past-classes list only: this learner can open a Ready recording now.
+    bool RecordingReady = false);
 
 /// <summary>Admin-only session summary with Zoom provisioning fields.</summary>
 public sealed record AdminLiveClassSessionSummaryDto(
