@@ -344,6 +344,35 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.Same(client, services.GetRequiredService<ITypeSafeJudgmentClient>());
     }
 
+    [Fact]
+    public async Task ModelPinProbe_UsesRegistryKeyWithoutEnvironmentKey()
+    {
+        var registry = new MutableKeyRegistry { Key = "registry-key" };
+        var sentKeys = new List<string>();
+        var handler = new StubHandler((request, _) =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("/v1/models", request.RequestUri!.AbsolutePath);
+            sentKeys.Add(request.Headers.Authorization!.Parameter!);
+            return Task.FromResult(JsonResponse("""{"models":[{"name":"jev-1.13.0"}]}"""));
+        });
+        using var services = new ServiceCollection()
+            .AddScoped<IAiProviderRegistry>(_ => registry)
+            .AddSingleton<IHttpClientFactory>(new SingleClientFactory(new HttpClient(handler)))
+            .AddSingleton<IOptions<TypeSafeOptions>>(Options.Create(new TypeSafeOptions { Enabled = true }))
+            .AddLogging()
+            .AddSingleton<TypeSafeModelPinProbe>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var probe = services.GetRequiredService<TypeSafeModelPinProbe>();
+
+        await probe.StartAsync(CancellationToken.None);
+        await probe.ExecuteTask!;
+        await probe.StopAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "registry-key" }, sentKeys);
+        Assert.Equal(1, registry.Reads);
+    }
+
     // ── Governed service ────────────────────────────────────────────────────
 
     [Fact]
