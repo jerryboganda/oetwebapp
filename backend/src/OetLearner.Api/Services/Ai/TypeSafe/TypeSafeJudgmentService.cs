@@ -73,7 +73,9 @@ public sealed class TypeSafeJudgmentService(
             ResourceType = call.ResourceType,
             ResourceVersion = call.ResourceVersion,
             RequestHash = requestHash,
-            OperationClass = AiOperationClass.InteractiveLearning,
+            OperationClass = AiFeaturePolicyDefaults.All.TryGetValue(call.FeatureCode, out var defaultPolicy)
+                ? defaultPolicy.OperationClass
+                : AiOperationClass.InteractiveLearning,
             AllowRetryAfterFailure = true,
         }, ct);
 

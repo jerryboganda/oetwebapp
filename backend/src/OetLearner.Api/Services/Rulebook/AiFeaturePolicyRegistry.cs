@@ -163,6 +163,7 @@ public static class AiFeaturePolicyDefaults
     /// generic prefix/keyword heuristic below.</summary>
     private static readonly Dictionary<string, AiOperationClass> ClassOverrides = new(StringComparer.OrdinalIgnoreCase)
     {
+        [AiFeatureCodes.JevDevelopmentTriage] = AiOperationClass.AdminBatch,
         // Admin AI-draft tool for role-play cards — an authoring tool despite
         // not carrying the "admin." prefix.
         [SpeakingAiFeatureCodes.CardDraftV1] = AiOperationClass.AdminBatch,

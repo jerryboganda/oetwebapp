@@ -487,6 +487,9 @@ public static class AiFeatureCodes
     /// or ends a session.</summary>
     public const string JevConversationTurn = "jev.conversation.turn";
 
+    public const string JevResponseVerify = "jev.response.verify";
+    public const string JevDevelopmentTriage = "jev.development.triage";
+
     // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner
