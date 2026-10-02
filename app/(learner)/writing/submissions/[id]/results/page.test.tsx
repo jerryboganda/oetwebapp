@@ -533,3 +533,69 @@ describe('Writing results page — simplified report order (launch handoff UI-3)
     expect(within(ruleChecks!).getByRole('button', { name: /mark this detection as incorrect/i, hidden: true })).toBeInTheDocument();
   });
 });
+
+// Spec review (2 Oct 2026): "What's next?" offers a paid Revise & Resubmit
+// whenever the grade invites a revision of this graded, non-mock letter.
+describe('Writing results page — paid Revise & Resubmit', () => {
+  const INVITED = { ...GRADE, revisionInvite: { shouldOffer: true, reason: 'Significant gains likely on a focused revision.' } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
+    getWritingSubmission.mockResolvedValue(SUBMISSION);
+    getWritingSubmissionGrade.mockResolvedValue(INVITED);
+    getWritingAssessmentV11.mockResolvedValue(null);
+    getTutorReview.mockResolvedValue(null);
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it('links to this letter\'s revise page and keeps "Practice this again"', async () => {
+    renderPage();
+
+    const cta = await screen.findByTestId('revise-and-resubmit');
+    expect(cta).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
+    expect(cta).toHaveTextContent('writing.submissions.results.actions.reviseResubmit');
+    expect(screen.getByRole('link', { name: /practiceAgain/i })).toHaveAttribute('href', '/writing/practice/session/scenario-1');
+    expect(reviseWritingSubmission).not.toHaveBeenCalled();
+  });
+
+  it('is hidden when the grade does not invite a revision', async () => {
+    getWritingSubmissionGrade.mockResolvedValue(GRADE);
+    renderPage();
+
+    await screen.findByText(/I am writing to refer this patient/);
+    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+  });
+
+  it('is hidden on a mock and on a letter that is not graded', async () => {
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, mode: 'mock' });
+    const { unmount } = renderPage();
+    await screen.findByText(/I am writing to refer this patient/);
+    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+    unmount();
+
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, status: 'failed' });
+    renderPage();
+    await screen.findByText(/I am writing to refer this patient/);
+    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+  });
+
+  it('leaves a free-sample letter to its free retry button', async () => {
+    listFreeSamples.mockResolvedValue([{
+      professionId: 'medicine',
+      contentId: 'scenario-1',
+      state: 'retry_available',
+      route: '/writing/submissions/sub-1/revise',
+      limit: 2,
+      successfulCount: 1,
+      remaining: 1,
+      lastResultRoute: '/writing/submissions/sub-1/results',
+      lastSubmissionId: 'sub-1',
+    }]);
+    renderPage();
+
+    expect(await screen.findByTestId('free-sample-revise-cta')).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
+    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+  });
+});

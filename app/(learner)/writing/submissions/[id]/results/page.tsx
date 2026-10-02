@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, FileText, RefreshCw, Share2, Sparkles } from 'lucide-react';
+import { Award, FileText, PenLine, RefreshCw, Share2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -211,6 +211,12 @@ export default function WritingSubmissionResultsPage() {
     : null;
   const freeRevisionHref = freeSampleForThisLetter?.state === 'retry_available'
     ? `/writing/submissions/${encodeURIComponent(freeSampleForThisLetter.lastSubmissionId ?? submissionId)}/revise`
+    : null;
+  // Paid Revise & Resubmit: only on a graded, non-mock letter the grade invites
+  // revising (revisionInvite.shouldOffer). A free-sample letter keeps its own
+  // free retry above instead.
+  const paidRevisionHref = submission?.status === 'graded' && !isMock && offerRevision && !freeSampleForThisLetter
+    ? `/writing/submissions/${encodeURIComponent(submission.id)}/revise`
     : null;
   const practiceRawTotal = assessment
     ? writingRawTotalFromCriterionScores(
@@ -540,13 +546,20 @@ export default function WritingSubmissionResultsPage() {
               </Link>
             </Button>
           ) : null}
+          {paidRevisionHref ? (
+            <Button asChild>
+              <Link href={paidRevisionHref} data-testid="revise-and-resubmit">
+                <PenLine className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.reviseResubmit')}
+              </Link>
+            </Button>
+          ) : null}
           {/* "Practice this again" is a genuinely new attempt — links to the
               scenario's practice session so it runs the same entitlement
               gate as any other new attempt (Writing Rule Enforcement
               Addendum Rev5, 10 Sep 2026, §13). This submission's own
               letter/score/feedback stay reviewable, unchanged, above. */}
           {submission ? (
-            <Button asChild variant={freeRevisionHref ? 'outline' : 'primary'}>
+            <Button asChild variant={freeRevisionHref || paidRevisionHref ? 'outline' : 'primary'}>
               <Link href={`/writing/practice/session/${encodeURIComponent(submission.scenarioId)}`}>
                 <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.practiceAgain')}
               </Link>
