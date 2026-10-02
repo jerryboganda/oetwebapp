@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { letterTextToDoc } from '@/lib/writing/letter-text';
+import { countLetterWords, letterTextToDoc } from '@/lib/writing/letter-text';
 import type { WritingEditorMode } from '@/lib/writing/types';
 import type {
   AnnotationDecoration,
@@ -101,12 +101,7 @@ export interface WritingEditorV2Props {
   children?: ReactNode;
 }
 
-function countWords(s: string): number {
-  if (!s) return 0;
-  const trimmed = s.trim();
-  if (trimmed.length === 0) return 0;
-  return trimmed.split(/\s+/u).length;
-}
+const countWords = countLetterWords;
 
 interface TiptapModule {
   useEditor: (config: unknown) => unknown;
@@ -415,7 +410,7 @@ function TiptapEditor({
     onBlur: () => onBlur?.(),
   }) as {
     getText(): string;
-    setEditable(v: boolean): void;
+    setEditable(v: boolean, emitUpdate?: boolean): void;
     setOptions(opts: { extensions?: unknown[] }): void;
     view?: { dispatch?: (tr: unknown) => void };
   } | null;
@@ -423,7 +418,8 @@ function TiptapEditor({
   // Sync editable state when `disabled` flips.
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!disabled);
+    // No update event: toggling editability is not an edit by the learner.
+    editor.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   // Reconfigure the annotation plugin when the upstream array changes. Tiptap

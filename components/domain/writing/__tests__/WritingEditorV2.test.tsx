@@ -16,15 +16,17 @@ beforeAll(() => {
 
 /** Tiptap stores its instance on the ProseMirror element ("for tests"). */
 async function mountedEditor(): Promise<{ dom: HTMLElement; editor: Editor }> {
-  const dom = await waitFor(
+  return waitFor(
     () => {
-      const element = document.querySelector<HTMLElement>('.ProseMirror');
-      if (!element) throw new Error('Tiptap has not mounted yet');
-      return element;
+      const dom = screen.getByTestId('writing-editor').querySelector<HTMLElement>('.ProseMirror');
+      const editor = (dom as unknown as { editor?: Editor } | null)?.editor;
+      if (!dom || !editor || editor.isDestroyed) {
+        throw new Error(`No live Tiptap editor inside writing-editor yet:\n${document.body.innerHTML.slice(0, 4000)}`);
+      }
+      return { dom, editor };
     },
     { timeout: 10_000 },
   );
-  return { dom, editor: (dom as unknown as { editor: Editor }).editor };
 }
 
 /** Types like a key press does in ProseMirror: input rules get the first say, else the text is inserted. */
