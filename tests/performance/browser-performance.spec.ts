@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { bootstrapSessionForRole, persistSessionToStorageState } from '../e2e/fixtures/auth-bootstrap';
 import {
   DEFAULT_PERFORMANCE_BUDGETS,
   evaluatePerformanceBudget,
@@ -39,6 +40,37 @@ const routeByProject: Record<string, RouteDefinition> = {
   'perf-admin-chromium': { route: '/admin', readiness: 'admin' },
   'perf-admin-pixel': { route: '/admin', readiness: 'admin' },
 };
+
+// Refresh tokens rotate single-use and each sign-in is the account's only live
+// session (security spec §3.1), so the storage state captured once in
+// perf-setup is spent by the first project that refreshes it: every later
+// learner/admin project used to land on /sign-in. Mint a fresh session just
+// before each authenticated measurement instead; projects run one at a time.
+// perf-setup still prepares the accounts (trusted device, tours completed).
+test.use({
+  // `provide` is Playwright's fixture callback (named apart from React's `use`).
+  storageState: async ({ playwright }, provide, testInfo) => {
+    const readiness = routeByProject[testInfo.project.name]?.readiness;
+    const role = readiness === 'learner' || readiness === 'admin' ? readiness : null;
+    if (!role) {
+      await provide(undefined);
+      return;
+    }
+
+    const api = await playwright.request.newContext({
+      ignoreHTTPSErrors: testInfo.project.use.ignoreHTTPSErrors,
+      extraHTTPHeaders: testInfo.project.use.extraHTTPHeaders,
+    });
+    try {
+      const session = await bootstrapSessionForRole(api, role, undefined, { useDiskCache: false, isolateSession: true });
+      const statePath = testInfo.outputPath(`${role}-storage-state.json`);
+      await persistSessionToStorageState(session, statePath, api, role);
+      await provide(statePath);
+    } finally {
+      await api.dispose();
+    }
+  },
+});
 
 function sanitizeErrorMessage(message: string) {
   return message
@@ -212,6 +244,13 @@ async function collectBrowserPerformance(
     // keep it out of the zero-tolerance error budget.
     if (response.status() === 429) {
       messages.push(`responseratelimited: ${response.request().method()} ${pathname} (${response.status()})`);
+      return;
+    }
+
+    // The placement test is gated: its status route answers 404, as if absent,
+    // until the learner may open it, and the app reads that as "hide the entry".
+    if (response.status() === 404 && pathname.endsWith('/v1/placement/status')) {
+      messages.push(`responsefeatureabsent: ${response.request().method()} ${pathname} (404)`);
       return;
     }
 

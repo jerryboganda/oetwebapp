@@ -1,8 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
-const performanceDeviceId = process.env.PERF_DEVICE_ID
-  ?? `perf-playwright-${process.env.GITHUB_RUN_ID ?? 'local'}`;
+// The auth bootstrap (tests/e2e/fixtures/auth-bootstrap.ts) signs in with
+// E2E_DEVICE_ID and binds the session's refresh token to it. Every browser
+// request must present that same id: any other id fails the first
+// /v1/auth/refresh closed (device mismatch, 403) and lands on /sign-in.
+const performanceDeviceId = process.env.E2E_DEVICE_ID ?? 'e2e-playwright-harness';
 
 export default defineConfig({
   testDir: '.',
