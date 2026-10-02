@@ -206,9 +206,12 @@ export async function openTaskFromLibrary(session, task) {
   await page.waitForURL((u) => u.pathname === ROUTES.practice(task.scenarioId), { timeout: 60_000 });
 }
 
+// The timer renders 0 while the task is still loading ("Loading scenario..."): wait until it carries a real
+// reading (up to 60 s) before reading it, so a slow load is never judged as a lost timer.
 export async function readTimer(page) {
   const timer = page.locator(tid(TEST_IDS.timer)).first();
   await timer.waitFor({ state: 'attached', timeout: 60_000 });
+  await page.waitForFunction((sel) => Number(document.querySelector(sel)?.getAttribute('data-seconds-remaining')) > 0, tid(TEST_IDS.timer), { timeout: 60_000 }).catch(() => undefined);
   return { phase: await timer.getAttribute('data-phase'), seconds: Number(await timer.getAttribute('data-seconds-remaining')) };
 }
 
@@ -277,13 +280,19 @@ export async function gradingSteps(page) {
 const RAW = '?qa=raw';
 
 /** Polls the submission until graded / failed (or the deadline). */
-export async function waitGradeOutcome(session, submissionId, ms = 15 * 60_000) {
-  const deadline = Date.now() + ms;
+// afterRetry: a Retry was just pressed; the row still reads `failed` until the server re-queues it, so a
+// `failed` read only counts once the row has left `failed` (or after 90 s, when the Retry evidently did nothing).
+export async function waitGradeOutcome(session, submissionId, ms = 15 * 60_000, { afterRetry = false } = {}) {
+  const started = Date.now();
+  const deadline = started + ms;
   let last = null;
+  let leftFailed = !afterRetry;
   while (Date.now() < deadline) {
     const res = await session.api(ENDPOINTS.submission(submissionId) + RAW);
     last = res.body;
-    if (last?.status === 'graded' || last?.status === 'failed') return last;
+    if (last?.status && last.status !== 'failed') leftFailed = true;
+    if (last?.status === 'graded') return last;
+    if (last?.status === 'failed' && (leftFailed || Date.now() - started > 90_000)) return last;
     await sleep(5_000);
   }
   return last ?? { status: 'timeout' };
@@ -397,7 +406,11 @@ export async function mobileChecks(context, url, shotPrefix, targets = null) {
       const at = `${viewport.width}px`;
       await page.setViewportSize(viewport);
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await page.locator(SELECTORS.mainContent).first().waitFor({ state: 'visible', timeout: 60_000 });
+      if (!(await page.locator(SELECTORS.mainContent).first().waitFor({ state: 'visible', timeout: 60_000 }).then(() => true, () => false))) {
+        const diag = await pageDiagnostics(page, shotPrefix ? `${shotPrefix}-mobile-${viewport.width}-failure.png` : null);
+        problems.push(`${at}: the native-shell page never showed its content (${JSON.stringify(diag)})`);
+        continue;
+      }
       await page.waitForTimeout(1_000);
       const handleVisible = await page.locator(SELECTORS.handle).first().isVisible().catch(() => false);
       const found = [];

@@ -176,7 +176,7 @@ async function runTest(ctx, row, needs, fn) {
       t.blocked.push(error.message);
       for (const group of needs) if (!ctx.contractMissing[group] && error.message.includes(`live ${group} page`)) ctx.contractMissing[group] = error.message;
     } else if (error instanceof Blocked) t.blocked.push(error.message);
-    else t.problems.push(`error: ${String(error.message).split('\n')[0].slice(0, 300)}`);
+    else t.problems.push(`error: ${String(error.message).replace(/\s+/g, ' ').slice(0, 400)}`);
   }
   let status = verdictOf(t);
   if (ctx.deploy.epoch !== epoch || ctx.deploy.busy) status = 'VOID_DEPLOY';
@@ -241,7 +241,7 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
         t.problems.push('no visible Retry on the grading page');
         await session.api(ENDPOINTS.retryGrade(submissionId), 'POST', {});
       }
-      result = await b.waitGradeOutcome(session, submissionId);
+      result = await b.waitGradeOutcome(session, submissionId, 15 * 60_000, { afterRetry: true });
     } else if (opts.expectFailure && !opts.clientFault) t.problems.push(`the fault flag did not fail the first run (status ${result.status})`);
     return { submissionId, result };
   });
