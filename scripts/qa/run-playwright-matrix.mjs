@@ -249,6 +249,7 @@ const smokeRuns = [
         'tests/e2e/writing-v2/drills.spec.ts',
         'tests/e2e/writing-v2/stats.spec.ts',
         'tests/e2e/writing-v2/mocks.spec.ts',
+        'tests/e2e/writing-v2/draft-persistence.spec.ts',
       ],
       projects: ['chromium-learner'],
       workers: 1,
