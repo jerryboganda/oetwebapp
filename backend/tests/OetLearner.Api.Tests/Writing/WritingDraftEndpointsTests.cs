@@ -78,6 +78,34 @@ public sealed class WritingDraftEndpointsTests(TestWebApplicationFactory factory
         Assert.Equal(scenarioId, draft.GetProperty("scenarioId").GetGuid());
     }
 
+    [Fact]
+    public async Task MyWork_ListsOnlyTheCallersOwnDraft_InTheContractShape()
+    {
+        using var client = await LearnerClientAsync();
+        using var other = await LearnerClientAsync();
+        var scenarioId = Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/v1/writing/drafts/{scenarioId}/practice", Body("Dear Dr Green", 0))).StatusCode);
+
+        var response = await client.GetAsync("/v1/writing/my-work?limit=5");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await JsonAsync(response);
+        Assert.Equal(new[] { "hasMore", "items" }, body.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        var item = Assert.Single(body.GetProperty("items").EnumerateArray());
+        Assert.Equal(
+            new[]
+            {
+                "actions", "autoRetrying", "canRetry", "draftId", "isFreeSample", "isRevision", "key", "kind",
+                "lastActivityAt", "letterType", "mode", "phase", "rawStatus", "readingSecondsRemaining", "scenarioId",
+                "state", "submissionId", "title", "wordCount", "writingSecondsRemaining",
+            },
+            item.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(("draft", "draft", scenarioId), (item.GetProperty("kind").GetString(), item.GetProperty("state").GetString(), item.GetProperty("scenarioId").GetGuid()));
+        var action = Assert.Single(item.GetProperty("actions").EnumerateArray());
+        Assert.Equal(("resume", $"/writing/practice/session/{scenarioId}"), (action.GetProperty("kind").GetString(), action.GetProperty("href").GetString()));
+
+        Assert.Empty((await JsonAsync(await other.GetAsync("/v1/writing/my-work"))).GetProperty("items").EnumerateArray());
+    }
+
     private static object Body(string content, int? expectedVersion) => new
     {
         content,
