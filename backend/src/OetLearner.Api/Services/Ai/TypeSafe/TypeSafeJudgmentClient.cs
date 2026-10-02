@@ -319,6 +319,8 @@ public sealed class TypeSafeJudgmentClient(
                     : throw new TypeSafeHttpException("TypeSafe choice answer missing choice.", 0);
                 var probabilities = ParseProbabilities(answer);
                 var confidence = RequiredProbability(answer, "confidence");
+                if (!probabilities.ContainsKey(choice))
+                    throw new TypeSafeHttpException("TypeSafe choice is absent from its probabilities.", 0);
                 return new JevAnswer(JevQuestionKind.Choice, null, new JevChoiceAnswer(choice, probabilities, confidence), null);
             }
             case "score":
@@ -339,10 +341,14 @@ public sealed class TypeSafeJudgmentClient(
             throw new TypeSafeHttpException("TypeSafe answer missing probabilities.", 0);
 
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
-        foreach (var p in probs.EnumerateObject())
+        foreach (var probabilityProperty in probs.EnumerateObject())
         {
-            result[p.Name] = p.Value.ValueKind == JsonValueKind.Number ? p.Value.GetDouble() : 0d;
+            if (!result.TryAdd(probabilityProperty.Name, RequiredProbability(probs, probabilityProperty.Name)))
+                throw new TypeSafeHttpException("TypeSafe probabilities contain duplicate options.", 0);
         }
+
+        if (result.Count == 0 || Math.Abs(result.Values.Sum() - 1d) > 0.001d)
+            throw new TypeSafeHttpException("TypeSafe probabilities are not normalized.", 0);
 
         return result;
     }
