@@ -455,6 +455,22 @@
     transform: translateY(100%) !important;
   }
 
+  /* The AI-assistant launcher (AiAssistantWidget, 3.5rem tall) floats
+     bottom-right, 0.75rem above the bottom nav (lg+: 1.5rem from the bottom).
+     While it is mounted, the scrolling #main-content reserves its height plus
+     0.5rem, so the last content and any scrolled-to control stay clear of it. */
+  html:has([data-ai-assistant-fab]) #main-content {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 4.75rem);
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 4.75rem);
+  }
+
+  @media (width >= 64rem) {
+    html:has([data-ai-assistant-fab]) #main-content {
+      padding-bottom: 5.5rem;
+      scroll-padding-bottom: 5.5rem;
+    }
+  }
+
   .touch-target {
     min-width: 44px;
     min-height: 44px;

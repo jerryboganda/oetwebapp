@@ -46,6 +46,13 @@ vi.mock('@/components/onboarding/help-center-drawer', () => ({
   HelpCenterDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="help-center-drawer" /> : null),
 }));
 
+const { mockHardReload } = vi.hoisted(() => ({ mockHardReload: vi.fn() }));
+vi.mock('@/lib/shell/hard-reload', () => ({ hardReload: mockHardReload }));
+// The update dialog is a shell-only dynamic chunk; stand in for it.
+vi.mock('next/dynamic', () => ({
+  default: () => ({ open }: { open: boolean }) => (open ? <div data-testid="update-dialog" /> : null),
+}));
+
 import { TopNav } from '../top-nav';
 
 describe('TopNav header safe-area box model', () => {
@@ -187,5 +194,40 @@ describe('TopNav search triggers', () => {
 
     fireEvent.click(screen.getByTestId('search-trigger'));
     expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Launch handoff UI-2: below lg the native shells hide the floating quick-access
+// handle, so "Reload app" / "Check for updates" move into the mobile menu.
+describe('TopNav native-shell app controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { avatarUrl: null }, signOut: mockSignOut });
+  });
+  afterEach(() => {
+    delete document.documentElement.dataset.runtimeKind;
+  });
+
+  it('are absent on the web', () => {
+    document.documentElement.dataset.runtimeKind = 'web';
+    renderWithRouter(<TopNav showBrand userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />, { pathname: '/' });
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+
+    expect(screen.queryByTestId('mobile-menu-reload-app')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-menu-check-updates')).not.toBeInTheDocument();
+  });
+
+  it('reload the app and open the update dialog inside the native shell', () => {
+    document.documentElement.dataset.runtimeKind = 'capacitor-native';
+    renderWithRouter(<TopNav showBrand userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />, { pathname: '/' });
+
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    fireEvent.click(screen.getByTestId('mobile-menu-reload-app'));
+    expect(mockHardReload).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
+    expect(screen.queryByTestId('update-dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('mobile-menu-check-updates'));
+    expect(screen.getByTestId('update-dialog')).toBeInTheDocument();
   });
 });

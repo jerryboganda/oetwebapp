@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // Launch handoff UI-1 (2 Oct 2026): on desktop the Writing result card must
 // hold all of its text — no label or value may spill out of the card or out of
@@ -132,6 +132,8 @@ async function mockWritingResult(page: Page) {
 }
 
 async function openWritingResult(page: Page) {
+  // No reveal transforms mid-measurement.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await mockWritingResult(page);
   await page.goto(`/writing/submissions/${SUBMISSION_ID}/results`, { waitUntil: 'domcontentloaded' });
   // CountUp has settled once the real value is shown; measure after that.
@@ -180,6 +182,92 @@ test.describe('Writing result card containment @learner @writing-v2 @responsive'
       expect(geometry.outside, `text outside the card @${width}`).toEqual([]);
       expect(geometry.overflowing, `card/tile overflow @${width}`).toEqual([]);
       expect(geometry.documentWidth, `document overflow @${width}`).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    });
+  }
+});
+
+// Launch handoff UI-2 (2 Oct 2026): inside the native app shell on a phone,
+// the floating quick-access handle and the bottom nav must never cover the
+// report — the last content and "View all corrections" stay >= 8 px clear.
+
+const PHONES = [
+  { width: 360, height: 780 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+] as const;
+
+/**
+ * Fakes the Capacitor shell. The app bootstrap stamps `web` on <html> after
+ * load, so a MutationObserver keeps re-stamping the native runtime kind.
+ */
+async function emulateNativeShell(page: Page) {
+  await page.addInitScript(() => {
+    const stamp = () => {
+      const root = document.documentElement;
+      if (root && root.dataset.runtimeKind !== 'capacitor-native') root.dataset.runtimeKind = 'capacitor-native';
+    };
+    stamp();
+    new MutationObserver(stamp).observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['data-runtime-kind'],
+    });
+  });
+}
+
+/** The control is top-most at its centre and its bottom sits >= 8 px above the bottom nav. */
+async function expectClearOfBottomNav(page: Page, control: Locator, label: string) {
+  const nav = await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox();
+  const box = await control.boundingBox();
+  expect(nav, 'bottom nav box').not.toBeNull();
+  expect(box, `${label} box`).not.toBeNull();
+  if (!nav || !box) return;
+  expect(box.y + box.height, `${label} reaches under the bottom nav`).toBeLessThanOrEqual(nav.y - 8);
+  const onTop = await control.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return Boolean(hit && (hit === element || element.contains(hit)));
+  });
+  expect(onTop, `${label} is covered by another element`).toBe(true);
+}
+
+test.describe('Writing result on a phone in the native shell @learner @writing-v2 @responsive', () => {
+  for (const viewport of PHONES) {
+    test(`nothing covers the report at ${viewport.width}px`, async ({ page }, testInfo) => {
+      if (testInfo.project.name !== 'chromium-learner') test.skip();
+      await page.setViewportSize(viewport);
+      await emulateNativeShell(page);
+      await openWritingResult(page);
+
+      // Positive control: the shell emulation took effect (the app controls
+      // only appear in the menu inside a native shell), and the floating
+      // handle stays hidden below lg.
+      await page.getByRole('button', { name: 'Open menu' }).click();
+      await expect(page.getByTestId('mobile-menu-reload-app')).toBeVisible();
+      await expect(page.getByTestId('mobile-menu-check-updates')).toBeVisible();
+      await page.getByRole('button', { name: 'Close menu' }).click();
+      await expect(page.getByTestId('shell-controls-handle')).toBeHidden();
+      await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
+
+      const viewAll = page.getByTestId('corrections-view-all');
+      // scroll-padding: aligning the control to the bottom keeps it above the nav.
+      await viewAll.evaluate((element) => element.scrollIntoView({ block: 'end' }));
+      await expectClearOfBottomNav(page, viewAll, `View all corrections @${viewport.width}`);
+      await viewAll.click();
+      await expect(page.getByTestId('corrections-full-list').getByRole('listitem')).toHaveCount(8);
+
+      // Scrolled to the very end, the last report block and its actions clear the nav.
+      await page.locator('#main-content').evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      const lastSection = page.getByTestId('result-section').last();
+      await expect(lastSection).toHaveAttribute('data-section', 'next-actions');
+      await expectClearOfBottomNav(page, lastSection, `last report section @${viewport.width}`);
+      await expectClearOfBottomNav(page, page.getByRole('link', { name: /practiceAgain|Practice this again/ }), `Practice this again @${viewport.width}`);
+
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow @${viewport.width}`).toBeLessThanOrEqual(1);
     });
   }
 });

@@ -7,7 +7,8 @@ import { AuthContext } from '@/contexts/auth-context';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import { PLACEMENT_NAV_HREF, usePlacementAccess } from '@/hooks/use-placement-access';
 import type { UserRole } from '@/lib/types/auth';
-import { HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import { ArrowDownToLine, HelpCircle, LogOut, Menu, RefreshCw, Settings, X } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import { type ReactNode, useContext, useMemo, useState } from 'react';
@@ -23,6 +24,15 @@ import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { TourLauncher } from '@/components/onboarding/tour-launcher';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
+import { hardReload } from '@/lib/shell/hard-reload';
+import { useAppVersionGate } from '@/app/providers/AppVersionGateProvider';
+
+// Shell-only, so it stays out of the web bundle (as in runtime-shell-bridges).
+const UpdateDialog = dynamic(
+  () => import('@/components/shell/UpdateDialog').then((module) => module.UpdateDialog),
+  { ssr: false },
+);
 
 export interface MobileMenuSection {
   label: string;
@@ -108,6 +118,8 @@ export function TopNav({
   onOpenSearch,
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const { blocked: appVersionBlocked } = useAppVersionGate();
   const pathname = usePathname() ?? '/';
   // Close the menu when the route changes under a shell that stays mounted
   // (admin/expert today; the Android back button only calls history.back()).
@@ -460,6 +472,37 @@ export function TopNav({
                     </ul>
                   )}
 
+                  {/* Below lg the native shells' floating quick-access handle is
+                      hidden (it covered page content), so its actions live here. */}
+                  {getAppRuntimeKind() !== 'web' && !appVersionBlocked ? (
+                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-4">
+                      <button
+                        type="button"
+                        data-testid="mobile-menu-reload-app"
+                        onClick={() => {
+                          closeMobileMenu();
+                          void hardReload();
+                        }}
+                        className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-sm font-semibold text-navy shadow-sm hover-primary"
+                      >
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                        Reload app
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="mobile-menu-check-updates"
+                        onClick={() => {
+                          closeMobileMenu();
+                          setUpdateOpen(true);
+                        }}
+                        className="pressable flex items-center gap-2 rounded-xl border border-border/60 bg-surface/95 px-3 py-2 text-sm font-semibold text-navy shadow-sm hover-primary"
+                      >
+                        <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+                        Check for updates
+                      </button>
+                    </div>
+                  ) : null}
+
                   {signOut && (
                     <div className={cn('pt-4', hasSectionedMenu && 'mt-4 border-t border-border/60')}>
                       <button
@@ -480,6 +523,8 @@ export function TopNav({
           </div>
         )}
       </AnimatePresence>
+
+      {updateOpen ? <UpdateDialog open onClose={() => setUpdateOpen(false)} /> : null}
     </>
   );
 }
