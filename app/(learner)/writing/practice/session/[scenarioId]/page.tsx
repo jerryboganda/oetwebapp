@@ -34,6 +34,7 @@ import {
   getWritingDraftV2,
   getWritingHighlights,
   getWritingScenario,
+  getWritingSubmission,
   putWritingHighlights,
 } from '@/lib/writing/api';
 import {
@@ -211,7 +212,8 @@ export default function WritingPracticeSessionPage() {
   // ── Load: draft first, then (only for a new attempt) eligibility ───────────
   // 1. Strict draft GET: only a 404 means "no draft" — a 5xx or a dropped
   //    connection is the Retry state, never "blank editor + overwrite".
-  // 2. Submitted and still grading (or failed) → the grading page.
+  // 2. Submitted and still grading, or failed with Retry available → the
+  //    grading page (a final failure with no Retry starts a new attempt).
   // 3. An active draft RESUMES without the eligibility call (the attempt was
   //    paid at task open). No draft, or a graded one ("Practice this again"),
   //    starts a new attempt: eligibility first — a learner without credits
@@ -226,8 +228,17 @@ export default function WritingPracticeSessionPage() {
       if (draft?.status === 'submitted') {
         clearDraftShadow(shadowKey);
         if (draft.submissionId && draft.submissionStatus && GRADING_STATUSES.has(draft.submissionStatus)) {
-          routerRef.current.replace(`/writing/submissions/${encodeURIComponent(draft.submissionId)}/grading`);
-          return;
+          // A FINAL failure (no Retry: task_not_ready / manual_review /
+          // letter_invalid) would loop the learner back to a dead end: like a
+          // graded letter, it opens a new attempt instead.
+          const finalFailure =
+            draft.submissionStatus === 'failed'
+            && (await getWritingSubmission(draft.submissionId)).canRetry === false;
+          if (cancelled) return;
+          if (!finalFailure) {
+            routerRef.current.replace(`/writing/submissions/${encodeURIComponent(draft.submissionId)}/grading`);
+            return;
+          }
         }
       }
       const active = draft && draft.status !== 'submitted' ? draft : null;

@@ -11,7 +11,7 @@ import {
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { Button } from '@/components/ui/button';
-import { useWritingDraftSync, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
+import { useWritingDraftSync, type DraftClockSnapshot, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
 import { loadStoredSession } from '@/lib/auth-storage';
 import {
   beginWritingMockWriting,
@@ -170,6 +170,8 @@ export default function WritingPaperSessionPage() {
   // and on tab refocus. Null until the session/window is resolved.
   const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
   const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
+  // Writing seconds still owed when the reading window ends (direct launch).
+  const writingRemainingRef = useRef(WRITING_WINDOW_SECONDS);
 
   const [text, setText] = useState('');
   const [wordCount, setWordCount] = useState(0);
@@ -327,6 +329,22 @@ export default function WritingPaperSessionPage() {
         }
         const restored = reconcileDraft(active, shadow);
         const words = restored.wordCount || countLetterWords(restored.text);
+        // Direct launch: the clock is this page's own, so it resumes from the
+        // seconds left at the last save (paused while away). A mock session's
+        // clock stays server-owned.
+        if (resolution === 'scenario' && restored.phase) {
+          const now = Date.now();
+          const reading = Math.max(0, Math.min(WRITING_READING_WINDOW_SECONDS, restored.readingSecondsRemaining ?? WRITING_READING_WINDOW_SECONDS));
+          const writing = Math.max(0, Math.min(WRITING_WINDOW_SECONDS, restored.writingSecondsRemaining ?? WRITING_WINDOW_SECONDS));
+          writingRemainingRef.current = writing;
+          if (restored.phase === 'writing') {
+            beganWritingRef.current = true;
+            setWritingDeadlineMs(now + writing * 1000);
+            setPhase('writing');
+          } else {
+            setReadingDeadlineMs(now + reading * 1000);
+          }
+        }
         setText(restored.text);
         setWordCount(words);
         setError(null);
@@ -350,7 +368,37 @@ export default function WritingPaperSessionPage() {
     };
   }, [resolution, scenarioId, sessionDone, sessionStartedAt, userId, draftAttempt]);
 
-  const sync = useWritingDraftSync({ scenarioId: scenarioId ?? '', mode: 'mock', userId, baseline });
+  // The direct-launch clock is saved with every draft save (and a 10 s
+  // heartbeat) so reopening resumes it; a mock session's clock is server-owned.
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const readingDeadlineRef = useRef(readingDeadlineMs);
+  readingDeadlineRef.current = readingDeadlineMs;
+  const writingDeadlineRef = useRef(writingDeadlineMs);
+  writingDeadlineRef.current = writingDeadlineMs;
+  const getClock = useCallback((): DraftClockSnapshot => {
+    const now = Date.now();
+    const left = (deadline: number | null) => (deadline == null ? 0 : Math.max(0, Math.ceil((deadline - now) / 1000)));
+    if (phaseRef.current === 'reading') {
+      return {
+        phase: 'reading',
+        readingSecondsRemaining: left(readingDeadlineRef.current),
+        writingSecondsRemaining: writingRemainingRef.current,
+        timeSpentSeconds: 0,
+      };
+    }
+    const writing = phaseRef.current === 'writing' ? left(writingDeadlineRef.current) : 0;
+    return { phase: 'writing', readingSecondsRemaining: 0, writingSecondsRemaining: writing, timeSpentSeconds: WRITING_WINDOW_SECONDS - writing };
+  }, []);
+  const ownClock = resolution === 'scenario';
+  const sync = useWritingDraftSync({
+    scenarioId: scenarioId ?? '',
+    mode: 'mock',
+    userId,
+    baseline,
+    getClock: ownClock ? getClock : undefined,
+    heartbeatMs: ownClock && !submitted ? 10_000 : null,
+  });
   const { update: updateDraft, flush: flushDraft, discard: discardDraft } = sync;
 
   // ── beforeunload guard while actively writing (strict) ────────────────────
@@ -424,7 +472,8 @@ export default function WritingPaperSessionPage() {
     // Provisional deadline BEFORE flipping phase so the writing countdown never
     // momentarily reads 0:00 during the begin-writing round-trip; corrected from
     // the server response below for the mock path.
-    setWritingDeadlineMs(Date.now() + WRITING_WINDOW_SECONDS * 1000);
+    // Direct launch: the writing seconds restored with the draft (a full window otherwise).
+    setWritingDeadlineMs(Date.now() + writingRemainingRef.current * 1000);
     startedAtRef.current = Date.now();
     setPhase('writing');
     if (resolution === 'mock' && session?.id) {
