@@ -87,6 +87,46 @@ describe('SessionManager', () => {
     await vi.waitFor(async () => expect(await types(h, session.id)).toContain('turn_complete'));
   });
 
+  it.each([
+    { taskKind: 'grant_permission' },
+    { riskLevel: 'approved' },
+    { taskConfidence: 0.49 },
+    { riskConfidence: Number.NaN },
+    { model: 'jev-latest' },
+  ])('rejects malformed Jev advice before opening an engine: %j', async (invalid) => {
+    activateLease(h);
+    const session = await h.sessions.create({ engine: 'claude', model: 'model-a', mode: 'guarded' });
+    const jevAdvisory = {
+      status: 'ok', model: 'jev-1.13.0', requiresHumanReview: false,
+      taskKind: 'debug', taskConfidence: 1, riskLevel: 'elevated', riskConfidence: 1,
+      ...invalid,
+    };
+
+    await expectHttp(h.sessions.sendMessage(session.id, { text: 'Investigate', jevAdvisory }), 400);
+    expect(h.adapters.claude.turns).toHaveLength(0);
+    expect(h.sessions.get(session.id).status).toBe('idle');
+  });
+
+  it('does not turn low-risk Jev advice into permission for a read-only write', async () => {
+    activateLease(h);
+    const decisions: ToolDecision[] = [];
+    h.adapters.codex.script = async (turn) => {
+      decisions.push(await turn.hooks.onToolCall({ toolCallId: 'write', name: 'fileChange', input: {}, writePaths: ['src/a.ts'] }, turn.signal));
+    };
+    const session = await h.sessions.create({ engine: 'codex', model: 'model-a', mode: 'read_only' });
+    await h.sessions.sendMessage(session.id, {
+      text: 'Review the module',
+      jevAdvisory: {
+        status: 'ok', model: 'jev-1.13.0', requiresHumanReview: false,
+        taskKind: 'review', taskConfidence: 1, riskLevel: 'low', riskConfidence: 1,
+      },
+    });
+
+    await vi.waitFor(() => expect(decisions).toHaveLength(1));
+    expect(decisions[0]).toMatchObject({ behavior: 'deny' });
+    expect(h.approvals.size).toBe(0);
+  });
+
   it('rejects unknown models, unsupported efforts and signed-out engines', async () => {
     await expectHttp(h.sessions.create({ engine: 'claude', model: 'nope', mode: 'guarded' }), 400, 'unknown_model');
     await expectHttp(h.sessions.create({ engine: 'claude', model: 'model-b', effort: 'high', mode: 'guarded' }), 400, 'effort_not_supported');
