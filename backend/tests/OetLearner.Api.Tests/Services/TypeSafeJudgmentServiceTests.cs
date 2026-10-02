@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -315,6 +316,34 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.Equal(3, calls); // initial + MaxRetries(2)
     }
 
+    [Fact]
+    public async Task Client_UsesRegistryKeyAndObservesRotation()
+    {
+        var registry = new MutableKeyRegistry { Key = "registry-first" };
+        var sentKeys = new List<string>();
+        var handler = new StubHandler((request, _) =>
+        {
+            sentKeys.Add(request.Headers.Authorization!.Parameter!);
+            return Task.FromResult(JsonResponse(SuccessBody()));
+        });
+        using var services = new ServiceCollection()
+            .AddScoped<IAiProviderRegistry>(_ => registry)
+            .AddSingleton<IHttpClientFactory>(new SingleClientFactory(new HttpClient(handler)))
+            .AddSingleton<IOptions<TypeSafeOptions>>(Options.Create(EnabledOptions()))
+            .AddSingleton<ITypeSafeJudgmentClient, TypeSafeJudgmentClient>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var client = services.GetRequiredService<ITypeSafeJudgmentClient>();
+        var payload = TypeSafeRequestBuilder.BuildPayload(SampleRequest(), "jev-1.13.0");
+
+        await client.SendAsync(payload, CancellationToken.None);
+        registry.Key = "registry-rotated";
+        await client.SendAsync(payload, CancellationToken.None);
+
+        Assert.Equal(new[] { "registry-first", "registry-rotated" }, sentKeys);
+        Assert.Equal(2, registry.Reads);
+        Assert.Same(client, services.GetRequiredService<ITypeSafeJudgmentClient>());
+    }
+
     // ── Governed service ────────────────────────────────────────────────────
 
     [Fact]
@@ -460,6 +489,23 @@ public sealed class TypeSafeJudgmentServiceTests
     private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => client;
+    }
+
+    private sealed class MutableKeyRegistry : IAiProviderRegistry
+    {
+        public string? Key { get; set; }
+        public int Reads { get; private set; }
+
+        public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
+        {
+            Assert.Equal(TypeSafeOptions.ProviderCode, providerCode);
+            Reads++;
+            return Task.FromResult(Key);
+        }
+
+        public Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private sealed class FakeRecorder(DirectAiOperationLease? lease = null) : IDirectAiCallRecorder
