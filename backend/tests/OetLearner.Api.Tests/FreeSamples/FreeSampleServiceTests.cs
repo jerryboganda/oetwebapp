@@ -354,16 +354,20 @@ public sealed class FreeSampleServiceTests
         Assert.False(await svc.IsOfferedAsync("u1", "writing", content, default));                   // one use is being graded
         var grading = (await svc.ListAsync("u1", "writing", default)).Single();
         Assert.Equal(FreeSampleService.StateInProgress, grading.State);
-        Assert.Equal($"/writing/submissions/{first:D}/results", grading.Route);
+        Assert.Equal($"/writing/submissions/{first:D}/grading", grading.Route); // no result page until graded
 
         // Another submission while the first is still grading gets nothing free.
         var second = Guid.NewGuid();
         Assert.False(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, second.ToString("N"), default));
 
-        // The first grade FAILED: nothing was spent, the next submission is free.
+        // The first grade FAILED: nothing was spent; the learner is routed to retry
+        // THAT submission, and a new submission would still be free.
         (await db.WritingSubmissions.SingleAsync(s => s.Id == first)).Status = WritingSubmissionStatuses.Failed;
         await db.SaveChangesAsync();
-        Assert.Equal(FreeSampleService.StateAvailable, (await svc.ListAsync("u1", "writing", default)).Single().State);
+        var failed = (await svc.ListAsync("u1", "writing", default)).Single();
+        Assert.Equal(FreeSampleService.StateGradingFailed, failed.State);
+        Assert.Equal($"/writing/submissions/{first:D}/grading", failed.Route);
+        Assert.True(await svc.IsOfferedAsync("u1", "writing", content, default));
         await SeedSubmissionAsync(db, "u1", scenario, "grading", second);
         Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, second.ToString("N"), default));
         Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", second.ToString("N"), default));
@@ -378,6 +382,65 @@ public sealed class FreeSampleServiceTests
         Assert.Equal(1, retry.SuccessfulCount);
         Assert.Equal(1, retry.Remaining);
         Assert.Equal("medicine", retry.ProfessionId);
+    }
+
+    [Fact]
+    public async Task Writing_AFailedGrade_IsRetriedOnTheSameSubmission_RequeuedStaysInProgress()
+    {
+        await using var db = NewDb();
+        await EnableAsync(db);
+        var scenario = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
+        var content = scenario.ToString("D");
+        await SeedLearnerAsync(db, "u1", "medicine");
+        var svc = new FreeSampleService(db);
+        var first = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Grading);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, first.ToString("N"), default));
+
+        async Task<FreeSampleOffer> OfferAfterAsync(string status)
+        {
+            (await db.WritingSubmissions.SingleAsync(s => s.Id == first)).Status = status;
+            await db.SaveChangesAsync();
+            return (await svc.ListAsync("u1", "writing", default)).Single();
+        }
+
+        var failed = await OfferAfterAsync(WritingSubmissionStatuses.Failed);
+        Assert.Equal((FreeSampleService.StateGradingFailed, $"/writing/submissions/{first:D}/grading", 0),
+            (failed.State, failed.Route, failed.SuccessfulCount));
+
+        // Retry / auto-retry requeues the same row: live grading, never failed.
+        var requeued = await OfferAfterAsync(WritingSubmissionStatuses.Queued);
+        Assert.Equal((FreeSampleService.StateInProgress, $"/writing/submissions/{first:D}/grading"), (requeued.State, requeued.Route));
+        Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", first.ToString("N"), default)); // the retry stays free
+
+        var graded = await OfferAfterAsync(WritingSubmissionStatuses.Graded);
+        Assert.Equal((FreeSampleService.StateRetryAvailable, 1), (graded.State, graded.SuccessfulCount));
+        Assert.Single(db.FreeSampleUses); // one submission, one use throughout
+    }
+
+    [Fact]
+    public async Task Writing_GradingFailed_OnlyWhenTheLatestUseFailed()
+    {
+        await using var db = NewDb();
+        await EnableAsync(db);
+        var scenario = await SeedScenarioAsync(db, "medicine", "Alpha", difficulty: 1);
+        var content = scenario.ToString("D");
+        await SeedLearnerAsync(db, "u1", "medicine");
+        var svc = new FreeSampleService(db);
+
+        var original = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Failed);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, original.ToString("N"), default));
+        await Task.Delay(5); // uses are ordered by CreatedAt
+        var newer = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Graded);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, newer.ToString("N"), default));
+        Assert.Equal(FreeSampleService.StateRetryAvailable, (await svc.ListAsync("u1", "writing", default)).Single().State);
+
+        // The free revision then fails: the learner retries the revision itself.
+        await Task.Delay(5);
+        var revision = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Failed);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, revision.ToString("N"), default));
+        var offer = (await svc.ListAsync("u1", "writing", default)).Single();
+        Assert.Equal((FreeSampleService.StateGradingFailed, $"/writing/submissions/{revision:D}/grading", 1),
+            (offer.State, offer.Route, offer.SuccessfulCount));
     }
 
     [Fact]

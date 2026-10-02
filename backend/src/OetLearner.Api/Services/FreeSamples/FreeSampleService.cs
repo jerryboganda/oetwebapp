@@ -11,7 +11,7 @@ namespace OetLearner.Api.Services.FreeSamples;
 /// <param name="ContentId">Writing: scenario id ("D"). Speaking: role-play card id.
 /// Null only when the learner's profession has no eligible item.</param>
 /// <param name="State"><c>available</c> | <c>retry_available</c> | <c>in_progress</c> |
-/// <c>completed</c> | <c>unavailable</c></param>
+/// <c>grading_failed</c> | <c>completed</c> | <c>unavailable</c></param>
 /// <param name="Route">Where the learner goes next (start, revise, or the result
 /// being processed); null for <c>completed</c> / <c>unavailable</c>.</param>
 /// <param name="SuccessfulCount">Uses that produced a result (0..<see cref="FreeSampleService.SuccessLimit"/>).</param>
@@ -85,6 +85,10 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
     public const string StateAvailable = "available";
     public const string StateRetryAvailable = "retry_available";
     public const string StateInProgress = "in_progress";
+
+    /// <summary>The latest use's grade failed (nothing newer): Retry grading re-runs
+    /// that SAME submission, so it neither counts nor costs a new use.</summary>
+    public const string StateGradingFailed = "grading_failed";
     public const string StateCompleted = "completed";
     public const string StateUnavailable = "unavailable";
 
@@ -94,6 +98,9 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
     /// "occupational-therapy" all compare equal across the three profession vocabularies.</summary>
     public static string NormalizeProfession(string? value)
         => (value ?? string.Empty).Trim().ToLowerInvariant().Replace('_', '-');
+
+    private static string GradingRoute(string submissionId)
+        => $"/writing/submissions/{Uri.EscapeDataString(submissionId)}/grading";
 
     /// <summary>Where a learner starts a use of the sample.</summary>
     public static string StartRoute(string subtest, string contentId)
@@ -115,6 +122,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             var successes = uses.Where(u => u.State == UseState.Done).ToList();
             var last = successes.LastOrDefault();
             var grading = uses.FirstOrDefault(u => u.State == UseState.Grading);
+            var failed = uses.LastOrDefault() is { State: UseState.Failed } latest ? latest : null;
 
             string state;
             string? route = null;
@@ -131,7 +139,13 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             else if (grading is not null)
             {
                 state = StateInProgress;
-                route = grading.ResultRoute;
+                // Writing has no result page until graded: wait on the grading page.
+                route = subtest == Writing ? GradingRoute(grading.SubmissionId) : grading.ResultRoute;
+            }
+            else if (failed is not null)
+            {
+                state = StateGradingFailed;
+                route = GradingRoute(failed.SubmissionId);
             }
             else if (last is null)
             {
@@ -300,9 +314,11 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             .FirstOrDefaultAsync(ct));
 
     /// <summary>PreSubmit = started, nothing submitted (free to abandon/rebind).
-    /// Grading = submitted, result pending. Done = a result exists (counts).
-    /// Dead = failed / abandoned / gone (never counts, never blocks).</summary>
-    private enum UseState { PreSubmit, Grading, Done, Dead }
+    /// Grading = submitted, result pending (queued/requeued rows included).
+    /// Done = a result exists (counts). Failed = a Writing grade failed and can
+    /// be retried on the same submission. Failed and Dead (abandoned / gone)
+    /// never count and never block.</summary>
+    private enum UseState { PreSubmit, Grading, Done, Failed, Dead }
 
     private sealed record UseStatus(FreeSampleUse Use, UseState State, string? ResultRoute, string SubmissionId);
 
@@ -440,7 +456,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
                     WritingSubmissionStatuses.Graded => UseState.Done,
                     // Failed grading never counts; RetryGradeAsync re-enters the
                     // same use through the grading gate.
-                    WritingSubmissionStatuses.Failed => UseState.Dead,
+                    WritingSubmissionStatuses.Failed => UseState.Failed,
                     _ => UseState.Grading, // queued / preflight / grading
                 };
                 return new UseStatus(use, state, $"/writing/submissions/{id}/results", id);
