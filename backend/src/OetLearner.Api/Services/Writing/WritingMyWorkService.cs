@@ -26,7 +26,8 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
     }
 
     private sealed record SubmissionRow(
-        Guid Id, Guid ScenarioId, string Mode, bool IsRevision, string Status, int WordCount, DateTimeOffset CreatedAt, DateTimeOffset? ClaimedAt);
+        Guid Id, Guid ScenarioId, string Mode, bool IsRevision, string Status, int WordCount, DateTimeOffset CreatedAt,
+        DateTimeOffset? ClaimedAt, DateTimeOffset SubmittedAt, DateTimeOffset? NextAutoRetryAt, int AutoRetryCount, bool? FailureRetryable);
 
     public async Task<WritingMyWorkResponse> ListAsync(string userId, int? limit, DateTimeOffset? before, CancellationToken ct)
     {
@@ -47,7 +48,8 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
         var submissions = await submissionQuery
             .OrderByDescending(s => s.CreatedAt) // IX_WritingSubmissions_User_CreatedAt
             .Take(take + 1)
-            .Select(s => new SubmissionRow(s.Id, s.ScenarioId, s.Mode, s.IsRevision, s.Status, s.WordCount, s.CreatedAt, s.ClaimedAt))
+            .Select(s => new SubmissionRow(s.Id, s.ScenarioId, s.Mode, s.IsRevision, s.Status, s.WordCount, s.CreatedAt,
+                s.ClaimedAt, s.SubmittedAt, s.NextAutoRetryAt, s.AutoRetryCount, s.FailureRetryable))
             .ToListAsync(ct);
 
         var rows = drafts.Select(d => new Row(d.LastSavedAt, d, null))
@@ -109,7 +111,8 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
             }
 
             var s = row.Submission!;
-            var (state, canRetry, autoRetrying) = ComputeRetryState(s.Status, s.ClaimedAt, now);
+            var (state, canRetry, autoRetrying) = ComputeRetryState(
+                s.Status, s.ClaimedAt, s.SubmittedAt, s.NextAutoRetryAt, s.AutoRetryCount, s.FailureRetryable, now);
             var root = $"/writing/submissions/{s.Id}";
             IReadOnlyList<WritingMyWorkActionResponse> actions = state == "graded"
                 ? [new("open_result", $"{root}/results"), new("view_letter", root)]
@@ -125,24 +128,23 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
     }
 
     /// <summary>
-    /// List state + Retry availability from the columns that exist today
-    /// (Status, ClaimedAt). Kept in ONE method on purpose: WAI-03 adds
-    /// FailureRetryable / AutoRetryCount and the coordinator replaces this
-    /// body with that logic when the branches merge. <c>queued</c> is always
-    /// live grading (the cron or an auto-retry owns it), never failed; only a
-    /// <c>grading</c> claim silent past the lease is shown as failed.
+    /// List state + Retry availability. The same rules as the grading-status response
+    /// (<c>WritingV2ResponseMapper.ToSubmissionResponse</c>): a failed row can be retried unless the
+    /// failure is final (<c>FailureRetryable == false</c>); a grading claim silent past the lease shows
+    /// as failed + Retry; a queued row is live grading (the cron or an auto-retry owns it) and only
+    /// offers Retry once nothing has picked it up within the lease; <c>autoRetrying</c> = the server
+    /// re-queued a failed run by itself.
     /// </summary>
     internal static (string State, bool CanRetry, bool AutoRetrying) ComputeRetryState(
-        string status, DateTimeOffset? claimedAt, DateTimeOffset now)
+        string status, DateTimeOffset? claimedAt, DateTimeOffset submittedAt, DateTimeOffset? nextAutoRetryAt,
+        int autoRetryCount, bool? failureRetryable, DateTimeOffset now)
     {
         if (status == WritingSubmissionStatuses.Graded) return ("graded", false, false);
-        if (status == WritingSubmissionStatuses.Failed) return ("failed", true, false);
-        if (status == WritingSubmissionStatuses.Grading
-            && claimedAt is { } claimed
-            && claimed <= now - WritingGradeTimings.StaleClaimLease)
-        {
-            return ("failed", true, false);
-        }
-        return ("grading", false, false);
+        if (status == WritingSubmissionStatuses.Failed) return ("failed", failureRetryable != false, false);
+        if (WritingGradeRecovery.IsStaleGrading(status, claimedAt, now)) return ("failed", true, false);
+        return (
+            "grading",
+            WritingGradeRecovery.IsStaleQueued(status, nextAutoRetryAt, submittedAt, now),
+            status == WritingSubmissionStatuses.Queued && autoRetryCount > 0);
     }
 }

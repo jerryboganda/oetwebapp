@@ -96,17 +96,29 @@ public sealed class WritingMyWorkServiceTests
         Assert.Equal(6, (await service.ListAsync(User, limit: 0, before: null, default)).Items.Count); // 0 falls back to the default (20)
     }
 
+    // status, claimedMinutesAgo, submittedMinutesAgo, nextAutoRetryInMinutes (negative = due in the past),
+    // autoRetryCount, failureRetryable, expected (state, canRetry, autoRetrying)
     [Theory]
-    [InlineData("graded", null, "graded", false)]
-    [InlineData("failed", null, "failed", true)]
-    [InlineData("queued", null, "grading", false)]
-    [InlineData("preflight", null, "grading", false)]
-    [InlineData("grading", 24, "grading", false)]
-    [InlineData("grading", 25, "failed", true)]
-    public void ComputeRetryState_UsesTheSharedLease(string status, int? claimedMinutesAgo, string state, bool canRetry)
+    [InlineData("graded", null, 1, null, 0, null, "graded", false, false)]
+    [InlineData("failed", null, 1, null, 0, null, "failed", true, false)]     // legacy failed row (null verdict) = retryable
+    [InlineData("failed", null, 1, null, 4, true, "failed", true, false)]     // auto-retries spent, still retryable by hand
+    [InlineData("failed", null, 1, null, 0, false, "failed", false, false)]   // final failure (task not ready, manual review)
+    [InlineData("queued", null, 1, null, 0, null, "grading", false, false)]
+    [InlineData("queued", null, 1, -2, 2, true, "grading", false, true)]      // server re-queued it: live grading, auto-retrying
+    [InlineData("queued", null, 40, null, 0, null, "grading", true, false)]   // nobody picked it up within the lease: Retry
+    [InlineData("preflight", null, 1, null, 0, null, "grading", false, false)]
+    [InlineData("grading", 24, 30, null, 0, null, "grading", false, false)]
+    [InlineData("grading", 25, 30, null, 0, null, "failed", true, false)]
+    public void ComputeRetryState_FollowsTheGradingStatusRules(
+        string status, int? claimedMinutesAgo, int submittedMinutesAgo, int? nextAutoRetryMinutes,
+        int autoRetryCount, bool? failureRetryable, string state, bool canRetry, bool autoRetrying)
     {
         var claimed = claimedMinutesAgo is { } m ? Now.AddMinutes(-m) : (DateTimeOffset?)null;
-        Assert.Equal((state, canRetry, false), WritingMyWorkService.ComputeRetryState(status, claimed, Now));
+        var next = nextAutoRetryMinutes is { } n ? Now.AddMinutes(n) : (DateTimeOffset?)null;
+        Assert.Equal(
+            (state, canRetry, autoRetrying),
+            WritingMyWorkService.ComputeRetryState(
+                status, claimed, Now.AddMinutes(-submittedMinutesAgo), next, autoRetryCount, failureRetryable, Now));
     }
 
     private static WritingMyWorkActionResponse Action(string kind, string href) => new(kind, href);

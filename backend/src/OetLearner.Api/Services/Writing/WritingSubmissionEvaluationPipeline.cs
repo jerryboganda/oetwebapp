@@ -169,15 +169,25 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // attempt never sees writing_submission_locked for its own attempt.
         if (attempt.CheckTerminalLock && !attempt.IsRevision)
         {
-            var alreadyLocked = await db.WritingSubmissions.AsNoTracking()
-                .AnyAsync(s => s.UserId == attempt.UserId
+            var lockQuery = db.WritingSubmissions.AsNoTracking()
+                .Where(s => s.UserId == attempt.UserId
                     && s.ScenarioId == attempt.ScenarioId
                     && !s.IsRevision
                     && s.Mode != "mock"
                     && (s.Status == WritingSubmissionStatuses.Queued
                         || s.Status == WritingSubmissionStatuses.Preflight
                         || s.Status == WritingSubmissionStatuses.Grading
-                        || s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
+                        || s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"));
+            // "Practice this again" is a real new attempt (a fresh credit at task open): the lock holds for
+            // the CURRENT attempt only, so submissions from before it started never block it. A learner with
+            // no draft row (API-only flows, legacy drafts) keeps the task-wide lock.
+            if (await WritingDraftServiceV2.GetAttemptStartedAtAsync(
+                    db, attempt.UserId, attempt.ScenarioId, attempt.Mode, ct) is { } attemptStartedAt)
+            {
+                lockQuery = lockQuery.Where(s => s.CreatedAt >= attemptStartedAt);
+            }
+
+            var alreadyLocked = await lockQuery.AnyAsync(ct);
             if (alreadyLocked)
             {
                 throw ApiException.Conflict(
@@ -235,7 +245,9 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     && !s.IsRevision
                     && s.Mode == mode
                     && s.LetterContentHash == hash
-                    && s.CreatedAt >= recentCutoff)
+                    // A FAILED letter is never orphaned: the same text resolves to it at any age, so a
+                    // resubmit routes to Retry on that record instead of opening a duplicate one.
+                    && (s.CreatedAt >= recentCutoff || s.Status == WritingSubmissionStatuses.Failed))
                 .OrderByDescending(s => s.CreatedAt)
                 .Select(s => s.Id)
                 .FirstOrDefaultAsync(ct);

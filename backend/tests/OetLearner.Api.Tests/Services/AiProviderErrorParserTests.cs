@@ -62,6 +62,12 @@ public sealed class AiProviderErrorParserTests
         """{"error":{"code":"quota_exceeded","message":"Claude subscription quota/rate limit: you have hit your limit","type":"rate_limit_error"}}""";
     private const string SidecarEngineError =
         """{"error":{"code":"engine_error","message":"claude exited 1: something went wrong"}}""";
+    // WAI-04 sidecar hardening: a full lane answers THAT request 503 (retryable, fails over inside the
+    // grade only) and a dead login answers 401 (Auth). Neither ever disables the Max route.
+    private const string SidecarLaneBusy =
+        """{"error":{"code":"lane_busy","message":"Claude lane is full: try again shortly","type":"overloaded_error"}}""";
+    private const string SidecarAuthExpired =
+        """{"error":{"code":"auth_expired","message":"Claude login expired or invalid: please sign in again","type":"authentication_error"}}""";
 
     // ── Gemini ──────────────────────────────────────────────────────────
     private const string GeminiPerDayQuota =
@@ -105,6 +111,8 @@ public sealed class AiProviderErrorParserTests
     [InlineData(AiProviderErrorDialect.Anthropic, 504, AnthropicTimeout, AiProviderErrorClass.ServerError, "timeout_error", null)]
     [InlineData(AiProviderErrorDialect.Anthropic, 429, SidecarQuota, AiProviderErrorClass.QuotaExhausted, "rate_limit_error", "quota_exceeded")]
     [InlineData(AiProviderErrorDialect.Anthropic, 502, SidecarEngineError, AiProviderErrorClass.ServerError, null, "engine_error")]
+    [InlineData(AiProviderErrorDialect.Anthropic, 503, SidecarLaneBusy, AiProviderErrorClass.Overloaded, "overloaded_error", "lane_busy")]
+    [InlineData(AiProviderErrorDialect.Anthropic, 401, SidecarAuthExpired, AiProviderErrorClass.Auth, "authentication_error", "auth_expired")]
     [InlineData(AiProviderErrorDialect.Gemini, 429, GeminiPerDayQuota, AiProviderErrorClass.QuotaExhausted, "resource_exhausted", "generaterequestsperdayperprojectpermodel-freetier")]
     [InlineData(AiProviderErrorDialect.Gemini, 429, GeminiPerMinuteQuota, AiProviderErrorClass.RateLimited, "resource_exhausted", "generaterequestsperminuteperprojectpermodel-freetier")]
     [InlineData(AiProviderErrorDialect.Gemini, 429, GeminiNoDetails, AiProviderErrorClass.RateLimited, "resource_exhausted", null)]

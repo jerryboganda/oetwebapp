@@ -54,14 +54,22 @@ public static class WritingGradeRecovery
 
     /// <summary>A queued row nobody picked up within the lease (the worker is down): Retry may restart it.</summary>
     public static bool IsStaleQueued(WritingSubmission s, DateTimeOffset now)
-        => s.Status == WritingSubmissionStatuses.Queued
-           && (s.NextAutoRetryAt ?? s.SubmittedAt) <= now - WritingGradeTimings.StaleClaimLease;
+        => IsStaleQueued(s.Status, s.NextAutoRetryAt, s.SubmittedAt, now);
+
+    /// <summary>Projection-friendly form: lists read a few columns, not the entity.</summary>
+    public static bool IsStaleQueued(string status, DateTimeOffset? nextAutoRetryAt, DateTimeOffset submittedAt, DateTimeOffset now)
+        => status == WritingSubmissionStatuses.Queued
+           && (nextAutoRetryAt ?? submittedAt) <= now - WritingGradeTimings.StaleClaimLease;
 
     /// <summary>A grading row whose grader died or was redeployed.</summary>
     public static bool IsStaleGrading(WritingSubmission s, DateTimeOffset now)
-        => s.Status == WritingSubmissionStatuses.Grading
-           && s.ClaimedAt is { } claimedAt
-           && claimedAt <= now - WritingGradeTimings.StaleClaimLease;
+        => IsStaleGrading(s.Status, s.ClaimedAt, now);
+
+    /// <summary>Projection-friendly form: lists read a few columns, not the entity.</summary>
+    public static bool IsStaleGrading(string status, DateTimeOffset? claimedAt, DateTimeOffset now)
+        => status == WritingSubmissionStatuses.Grading
+           && claimedAt is { } claimed
+           && claimed <= now - WritingGradeTimings.StaleClaimLease;
 
     /// <summary>
     /// grading → queued (due now) for every claim older than the lease. Clearing the owner fences the
