@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai.TypeSafe;
 
@@ -18,19 +20,30 @@ namespace OetLearner.Api.Services.Ai.TypeSafe;
 public sealed class TypeSafeModelPinProbe(
     IHttpClientFactory httpClientFactory,
     IOptions<TypeSafeOptions> options,
-    ILogger<TypeSafeModelPinProbe> logger) : BackgroundService
+    ILogger<TypeSafeModelPinProbe> logger,
+    IServiceScopeFactory? scopeFactory = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var opts = options.Value;
-        if (!opts.Enabled || string.IsNullOrWhiteSpace(opts.ApiKey))
+        if (!opts.Enabled)
             return;
 
         try
         {
+            var apiKey = opts.ApiKey;
+            if (scopeFactory is not null)
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                apiKey = await scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>()
+                    .GetPlatformKeyAsync(TypeSafeOptions.ProviderCode, stoppingToken) ?? apiKey;
+            }
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return;
+
             var client = httpClientFactory.CreateClient(TypeSafeJudgmentClient.HttpClientName);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{opts.BaseUrl.TrimEnd('/')}/v1/models");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.ApiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             using var response = await client.SendAsync(request, stoppingToken);
             var body = await response.Content.ReadAsStringAsync(stoppingToken);
