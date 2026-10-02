@@ -149,7 +149,11 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         Assert.Equal(140, json.GetProperty("totals").GetProperty("completedEvaluations").GetInt32());
         Assert.Equal(140, json.GetProperty("reviewUsage").GetProperty("totalRequests").GetInt32());
         Assert.Equal(2.0, json.GetProperty("reviewUsage").GetProperty("averageTurnaroundHours").GetDouble());
-        Assert.Equal(4, _sql.Commands.Count);
+        Assert.Equal(7, json.GetProperty("completion").GetArrayLength());
+        Assert.Equal(5, json.GetProperty("submissionVolume").GetArrayLength());
+        // The completion and volume charts read the learner's attempt timestamps
+        // (one narrow projection) instead of fixed demo arrays: 4 queries became 5.
+        Assert.Equal(5, _sql.Commands.Count);
         Assert.Contains(_sql.Commands, command =>
             command.Contains("LIMIT", StringComparison.OrdinalIgnoreCase)
             && command.Contains("Evaluations", StringComparison.OrdinalIgnoreCase));
@@ -175,7 +179,9 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         Assert.Equal(0, json.GetProperty("reviewUsage").GetProperty("totalRequests").GetInt32());
         Assert.Equal(JsonValueKind.Null, json.GetProperty("reviewUsage").GetProperty("averageTurnaroundHours").ValueKind);
         Assert.True(json.GetProperty("freshness").GetProperty("usesFallbackSeries").GetBoolean());
-        Assert.Equal(4, _sql.Commands.Count);
+        Assert.All(json.GetProperty("completion").EnumerateArray(), point => Assert.Equal(0, point.GetProperty("completed").GetInt32()));
+        Assert.All(json.GetProperty("submissionVolume").EnumerateArray(), point => Assert.Equal(0, point.GetProperty("submissions").GetInt32()));
+        Assert.Equal(5, _sql.Commands.Count);
     }
 
     [Fact]
