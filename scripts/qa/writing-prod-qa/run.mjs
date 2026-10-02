@@ -787,8 +787,8 @@ async function run() {
     } else {
       guard = startGuard(ctx);
       await guard.tick();
-      if (suiteRuns(inputs.suite, 'acceptance')) await acceptanceSuite(ctx, plan).catch((e) => ctx.tables.acceptance.push({ profession: 'Medicine (acceptance)', task: '-', category: 'P0-3 acceptance', status: 'FAIL', notes: `aborted: ${e.message}` }));
-      if (suiteRuns(inputs.suite, 'ui')) await uiSuite(ctx, plan).catch((e) => ctx.tables.ui.push({ profession: 'Medicine (UI)', task: '-', category: 'UI suite', status: 'FAIL', notes: `aborted: ${e.message}` }));
+      if (suiteRuns(inputs.suite, 'acceptance')) await acceptanceSuite(ctx, plan).catch((e) => ctx.tables.acceptance.push({ profession: 'Medicine (acceptance)', task: '-', category: 'P0-3 acceptance', status: e instanceof Blocked ? 'BLOCKED' : 'FAIL', notes: `aborted: ${e.message}` }));
+      if (suiteRuns(inputs.suite, 'ui')) await uiSuite(ctx, plan).catch((e) => ctx.tables.ui.push({ profession: 'Medicine (UI)', task: '-', category: 'UI suite', status: e instanceof Blocked ? 'BLOCKED' : 'FAIL', notes: `aborted: ${e.message}` }));
       if (suiteRuns(inputs.suite, 'matrix')) {
         await matrixSuite(ctx, plan);
         ctx.tables.qa2.push(...notEnabled);
