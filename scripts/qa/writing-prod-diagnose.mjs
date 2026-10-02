@@ -92,6 +92,24 @@ if (process.env.CLEAR_MAX_MARKER === 'true') {
   if (!response.ok || after.data?.quotaExceededUntil) process.exitCode = 1;
 }
 
+// One-off: a real 1-turn completion through the Codex SUBSCRIPTION sidecar per model ($0, never the paid API).
+if (process.env.TEST_CODEX_MODELS) {
+  for (const model of process.env.TEST_CODEX_MODELS.split(',').map((m) => m.trim()).filter(Boolean)) {
+    try {
+      const response = await fetch(`${base}/v1/admin/ai/providers/${L3}/test-model`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+        signal: AbortSignal.timeout(170000),
+      });
+      const body = await response.json().catch(() => ({}));
+      log(`CODEX_MODEL_TEST ${model}`, { http: response.status, status: body.status, latencyMs: body.latencyMs, error: clean(body.errorMessage, 300), steps: body.steps });
+    } catch (error) {
+      log(`CODEX_MODEL_TEST ${model}`, { error: clean(error?.message) });
+    }
+  }
+}
+
 const [ops, usage, providers, writingProvider, circuits, budgets, policy, usageSummary, flags] = await Promise.all([
   read('/v1/admin/ai/operations?featureCode=writing.grade&pageSize=200'),
   read('/v1/admin/ai/usage?featureCode=writing.grade&pageSize=200'),
