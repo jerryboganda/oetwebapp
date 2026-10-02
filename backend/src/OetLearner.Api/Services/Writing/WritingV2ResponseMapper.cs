@@ -348,5 +348,14 @@ public static class WritingV2ResponseMapper
             Content: view.Content,
             WordCount: view.WordCount,
             TimeSpentSeconds: view.TimeSpentSeconds,
-            LastSavedAt: view.LastSavedAt);
+            LastSavedAt: view.LastSavedAt,
+            DraftId: view.DraftId,
+            Version: view.Version,
+            Status: view.Status,
+            SubmissionId: view.SubmissionId,
+            SubmissionStatus: view.SubmissionStatus,
+            Phase: view.Phase,
+            ReadingSecondsRemaining: view.ReadingSecondsRemaining,
+            WritingSecondsRemaining: view.WritingSecondsRemaining,
+            AttemptStartedAt: view.AttemptStartedAt);
 }

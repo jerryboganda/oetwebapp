@@ -20,7 +20,8 @@ public static class WritingDraftV2Endpoints
             CancellationToken ct) =>
         {
             var draft = await service.SaveAsync(http.WritingV2UserId(), scenarioId, mode,
-                new WritingDraftV2SaveRequest(request.Content, request.WordCount, request.TimeSpentSeconds), ct);
+                new WritingDraftV2SaveRequest(request.Content, request.WordCount, request.TimeSpentSeconds,
+                    request.ExpectedVersion, request.Phase, request.ReadingSecondsRemaining, request.WritingSecondsRemaining), ct);
             return Results.Ok(WritingV2ResponseMapper.ToResponse(draft));
         })
         .RequireRateLimiting("PerUserWrite")

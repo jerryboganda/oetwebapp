@@ -289,10 +289,19 @@ public sealed record WritingScoreAppealResponse(
 // Drafts V2
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// <see cref="ExpectedVersion"/>: 0 = create-only, n = compare-and-set (409
+/// <c>draft_version_conflict</c> on a mismatch), null = legacy unconditional
+/// write. Timers are seconds left at this save (pause-while-away).
+/// </summary>
 public sealed record WritingDraftV2UpsertRequest(
-    [property: Required] string Content,
+    [property: Required(AllowEmptyStrings = true)] string Content,
     [property: Range(0, 5000)] int WordCount,
-    [property: Range(0, 7200)] int TimeSpentSeconds);
+    [property: Range(0, 7200)] int TimeSpentSeconds,
+    int? ExpectedVersion = null,
+    [property: StringLength(16)] string? Phase = null,
+    int? ReadingSecondsRemaining = null,
+    int? WritingSecondsRemaining = null);
 
 public sealed record WritingDraftV2Response(
     string UserId,
@@ -301,7 +310,47 @@ public sealed record WritingDraftV2Response(
     string Content,
     int WordCount,
     int TimeSpentSeconds,
-    DateTimeOffset LastSavedAt);
+    DateTimeOffset LastSavedAt,
+    Guid DraftId,
+    int Version,
+    string Status,
+    Guid? SubmissionId,
+    string? SubmissionStatus,
+    string? Phase,
+    int? ReadingSecondsRemaining,
+    int? WritingSecondsRemaining,
+    DateTimeOffset? AttemptStartedAt);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My work (Post Submissions) — lib/writing/types.ts WritingMyWork*
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Kind: resume | wait | retry | open_result | view_letter.</summary>
+public sealed record WritingMyWorkActionResponse(string Kind, string Href);
+
+public sealed record WritingMyWorkItemResponse(
+    string Key,
+    string Kind,
+    string State,
+    string RawStatus,
+    Guid ScenarioId,
+    string Title,
+    string? LetterType,
+    string Mode,
+    bool IsRevision,
+    bool IsFreeSample,
+    Guid? DraftId,
+    Guid? SubmissionId,
+    int WordCount,
+    string? Phase,
+    int? ReadingSecondsRemaining,
+    int? WritingSecondsRemaining,
+    DateTimeOffset LastActivityAt,
+    bool CanRetry,
+    bool AutoRetrying,
+    IReadOnlyList<WritingMyWorkActionResponse> Actions);
+
+public sealed record WritingMyWorkResponse(IReadOnlyList<WritingMyWorkItemResponse> Items, bool HasMore);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Case-note highlights (persist per user + scenario across attempts)
