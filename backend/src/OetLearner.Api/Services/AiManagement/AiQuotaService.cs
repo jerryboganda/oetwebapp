@@ -115,12 +115,12 @@ public sealed class AiQuotaService(
     /// point 5): "Start with only $10 prepaid API balance... increase it later
     /// after we confirm the real legitimate daily usage." Used both by
     /// <c>SeedData.SeedAiGlobalPolicy</c> and by <see cref="GetGlobalPolicyAsync"/>'s
-    /// bootstrap path below, so a fresh database can never boot with an
-    /// unenforced (zero/disabled) platform-wide spend ceiling — the hard-kill
-    /// branch in <see cref="TryReserveAsync"/> is a no-op whenever
-    /// <c>MonthlyBudgetUsd &lt;= 0</c>, so "unconfigured" previously meant
-    /// "unlimited", not "safe". An admin raises this on
-    /// <c>/admin/ai-usage → Budget</c> once real usage is confirmed.
+    /// bootstrap path below, so a fresh database never carries a zero ceiling —
+    /// the hard-kill branch in <see cref="TryReserveAsync"/> is a no-op whenever
+    /// <c>MonthlyBudgetUsd &lt;= 0</c>. Since the owner directive of 2026-10-02
+    /// the ceiling refuses calls only once an admin turns
+    /// <see cref="AiGlobalPolicy.EnforceSpendCaps"/> on (new rows default off).
+    /// An admin raises this on <c>/admin/ai-usage → Budget</c>.
     /// </summary>
     public const decimal ConservativeDefaultMonthlyBudgetUsd = 10m;
 
@@ -199,7 +199,10 @@ public sealed class AiQuotaService(
         // their own key is never blocked by our card. Anonymous used to
         // short-circuit BEFORE this check despite the comment claiming
         // otherwise — that leak is closed here.
-        if (prospectiveKeySource != AiKeySource.Byok
+        // Owner directive 2026-10-02: applies only while the admin switch
+        // EnforceSpendCaps is on (default off). Spend is booked either way.
+        if (global.EnforceSpendCaps
+            && prospectiveKeySource != AiKeySource.Byok
             && global.MonthlyBudgetUsd > 0
             && global.HardKillPct > 0
             && global.CurrentSpendUsd >= global.MonthlyBudgetUsd * (global.HardKillPct / 100m))
@@ -486,11 +489,11 @@ public sealed class AiQuotaService(
         if (row is null)
         {
             // Bootstrap a fresh default row. Kill switch stays off (BYOK/manual
-            // admin control remains the primary lever), but the monthly budget
-            // must NOT default to 0 — TryReserveAsync's hard-kill branch below
-            // is skipped entirely when MonthlyBudgetUsd <= 0, so an all-zeros
-            // row silently meant "unlimited platform spend" rather than "safe
-            // defaults". See ConservativeDefaultMonthlyBudgetUsd.
+            // admin control remains the primary lever) and EnforceSpendCaps
+            // stays at its default (off, owner directive 2026-10-02), so this
+            // row never re-enables a spend denial; the $10 budget only takes
+            // effect once an admin turns enforcement on.
+            // See ConservativeDefaultMonthlyBudgetUsd.
             row = new AiGlobalPolicy
             {
                 Id = "global",

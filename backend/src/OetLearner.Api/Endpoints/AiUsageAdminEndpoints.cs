@@ -272,8 +272,10 @@ public static class AiUsageAdminEndpoints
             var warnPct = row.WritingAiWarnPct
                 ?? OetLearner.Api.Services.Writing.WritingSubscriptionProviders.DefaultWarnPct;
             var util = snapshot.UtilizationPct;
-            var failoverActive = row.WritingAiClaudeQuotaExceededUntil is { } u && u > now
-                || (util is double uv && uv >= failoverPct);
+            // Owner directive 2026-10-02: the weekly estimate is information
+            // only and never switches providers; only a recorded Claude quota
+            // refusal means failover is active.
+            var failoverActive = row.WritingAiClaudeQuotaExceededUntil is { } u && u > now;
 
             return Results.Ok(new
             {
@@ -467,11 +469,13 @@ public static class AiUsageAdminEndpoints
             row.ByokTransientRetryCount = Math.Clamp(dto.ByokTransientRetryCount, 0, 5);
             row.AnomalyDetectionEnabled = dto.AnomalyDetectionEnabled;
             row.AnomalyMultiplierX = Math.Max(2m, dto.AnomalyMultiplierX);
+            // Null = a client that predates the switch: keep the stored value.
+            row.EnforceSpendCaps = dto.EnforceSpendCaps ?? row.EnforceSpendCaps;
             row.RowVersion += 1;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiGlobalPolicyUpdated", "global",
-                row.KillSwitchEnabled ? "kill_switch=on" : "kill_switch=off", ct);
+                $"kill_switch={(row.KillSwitchEnabled ? "on" : "off")} enforce_spend_caps={(row.EnforceSpendCaps ? "on" : "off")}", ct);
             return Results.Ok(row);
         }).RequireRateLimiting("PerUserWrite");
 
@@ -1440,7 +1444,8 @@ public sealed record AiGlobalPolicyUpsertDto(
     int ByokErrorCooldownHours,
     int ByokTransientRetryCount,
     bool AnomalyDetectionEnabled,
-    decimal AnomalyMultiplierX);
+    decimal AnomalyMultiplierX,
+    bool? EnforceSpendCaps = null);
 
 public sealed record AiKillSwitchDto(bool Enabled, AiKillSwitchScope Scope, string? Reason);
 

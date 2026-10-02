@@ -200,6 +200,7 @@ global switch gates the scoring-critical rows.
 | Option | Meaning | Default | Alternatives |
 |---|---|---|---|
 | `AiGlobalKillSwitch` | Hard-disable all AI calls platform-wide | `false` | `true` |
+| `EnforceSpendCaps` | Whether the platform USD caps (global budget + hard-kill, global daily cap, class daily/monthly caps) may refuse a call | `false` | `true` |
 | `AiGlobalBudgetUsd` | Hard monthly USD cap across all platform-keyed calls | admin-supplied, no default | any decimal ≥ 0 |
 | `AiGlobalBudgetSoftWarnPct` | Email admins at this % of budget | `80` | 0–100 |
 | `AiGlobalBudgetHardKillPct` | Auto-engage kill switch at this % | `100` | 0–150 |
@@ -209,6 +210,19 @@ global switch gates the scoring-critical rows.
 Kill-switch semantics: when engaged, platform-keyed calls throw
 `AiGloballyDisabledException`. **BYOK calls continue** — the switch protects
 the platform budget, not learner sovereignty over their own key.
+
+**Platform spend caps are an admin switch, OFF by default (owner directive,
+2026-10-02: "delete the monthly, weekly and daily AI caps").** While
+`AiGlobalPolicy.EnforceSpendCaps` is off, no platform USD cap refuses a call:
+neither the `AiQuotaService` hard-kill nor any `AiBudgetService` reservation
+(global month/day, class month/day, scoring borrow) denies, but every budget
+period is still reserved, committed and released, so `CurrentSpendUsd`,
+`/admin/ai-usage` and the budget alerts keep showing real spend. Turning it on
+(`/admin/ai-usage → Budget & Kill-switch`) restores the caps exactly as
+described in this section. Not affected by the switch: the kill switch, the
+per-feature kill list, per-user AI disable, plan token caps, learner credits and
+the per-learner caps listed below. The Claude Max weekly usage estimate on
+`/admin/writing-ai` is information only and never switches Writing providers.
 
 **Admin-side AI carries no day or class-month ceilings (owner directive,
 2026-09-23).** `AdminBatch`-class calls — `admin.*` content drafts,
@@ -552,8 +566,9 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
   off). Details and revert: [`docs/speaking/ai-providers.md`](speaking/ai-providers.md).
 - **Still under this policy (§0, §12):** the call goes through the coordinator and the gateway:
   grounding enforced, one `AiUsageRecord` per physical call (priced `0.00` on the sidecar row),
-  kill switch, feature policy, platform budget reservation and the provider circuit breaker all
-  apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
+  kill switch, feature policy, platform budget reservation (spend booked; it refuses a call only
+  while `EnforceSpendCaps` is on, off by default since 2026-10-02, see §7) and the provider circuit
+  breaker all apply. Learner credit accounting is unchanged: the gateway never debits Speaking; the hold
   taken at card reveal is committed once, after a grade exists.
 - **Shared allowance and lane:** the sidecar runs one request at a time and shares the Claude
   Max allowance (and the `oet_agent_home` login) with Writing and the console, so Speaking and

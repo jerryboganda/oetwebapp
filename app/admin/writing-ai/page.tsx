@@ -36,9 +36,9 @@ function fmtWhen(iso: string | null): string {
 }
 
 const MODE_OPTIONS = [
-  { value: 'auto', label: 'Automatic — Claude 5x primary, Codex fallback' },
+  { value: 'auto', label: 'Automatic — Claude Max primary, Codex fallback' },
   { value: 'claude', label: 'Claude Opus 5.5 High (force primary)' },
-  { value: 'codex', label: 'OpenAI Sol (Codex) — force fallback' },
+  { value: 'codex', label: 'GPT-6.1 Sol (Codex) — force fallback' },
 ];
 
 export default function WritingAiProviderPage() {
@@ -118,9 +118,10 @@ export default function WritingAiProviderPage() {
                   <CardContent className="flex items-center gap-3 py-3 text-sm">
                     <AlertTriangle className="w-5 h-5 text-[var(--admin-danger)]" />
                     <div>
-                      <strong>Failover active.</strong> New Writing grading requests are being served by the Codex
-                      fallback until the Claude weekly allowance resets
-                      {status.quotaExceededUntil ? ` (${fmtWhen(status.quotaExceededUntil)})` : ''}.
+                      <strong>Failover active.</strong> Claude Max reported a quota or rate-limit refusal, so new
+                      Writing grading requests skip the subscription and continue down the chain (Claude API, then
+                      Codex)
+                      {status.quotaExceededUntil ? ` until ${fmtWhen(status.quotaExceededUntil)}` : ''}.
                     </div>
                   </CardContent>
                 </Card>
@@ -130,8 +131,9 @@ export default function WritingAiProviderPage() {
                   <CardContent className="flex items-center gap-3 py-3 text-sm">
                     <AlertTriangle className="w-5 h-5 text-[var(--admin-warning)]" />
                     <div>
-                      <strong>Approaching weekly limit.</strong> Claude 5x utilisation is {fmtPct(util)} (warns at{' '}
-                      {status.warnPct}%, fails over at {status.failoverPct}%).
+                      <strong>High weekly usage estimate.</strong> Claude Max usage is estimated at {fmtPct(util)} of
+                      the weekly allowance. Information only: grading stays on Claude Max and moves down the chain
+                      only when a call actually fails.
                     </div>
                   </CardContent>
                 </Card>
@@ -180,9 +182,10 @@ export default function WritingAiProviderPage() {
                 <CardHeader>
                   <CardTitle>Provider control</CardTitle>
                   <p className="text-sm text-admin-fg-muted">
-                    Automatic runs the 3-level chain: Claude Opus 5.5 (5x subscription) — retried once — then Claude
-                    Opus 5.5 via the Anthropic API, then the Codex subscription. The weekly-cap failover engages at{' '}
-                    {status.failoverPct}% utilisation or on a quota/rate-limit signal.
+                    Automatic runs the 3-level chain: Claude Opus 5.5 (Max 5x subscription) — retried once — then
+                    Claude Opus 5.5 via the Anthropic API, then GPT-6.1 Sol on the Codex subscription. The chain moves
+                    on only when a call fails (quota, rate-limit, sign-in or service error); the weekly usage estimate
+                    never switches providers.
                   </p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
@@ -206,7 +209,7 @@ export default function WritingAiProviderPage() {
                       Mode: <Badge>{status.mode}</Badge>
                     </span>
                     <span>
-                      Warn at <strong>{status.warnPct}%</strong> · Failover at <strong>{status.failoverPct}%</strong>
+                      Usage warning at <strong>{status.warnPct}%</strong> (information only)
                     </span>
                     <span>
                       Claude (7d): {fmt(status.claude.callsWeek)} calls · {fmt(status.claude.tokensWeek)} tokens

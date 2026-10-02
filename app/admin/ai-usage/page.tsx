@@ -331,6 +331,21 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
           </Panel>
 
           <Panel title="Monthly budget">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 font-semibold">
+                <input type="checkbox" checked={policy.enforceSpendCaps} aria-describedby="enforce-spend-caps-help"
+                  onChange={(e) => setPolicy({ ...policy, enforceSpendCaps: e.target.checked })} />
+                Enforce platform spend caps
+              </label>
+              <Badge variant={policy.enforceSpendCaps ? 'warning' : 'muted'}>
+                {policy.enforceSpendCaps ? 'Enforced' : 'Off'}
+              </Badge>
+            </div>
+            <p id="enforce-spend-caps-help" className="text-sm text-admin-fg-muted mt-1 mb-4">
+              Off (default): the monthly budget below and the built-in daily and per-class USD caps never block an AI call;
+              spend is still recorded. On: platform-key calls are refused once a cap is reached. The kill-switch,
+              per-feature kill list, per-user AI disable, plan token limits and learner credits work either way.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input type="number" step="0.01" label="Monthly budget (USD)" value={policy.monthlyBudgetUsd}
                 onChange={(e) => setPolicy({ ...policy, monthlyBudgetUsd: Number(e.target.value) })} />
