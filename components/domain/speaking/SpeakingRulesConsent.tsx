@@ -15,7 +15,7 @@ import { apiClient } from '@/lib/api';
 export const FREE_SPEAKING_SAMPLE_COPY = 'Free sample includes one full attempt + one free retry.';
 
 const FALLBACK_RECORDING_NOTICE =
-  'By recording you agree that your audio will be processed by our AI evaluator and may be reviewed by a human tutor. Recordings are stored securely and deleted after the configured retention window.';
+  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Audio recordings are retained for a limited period and may be reviewed to support your feedback and improve the service.';
 
 const AI_PROVIDER_DISCLOSURE =
   'Your recorded audio and its transcript are sent to our AI speech-to-text and grading providers to mark your performance. When the live AI patient is available, your microphone is streamed in real time to the live voice provider.';

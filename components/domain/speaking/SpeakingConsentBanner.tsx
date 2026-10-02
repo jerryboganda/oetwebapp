@@ -29,7 +29,7 @@ const FALLBACK_DISCLAIMER =
   'Practice estimate only. This is not an official OET score or result.';
 
 const FALLBACK_RECORDING_BODY =
-  'By recording you agree that your audio will be processed by our AI evaluator and may be reviewed by a human tutor. Recordings are stored securely and deleted after the configured retention window.';
+  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Audio recordings are retained for a limited period and may be reviewed to support your feedback and improve the service.';
 
 const FALLBACK_LIVE_VIDEO_BODY =
   'By joining a live tutor session you agree to share your audio and video with the tutor in real time. The session is recorded for review and stored securely until the retention period elapses.';

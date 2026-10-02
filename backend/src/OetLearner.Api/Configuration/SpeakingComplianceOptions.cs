@@ -52,17 +52,17 @@ public sealed class SpeakingComplianceOptions
     /// in the device-check screen and on the speaking task page.
     /// </summary>
     public string ConsentText { get; set; } =
-        "By recording you agree that your audio will be processed by our "
-        + "AI evaluator and may be reviewed by a human tutor. Recordings "
-        + "are stored securely and deleted after the configured retention "
-        + "window.";
+        "Your voice is processed during the session to provide AI-powered "
+        + "speaking practice and feedback. Audio recordings are retained for "
+        + "a limited period and may be reviewed to support your feedback and "
+        + "improve the service.";
 
     /// <summary>
     /// Phase 7: version code stored on every audio recording consent
     /// row. Bump when the consent body changes meaningfully so the
     /// learner can be asked to re-accept.
     /// </summary>
-    public string CurrentConsentVersion { get; set; } = "recording.v1";
+    public string CurrentConsentVersion { get; set; } = "recording.v2";
 
     /// <summary>
     /// Phase 7: version code stored on every live-video-with-tutor
