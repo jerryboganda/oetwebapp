@@ -1,5 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 
+/** Whitespace-separated word count — the one the editor reports. */
+export function countLetterWords(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/u).length : 0;
+}
+
 /**
  * Plain letter text → Tiptap document, the exact inverse of the Writing
  * editor's `editor.getText()`: paragraphs are joined by "\n\n" and a hard break
