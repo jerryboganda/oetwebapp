@@ -193,9 +193,13 @@ public static class AiBudgetClasses
             // experts/tutors, not students — admin-side, budget-exempt.
             || string.Equals(code, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase)
             // Jev dev/review triage never runs on a learner path. Mirrors the
-            // ClassOverrides entry in AiFeaturePolicyRegistry (the other
-            // "jev." judgments stay InteractiveLearning).
-            || string.Equals(code, AiFeatureCodes.JevDevelopmentTriage, StringComparison.OrdinalIgnoreCase))
+            // ClassOverrides entry in AiFeaturePolicyRegistry (the learner-facing
+            // "jev." judgments stay InteractiveLearning; admin tools are below).
+            || string.Equals(code, AiFeatureCodes.JevDevelopmentTriage, StringComparison.OrdinalIgnoreCase)
+            // Jev admin authoring/triage tools (never a learner path).
+            || string.Equals(code, AiFeatureCodes.JevWritingModelReview, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, AiFeatureCodes.JevAnswerKeyTriage, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, AiFeatureCodes.JevExtractionVerify, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

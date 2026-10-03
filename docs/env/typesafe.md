@@ -77,6 +77,14 @@ start (a normal Build & Deploy), not live.
 | `TYPESAFE__RESPONSEVERIFYENABLED` | Gateway response review (`jev.response.verify`) | Advisory review of a Reading/Listening explanation completion only (evidence relation, addresses-task, unsafe-recommendation). Never changes a grade or the gateway verdict. |
 | `TYPESAFE__DEVELOPMENTTRIAGEENABLED` | Development/review tooling triage (`jev.development.triage`) | Typed triage for the owner agent console. Never on a learner path. |
 | `TYPESAFE__WRITINGGUARDENFORCED` | Writing guard enforcement (owner decision) | Default `false`: a guard Block is recorded and flagged to a tutor but the letter is still graded by Max. `true` restores the old skip-the-paid-grade behaviour and needs explicit owner approval. |
+| `TYPESAFE__WRITINGCOACHNEEDENABLED` | Writing helper need-routing (`jev.writing.coachneed`) | Skips the coach LLM call only when Jev is confident (>= `TYPESAFE__COACHSKIPCONFIDENCETHRESHOLD`) that the paragraph needs nothing; any doubt keeps the LLM path. |
+| `TYPESAFE__CONVERSATIONCROSSCHECKENABLED` | Conversation evaluation cross-check (`jev.conversation.crosscheck`) | Advisory Score + ASR-artifact Choice; never changes a number. |
+| `TYPESAFE__PRONUNCIATIONWORDSENABLED` | Pronunciation word check (`jev.pronunciation.words`) | Advisory only; Azure/Gemini audio stay the acoustic truth. |
+| `TYPESAFE__WRITINGMODELREVIEWENABLED` | Writing Model Answer semantic review (`jev.writing.modelreview`) | Owner-approved 2026-10-03 replacement for the paid semantic validator (parallel Nouls). Admin authoring only. |
+| `TYPESAFE__LISTENINGGAPVERDICTENABLED` | Listening Part A gap verdict (`jev.listening.gaps`) | Advisory per-gap verdict for expert review. Never changes marks. |
+| `TYPESAFE__MOCKWEAKNESSENABLED` | Mock weakness ranking (`jev.mock.weakness`) | Ranks catalogue tags for the report; template text; no pass claims. |
+| `TYPESAFE__ANSWERKEYTRIAGEENABLED` | Answer-key dispute triage (`jev.answerkey.triage`) | Annotates the tutor queue only. |
+| `TYPESAFE__EXTRACTIONVERIFYENABLED` | Extraction verification (`jev.extraction.verify`) | Review flags on admin drafts; humans still approve. |
 | `TYPESAFE__WRITINGOUTCOMEENABLED` | Writing pass/fail cross-check (`jev.writing.outcome`) | One Noul beside the grader's verdict; a confident flip flags tutor review. Advisory, runs after the grade chain. |
 | `TYPESAFE__WRITINGFINDINGSENABLED` | Writing finding classification (`jev.writing.findings`) | Criterion Choice and valid-alternative Noul per AI finding. Advisory. |
 | `TYPESAFE__SPEAKINGREADINESSENABLED` | Speaking pre-grade readiness (`jev.speaking.readiness`) | Negative flag to tutor review only; never skips or reroutes the pinned Max grade. |
@@ -91,6 +99,7 @@ All six are probabilities in the range 0 to 1 inclusive.
 | `TYPESAFE__OUTCOMECONFIDENCETHRESHOLD` | `0.70` | Writing outcome Noul must be at least this confident (either way) before a pass/fail flip counts. |
 | `TYPESAFE__CROSSCHECKDIVERGENCETHRESHOLD` | `0.34` | Normalised grader-vs-Jev distance (0..1 of the criterion scale) that counts as divergence. |
 | `TYPESAFE__CROSSCHECKCONFIDENCETHRESHOLD` | `0.60` | Minimum Jev confidence for a cross-check answer to be used; lower is treated as no signal. |
+| `TYPESAFE__COACHSKIPCONFIDENCETHRESHOLD` | `0.85` | The "nothing needed" Choice must reach this confidence before the coach LLM call may be skipped. |
 | `TYPESAFE__READINESSFLAGTHRESHOLD` | `0.80` | Any single Speaking readiness Noul at or above this flags the submission for tutor attention. |
 | `TYPESAFE__GUARDREVIEWTHRESHOLD` | `0.50` | At or above this (below the block threshold) the submission proceeds and is logged for calibration. |
 | `TYPESAFE__ROUTECONFIDENCETHRESHOLD` | `0.70` | Router confidence required before a routed target may override the caller's explicit request. |
@@ -147,7 +156,13 @@ calibration kit on a workstation or the VPS; it runs on Actions only.
    tutor flags and advisory fields only).
 5. `TYPESAFE__CONVERSATIONADVISORYENABLED` (Speaking shadow). Only after the advisory
    runs off the turn's critical path.
-6. Reading and Listening surfaces, using the per-surface flags those waves add.
+6. The remaining advisory surfaces, one at a time, each after a green calibration run:
+   `TYPESAFE__CONVERSATIONCROSSCHECKENABLED`, `TYPESAFE__PRONUNCIATIONWORDSENABLED`,
+   `TYPESAFE__WRITINGCOACHNEEDENABLED` (the only one that can skip an LLM call),
+   `TYPESAFE__LISTENINGGAPVERDICTENABLED`, `TYPESAFE__MOCKWEAKNESSENABLED`,
+   `TYPESAFE__ANSWERKEYTRIAGEENABLED`, `TYPESAFE__EXTRACTIONVERIFYENABLED`, and
+   `TYPESAFE__WRITINGMODELREVIEWENABLED` (owner-approved replacement for the paid semantic
+   validator; admin authoring only, holds a letter if Jev is down).
 7. `TYPESAFE__WRITINGGUARDENABLED`, last. It is the only surface that can stop a
    submission, so it needs the longest calibration record, including
    `injection-attempt.json` staying green.

@@ -838,7 +838,8 @@ public sealed record WritingTutorQueueItemResponse(
     DateTimeOffset RequestedAt,
     DateTimeOffset? ClaimedAt,
     string? ClaimedByTutorId,
-    string Status);
+    string Status,
+    string? ReviewReason = null);
 
 public sealed record WritingTutorQueueResponse(IReadOnlyList<WritingTutorQueueItemResponse> Items);
 

@@ -85,7 +85,13 @@ export default function AdminAnswerKeyReportsPage() {
         assessment: assessment || undefined,
         limit: 50,
       });
-      setRows(response.items ?? []);
+      // Advisory only: reports Jev flags as worth a closer look float up; nothing else changes.
+      // Array.prototype.sort is stable, so the server's newest-first order holds within each group.
+      setRows(
+        [...(response.items ?? [])].sort(
+          (a, b) => Number(!!b.jevTriage?.prioritiseReview) - Number(!!a.jevTriage?.prioritiseReview),
+        ),
+      );
     } catch (err) {
       setToast({
         variant: 'error',
@@ -293,6 +299,20 @@ export default function AdminAnswerKeyReportsPage() {
                             <p className="font-medium text-admin-fg-strong">{REASON_LABELS[row.reasonCode] ?? row.reasonCode}</p>
                             {row.details ? (
                               <p className="mt-1 max-w-xs text-xs text-admin-fg-muted">{row.details}</p>
+                            ) : null}
+                            {row.jevTriage ? (
+                              <div
+                                className="mt-2 max-w-xs rounded-admin border border-admin-border bg-admin-bg-subtle p-2"
+                                data-testid={`jev-triage-${row.id}`}
+                              >
+                                <p className="text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
+                                  Jev hint (advisory)
+                                </p>
+                                <p className="mt-1 text-xs text-admin-fg-muted">{row.jevTriage.summary}</p>
+                                {row.jevTriage.prioritiseReview ? (
+                                  <Badge variant="warning" className="mt-1">Worth reviewing first</Badge>
+                                ) : null}
+                              </div>
                             ) : null}
                           </td>
                           <td className="px-4 py-3 text-admin-fg-strong">

@@ -323,6 +323,99 @@ public sealed class JevWritingWave2PipelineTests
         Assert.Equal(31, outcome.RawTotal);
     }
 
+    // ── Persisted review reason (ITEM 3) ────────────────────────────────────
+
+    [Fact]
+    public async Task ReviewReason_IsStoredOnTheNewAssignment()
+    {
+        await using var db = NewDb();
+        var judgments = new ScriptedJudgments();
+        judgments.Handlers[AiFeatureCodes.JevWritingOutcome] = r => Answer(r, _ => Noul(0.10));
+        var (pipeline, _) = BuildPipeline(db, judgments, Flags(o => o.WritingOutcomeEnabled = true), Completion(380));
+        var id = await SeedSubmissionAsync(db);
+
+        await pipeline.EvaluateAsync(id, default);
+
+        var assignment = Assert.Single(await AssignmentsAsync(db, id));
+        Assert.Equal(WritingJevReviewReasons.OutcomeFlip, assignment.ReviewReason);
+    }
+
+    [Fact]
+    public async Task ReviewReason_SeveralReasonsInOneRun_AreAllStored_FirstReasonFirst_WithoutDuplicates()
+    {
+        await using var db = NewDb();
+        var judgments = new ScriptedJudgments();
+        judgments.Handlers[AiFeatureCodes.JevWritingGuard] = BlockingGuard;
+        judgments.Handlers[AiFeatureCodes.JevWritingVerify] = r => Answer(r, _ => Choice("contradicted", 0.9));
+        judgments.Handlers[AiFeatureCodes.JevWritingOutcome] = r => Answer(r, _ => Noul(0.05));
+        var (pipeline, _) = BuildPipeline(
+            db, judgments, Flags(o =>
+            {
+                o.WritingGuardEnabled = true;
+                o.WritingVerifyEnabled = true;
+                o.WritingOutcomeEnabled = true;
+            }), Completion(findings: TwoFindings));
+        var id = await SeedSubmissionAsync(db);
+
+        await pipeline.EvaluateAsync(id, default);
+
+        var assignment = Assert.Single(await AssignmentsAsync(db, id));
+        var codes = assignment.ReviewReason!.Split(',');
+        Assert.Equal(WritingJevReviewReasons.GuardBlock, codes[0]);
+        Assert.Contains(WritingJevReviewReasons.VerifyFlag, codes);
+        Assert.Contains(WritingJevReviewReasons.OutcomeFlip, codes);
+        Assert.Equal(codes.Length, codes.Distinct().Count());
+        Assert.True(assignment.ReviewReason.Length <= 64);
+    }
+
+    [Theory]
+    [InlineData(false, "criteria_divergence", "criteria_divergence,outcome_flip")]   // tracked existing row: first reason kept, new one appended
+    [InlineData(true, "criteria_divergence", "criteria_divergence,outcome_flip")]    // existing row only in the database
+    [InlineData(true, "outcome_flip", "outcome_flip")]                               // same reason again: no duplicate
+    [InlineData(true, null, "outcome_flip")]                                          // old row without a reason gains one
+    public async Task ReviewReason_ExistingAssignment_KeepsTheFirstReason_AndAppendsOnlyNewDistinctOnes(
+        bool detachExisting, string? existingReason, string expectedReason)
+    {
+        await using var db = NewDb();
+        var judgments = new ScriptedJudgments();
+        judgments.Handlers[AiFeatureCodes.JevWritingOutcome] = r => Answer(r, _ => Noul(0.10));
+        var (pipeline, _) = BuildPipeline(db, judgments, Flags(o => o.WritingOutcomeEnabled = true), Completion(380));
+        var id = await SeedSubmissionAsync(db);
+        var existingId = Guid.NewGuid();
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = existingId,
+            SubmissionId = id,
+            TutorId = string.Empty,
+            ClaimedAt = DateTimeOffset.UtcNow,
+            DueAt = DateTimeOffset.UtcNow.AddHours(24),
+            Status = "pending",
+            ReviewReason = existingReason,
+        });
+        await db.SaveChangesAsync();
+        if (detachExisting) db.ChangeTracker.Clear();
+
+        await pipeline.EvaluateAsync(id, default);
+
+        var assignment = Assert.Single(await AssignmentsAsync(db, id));
+        Assert.Equal(existingId, assignment.Id);
+        Assert.Equal(expectedReason, assignment.ReviewReason);
+    }
+
+    [Fact]
+    public async Task ReviewReason_StaysNull_WhenNothingIsFlagged()
+    {
+        await using var db = NewDb();
+        var judgments = new ScriptedJudgments();
+        judgments.Handlers[AiFeatureCodes.JevWritingOutcome] = r => Answer(r, _ => Noul(0.90)); // agrees
+        var (pipeline, _) = BuildPipeline(db, judgments, Flags(o => o.WritingOutcomeEnabled = true), Completion(380));
+        var id = await SeedSubmissionAsync(db);
+
+        await pipeline.EvaluateAsync(id, default);
+
+        Assert.Empty(await AssignmentsAsync(db, id));
+    }
+
     // ── Flags off / Jev outage / Jev crash ──────────────────────────────────
 
     [Fact]

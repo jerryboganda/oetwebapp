@@ -17,7 +17,8 @@ public sealed record WritingTutorQueueEntry(
     DateTimeOffset? ClaimedAt,
     string? ClaimedByTutorId,
     string Status,
-    int? WaitMinutes);
+    int? WaitMinutes,
+    string? ReviewReason = null);
 
 public sealed record WritingTutorReviewView(
     Guid Id,
@@ -132,7 +133,8 @@ public sealed class WritingTutorReviewService(
                 assignment.Status == "pending" ? null : assignment.ClaimedAt,
                 string.IsNullOrWhiteSpace(assignment.TutorId) ? null : assignment.TutorId,
                 assignment.Status,
-                wait));
+                wait,
+                assignment.ReviewReason));
         }
         return result;
     }

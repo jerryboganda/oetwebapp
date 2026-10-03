@@ -60,7 +60,9 @@ public sealed partial class ListeningPartAAiScoringService(
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartAAiScoringService> logger,
-    IAiPricingResolver? pricingResolver = null) : IListeningPartAAiScoringService
+    IAiPricingResolver? pricingResolver = null,
+    OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentService? jev = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null) : IListeningPartAAiScoringService
 {
     public const string AnthropicProviderCode = "anthropic";
     // UBAG route: mirrors the extraction services — an admin ubag route
@@ -68,7 +70,7 @@ public sealed partial class ListeningPartAAiScoringService(
     // json_object + forced-tool emulation.
     public const string UbagProviderCode = "ubag";
 
-    private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted, string ApprovedRationale);
+    private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted, string ApprovedRationale, bool CaseSensitive = false);
     private sealed record Verdict(int Number, string? Verdict_, string? Rationale);
 
     private enum CallDisposition { Success, Retryable, Terminal }
@@ -167,7 +169,8 @@ public sealed partial class ListeningPartAAiScoringService(
                 UserAnswer: TryReadString(x.a.UserAnswerJson) ?? string.Empty,
                 Canonical: TryReadString(x.q.CorrectAnswerJson) ?? string.Empty,
                 Accepted: ParseAccepted(x.q.AcceptedSynonymsJson),
-                ApprovedRationale: rationaleByQuestionId.GetValueOrDefault(x.q.Id, string.Empty)))
+                ApprovedRationale: rationaleByQuestionId.GetValueOrDefault(x.q.Id, string.Empty),
+                CaseSensitive: x.q.CaseSensitive))
             .Where(x => !string.IsNullOrWhiteSpace(x.ApprovedRationale))
             .ToList();
 
@@ -249,35 +252,53 @@ public sealed partial class ListeningPartAAiScoringService(
         DateTimeOffset now,
         CancellationToken ct)
     {
-        var provider = await ResolveProviderAsync(ct);
-        // Route-aware: an admin ubag route for listening.parta.score diverts
-        // to the facade path below (usage recorded against ubag). Otherwise
-        // the Anthropic path runs byte-identical to before.
-        var ubagRoute = await routeResolver.ResolveAsync(AiFeatureCodes.ListeningPartAScore, ct);
-        var useUbag = ubagRoute is not null
-            && string.Equals(ubagRoute.ProviderCode, UbagProviderCode, StringComparison.OrdinalIgnoreCase);
-        if (provider is null && !useUbag)
-        {
-            // NOT terminal and NOT an attempt: nothing left the process and an
-            // admin can still configure/rotate the platform credential. The
-            // cool-off only stops the 20 s re-selection spin.
-            var deferUntil = now + ListeningPartAAiRetryPolicy.UnconfiguredProviderCooldown;
-            foreach (var a in partAAnswers) a.AiNextAttemptAt = deferUntil;
-            await db.SaveChangesAsync(ct);
-            await usageRecorder.CompleteOperationAsync(
-                lease.OperationId!, AiOperationState.Cancelled, null, AnthropicProviderCode, null, CancellationToken.None,
-                lease.BudgetReservation);
-            logger.LogDebug(
-                "Part A AI scoring deferred for attempt {AttemptId}: anthropic provider/key not configured.",
-                attemptId);
-            return;
-        }
+        ProviderCallOutcome outcome;
+        string servingProviderCode;
+        string servingModel;
 
-        var outcome = useUbag
-            ? await CallUbagVerdictsAsync(items, attempt.UserId, ubagRoute!.Model, lease, ct)
-            : await CallClaudeVerdictsAsync(items, attempt.UserId, provider!, lease, ct);
-        var servingProviderCode = useUbag ? UbagProviderCode : AnthropicProviderCode;
-        var servingModel = useUbag ? (ubagRoute!.Model ?? "chatgpt_web") : provider!.Model;
+        // Jev first when TypeSafe + ListeningGapVerdictEnabled are on: one Choice
+        // call per attempt, advisory only (see ListeningPartAAiScoringService.Jev.cs).
+        // Null (flag off, unavailable, low confidence, any failure) means the
+        // existing Claude/UBAG path below runs exactly as before.
+        var jevServed = await TryJevGapVerdictsAsync(attempt, items, attemptId, attemptNumber, ct);
+        if (jevServed is not null)
+        {
+            outcome = jevServed.Outcome;
+            servingProviderCode = OetLearner.Api.Configuration.TypeSafeOptions.ProviderCode;
+            servingModel = jevServed.Model;
+        }
+        else
+        {
+            var provider = await ResolveProviderAsync(ct);
+            // Route-aware: an admin ubag route for listening.parta.score diverts
+            // to the facade path below (usage recorded against ubag). Otherwise
+            // the Anthropic path runs byte-identical to before.
+            var ubagRoute = await routeResolver.ResolveAsync(AiFeatureCodes.ListeningPartAScore, ct);
+            var useUbag = ubagRoute is not null
+                && string.Equals(ubagRoute.ProviderCode, UbagProviderCode, StringComparison.OrdinalIgnoreCase);
+            if (provider is null && !useUbag)
+            {
+                // NOT terminal and NOT an attempt: nothing left the process and an
+                // admin can still configure/rotate the platform credential. The
+                // cool-off only stops the 20 s re-selection spin.
+                var deferUntil = now + ListeningPartAAiRetryPolicy.UnconfiguredProviderCooldown;
+                foreach (var a in partAAnswers) a.AiNextAttemptAt = deferUntil;
+                await db.SaveChangesAsync(ct);
+                await usageRecorder.CompleteOperationAsync(
+                    lease.OperationId!, AiOperationState.Cancelled, null, AnthropicProviderCode, null, CancellationToken.None,
+                    lease.BudgetReservation);
+                logger.LogDebug(
+                    "Part A AI scoring deferred for attempt {AttemptId}: anthropic provider/key not configured.",
+                    attemptId);
+                return;
+            }
+
+            outcome = useUbag
+                ? await CallUbagVerdictsAsync(items, attempt.UserId, ubagRoute!.Model, lease, ct)
+                : await CallClaudeVerdictsAsync(items, attempt.UserId, provider!, lease, ct);
+            servingProviderCode = useUbag ? UbagProviderCode : AnthropicProviderCode;
+            servingModel = useUbag ? (ubagRoute!.Model ?? "chatgpt_web") : provider!.Model;
+        }
 
         if (outcome.Disposition != CallDisposition.Success)
         {
@@ -341,8 +362,13 @@ public sealed partial class ListeningPartAAiScoringService(
         // and with CancellationToken.None, because the provider call is already
         // paid for: a caller cancelling now must not cost us the result.
         await db.SaveChangesAsync(CancellationToken.None);
+        // A Jev-served attempt made no call under THIS lease (Jev holds its own lease
+        // and usage row), so the lease is released rather than committing this feature's
+        // flat budget hold; Cancelled is the zero-spend terminal state.
         await usageRecorder.CompleteOperationAsync(
-            lease.OperationId!, AiOperationState.Completed, outcome.UsageRecordId,
+            lease.OperationId!,
+            jevServed is not null ? AiOperationState.Cancelled : AiOperationState.Completed,
+            outcome.UsageRecordId,
             servingProviderCode, servingModel, CancellationToken.None,
             lease.BudgetReservation);
         logger.LogInformation(

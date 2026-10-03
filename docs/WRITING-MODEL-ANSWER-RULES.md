@@ -14,6 +14,8 @@ Never call a paid AI API for Writing work: no generation, no semantic validation
 - the agent's own documented semantic review against the rule map (handoff: `.tools-state/rev8-writing/AGENT-HANDOFF-WRITING-REV10.md`).
 Only the owner can lift this rule, explicitly, in writing.
 
+**Owner exception 2026-10-03 (Jev semantic review):** the owner explicitly approved ONE path: the Jev semantic review (`jev.writing.modelreview`, `JevWritingModelReview`, flag `TypeSafe:WritingModelReviewEnabled`, default OFF, about $42 per billion input tokens). When `TypeSafe:Enabled` and that flag are on, it runs as the semantic layer of the gate (only when semantic validation is requested, i.e. `includeSemantic` true) INSTEAD of the paid free-text Claude validator, never both. Jev returns only typed probabilities; the findings are static code-owned checklist messages, and Jev never writes or alters letter text. If Jev is unavailable while semantic validation was requested, the gate HOLDS the letter with `model_answer_semantic_validator_unavailable` (transient; reason in `SemanticError`), exactly like an unavailable paid validator: never a pass, never a fallback to the paid validator. `includeSemantic: false` stays $0 with no Jev call, and every paid free-text AI validator, generator and grader for Writing work remains forbidden.
+
 ## 2. THE WORKFLOW PRINCIPLE (owner, verbatim intent)
 
 > CASE NOTES + WRITING TASK + CURRENT RULES → produce the best clinically accurate OET Model Answer → validator checks that answer correctly.

@@ -201,6 +201,19 @@ export async function updateAdminMockLeakReport(
 export type AdminAnswerKeyReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
 export type AdminAnswerKeyReportAssessment = 'reading' | 'listening';
 
+/**
+ * Advisory Jev annotation on a pending report (computed on read; absent when the
+ * triage flag is off or Jev is unavailable). It never accepts an answer or changes a key.
+ */
+export interface AdminAnswerKeyTriageHint {
+  equivalenceProbability: number;
+  likelyCause: 'wrong_official_answer' | 'missing_accepted_variant' | 'learner_error' | 'unclear' | string;
+  causeConfidence: number;
+  prioritiseReview: boolean;
+  summary: string;
+  model: string | null;
+}
+
 export interface AdminAnswerKeyReport {
   id: string;
   assessment: AdminAnswerKeyReportAssessment | string;
@@ -225,6 +238,7 @@ export interface AdminAnswerKeyReport {
   resolvedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  jevTriage?: AdminAnswerKeyTriageHint | null;
 }
 
 export async function listAdminAnswerKeyReports(

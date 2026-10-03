@@ -8,6 +8,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
@@ -116,7 +117,9 @@ public sealed class ListeningPartAExtractionService(
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartAExtractionService> logger,
-    IListeningPolicyService? listeningPolicyService = null) : IListeningPartAExtractionService
+    IListeningPolicyService? listeningPolicyService = null,
+    ITypeSafeJudgmentService? judgments = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafe = null) : IListeningPartAExtractionService
 {
     // Owner policy is checked before any OCR or model call. Every result stays
     // Pending until an authorised admin explicitly approves it; the extraction
@@ -219,10 +222,14 @@ public sealed class ListeningPartAExtractionService(
             throw ApiException.Validation("listening_extract_bad_manifest", "The AI returned an empty manifest.");
 
         var (warnings, gapsA1, gapsA2, ansA1, ansA2) = ValidateManifest(manifest);
+        // IsStub / StubReason come from the deterministic warnings only; Jev review flags are
+        // advisory and surface in the summary and the returned warnings without flipping them.
+        var jevFlags = await JevReviewFlagsAsync(manifest, answerMarkdown, adminId, paperId, ct);
         var isStub = warnings.Count > 0;
         var summary = isStub
             ? $"AI extraction with {warnings.Count} issue(s) to review — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers."
             : $"AI extraction OK — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers.";
+        if (jevFlags.Count > 0) summary += " " + string.Join(" ", jevFlags);
 
         var draft = new ListeningExtractionDraft
         {
@@ -244,7 +251,8 @@ public sealed class ListeningPartAExtractionService(
             AnthropicProviderCode, null, CancellationToken.None, lease.BudgetReservation);
 
         return new ListeningExtractionRunResult(
-            draft.Id, "pending", gapsA1, gapsA2, ansA1, ansA2, warnings, summary);
+            draft.Id, "pending", gapsA1, gapsA2, ansA1, ansA2,
+            jevFlags.Count == 0 ? warnings : warnings.Concat(jevFlags).ToList(), summary);
     }
 
     // ── List ─────────────────────────────────────────────────────────────────
@@ -366,10 +374,14 @@ public sealed class ListeningPartAExtractionService(
             throw ApiException.Validation("listening_extract_bad_manifest", "The AI returned an empty manifest.");
 
         var (warnings, gapsA1, gapsA2, ansA1, ansA2) = ValidateManifest(manifest);
+        // Without a supplied key the answer text is a placeholder: nothing to verify against.
+        var jevFlags = await JevReviewFlagsAsync(
+            manifest, answerBytes is { Length: > 0 } ? answerMarkdown : null, adminId, paperId, ct);
         var isStub = warnings.Count > 0;
         var summary = isStub
             ? $"AI import with {warnings.Count} issue(s) to review — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers."
             : $"AI import OK — A1 {gapsA1} gaps / {ansA1} answers, A2 {gapsA2} gaps / {ansA2} answers.";
+        if (jevFlags.Count > 0) summary += " " + string.Join(" ", jevFlags);
 
         // Stage a Pending draft so the import is auditable and can still be
         // approved later through the normal flow, even though the operator's
@@ -544,6 +556,64 @@ public sealed class ListeningPartAExtractionService(
         }
 
         return (warnings, gapsA1, gapsA2, ansA1, ansA2);
+    }
+
+    /// <summary>
+    /// Jev review flags (jev.extraction.verify): for each gap, whether the printed answer key supports the
+    /// extracted correct answer, and whether the gap's note line looks OCR-corrupted. Flags are advisory text
+    /// only, kept apart from the deterministic warnings so they never change IsStub or StubReason: the
+    /// manifest is never edited, the draft is never approved or blocked, and a Jev problem (or the flag
+    /// being off) returns no flags.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> JevReviewFlagsAsync(
+        ListeningStructureManifest manifest, string? answerMarkdown,
+        string adminId, string paperId, CancellationToken ct)
+    {
+        var options = typeSafe?.Value;
+        if (judgments is null || options is null || !JevExtractionVerify.Enabled(options)) return Array.Empty<string>();
+
+        try
+        {
+            var items = new List<ExtractionVerifyItem>();
+            foreach (var extract in manifest.PartA?.Extracts ?? Array.Empty<ListeningExtractManifest>())
+            {
+                var questions = extract.Questions ?? Array.Empty<ListeningQuestionManifest>();
+                for (var i = 0; i < questions.Count; i++)
+                {
+                    var q = questions[i];
+                    items.Add(new ExtractionVerifyItem($"Q{q.Number}", GapLine(extract.NotesBody, i + 1), null, q.CorrectAnswer ?? string.Empty));
+                }
+            }
+
+            var advisory = await JevExtractionVerify.VerifyAsync(
+                judgments, options, items, answerMarkdown, adminId, paperId, ct, logger: logger);
+            return JevExtractionVerify.FlagsOf(advisory);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Jev extraction verification failed for paper {PaperId}; the draft carries no Jev flags.", paperId);
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>The note line holding the Nth gap (1-based) of an extract body; null when there is none.</summary>
+    private static string? GapLine(string? notesBody, int gapNumber)
+    {
+        if (string.IsNullOrEmpty(notesBody)) return null;
+        var seen = 0;
+        foreach (var line in notesBody.Split('\n'))
+        {
+            var gaps = CountGaps(line);
+            if (gaps == 0) continue;
+            if (gapNumber <= seen + gaps) return line.Trim();
+            seen += gaps;
+        }
+
+        return null;
     }
 
     /// <summary>Count gap markers — a run of 4+ underscores is ONE gap. Byte-identical

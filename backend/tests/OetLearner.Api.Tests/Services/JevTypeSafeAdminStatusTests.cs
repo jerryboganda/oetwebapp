@@ -72,7 +72,12 @@ public sealed class JevTypeSafeAdminStatusTests
         Assert.Equal(JsonValueKind.Null, key.GetProperty("apiKeyHint").ValueKind);
 
         var surfaces = status.GetProperty("surfaces").EnumerateArray().ToList();
-        Assert.Equal(12, surfaces.Count);
+        // 12 original surfaces + 8 added 2026-10-03 (coach need, conversation cross-check, pronunciation words,
+        // Model Answer review, listening gaps, mock weakness, answer-key triage, extraction verify).
+        Assert.Equal(20, surfaces.Count);
+        // The frontend keys rows by feature code and the 7-day usage join is by feature code: both must be unique.
+        Assert.Equal(20, surfaces.Select(s => s.GetProperty("featureCode").GetString()).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(20, surfaces.Select(s => s.GetProperty("envVar").GetString()).Distinct(StringComparer.Ordinal).Count());
         Assert.All(surfaces, s =>
         {
             Assert.False(s.GetProperty("enabled").GetBoolean());
