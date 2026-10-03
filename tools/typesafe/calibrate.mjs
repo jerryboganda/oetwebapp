@@ -8,8 +8,9 @@
  * each anchor. Run this BEFORE flipping any TypeSafe:Writing*Enabled flag,
  * and after every model bump in TypeSafeOptions.
  *
- * Usage:
- *   TYPESAFE_API_KEY=... node tools/typesafe/calibrate.mjs
+ * Runs on GitHub Actions only (repo AGENTS.md compute policy): dispatch
+ * .github/workflows/jev-calibrate.yml, which injects TYPESAFE_API_KEY from the
+ * repository secret.
  *
  * Server-side only: the key is read from the environment, never logged.
  */

@@ -533,10 +533,84 @@ case "$livekit_provider" in
     ;;
 esac
 
+# TypeSafe (Jev) tuning knobs are all optional: an unset key falls back to the
+# default docker-compose.production.yml forwards. A value that IS set must be
+# sane, because a bad threshold silently turns a judgment gate off (0) or makes
+# it unreachable (>1). Reference: docs/env/typesafe.md.
+require_unit_interval_if_set() {
+  local key="$1"
+  local value
+  value=$(read_env_value "$key" || true)
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  if ! awk -v v="$value" 'BEGIN { exit !(v ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && v + 0 >= 0 && v + 0 <= 1) }' 2>/dev/null; then
+    echo "[env] $key must be a number between 0 and 1 when set" >&2
+    failed=1
+  fi
+}
+
+require_int_min_if_set() {
+  local key="$1"
+  local min="$2"
+  local value
+  value=$(read_env_value "$key" || true)
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  case "$value" in
+    *[!0-9]*)
+      echo "[env] $key must be an integer >= $min when set" >&2
+      failed=1
+      return
+      ;;
+  esac
+  if [ "${#value}" -gt 9 ] || [ "$((10#$value))" -lt "$min" ]; then
+    echo "[env] $key must be an integer between $min and 999999999 when set" >&2
+    failed=1
+  fi
+}
+
+typesafe_surface_flags=(
+  TYPESAFE__WRITINGGUARDENABLED
+  TYPESAFE__WRITINGROUTEENABLED
+  TYPESAFE__WRITINGVERIFYENABLED
+  TYPESAFE__WRITINGCRITERIAENABLED
+  TYPESAFE__COMPANIONRERANKENABLED
+  TYPESAFE__CONVERSATIONADVISORYENABLED
+  TYPESAFE__RESPONSEVERIFYENABLED
+  TYPESAFE__DEVELOPMENTTRIAGEENABLED
+)
 typesafe_enabled=$(read_env_value TYPESAFE__ENABLED || true)
 if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
   require_min_length TYPESAFE__APIKEY 16
+else
+  # Warn only: every surface flag is a no-op until the master switch is on, so
+  # this is a mis-staged rollout, not a broken deploy.
+  for typesafe_flag in "${typesafe_surface_flags[@]}"; do
+    typesafe_flag_value=$(read_env_value "$typesafe_flag" || true)
+    if [ "$(printf '%s' "$typesafe_flag_value" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+      echo "[env] WARNING: $typesafe_flag=true has no effect while TYPESAFE__ENABLED is not true" >&2
+    fi
+  done
 fi
+# The six thresholds are probabilities; the per-token price is a USD fraction
+# (default 0.000000042), so anything above 1 is a typo there too.
+for typesafe_fraction in \
+  TYPESAFE__RESPONSECONFIDENCETHRESHOLD \
+  TYPESAFE__DEVELOPMENTCONFIDENCETHRESHOLD \
+  TYPESAFE__GUARDBLOCKTHRESHOLD \
+  TYPESAFE__GUARDREVIEWTHRESHOLD \
+  TYPESAFE__ROUTECONFIDENCETHRESHOLD \
+  TYPESAFE__VERIFYCONFIDENCETHRESHOLD \
+  TYPESAFE__COSTPERINPUTTOKENUSD; do
+  require_unit_interval_if_set "$typesafe_fraction"
+done
+require_int_min_if_set TYPESAFE__TIMEOUTSECONDS 1
+require_int_min_if_set TYPESAFE__MAXRETRIES 0
+require_int_min_if_set TYPESAFE__VERIFYMAXFINDINGSPERCALL 1
+require_int_min_if_set TYPESAFE__BREAKERFAILURETHRESHOLD 1
+require_int_min_if_set TYPESAFE__BREAKERCOOLDOWNSECONDS 1
 
 # GEPA placement engine connection is OPTIONAL in the env file (same owner
 # policy as live voice / LiveKit / TypeSafe): when both keys are empty the

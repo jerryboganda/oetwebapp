@@ -1,0 +1,116 @@
+name: Jev calibrate
+
+# Live TypeSafe (Jev) checks on GitHub Actions. This is the compute-policy
+# compliant way to run tools/typesafe/e2e.mjs and calibrate.mjs (AGENTS.md
+# forbids running them on the workstation). Run it green before flipping any
+# TypeSafe:* flag and after every model-pin bump (pinned: jev-1.13.0).
+#
+# Needs the repository secret TYPESAFE_API_KEY (owner sets it with
+# `gh secret set TYPESAFE_API_KEY`). The key reaches the scripts through the
+# environment only. Logs on a public-when-working repo are world-readable, so
+# the scripts print only ids, numbers and pass/fail: the fixtures are synthetic
+# (no learner text) and the key is never echoed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Which live suite to run'
+        type: choice
+        options:
+          - e2e
+          - calibrate
+          - both
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jev-calibrate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  calibrate:
+    name: Jev live calibration (jev-1.13.0)
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require TYPESAFE_API_KEY
+        id: key
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          if [ -z "$TYPESAFE_API_KEY" ]; then
+            echo "::error title=TYPESAFE_API_KEY missing::Repository secret TYPESAFE_API_KEY is empty. The owner sets it with 'gh secret set TYPESAFE_API_KEY' (paste the key at the prompt). Nothing was run."
+            exit 1
+          fi
+          echo "::add-mask::$TYPESAFE_API_KEY"
+
+      - name: E2E (tools/typesafe/e2e.mjs)
+        id: e2e
+        if: ${{ inputs.suite != 'calibrate' }}
+        continue-on-error: true
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          export TYPESAFE_API_KEY="$(printf '%s' "$TYPESAFE_API_KEY" | tr -d '[:space:]')"
+          node tools/typesafe/e2e.mjs 2>&1 | tee "$RUNNER_TEMP/e2e.log"
+
+      - name: Calibrate (tools/typesafe/calibrate.mjs)
+        id: calibrate
+        if: ${{ inputs.suite != 'e2e' }}
+        continue-on-error: true
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          export TYPESAFE_API_KEY="$(printf '%s' "$TYPESAFE_API_KEY" | tr -d '[:space:]')"
+          node tools/typesafe/calibrate.mjs 2>&1 | tee "$RUNNER_TEMP/calibrate.log"
+
+      - name: Summary
+        if: ${{ always() }}
+        env:
+          KEY: ${{ steps.key.outcome }}
+          E2E: ${{ steps.e2e.outcome }}
+          CALIBRATE: ${{ steps.calibrate.outcome }}
+        run: |
+          {
+            echo "## Jev live calibration (pinned model jev-1.13.0)"
+            echo
+            if [ "$KEY" != "success" ]; then
+              echo "**Not run:** repository secret \`TYPESAFE_API_KEY\` is empty."
+            else
+              echo "| Suite | Result |"
+              echo "|---|---|"
+              echo "| e2e | $E2E |"
+              echo "| calibrate | $CALIBRATE |"
+              if [ -f "$RUNNER_TEMP/e2e.log" ]; then
+                echo
+                echo "e2e verdict:"
+                echo '```'
+                grep -E '^(PASS|FAIL)' "$RUNNER_TEMP/e2e.log" | head -n 5 || true
+                echo '```'
+              fi
+              if [ -f "$RUNNER_TEMP/calibrate.log" ]; then
+                echo
+                echo "calibrate verdict:"
+                echo '```'
+                grep -E '^[0-9]+ checks, |^FAIL' "$RUNNER_TEMP/calibrate.log" | head -n 40 || true
+                echo '```'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when a suite failed
+        if: ${{ steps.e2e.outcome == 'failure' || steps.calibrate.outcome == 'failure' }}
+        run: |
+          echo "::error title=Jev calibration failed::e2e=${{ steps.e2e.outcome }} calibrate=${{ steps.calibrate.outcome }}. Do not flip any TypeSafe flag until this run is green."
+          exit 1

@@ -191,7 +191,11 @@ public static class AiBudgetClasses
             || string.Equals(code, AiFeatureCodes.WritingModelAnswerPregenerate, StringComparison.OrdinalIgnoreCase)
             // Owner directive 2026-09-23: the expert assistant serves staff
             // experts/tutors, not students — admin-side, budget-exempt.
-            || string.Equals(code, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(code, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase)
+            // Jev dev/review triage never runs on a learner path. Mirrors the
+            // ClassOverrides entry in AiFeaturePolicyRegistry (the other
+            // "jev." judgments stay InteractiveLearning).
+            || string.Equals(code, AiFeatureCodes.JevDevelopmentTriage, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

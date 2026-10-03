@@ -208,7 +208,7 @@ jobs:
         run: node scripts/qa/writing-prod-diagnose.mjs
 
   software-review:
-    name: Jev typed software review (AI Gateway)
+    name: Jev typed software review (TypeSafe API)
     if: ${{ inputs.review_json != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -216,17 +216,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install isolated review SDK
-        run: npm install --prefix "$RUNNER_TEMP/jev-review" --no-package-lock --no-save ai@7.0.107
       - name: Evaluate and validate typed judgments
-        working-directory: ${{ runner.temp }}/jev-review
         env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
           REVIEW_JSON: ${{ inputs.review_json }}
         run: |
           node --input-type=module <<'NODE'
-          import { experimental_evaluate } from 'ai';
-          if (!process.env.AI_GATEWAY_API_KEY) throw new Error('AI Gateway key is unavailable');
+          const apiKey = process.env.TYPESAFE_API_KEY;
+          if (!apiKey) throw new Error('TypeSafe API key is unavailable');
           const request = JSON.parse(process.env.REVIEW_JSON);
           if (!request.state || !request.questions) throw new Error('Review state and questions are required');
           for (const question of Object.values(request.questions)) {
@@ -234,12 +231,19 @@ jobs:
               throw new Error('Only explicit typed choice questions are supported');
             }
           }
-          const result = await experimental_evaluate({
-            model: 'typesafe-ai/jev',
-            state: request.state,
-            questions: request.questions,
-            abortSignal: AbortSignal.timeout(30000),
+          const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({ model: 'jev-latest', state: request.state, questions: request.questions }),
+            signal: AbortSignal.timeout(30000),
           });
+          if (!response.ok) throw new Error(`TypeSafe API returned HTTP ${response.status}`);
+          const result = await response.json();
+          if (!result.answers || typeof result.answers !== 'object') throw new Error('TypeSafe API returned no typed answers');
           console.log(JSON.stringify({ model: 'typesafe-ai/jev', answers: result.answers }));
           for (const [id, question] of Object.entries(request.questions)) {
             const answer = result.answers[id];

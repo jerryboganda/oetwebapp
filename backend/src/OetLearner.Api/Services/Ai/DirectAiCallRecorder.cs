@@ -1,4 +1,5 @@
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai;
@@ -59,8 +60,23 @@ public interface IDirectAiCallRecorder
     /// must treat as "try again later" — the one disposition it must never be
     /// is "send anyway".
     /// </para>
+    /// <para>
+    /// Judgment ("jev.") features additionally honour the owner emergency
+    /// levers the gateway path already obeys — the global AI kill switch and
+    /// the per-feature kill list (<see cref="AiGlobalPolicy"/>) — and are
+    /// refused with <see cref="DirectAiOperationDisposition.PolicyRefused"/>
+    /// before any operation row or budget hold exists. Other direct callers
+    /// (OCR / STT / extraction) are deliberately unaffected.
+    /// </para>
+    /// <para>
+    /// <paramref name="reservationEstimateUsd"/> overrides the flat
+    /// <see cref="AiBudgetService.DefaultReservationEstimateUsd"/> platform
+    /// budget hold for a caller whose real cost is far below it (a Jev call is
+    /// a fraction of a cent). Null keeps the flat default.
+    /// </para>
     /// </summary>
-    Task<DirectAiOperationLease> BeginOperationAsync(DirectAiOperationRequest request, CancellationToken ct);
+    Task<DirectAiOperationLease> BeginOperationAsync(
+        DirectAiOperationRequest request, CancellationToken ct, decimal? reservationEstimateUsd = null);
 
     /// <summary>
     /// W2 — closes the operation opened by
@@ -99,6 +115,10 @@ public sealed class DirectAiCallRecorder(
     /// in <see cref="BeginOperationAsync"/>. Small on purpose: it exists to
     /// survive a transient failure, not to become an unbounded retry loop.</summary>
     private const int MaxRetryAfterFailureRounds = AiOperationReplayPolicy.DefaultMaxReplayRounds;
+
+    /// <summary>Feature-code prefix of the TypeSafe Jev judgment features — the
+    /// only direct callers the global kill switch / kill list apply to.</summary>
+    private const string JevFeaturePrefix = "jev.";
 
     /// <summary>
     /// Only a predecessor we can prove was NOT billed may be replaced by a new
@@ -175,7 +195,7 @@ public sealed class DirectAiCallRecorder(
     }
 
     public async Task<DirectAiOperationLease> BeginOperationAsync(
-        DirectAiOperationRequest request, CancellationToken ct)
+        DirectAiOperationRequest request, CancellationToken ct, decimal? reservationEstimateUsd = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -183,6 +203,28 @@ public sealed class DirectAiCallRecorder(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var sp = scope.ServiceProvider;
+
+            // Emergency levers for Jev only (the gateway path already obeys
+            // them through AiQuotaService.TryReserveAsync). Evaluated before
+            // the policy lookup / operation insert / budget hold so a killed
+            // judgment costs nothing. Jev always runs on the platform key, so
+            // the kill switch blocks it under either scope. OCR/STT direct
+            // callers keep their pre-existing behaviour.
+            if (request.FeatureCode.StartsWith(JevFeaturePrefix, StringComparison.OrdinalIgnoreCase)
+                && sp.GetService<IAiQuotaService>() is { } quotaService)
+            {
+                var global = await quotaService.GetGlobalPolicyAsync(ct);
+                var killReason = AiQuotaService.IsFeatureCodeInCsv(global.DisabledFeaturesCsv, request.FeatureCode)
+                    ? "feature_disabled"
+                    : global.KillSwitchEnabled ? "kill_switch" : null;
+                if (killReason is not null)
+                {
+                    logger.LogWarning(
+                        "DirectAiCallRecorder: refusing {Feature} before any provider call ({Reason}).",
+                        request.FeatureCode, killReason);
+                    return DirectAiOperationLease.Blocked(DirectAiOperationDisposition.PolicyRefused, killReason);
+                }
+            }
 
             var policyRegistry = sp.GetService<IAiFeaturePolicyRegistry>();
             var operationClass = request.OperationClass;
@@ -286,7 +328,7 @@ public sealed class DirectAiCallRecorder(
                     if (budgetService is not null && !isBudgetExempt)
                     {
                         reservation = await budgetService.ReserveForCallAsync(
-                            operationClass, AiBudgetService.DefaultReservationEstimateUsd, ct);
+                            operationClass, reservationEstimateUsd ?? AiBudgetService.DefaultReservationEstimateUsd, ct);
                         if (!reservation.Granted)
                         {
                             logger.LogWarning(

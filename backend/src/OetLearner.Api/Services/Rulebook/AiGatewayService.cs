@@ -87,6 +87,20 @@ public sealed class AiGatewayService(
             AiFeatureCodes.ConversationEvaluation,
         };
 
+    /// <summary>
+    /// The only feature codes whose completion gets the advisory Jev response
+    /// review (<see cref="JevWorkflowAdvisor.ReviewResponseAsync"/>): the
+    /// post-submit Reading/Listening explanations. Grading, conversation and
+    /// pronunciation codes (every ScoringCritical feature, and each Claude Max
+    /// attempt of the Writing/Speaking chains) must never pay a Jev round trip.
+    /// </summary>
+    private static readonly HashSet<string> JevResponseReviewFeatureCodes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            AiFeatureCodes.ReadingExplanation,
+            AiFeatureCodes.ListeningExplanation,
+        };
+
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
 
@@ -1041,9 +1055,7 @@ public sealed class AiGatewayService(
             }
         }
 
-        var jevAdvisory = judgments is not null && judgmentOptions is not null
-            ? await JevWorkflowAdvisor.ReviewResponseAsync(judgments, judgmentOptions.Value, request, completion.Text, ct)
-            : null;
+        var jevAdvisory = await TryReviewResponseAsync(request, featureCode, completion.Text, ct);
 
         return new AiGatewayResult
         {
@@ -1061,6 +1073,33 @@ public sealed class AiGatewayService(
             RetryCount = 0,
             JevAdvisory = jevAdvisory,
         };
+    }
+
+    /// <summary>
+    /// Advisory-only: runs for the allowlisted explanation features, under a
+    /// short linked timeout. Any failure, including cancellation of the caller's
+    /// token or the review timeout, yields null and never fails or discards the
+    /// completion the provider already served and billed.
+    /// </summary>
+    private async Task<JevResponseAdvisory?> TryReviewResponseAsync(
+        AiGatewayRequest request, string featureCode, string completionText, CancellationToken ct)
+    {
+        if (judgments is null || judgmentOptions is null
+            || !JevResponseReviewFeatureCodes.Contains(featureCode))
+            return null;
+
+        try
+        {
+            var options = judgmentOptions.Value;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds)));
+            return await JevWorkflowAdvisor.ReviewResponseAsync(judgments, options, request, completionText, timeout.Token);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Jev response review failed for feature {FeatureCode}; returning the completion without an advisory.", featureCode);
+            return null;
+        }
     }
 
     private async Task<AiOperationClass> ResolveBudgetOperationClassAsync(string featureCode, CancellationToken ct)

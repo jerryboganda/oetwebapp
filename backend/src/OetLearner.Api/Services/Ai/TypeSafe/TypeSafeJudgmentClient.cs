@@ -115,7 +115,10 @@ public static class TypeSafeRequestBuilder
 /// </summary>
 public interface ITypeSafeJudgmentClient
 {
-    Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct);
+    /// <param name="platformApiKey">The already-resolved platform key. The
+    /// governed service resolves it once per call and passes it through; when
+    /// null/blank the client resolves it itself (registry, then configuration).</param>
+    Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct, string? platformApiKey = null);
 }
 
 public sealed class TypeSafeJudgmentClient(
@@ -170,15 +173,20 @@ public sealed class TypeSafeJudgmentClient(
         }
     }
 
-    public async Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct)
+    public async Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct, string? platformApiKey = null)
     {
         var opts = options.Value;
-        var apiKey = opts.ApiKey;
-        if (scopeFactory is not null)
+        var apiKey = platformApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            apiKey = await scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>()
-                .GetPlatformKeyAsync(TypeSafeOptions.ProviderCode, ct) ?? apiKey;
+            // No pre-resolved key (e.g. a direct caller): resolve it here.
+            apiKey = opts.ApiKey;
+            if (scopeFactory is not null)
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                apiKey = await scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>()
+                    .GetPlatformKeyAsync(TypeSafeOptions.ProviderCode, ct) ?? apiKey;
+            }
         }
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("TypeSafe is enabled but no platform key is configured.");
@@ -188,32 +196,25 @@ public sealed class TypeSafeJudgmentClient(
         var client = httpClientFactory.CreateClient(HttpClientName);
         var baseUri = opts.BaseUrl.TrimEnd('/');
 
-        for (var attempt = 0; ; attempt++)
+        // Retries on 429/529 live in SendOnceAsync; this level only feeds the
+        // consecutive-failure breaker.
+        TypeSafeRawResponse parsed;
+        try
         {
-            TypeSafeRawResponse? parsed = null;
-            Exception? failure = null;
-            try
-            {
-                parsed = await SendOnceAsync(client, baseUri, opts, apiKey, payloadJson, ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
-
-            if (parsed is null)
-            {
-                RecordSendOutcome(success: false);
-                throw failure!;
-            }
-
-            RecordSendOutcome(success: true);
-            return parsed;
+            parsed = await SendOnceAsync(client, baseUri, opts, apiKey, payloadJson, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            RecordSendOutcome(success: false);
+            throw;
+        }
+
+        RecordSendOutcome(success: true);
+        return parsed;
     }
 
     private async Task<TypeSafeRawResponse> SendOnceAsync(

@@ -3,7 +3,12 @@
 Server-side only. The API key lives in the environment
 (`TYPESAFE_API_KEY` for this kit / `TYPESAFE__APIKEY` for the .NET backend —
 the scripts read either) and is **never** passed on the command line, logged,
-or committed. Only the masked form (head…tail, length) is ever reported.
+or committed. Only the masked form (last 4 characters and length, never a
+prefix) is ever reported, because Actions logs on the public-when-working repo
+are world-readable.
+
+**These scripts are not run locally.** `AGENTS.md` makes GitHub Actions the only
+compute environment, so they run through the `jev-calibrate.yml` workflow.
 
 ## What lives here
 
@@ -13,19 +18,33 @@ or committed. Only the masked form (head…tail, length) is ever reported.
 | `calibrate.mjs` | Phase-1 pilot calibration: replays every fixture through the SAME question designs the backend pilot uses (`Services/Ai/TypeSafe/JevWritingPilot.cs` is the source of truth — keep this script in sync on any design change). Run before flipping any `TypeSafe:Writing*Enabled` flag and after every model bump. Last full run 2026-09-19: 24/24 PASS incl. the companion-rerank ordering anchor (organisation=3.00 vs off-topic ~0.25), ~8.4k input tokens (~$0.0004). |
 | `fixtures/*.json` | Calibration anchors: a genuine urgent referral (letter type, route, criteria radar, verify claims), an adversarial injection attempt, a legitimate routine review, a pure-gibberish submission, and a companion-rerank ordering anchor. `expect` keys with `_gte` / `_lte` suffixes are threshold assertions; `criteria` ranges sit on the pilot's 0–3 level scale. |
 
-## Usage
+## Usage (GitHub Actions only)
+
+Run via the `jev-calibrate.yml` workflow on GitHub Actions
+(`workflow_dispatch`, input `suite` = `e2e` | `calibrate` | `both`, default
+`both`):
 
 ```bash
-cd "OET Project Web App"
-TYPESAFE_API_KEY=... node tools/typesafe/e2e.mjs
-TYPESAFE_API_KEY=... node tools/typesafe/calibrate.mjs
+gh workflow run jev-calibrate.yml -f suite=both
+gh run watch
 ```
+
+- Needs the repository secret `TYPESAFE_API_KEY` (`gh secret set TYPESAFE_API_KEY`,
+  paste at the prompt). The job fails fast with a clear error when it is empty.
+- Exit codes (both scripts): `0` pass, `1` any check failed or the API errored,
+  `2` key missing. The run summary shows only pass/fail and the check counts.
+- The job honours `vars.CI_RUNS_ON` like `qa-smoke.yml`; GitHub-hosted runners
+  need the repo to be in its public-when-working window (see `AGENTS.md`).
+- This run is the gate for every flag flip: green `jev-calibrate.yml` first,
+  then flip. Record the run id.
 
 ## Conventions the backend enforces (do not drift)
 
 - **Model is pinned** to `jev-1.13.0` in `TypeSafeOptions.Model` — never the
-  `jev-latest` alias. Thresholds are tuned against a fixed version; bump the
-  pin deliberately and re-run `calibrate.mjs`.
+  `jev-latest` alias. Thresholds are tuned against a fixed version. Every
+  script that calls the API here (`e2e.mjs`, `calibrate.mjs`,
+  `scripts/listening/jev-client.mjs`) sends the same pin. Bump the pin
+  deliberately, in all of them together, then re-run `jev-calibrate.yml`.
 - **Every backend call** flows through `TypeSafeJudgmentService` (control
   plane lease + one `AiUsageRecord` per call, input-token metering at
   $0.042/Mtok). Never call the API from product code directly.
