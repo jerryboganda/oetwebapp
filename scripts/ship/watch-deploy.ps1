@@ -14,7 +14,12 @@
 param(
     [string]$Repo = 'jerryboganda/oetwebapp',
     [string]$Sha = '',
+    # $Workflow is the display name used for the EXACT-match filter; $WorkflowFile
+    # is what `gh run list --workflow` is given, because a long-deleted workflow
+    # is still registered under the name "Deploy Production" (id 254806378) and
+    # `gh` refuses a name that resolves to two workflows. The file path is unique.
     [string]$Workflow = 'Deploy production',
+    [string]$WorkflowFile = 'production-deploy.yml',
     [int]$WaitForRunSeconds = 180,
     [int]$PollSeconds = 25,
     [int]$TimeoutSeconds = 1800,
@@ -83,7 +88,7 @@ while (-not $runId) {
         $listRaw = Invoke-GhJson @(
             'run', 'list',
             '--repo', $Repo,
-            '--workflow', $Workflow,
+            '--workflow', $WorkflowFile,
             '--commit', $Sha,
             '--json', 'databaseId,status,conclusion,url,workflowName',
             '--limit', '5'
@@ -106,7 +111,7 @@ while (-not $runId) {
         $recentRaw = Invoke-GhJson @(
             'run', 'list',
             '--repo', $Repo,
-            '--workflow', $Workflow,
+            '--workflow', $WorkflowFile,
             '--limit', '10',
             '--json', 'databaseId,headSha,status,conclusion,url,workflowName'
         )
