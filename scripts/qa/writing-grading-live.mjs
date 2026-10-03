@@ -122,6 +122,9 @@ async function verifyProductionReport() {
       savedGradeId = grade.id;
       savedReportId = report.id;
       await page.getByTestId('ai-estimated-score').waitFor({ state: 'visible' });
+      await page.waitForFunction(expectedScore =>
+        document.querySelector('[data-testid="ai-estimated-score"]')?.textContent?.trim() === expectedScore,
+      `${report.estimatedPracticeScore}/500`);
       assert.equal((await page.getByTestId('ai-estimated-score').textContent()).trim(), `${report.estimatedPracticeScore}/500`);
       // One concise per-criterion list (WAI-09 UI-3) replaced the v1.1 duplicate list.
       await page.getByTestId('criteria-list').waitFor({ state: 'visible' });
