@@ -12,7 +12,7 @@ public sealed record OwnerAgentLeaseRequest(DateTimeOffset? ExpiresAt);
 
 public sealed record OwnerAgentConnectCodeRequest(string? FlowId, string? Code);
 
-public sealed record OwnerAgentConnectRequest(string? ProviderId, int? MethodIndex);
+public sealed record OwnerAgentConnectRequest(string? ProviderId, int? MethodIndex, string? ApiKey);
 
 public sealed record OwnerAgentFlowRequest(string? FlowId);
 

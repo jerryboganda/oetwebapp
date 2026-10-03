@@ -152,9 +152,11 @@ Never claim tests pass without quoting the Actions run, job and step.
   `OPENAI_API_KEY`, `CODEX_API_KEY` and `OWNER_AGENT_*` must stay stripped
   (a test asserts it).
 - **Credentials.** The engines own their credential files. Sidecar code never
-  reads, copies, logs or returns them; OpenCode status projects safe OAuth
-  provider metadata only. There is no provider API-key or paste-token login
-  path. GitHub tokens are write-only.
+  reads, copies, logs or returns them; OpenCode status projects safe provider
+  metadata (OAuth + API-key method labels) only. Provider API keys are
+  write-only: they are forwarded to OpenCode's `PUT /auth/{id}` and never
+  returned, logged or echoed. There is no paste-token login path. GitHub
+  tokens are write-only.
 - **No secrets in code, tests, fixtures or examples.** Use obviously fake
   values; the redactor's own tests build token-shaped strings at runtime.
 - **Pinned versions.** Base image by digest; Agent SDK (with bundled CLI),

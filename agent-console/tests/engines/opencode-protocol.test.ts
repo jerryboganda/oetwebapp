@@ -85,6 +85,7 @@ describe('OpenCode permission mapping', () => {
       name: 'Custom Provider',
       connected: true,
       oauthMethods: [{ index: 1, label: 'Sign in' }],
+      apiMethods: [{ index: 0, label: 'API key' }],
     }]);
     expect(JSON.stringify(providers)).not.toContain('must-not-escape');
     expect(mapOpenCodeModels({

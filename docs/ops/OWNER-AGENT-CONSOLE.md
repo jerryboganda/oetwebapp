@@ -377,21 +377,25 @@ exports the engines' credential files.
 4. Status shows `signed_in` with plan/workspace. Codex is pinned to ChatGPT
    login and to the workspace id; API-key login is never offered.
 
-### 5.3 OpenCode providers (OAuth only)
+### 5.3 OpenCode providers (OAuth or API key)
 
 1. Settings → **Connect OpenCode** and choose a provider plus one of its
-  advertised OAuth methods. API-key entry is not supported.
+   advertised methods. Pick **OAuth** and choose one of its advertised OAuth
+   methods, or pick **API key** and paste the provider's API key. Both store
+   credentials in OpenCode's own `auth.json` on the console volume; API keys
+   are write-only and never returned by the API.
 2. A `code` method displays its authorization URL and accepts the returned
-  code in the dialog. An `auto` method is accepted only when OpenCode supplies
-  an explicit device code; the sidecar polls the native callback while the
-  owner authorizes it.
+   code in the dialog. An `auto` method is accepted only when OpenCode supplies
+   an explicit device code; the sidecar polls the native callback while the
+   owner authorizes it. An API-key connect completes immediately with a
+   `completed` flow.
 3. Browser-loopback OAuth methods fail closed because the isolated container
-  cannot receive the owner's browser callback. Choose a headless/device-code
-  method instead.
+   cannot receive the owner's browser callback. Choose a headless/device-code
+   method instead.
 4. Provider credentials stay in OpenCode's native
-  `/home/agent/.local/share/opencode/auth.json` on the existing
-  `oet_agent_home` volume. Status exposes safe provider metadata only.
-  OpenCode models do not advertise reasoning effort, so the UI offers none.
+   `/home/agent/.local/share/opencode/auth.json` on the existing
+   `oet_agent_home` volume. Status exposes safe provider metadata only.
+   OpenCode models do not advertise reasoning effort, so the UI offers none.
 
 ### 5.4 Re-auth and logout
 

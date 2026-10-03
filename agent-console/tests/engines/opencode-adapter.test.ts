@@ -101,6 +101,49 @@ describe('OpenCode adapter', () => {
     }
   });
 
+  it('connects a provider with an API key through PUT /auth/{id}', async () => {
+    const config = testConfig(tempDir()) as AppConfig;
+    let authPut: unknown;
+    let providerConnected = false;
+    const fakeFetch: OpenCodeFetch = async (input, init = {}) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/global/health') return response({ healthy: true, version: '1.18.34' });
+      if (url.pathname === '/provider') {
+        const payload = providerPayload();
+        return response({ ...payload, connected: providerConnected ? ['github-copilot'] : [] });
+      }
+      if (url.pathname === '/provider/auth') return response({ 'github-copilot': [{ type: 'api', label: 'API key' }] });
+      if (url.pathname === '/auth/github-copilot' && init.method === 'PUT') {
+        authPut = JSON.parse(String(init.body)) as unknown;
+        providerConnected = true;
+        return response(true);
+      }
+      if (url.pathname === '/instance/dispose') return response(true);
+      return response({ error: 'unexpected route' }, 404);
+    };
+    const adapter = createOpenCodeAdapter(config, undefined, {
+      baseEnv: () => ({ HOME: '/home/agent', PATH: '/usr/bin' }),
+      fetch: fakeFetch,
+      port: async () => 4098,
+      spawn: () => {
+        const child = new FakeChild();
+        return child;
+      },
+      runner: async () => ({ code: 0, signal: null, stdout: '', stdoutBuffer: Buffer.alloc(0), stderr: '', stdoutTruncated: false, timedOut: false }),
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    try {
+      const flow = await adapter.connect({ providerId: 'github-copilot', apiKey: '  sk-test-key  ' });
+      expect(flow).toMatchObject({ kind: 'api_key', state: 'completed', providerId: 'github-copilot', providerName: 'GitHub Copilot' });
+      expect(authPut).toEqual({ type: 'api', key: 'sk-test-key' });
+      const models = (await adapter.status()).models;
+      expect(models.some((model) => model.value === 'github-copilot/model/opaque')).toBe(true);
+    } finally {
+      await adapter.shutdown();
+    }
+  });
+
   it('polls OpenCode auto OAuth only when instructions contain an explicit device code', async () => {
     const config = testConfig(tempDir()) as AppConfig;
     let callbackBody: unknown;

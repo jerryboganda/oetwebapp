@@ -308,7 +308,7 @@ class OpenCodeAdapter implements EngineAdapter {
   async openSession(options: SessionEngineOptions): Promise<EngineSession> {
     const status = await this.status();
     if (status.auth.state !== 'signed_in') {
-      throw new EngineError('engine_not_signed_in', 'Connect an OpenCode OAuth provider before starting a session.');
+      throw new EngineError('engine_not_signed_in', 'Connect an OpenCode provider before starting a session.');
     }
     if (!status.models.some((model) => model.value === options.model)) {
       throw new EngineError('unknown_model', 'The selected OpenCode model is not available from a connected provider.');
@@ -322,7 +322,8 @@ class OpenCodeAdapter implements EngineAdapter {
     const previous = this.flows.active();
     if (previous) await this.cancel(previous.flowId);
     const providerId = safeProviderId(options.providerId);
-    if (!providerId) throw new EngineError('engine_auth_error', 'Select an OpenCode provider that supports OAuth.');
+    if (!providerId) throw new EngineError('engine_auth_error', 'Select an OpenCode provider.');
+    if (options.apiKey !== undefined) return this.connectWithApiKey(providerId, options.apiKey);
     const providerStatus = await this.status();
     const provider = providerStatus.providers?.find((item) => item.id === providerId);
     const method = options.methodIndex === undefined
@@ -386,6 +387,41 @@ class OpenCodeAdapter implements EngineAdapter {
     const result = { ...updated, providerId, providerName: provider.name };
     this.flows.update(flow.flowId, { detail: result.detail });
     return result;
+  }
+
+  private async connectWithApiKey(providerId: string, apiKey: string): Promise<ConnectFlow> {
+    const value = apiKey.trim();
+    if (!value || value.length > 512 || /[\u0000-\u001f\u007f]/.test(value)) {
+      throw new EngineError('engine_auth_error', 'The API key is invalid.');
+    }
+    const providerStatus = await this.status();
+    const provider = providerStatus.providers?.find((item) => item.id === providerId);
+    if (!provider) throw new EngineError('engine_auth_error', 'Unknown OpenCode provider.');
+    if (provider.apiMethods.length === 0) {
+      throw new EngineError('engine_auth_error', 'This OpenCode provider does not accept an API key.');
+    }
+    const server = await this.control();
+    try {
+      await server.json<unknown>(`/auth/${encodeURIComponent(providerId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ type: 'api', key: value }),
+      });
+    } catch (error) {
+      throw new EngineError('engine_auth_error', `OpenCode rejected the API key (${safeErrorMessage(error)}).`);
+    }
+    this.providerCache = undefined;
+    const refreshed = await this.status();
+    const nowConnected = refreshed.providers?.find((item) => item.id === providerId)?.connected === true;
+    const flow = this.flows.create('api_key');
+    const updated = this.flows.update(flow.flowId, {
+      state: nowConnected ? 'completed' : 'failed',
+      detail: nowConnected
+        ? 'OpenCode provider connected with an API key.'
+        : 'OpenCode did not report the provider as connected. Check the API key and try again.',
+      providerId,
+      providerName: provider.name,
+    }) ?? flow;
+    return { ...updated, providerId, providerName: provider.name };
   }
 
   getFlow(flowId: string): ConnectFlow | undefined {

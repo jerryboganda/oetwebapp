@@ -318,15 +318,28 @@ public static partial class OwnerAgentEndpoints
         if (validEngine == OwnerAgentIds.OpenCode)
         {
             var providerId = OwnerAgentIds.RequireOpaque(request?.ProviderId, "providerId", 128);
-            var methodIndex = request?.MethodIndex;
-            if (methodIndex is null or < 0 or > 100)
+            if (!string.IsNullOrWhiteSpace(request?.ApiKey))
             {
-                throw ApiException.Validation("invalid_method_index", "'methodIndex' must be from 0 through 100.");
-            }
+                var apiKey = request.ApiKey.Trim();
+                if (apiKey.Length > 512)
+                {
+                    throw ApiException.Validation("invalid_api_key", "'apiKey' is too long.");
+                }
 
-            body = new { providerId, methodIndex };
+                body = new { providerId, apiKey };
+            }
+            else
+            {
+                var methodIndex = request?.MethodIndex;
+                if (methodIndex is null or < 0 or > 100)
+                {
+                    throw ApiException.Validation("invalid_method_index", "'methodIndex' must be from 0 through 100.");
+                }
+
+                body = new { providerId, methodIndex };
+            }
         }
-        else if (request?.ProviderId is not null || request?.MethodIndex is not null)
+        else if (request?.ProviderId is not null || request?.MethodIndex is not null || !string.IsNullOrWhiteSpace(request?.ApiKey))
         {
             throw ApiException.Validation("invalid_engine_auth", "Provider selection is only supported for OpenCode.");
         }
@@ -341,7 +354,11 @@ public static partial class OwnerAgentEndpoints
         if (body is not null)
         {
             details["providerId"] = request!.ProviderId;
-            details["methodIndex"] = request.MethodIndex;
+            details["method"] = !string.IsNullOrWhiteSpace(request.ApiKey) ? "api_key" : "oauth";
+            if (string.IsNullOrWhiteSpace(request.ApiKey))
+            {
+                details["methodIndex"] = request.MethodIndex;
+            }
         }
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineConnect, validEngine, details, http.RequestAborted);
         return relay.Result;

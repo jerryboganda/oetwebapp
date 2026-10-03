@@ -63,6 +63,7 @@ export interface EngineProvider {
   name: string;
   connected: boolean;
   oauthMethods: { index: number; label: string }[];
+  apiMethods: { index: number; label: string }[];
 }
 
 export interface EngineStatus {
@@ -101,7 +102,7 @@ export interface ConsoleStatus {
   systemSessionId?: string;
 }
 
-export type ConnectFlowKind = 'paste_code' | 'device_code';
+export type ConnectFlowKind = 'paste_code' | 'device_code' | 'api_key';
 export type ConnectFlowState = 'pending' | 'awaiting_code' | 'completed' | 'failed' | 'cancelled' | 'expired';
 
 export interface ConnectFlow {

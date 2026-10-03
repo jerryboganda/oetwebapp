@@ -89,6 +89,11 @@ export function mapOpenCodeProviders(providerList: unknown, providerAuth: unknow
         const label = nonEmptyString(method['label']);
         return label ? [{ index, label }] : [];
       }),
+      apiMethods: methods.flatMap((method, index) => {
+        if (!isRecord(method) || method['type'] !== 'api') return [];
+        const label = nonEmptyString(method['label']);
+        return label ? [{ index, label }] : [];
+      }),
     }];
   });
 }

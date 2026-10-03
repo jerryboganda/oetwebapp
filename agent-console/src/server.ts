@@ -210,12 +210,20 @@ export function buildServer(ctx: ServerContext, options: ServerOptions = {}): Fa
     if (engine === 'opencode') {
       const obj = asObject(request.body, false);
       const providerId = reqString(obj, 'providerId', 128).trim();
-      const methodIndex = obj['methodIndex'];
       if (!/^[A-Za-z0-9_.-]{1,128}$/.test(providerId)) throw badRequest('bad_request', 'providerId is invalid.');
-      if (typeof methodIndex !== 'number' || !Number.isInteger(methodIndex) || methodIndex < 0 || methodIndex > 100) {
-        throw badRequest('bad_request', 'methodIndex must be an integer from 0 through 100.');
+      const apiKey = obj['apiKey'];
+      if (apiKey !== undefined) {
+        if (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 512 || /[\u0000-\u001f\u007f]/.test(apiKey)) {
+          throw badRequest('bad_request', 'apiKey is invalid.');
+        }
+        options = { providerId, apiKey: apiKey.trim() };
+      } else {
+        const methodIndex = obj['methodIndex'];
+        if (typeof methodIndex !== 'number' || !Number.isInteger(methodIndex) || methodIndex < 0 || methodIndex > 100) {
+          throw badRequest('bad_request', 'methodIndex must be an integer from 0 through 100.');
+        }
+        options = { providerId, methodIndex };
       }
-      options = { providerId, methodIndex };
     }
     const flow = await (await adapterFor(engine)).connect(options);
     ctx.engines.invalidate(engine);

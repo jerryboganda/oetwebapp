@@ -116,8 +116,24 @@ describe('control server', () => {
         payload: { providerId: 'github-copilot', methodIndex: 1, apiKey: 'must-not-forward' },
       });
       expect(connected.statusCode).toBe(200);
+      expect(h.adapters.opencode.connectOptions).toEqual({ providerId: 'github-copilot', apiKey: 'must-not-forward' });
+
+      const oauth = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/opencode/connect',
+        headers: authHeaders,
+        payload: { providerId: 'github-copilot', methodIndex: 1 },
+      });
+      expect(oauth.statusCode).toBe(200);
       expect(h.adapters.opencode.connectOptions).toEqual({ providerId: 'github-copilot', methodIndex: 1 });
-      expect(JSON.stringify(h.adapters.opencode.connectOptions)).not.toContain('must-not-forward');
+
+      const badKey = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/opencode/connect',
+        headers: authHeaders,
+        payload: { providerId: 'github-copilot', apiKey: '   ' },
+      });
+      expect(badKey.statusCode).toBe(400);
     });
 
     it('clamps the lease to 3 minutes', async () => {

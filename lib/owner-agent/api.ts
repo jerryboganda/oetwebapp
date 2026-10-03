@@ -315,14 +315,24 @@ export async function listOwners(): Promise<{ accountId: string; email: string }
 
 export async function connectEngine(
   engine: Engine,
-  options?: { providerId: string; methodIndex: number },
+  options?: { providerId: string; methodIndex: number } | { providerId: string; apiKey: string },
 ): Promise<ConnectFlow> {
-  let body: { providerId: string; methodIndex: number } | undefined;
+  let body: { providerId: string; methodIndex?: number; apiKey?: string } | undefined;
   if (engine === 'opencode') {
-    if (!options || !Number.isInteger(options.methodIndex) || options.methodIndex < 0) {
-      throw new OwnerAgentClientError('Select an OpenCode OAuth method.');
+    if (!options) {
+      throw new OwnerAgentClientError('Select an OpenCode provider and how to connect it.');
     }
-    body = { providerId: providerSegment(options.providerId), methodIndex: options.methodIndex };
+    if ('apiKey' in options) {
+      if (typeof options.apiKey !== 'string' || !options.apiKey.trim()) {
+        throw new OwnerAgentClientError('Enter the OpenCode provider API key.');
+      }
+      body = { providerId: providerSegment(options.providerId), apiKey: options.apiKey.trim() };
+    } else {
+      if (!Number.isInteger(options.methodIndex) || options.methodIndex < 0) {
+        throw new OwnerAgentClientError('Select an OpenCode OAuth method.');
+      }
+      body = { providerId: providerSegment(options.providerId), methodIndex: options.methodIndex };
+    }
   }
   return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/connect`, body);
 }

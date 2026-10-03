@@ -33,6 +33,7 @@ export interface EngineProvider {
   name: string;
   connected: boolean;
   oauthMethods: { index: number; label: string }[];
+  apiMethods: { index: number; label: string }[];
 }
 
 export interface EngineStatus {
@@ -47,7 +48,7 @@ export interface EngineStatus {
 export interface ConnectFlow {
   flowId: string;
   engine: Engine;
-  kind: 'paste_code' | 'device_code';
+  kind: 'paste_code' | 'device_code' | 'api_key';
   state: 'pending' | 'awaiting_code' | 'completed' | 'failed' | 'cancelled' | 'expired';
   verificationUrl?: string;
   userCode?: string;
@@ -60,6 +61,8 @@ export interface ConnectFlow {
 export interface EngineConnectOptions {
   providerId?: string;
   methodIndex?: number;
+  /** OpenCode only: connect a provider with an API key instead of OAuth. */
+  apiKey?: string;
 }
 
 /** Result of the Guard for one tool call (src/guard.ts). */

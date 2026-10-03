@@ -28,7 +28,7 @@ const SIGN_IN_HELP: Record<Engine, string> = {
   codex:
     'Signs Codex in with ChatGPT (device code). Open the OpenAI page, enter the code before it expires; Codex stores its own credentials inside the console container.',
   opencode:
-    'Connects an OpenCode provider through its native OAuth flow. OpenCode keeps provider credentials in its own user data directory; API keys are not entered here.',
+    'Connects an OpenCode provider through its native OAuth flow or with a provider API key. OpenCode keeps provider credentials in its own user data directory.',
 };
 
 export default function AgentConsoleSettingsPage() {
@@ -37,6 +37,9 @@ export default function AgentConsoleSettingsPage() {
   const [busyEngine, setBusyEngine] = useState<Engine | null>(null);
   const [confirmLogout, setConfirmLogout] = useState<Engine | null>(null);
   const [selectedOpenCodeAuth, setSelectedOpenCodeAuth] = useState('');
+  const [openCodeMode, setOpenCodeMode] = useState<'oauth' | 'api_key'>('oauth');
+  const [selectedOpenCodeApiProvider, setSelectedOpenCodeApiProvider] = useState('');
+  const [openCodeApiKey, setOpenCodeApiKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const status = consoleState.status;
   const openCodeOAuthChoices = (status?.engines?.opencode?.providers ?? []).flatMap((provider) =>
@@ -49,18 +52,38 @@ export default function AgentConsoleSettingsPage() {
     })),
   );
   const openCodeAuth = openCodeOAuthChoices.find((choice) => choice.value === selectedOpenCodeAuth) ?? openCodeOAuthChoices[0];
+  const openCodeApiChoices = (status?.engines?.opencode?.providers ?? []).flatMap((provider) =>
+    provider.apiMethods.length > 0
+      ? [{ value: provider.id, providerId: provider.id, providerName: provider.name, label: `${provider.name} · API key` }]
+      : [],
+  );
+  const openCodeApiChoice = openCodeApiChoices.find((choice) => choice.value === selectedOpenCodeApiProvider) ?? openCodeApiChoices[0];
 
   const connect = async (engine: Engine) => {
-    if (engine === 'opencode' && !openCodeAuth) {
-      setError('No OAuth sign-in methods are available for OpenCode.');
-      return;
+    if (engine === 'opencode') {
+      if (openCodeMode === 'api_key') {
+        if (!openCodeApiChoice) {
+          setError('No OpenCode providers accept an API key.');
+          return;
+        }
+        if (!openCodeApiKey.trim()) {
+          setError('Enter the provider API key.');
+          return;
+        }
+      } else if (!openCodeAuth) {
+        setError('No OAuth sign-in methods are available for OpenCode.');
+        return;
+      }
     }
     setBusyEngine(engine);
     setError(null);
     try {
-      setFlow(await connectEngine(engine, engine === 'opencode' && openCodeAuth
-        ? { providerId: openCodeAuth.providerId, methodIndex: openCodeAuth.methodIndex }
+      setFlow(await connectEngine(engine, engine === 'opencode'
+        ? openCodeMode === 'api_key' && openCodeApiChoice
+          ? { providerId: openCodeApiChoice.providerId, apiKey: openCodeApiKey.trim() }
+          : { providerId: openCodeAuth.providerId, methodIndex: openCodeAuth.methodIndex }
         : undefined));
+      if (engine === 'opencode' && openCodeMode === 'api_key') setOpenCodeApiKey('');
     } catch (err) {
       setError(describeOwnerAgentError(err, 'Could not start the sign-in.'));
     } finally {
@@ -136,19 +159,74 @@ export default function AgentConsoleSettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-3 text-xs">
                   {engine === 'opencode' ? (
-                    <label className="block space-y-1 text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-opencode-provider">
-                      <span>OAuth provider</span>
-                      <select
-                        id="owner-agent-opencode-provider"
-                        value={openCodeAuth?.value ?? ''}
-                        onChange={(event) => setSelectedOpenCodeAuth(event.target.value)}
-                        disabled={busyEngine !== null || openCodeOAuthChoices.length === 0}
-                        className="h-9 w-full rounded-lg border border-admin-border bg-admin-bg-surface px-2 text-xs text-admin-fg-default disabled:opacity-50"
-                      >
-                        {openCodeOAuthChoices.length === 0 ? <option value="">No OAuth providers available</option> : null}
-                        {openCodeOAuthChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-                      </select>
-                    </label>
+                    <div className="space-y-3">
+                      <div className="flex gap-2 text-xs" role="radiogroup" aria-label="OpenCode sign-in method">
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="opencode-mode"
+                            checked={openCodeMode === 'oauth'}
+                            onChange={() => setOpenCodeMode('oauth')}
+                            disabled={busyEngine !== null}
+                          />
+                          OAuth
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="opencode-mode"
+                            checked={openCodeMode === 'api_key'}
+                            onChange={() => setOpenCodeMode('api_key')}
+                            disabled={busyEngine !== null}
+                          />
+                          API key
+                        </label>
+                      </div>
+                      {openCodeMode === 'oauth' ? (
+                        <label className="block space-y-1 text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-opencode-provider">
+                          <span>OAuth provider</span>
+                          <select
+                            id="owner-agent-opencode-provider"
+                            value={openCodeAuth?.value ?? ''}
+                            onChange={(event) => setSelectedOpenCodeAuth(event.target.value)}
+                            disabled={busyEngine !== null || openCodeOAuthChoices.length === 0}
+                            className="h-9 w-full rounded-lg border border-admin-border bg-admin-bg-surface px-2 text-xs text-admin-fg-default disabled:opacity-50"
+                          >
+                            {openCodeOAuthChoices.length === 0 ? <option value="">No OAuth providers available</option> : null}
+                            {openCodeOAuthChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                          </select>
+                        </label>
+                      ) : (
+                        <>
+                          <label className="block space-y-1 text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-opencode-api-provider">
+                            <span>Provider</span>
+                            <select
+                              id="owner-agent-opencode-api-provider"
+                              value={openCodeApiChoice?.value ?? ''}
+                              onChange={(event) => setSelectedOpenCodeApiProvider(event.target.value)}
+                              disabled={busyEngine !== null || openCodeApiChoices.length === 0}
+                              className="h-9 w-full rounded-lg border border-admin-border bg-admin-bg-surface px-2 text-xs text-admin-fg-default disabled:opacity-50"
+                            >
+                              {openCodeApiChoices.length === 0 ? <option value="">No API-key providers available</option> : null}
+                              {openCodeApiChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                            </select>
+                          </label>
+                          <label className="block space-y-1 text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-opencode-api-key">
+                            <span>API key</span>
+                            <input
+                              id="owner-agent-opencode-api-key"
+                              type="password"
+                              autoComplete="off"
+                              spellCheck={false}
+                              value={openCodeApiKey}
+                              onChange={(event) => setOpenCodeApiKey(event.target.value)}
+                              disabled={busyEngine !== null}
+                              className="h-9 w-full rounded-lg border border-admin-border bg-admin-bg-surface px-2 font-mono text-xs text-admin-fg-default disabled:opacity-50"
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
                   ) : null}
                   <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                     <dt className="text-admin-fg-muted">Account</dt>
@@ -169,7 +247,7 @@ export default function AgentConsoleSettingsPage() {
                       variant={signedIn ? 'outline' : 'primary'}
                       size="sm"
                       loading={busyEngine === engine}
-                      disabled={engine === 'opencode' && !openCodeAuth}
+                      disabled={engine === 'opencode' && ((openCodeMode === 'oauth' && !openCodeAuth) || (openCodeMode === 'api_key' && (!openCodeApiChoice || !openCodeApiKey.trim())))}
                       onClick={() => void connect(engine)}
                     >
                       <Plug className="h-4 w-4" aria-hidden="true" /> {signedIn ? 'Reconnect' : 'Connect'}
