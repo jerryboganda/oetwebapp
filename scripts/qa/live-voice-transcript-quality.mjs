@@ -190,10 +190,15 @@ export function speakerMatch({ segments, wire, who, from, to, exclude }) {
  * Returns { ok, matchesWire, labelsAreTape, patientContained, speakers, candidateInTape, patientInTape,
  * worstPatientContainment, problems }; ok is null when nothing could be judged. A part is null when not judged.
  *   matchesWire       every speaker with words recalls and explains >= minMatch of them (Q12)
- *   labelsAreTape     saved candidate words are the tape's (>= 0.9) and saved patient words are not (<= 0.6), so no label swap
+ *   labelsAreTape     saved candidate words are the tape's (>= 0.9) and saved patient words clearly less so (at least LABEL_MARGIN below
+ *                     the candidate's share), so no label swap. A patient repeating the doctor's words in a teach-back shares 60-70% of
+ *                     the tape's vocabulary on real runs; a swap puts the candidate's own share far below 0.9.
  *   patientContained  every saved patient segment of >= 4 words has >= 0.9 of its words said by the patient on the wire in this
  *                     card's window: a segment from the other card would not (about 0.3-0.4 on real data)
  */
+/** How far below the candidate's share of tape words the patient's must sit (an honest teach-back patient reaches ~65%). */
+const LABEL_MARGIN = 0.25;
+
 export function transcriptVerdict(input) {
   const { segments, wire, window = {}, exclude = [], tape = null, minMatch = 0.95 } = input;
   const segs = Array.isArray(segments) ? segments : [];
@@ -209,7 +214,7 @@ export function transcriptVerdict(input) {
   };
   const candidateInTape = tape ? shareInTape(isCandidate) : null;
   const patientInTape = tape ? shareInTape(isPatient) : null;
-  const labelsAreTape = tape ? candidateInTape !== null && candidateInTape >= 0.9 && (patientInTape === null || patientInTape <= 0.6) : null;
+  const labelsAreTape = tape ? candidateInTape !== null && candidateInTape >= 0.9 && (patientInTape === null || candidateInTape - patientInTape >= LABEL_MARGIN) : null;
 
   const patientWords = new Set(tokens(wireText(wire, { who: 'patient', from: where.from, to: where.to, exclude })));
   const containment = segs.filter(isPatient)
@@ -224,7 +229,7 @@ export function transcriptVerdict(input) {
   const problems = [
     ...(matchesWire === false ? Object.entries(speakers).filter(([, s]) => (s.recall ?? 0) < minMatch || (s.precision ?? 0) < minMatch)
       .map(([who, s]) => `${who} words: the saved transcript holds ${pct(s.recall)} of what the provider sent and ${pct(s.precision)} of it was sent.`) : []),
-    ...(labelsAreTape === false ? [`speaker labels: ${pct(candidateInTape)} of the candidate text and ${pct(patientInTape)} of the patient text is the tape's (want >= 90% and <= 60%).`] : []),
+    ...(labelsAreTape === false ? [`speaker labels: ${pct(candidateInTape)} of the candidate text and ${pct(patientInTape)} of the patient text is the tape's (want >= 90% and at least 25 points below the candidate's).`] : []),
     ...(patientContained === false ? [`a saved patient segment is only ${pct(worstPatientContainment)} the patient's words in this card's window (want >= 90%): text from another card or session.`] : []),
   ];
   const decided = parts.filter(([, v]) => v !== null);

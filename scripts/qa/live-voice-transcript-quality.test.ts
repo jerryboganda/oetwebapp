@@ -345,6 +345,13 @@ describe('live voice E2E: the saved transcript against the provider wire', () =>
     expect(v.speakers.candidate).toMatchObject({ wire: 3, saved: 6, recall: 1, precision: 0.5 });
   });
 
+  it("accepts a patient whose teach-back repeats the doctor's words, as long as the labels are not swapped", () => {
+    const v = verdict({ segments: [seg('c', 0, 1000, 'Good morning doctor.'), seg('p', 1000, 3000, 'Thank you doctor it hurts badly')] });
+    expect(v.candidateInTape).toBe(1);
+    expect(v.patientInTape).toBeCloseTo(4 / 6);
+    expect(v.labelsAreTape).toBe(true);
+  });
+
   it('fails swapped speaker labels', () => {
     const v = verdict({ segments: [seg('c', 0, 3000, 'Hello there my friend how are you'), seg('p', 3000, 4000, 'Good morning doctor.')] });
     expect(v.ok).toBe(false);
