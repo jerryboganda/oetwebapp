@@ -110,7 +110,7 @@ public class GamificationServiceTests
 
         Assert.Equal(8, json.GetProperty("currentStreak").GetInt32());
         Assert.Equal(12, json.GetProperty("longestStreak").GetInt32());
-        Assert.Equal(today, json.GetProperty("lastActiveDate").GetDateOnly());
+        Assert.Equal(today, DateOnly.Parse(json.GetProperty("lastActiveDate").GetString()!, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]
