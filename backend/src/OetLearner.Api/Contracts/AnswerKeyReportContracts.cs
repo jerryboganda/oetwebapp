@@ -45,4 +45,19 @@ public sealed record AnswerKeyReportAdminDto(
     string? ResolvedByAdminId,
     DateTimeOffset? ResolvedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    AnswerKeyTriageHintDto? JevTriage = null);
+
+/// <summary>
+/// Neutral, advisory Jev annotation on a pending dispute report. It never accepts an
+/// answer, edits a key or accepted variant, or recalculates a mark: it only tells the
+/// reviewer how likely the learner's answer is to be equivalent to the key and what
+/// the likely cause is, so the queue can be prioritised. Computed on read, not stored.
+/// </summary>
+public sealed record AnswerKeyTriageHintDto(
+    double EquivalenceProbability,
+    string LikelyCause,
+    double CauseConfidence,
+    bool PrioritiseReview,
+    string Summary,
+    string? Model);

@@ -61,6 +61,15 @@ public class WritingTutorReviewAssignment
     public string Status { get; set; } = "claimed";
 
     public DateTimeOffset? ReleasedAt { get; set; }
+
+    /// <summary>
+    /// Why a Jev hook flagged this submission for tutor review: a comma-separated list of
+    /// codes from the fixed <c>WritingJevReviewReasons</c> vocabulary (first reason first),
+    /// never free text. Null for assignments created by a learner request, a mock or before
+    /// this column existed.
+    /// </summary>
+    [MaxLength(64)]
+    public string? ReviewReason { get; set; }
 }
 
 /// <summary>

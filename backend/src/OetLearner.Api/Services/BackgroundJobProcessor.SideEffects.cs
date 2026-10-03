@@ -498,6 +498,10 @@ public partial class BackgroundJobProcessor
         };
         db.ConversationEvaluations.Add(evaluation);
 
+        // Advisory Jev cross-check of the evaluation above (flag-gated, time-boxed, fail-soft).
+        // Persists an AuditEvent only; the scores, band and credits computed above never change.
+        await TryRecordJevConversationCrosscheckAsync(services, db, session, evaluationId, aiEval, cancellationToken);
+
         var examTypeCode = OetLearner.Api.Services.Common.ExamCodes.NormalizeOrNull(session.ExamTypeCode) ?? OetLearner.Api.Services.Common.ExamCodes.DefaultCode;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var seededReviewKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -563,6 +567,55 @@ public partial class BackgroundJobProcessor
 
         session.State = "evaluated";
         session.EvaluationId = evaluationId;
+    }
+
+    private static async Task TryRecordJevConversationCrosscheckAsync(
+        IServiceProvider services,
+        LearnerDbContext db,
+        ConversationSession session,
+        string evaluationId,
+        Conversation.ConversationAiEvaluation aiEval,
+        CancellationToken cancellationToken)
+    {
+        var tsOptions = services.GetService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>>()?.Value;
+        if (!Ai.TypeSafe.JevConversationCrosscheck.Enabled(tsOptions)) return;
+        var judgments = services.GetService<Ai.TypeSafe.ITypeSafeJudgmentService>();
+        if (judgments is null) return;
+
+        try
+        {
+            var turns = await db.ConversationTurns.AsNoTracking()
+                .Where(t => t.SessionId == session.Id)
+                .OrderBy(t => t.TurnNumber)
+                .Select(t => new { t.TurnNumber, t.Role, t.Content, t.ConfidenceScore, t.ProviderName })
+                .ToListAsync(cancellationToken);
+            // Mock ASR context: nothing real to cross-check.
+            if (turns.Any(t => string.Equals(t.ProviderName, "mock", StringComparison.OrdinalIgnoreCase))) return;
+
+            // Fallback stubs (parse/evaluation error, defaulted criterion) are not grader judgments.
+            var stubEvidence = new[] { "parse error", "evaluation error", "no evidence" };
+            var criteria = aiEval.Criteria
+                .Where(c => !stubEvidence.Contains(c.Evidence, StringComparer.OrdinalIgnoreCase))
+                .Select(c => new Ai.TypeSafe.ConversationCriterionInput(c.Id, c.Score06))
+                .ToList();
+
+            var advisory = await Ai.TypeSafe.JevConversationCrosscheck.CrosscheckAsync(
+                judgments, tsOptions!,
+                turns.Select(t => new Ai.TypeSafe.ConversationCrosscheckTurn(t.TurnNumber, t.Role, t.Content, t.ConfidenceScore)).ToList(),
+                criteria, session.UserId, session.Id, cancellationToken,
+                logger: services.GetService<ILogger<BackgroundJobProcessor>>());
+            var payload = Ai.TypeSafe.JevConversationCrosscheck.AdvisoryPayload(advisory, evaluationId);
+            if (payload is null) return;
+
+            db.AuditEvents.Add(Ai.TypeSafe.JevSpeakingAdvisor.ReviewEvent(
+                Ai.TypeSafe.JevConversationCrosscheck.AdvisoryAction, "ConversationSession", session.Id,
+                DateTimeOffset.UtcNow, payload));
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            services.GetService<ILogger<BackgroundJobProcessor>>()
+                ?.LogWarning(ex, "Jev conversation cross-check failed for {SessionId}; evaluation unaffected.", session.Id);
+        }
     }
 
     private static Task CompletePronunciationAnalysisAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)

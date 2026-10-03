@@ -4,8 +4,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Reading;
@@ -76,11 +79,16 @@ public interface IReadingExtractionService
         CancellationToken ct);
 }
 
+// The optional trailing parameters are the Jev extraction-verify seam (jev.extraction.verify). When
+// they are absent, or TypeSafe:Enabled / ExtractionVerifyEnabled is off, behaviour is unchanged.
 public sealed class ReadingExtractionService(
     LearnerDbContext db,
     IReadingExtractionAi ai,
     IReadingStructureService structure,
-    IReadingPolicyService policyService) : IReadingExtractionService
+    IReadingPolicyService policyService,
+    ITypeSafeJudgmentService? judgments = null,
+    IOptions<TypeSafeOptions>? typeSafe = null,
+    ILogger<ReadingExtractionService>? logger = null) : IReadingExtractionService
 {
     public async Task<ReadingExtractionDraft> CreateDraftAsync(
         string paperId,
@@ -139,6 +147,9 @@ public sealed class ReadingExtractionService(
             return failed;
         }
 
+        // Advisory review flags only (never edits the manifest, never approves, never blocks the draft).
+        var jevReviewNotes = aiResult.IsStub ? null : await JevReviewNotesAsync(paperId, adminId, aiResult.Manifest, ct);
+
         var manifestJson = JsonSerializer.Serialize(aiResult.Manifest);
         var draft = new ReadingExtractionDraft
         {
@@ -149,7 +160,7 @@ public sealed class ReadingExtractionService(
             ExtractedManifestJson = manifestJson,
             RawAiResponseJson = BuildRetainedAiResponseMetadata(aiResult.RawResponseJson),
             IsStub = aiResult.IsStub,
-            Notes = aiResult.IsStub ? aiResult.StubReason : null,
+            Notes = aiResult.IsStub ? aiResult.StubReason : jevReviewNotes,
             CreatedByAdminId = adminId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -168,6 +179,82 @@ public sealed class ReadingExtractionService(
         await db.SaveChangesAsync(ct);
 
         return draft;
+    }
+
+    /// <summary>
+    /// Jev review flags for a freshly built (non-stub) draft, as one note for the draft's existing
+    /// <c>Notes</c> text. Verifies each extracted correct answer against the printed answer-key text of
+    /// the paper's AnswerKey assets. Null (no note) when the flag is off, there is no key text, Jev is
+    /// unavailable or raises nothing; never throws for a Jev problem.
+    /// </summary>
+    private async Task<string?> JevReviewNotesAsync(
+        string paperId, string adminId, ReadingStructureManifest manifest, CancellationToken ct)
+    {
+        var options = typeSafe?.Value;
+        if (judgments is null || options is null || !JevExtractionVerify.Enabled(options)) return null;
+
+        try
+        {
+            var keyText = await LoadAnswerKeyTextAsync(paperId, ct);
+            var items = manifest.Parts
+                .SelectMany(part => part.Questions.Select(q => new ExtractionVerifyItem(
+                    $"Part {part.PartCode} Q{q.DisplayOrder}",
+                    q.Stem,
+                    q.OptionsJson is { Length: > 2 } ? q.OptionsJson : null,
+                    JevAnswerKeyTriage.AnswerText(q.CorrectAnswerJson))))
+                .ToList();
+            var advisory = await JevExtractionVerify.VerifyAsync(
+                judgments, options, items, keyText, adminId, paperId, ct, logger: logger);
+            var flags = JevExtractionVerify.FlagsOf(advisory);
+            if (flags.Count == 0) return null;
+
+            var note = string.Join(" ", flags);
+            return note.Length <= 2048 ? note : note[..2048];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Jev extraction verification failed for paper {PaperId}; the draft carries no flags.", paperId);
+            return null;
+        }
+    }
+
+    /// <summary>Extracted text of the paper's AnswerKey assets, concatenated; null when none was extracted.</summary>
+    private async Task<string?> LoadAnswerKeyTextAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .Include(p => p.Assets)
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        if (paper is null || string.IsNullOrWhiteSpace(paper.ExtractedTextJson)) return null;
+
+        var extracted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var doc = JsonDocument.Parse(paper.ExtractedTextJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.String)
+                    extracted[property.Name] = property.Value.GetString() ?? string.Empty;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var asset in paper.Assets.Where(a => a.Role == PaperAssetRole.AnswerKey).OrderBy(a => a.DisplayOrder))
+        {
+            if (!extracted.TryGetValue(asset.Id, out var text) && asset.MediaAssetId is not null)
+                extracted.TryGetValue(asset.MediaAssetId, out text);
+            if (!string.IsNullOrWhiteSpace(text)) sb.AppendLine(text.Trim()).AppendLine();
+        }
+
+        return sb.Length == 0 ? null : sb.ToString().Trim();
     }
 
     private async Task ReserveExtractionStartAsync(

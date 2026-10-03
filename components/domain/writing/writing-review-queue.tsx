@@ -9,12 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { apiClient } from '@/lib/api';
+import { WritingReviewReasonBadges } from '@/components/domain/writing/writing-review-reason-badge';
+import type { TutorWritingQueueItem } from '@/lib/api/expert';
 
-interface WritingReviewQueueItem {
-  submissionId: string;
-  userId: string;
-  profession: string;
-  letterType: string;
+// Same shape as the typed tutor-queue helper's item, narrowed to the fields this table renders.
+interface WritingReviewQueueItem extends TutorWritingQueueItem {
   wordCount: number;
   requestedAt: string;
   claimedAt: string | null;
@@ -132,6 +131,7 @@ export function WritingReviewQueue({
                   <tr key={row.submissionId} className="transition-colors hover:bg-background-light/40">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-navy dark:text-foreground">
                       {row.submissionId.slice(0, 8)}…
+                      <WritingReviewReasonBadges reviewReason={row.reviewReason} />
                     </td>
                     <td className="px-4 py-3 capitalize text-muted">{row.profession}</td>
                     <td className="px-4 py-3 text-navy dark:text-foreground">{row.letterType}</td>

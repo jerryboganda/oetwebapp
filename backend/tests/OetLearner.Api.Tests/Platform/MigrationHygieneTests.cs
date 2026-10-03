@@ -40,6 +40,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddWritingDraftResumeState), "20270104090100_AddWritingDraftResumeState")]
     [InlineData(typeof(AddAiGlobalPolicyEnforceSpendCaps), "20270104090200_AddAiGlobalPolicyEnforceSpendCaps")]
     [InlineData(typeof(AllowAiProviderCategoryJudgment), "20270105090000_AllowAiProviderCategoryJudgment")]
+    [InlineData(typeof(AddWritingTutorAssignmentReviewReason), "20270106090000_AddWritingTutorAssignmentReviewReason")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

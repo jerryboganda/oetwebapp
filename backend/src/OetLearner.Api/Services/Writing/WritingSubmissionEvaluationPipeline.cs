@@ -798,18 +798,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// surrounding SaveChanges persists it, mirroring the mock-review pattern
     /// in WritingTutorReviewService. There is at most ONE assignment per
     /// submission (the tutor flow looks it up by submission id), so a re-run
-    /// or a second reason never stacks a duplicate; the new reasons are still
-    /// logged. The assignment row has no text column, so the reasons live in
-    /// the log line, not the database (no schema change for this slice).
+    /// or a second reason never stacks a duplicate. The reasons are persisted
+    /// on <see cref="WritingTutorReviewAssignment.ReviewReason"/> (fixed
+    /// vocabulary, comma-separated, first reason first): an existing
+    /// assignment keeps its first reason and gains any new distinct ones.
     /// </summary>
     private async Task EnqueueJevTutorReviewAsync(Guid submissionId, IReadOnlyCollection<string> reasons, CancellationToken ct)
     {
         var reasonText = string.Join(',', reasons);
-        var existing = db.WritingTutorReviewAssignments.Local.Any(a => a.SubmissionId == submissionId)
-            || await db.WritingTutorReviewAssignments.AsNoTracking()
-                .AnyAsync(a => a.SubmissionId == submissionId, ct);
-        if (existing)
+        // Tracked on purpose: an existing row's ReviewReason is updated by the caller's SaveChanges.
+        var existing = db.WritingTutorReviewAssignments.Local.FirstOrDefault(a => a.SubmissionId == submissionId)
+            ?? await db.WritingTutorReviewAssignments.FirstOrDefaultAsync(a => a.SubmissionId == submissionId, ct);
+        if (existing is not null)
         {
+            existing.ReviewReason = MergeJevReviewReasons(existing.ReviewReason, reasons);
             logger.LogInformation(
                 "Jev tutor review for submission {SubmissionId} already queued; reasons {Reasons} noted, no second assignment.",
                 submissionId, reasonText);
@@ -825,10 +827,47 @@ public sealed class WritingSubmissionEvaluationPipeline(
             ClaimedAt = now,
             DueAt = now.AddHours(24),
             Status = "pending",
+            ReviewReason = MergeJevReviewReasons(null, reasons),
         });
         logger.LogWarning(
             "Jev flagged writing submission {SubmissionId} for tutor review: {Reasons}.",
             submissionId, reasonText);
+    }
+
+    private const int JevReviewReasonMaxLength = 64; // WritingTutorReviewAssignment.ReviewReason column width
+
+    private static readonly HashSet<string> JevReviewReasonVocabulary = new(StringComparer.Ordinal)
+    {
+        WritingJevReviewReasons.GuardBlock,
+        WritingJevReviewReasons.OutcomeFlip,
+        WritingJevReviewReasons.CriteriaDivergence,
+        WritingJevReviewReasons.VerifyFlag,
+        WritingJevReviewReasons.FindingValidAlternative,
+    };
+
+    /// <summary>
+    /// Appends each distinct, known reason code to the existing comma-separated list (the first
+    /// reason stays first). Only whole codes are ever added and the result never exceeds the
+    /// column width, so a code that would not fit is dropped rather than truncated. Unknown
+    /// strings are ignored: the column only ever holds the fixed vocabulary, never free text.
+    /// Returns null when the result is empty.
+    /// </summary>
+    internal static string? MergeJevReviewReasons(string? existing, IEnumerable<string> incoming)
+    {
+        var merged = (existing ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        var length = string.Join(',', merged).Length;
+        foreach (var reason in incoming)
+        {
+            if (!JevReviewReasonVocabulary.Contains(reason) || merged.Contains(reason)) continue;
+            var grown = length + (merged.Count > 0 ? 1 : 0) + reason.Length;
+            if (grown > JevReviewReasonMaxLength) continue;
+            merged.Add(reason);
+            length = grown;
+        }
+
+        return merged.Count == 0 ? null : string.Join(',', merged);
     }
 
     /// <summary>

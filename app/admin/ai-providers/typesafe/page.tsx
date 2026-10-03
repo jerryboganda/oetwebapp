@@ -37,7 +37,7 @@ const FLIP_ORDER = [
   'Reading / Listening explanation review (explanation features only, time-boxed).',
   'Writing citation verify and criteria advisory (shadow: tutor flags and advisory fields only).',
   'AI-patient turn advisory (Speaking shadow).',
-  'Reading and Listening surfaces, using the per-surface flags those waves add.',
+  'Remaining advisory surfaces one at a time after a green calibration run (conversation and pronunciation checks, Writing helper routing, Listening gaps, mock weakness, answer-key triage, extraction verification, Model Answer review).',
   'Writing submission guard, last: the only surface that can stop a submission.',
 ];
 

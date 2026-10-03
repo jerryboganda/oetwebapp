@@ -110,6 +110,15 @@ x-learner-api-slot: &learner-api-slot
     TypeSafe__CrosscheckDivergenceThreshold: ${TYPESAFE__CROSSCHECKDIVERGENCETHRESHOLD:-0.34}
     TypeSafe__CrosscheckConfidenceThreshold: ${TYPESAFE__CROSSCHECKCONFIDENCETHRESHOLD:-0.60}
     TypeSafe__ReadinessFlagThreshold: ${TYPESAFE__READINESSFLAGTHRESHOLD:-0.80}
+    TypeSafe__WritingCoachNeedEnabled: ${TYPESAFE__WRITINGCOACHNEEDENABLED:-false}
+    TypeSafe__ConversationCrosscheckEnabled: ${TYPESAFE__CONVERSATIONCROSSCHECKENABLED:-false}
+    TypeSafe__PronunciationWordsEnabled: ${TYPESAFE__PRONUNCIATIONWORDSENABLED:-false}
+    TypeSafe__WritingModelReviewEnabled: ${TYPESAFE__WRITINGMODELREVIEWENABLED:-false}
+    TypeSafe__ListeningGapVerdictEnabled: ${TYPESAFE__LISTENINGGAPVERDICTENABLED:-false}
+    TypeSafe__MockWeaknessEnabled: ${TYPESAFE__MOCKWEAKNESSENABLED:-false}
+    TypeSafe__AnswerKeyTriageEnabled: ${TYPESAFE__ANSWERKEYTRIAGEENABLED:-false}
+    TypeSafe__ExtractionVerifyEnabled: ${TYPESAFE__EXTRACTIONVERIFYENABLED:-false}
+    TypeSafe__CoachSkipConfidenceThreshold: ${TYPESAFE__COACHSKIPCONFIDENCETHRESHOLD:-0.85}
     TypeSafe__ResponseVerifyEnabled: ${TYPESAFE__RESPONSEVERIFYENABLED:-false}
     TypeSafe__ResponseConfidenceThreshold: ${TYPESAFE__RESPONSECONFIDENCETHRESHOLD:-0.80}
     TypeSafe__DevelopmentTriageEnabled: ${TYPESAFE__DEVELOPMENTTRIAGEENABLED:-false}

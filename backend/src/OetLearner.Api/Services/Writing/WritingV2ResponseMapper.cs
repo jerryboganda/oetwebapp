@@ -218,7 +218,8 @@ public static class WritingV2ResponseMapper
             RequestedAt: entry.SubmittedAt,
             ClaimedAt: entry.ClaimedAt,
             ClaimedByTutorId: entry.ClaimedByTutorId,
-            Status: entry.Status);
+            Status: entry.Status,
+            ReviewReason: entry.ReviewReason);
 
     public static WritingOcrJobResponse ToResponse(WritingOcrJobView view)
         => new(

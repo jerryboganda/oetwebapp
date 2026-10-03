@@ -2,8 +2,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
@@ -214,7 +217,11 @@ public sealed class WritingTaskModelAnswerService(
     WritingRuleEngine ruleEngine,
     TimeProvider clock,
     ILogger<WritingTaskModelAnswerService> logger,
-    IWritingModelAnswerSemanticValidator? semanticValidator = null) : IWritingTaskModelAnswerService
+    IWritingModelAnswerSemanticValidator? semanticValidator = null,
+    // Owner exception 2026-10-03: when TypeSafe:Enabled and TypeSafe:WritingModelReviewEnabled are on, the Jev
+    // review is the semantic layer INSTEAD of semanticValidator (never both). Both null/off = behaviour unchanged.
+    ITypeSafeJudgmentService? judgments = null,
+    IOptions<TypeSafeOptions>? typeSafeOptions = null) : IWritingTaskModelAnswerService
 {
     /// <summary>
     /// The ONLY predicate that decides whether a saved Model Answer may be shown
@@ -1280,17 +1287,27 @@ public sealed class WritingTaskModelAnswerService(
         var deterministicOk = wordCountOk && grounding.IsGrounded && findings.Count == 0;
 
         WritingModelAnswerSemanticResult? semantic = null;
-        if (includeSemantic && semanticValidator is not null && deterministicOk)
+        if (includeSemantic && deterministicOk)
         {
-            semantic = await semanticValidator.ValidateAsync(new WritingModelAnswerSemanticRequest(
-                scenario.Id,
-                profession,
-                scenario.LetterType,
-                scenario.TaskPromptMarkdown ?? string.Empty,
-                BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel))),
-                letterText,
-                rulePackHash,
-                adminUserId), ct);
+            var caseNotesForReview = BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
+            if (JevWritingModelReview.Enabled(typeSafeOptions?.Value))
+            {
+                // The Jev review REPLACES the paid validator for this gate; the two never both run.
+                semantic = await RunJevReviewAsync(
+                    scenario, profession, caseNotesForReview, letterText, adminUserId, ct);
+            }
+            else if (semanticValidator is not null)
+            {
+                semantic = await semanticValidator.ValidateAsync(new WritingModelAnswerSemanticRequest(
+                    scenario.Id,
+                    profession,
+                    scenario.LetterType,
+                    scenario.TaskPromptMarkdown ?? string.Empty,
+                    caseNotesForReview,
+                    letterText,
+                    rulePackHash,
+                    adminUserId), ct);
+            }
         }
 
         string? hold = !wordCountOk ? "model_answer_word_count_out_of_range"
@@ -1317,6 +1334,49 @@ public sealed class WritingTaskModelAnswerService(
             rulebookVersion,
             WritingRev8HouseStyle.Version,
             now);
+    }
+
+    /// <summary>
+    /// Jev semantic layer for the Model Answer gate. A violation becomes a normal semantic violation with a
+    /// STATIC checklist message (Jev returns no text and never touches the letter). Semantic validation was
+    /// requested, so Jev unavailable is an Unavailable semantic result with the reason in SemanticError: the
+    /// gate holds the letter (model_answer_semantic_validator_unavailable, transient) exactly like an
+    /// unavailable paid validator. It is never a pass and never falls back to the paid validator.
+    /// </summary>
+    private async Task<WritingModelAnswerSemanticResult> RunJevReviewAsync(
+        WritingScenario scenario,
+        ExamProfession profession,
+        string caseNotes,
+        string letterText,
+        string adminUserId,
+        CancellationToken ct)
+    {
+        var review = judgments is null
+            ? null
+            : await JevWritingModelReview.ReviewAsync(
+                judgments,
+                typeSafeOptions!.Value,
+                profession.ToString(),
+                WritingLetterTypeTaxonomy.ToLegacyLetterType(scenario.LetterType),
+                scenario.TaskPromptMarkdown ?? string.Empty,
+                caseNotes,
+                letterText,
+                adminUserId,
+                scenario.Id.ToString("D"),
+                ct,
+                logger: logger);
+
+        if (review is not { Available: true } available)
+        {
+            var reason = "jev_review_unavailable:" + (judgments is null ? "jev_not_configured" : review?.Reason ?? "jev_unavailable");
+            logger.LogWarning("Jev Model Answer review unavailable for scenario {ScenarioId}: {Reason}", scenario.Id, reason);
+            return new WritingModelAnswerSemanticResult(false, true, [], null, null, reason);
+        }
+
+        var violations = available.Findings
+            .Select(f => new WritingModelAnswerSemanticViolation(f.RuleId, string.Empty, f.Message))
+            .ToList();
+        return new WritingModelAnswerSemanticResult(violations.Count == 0, false, violations, available.Model, null, null);
     }
 
     private static WritingModelAnswerValidationReport FailedReport(Guid scenarioId, string holdReason)

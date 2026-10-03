@@ -40,7 +40,7 @@ describe('live voice E2E workflow', () => {
 
   it('keeps the artifact short-lived and refuses to run during a deploy', () => {
     expect(workflow).toMatch(/retention-days: 3\b/);
-    expect(workflow).toMatch(/gh run list [^\n]*--workflow deploy\.yml/);
+    expect(workflow).toMatch(/gh run list [^\n]*--workflow production-deploy\.yml/);
     expect(workflow).toMatch(/permissions:\s+actions: read\s+contents: read/);
   });
 });
