@@ -11,6 +11,9 @@ namespace OetLearner.Api.Tests.Speaking;
 
 public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
 {
+    // Seed the live consent version so a version bump (e.g. recording.v2) cannot silently break these tests.
+    private static readonly string CurrentConsentVersion = new SpeakingComplianceOptions().CurrentConsentVersion;
+
     private LearnerDbContext _db = default!;
     private RecordingLiveKitGateway _gateway = default!;
     private SpeakingLiveRoomService _svc = default!;
@@ -123,7 +126,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             Mode = SpeakingSessionMode.LiveTutor,
             State = SpeakingSessionState.Active,
             InterlocutorActorId = "tutor-1",
-            ConsentVersion = "recording.v1",
+            ConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -139,7 +142,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             ActualStartUtc = DateTimeOffset.UtcNow.AddMinutes(-9),
             State = SpeakingLiveRoomState.Active,
             RecordingEnabled = true,
-            RecordingConsentVersion = "recording.v1",
+            RecordingConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -163,7 +166,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             Mode = SpeakingSessionMode.LiveTutor,
             State = SpeakingSessionState.Active,
             InterlocutorActorId = "tutor-1",
-            ConsentVersion = "recording.v1",
+            ConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -179,7 +182,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             ActualStartUtc = DateTimeOffset.UtcNow.AddMinutes(-9),
             State = SpeakingLiveRoomState.Active,
             RecordingEnabled = true,
-            RecordingConsentVersion = "recording.v1",
+            RecordingConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -189,7 +192,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
                 Id = "consent-recording",
                 UserId = "learner-consented",
                 ConsentType = SpeakingComplianceConsentTypes.Recording,
-                ConsentVersion = "recording.v1",
+                ConsentVersion = CurrentConsentVersion,
                 AcceptedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             },
             new SpeakingComplianceConsent
@@ -363,7 +366,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             Mode = SpeakingSessionMode.LiveTutor,
             State = SpeakingSessionState.Active,
             InterlocutorActorId = "tutor-1",
-            ConsentVersion = "recording.v1",
+            ConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -380,7 +383,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
             ActualStartUtc = DateTimeOffset.UtcNow.AddMinutes(-9),
             State = SpeakingLiveRoomState.Active,
             RecordingEnabled = true,
-            RecordingConsentVersion = "recording.v1",
+            RecordingConsentVersion = CurrentConsentVersion,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         });
@@ -395,7 +398,7 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
                 Id = $"consent-{userId}-{consentType}",
                 UserId = userId,
                 ConsentType = consentType,
-                ConsentVersion = "recording.v1",
+                ConsentVersion = CurrentConsentVersion,
                 AcceptedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             });
         }
