@@ -710,3 +710,60 @@ export const updateAiFeatureToolGrant = (id: string, body: { isActive?: boolean 
 
 export const deleteAiFeatureToolGrant = (id: string) =>
   aiApi<void>(`/v1/admin/ai-tools/grants/${id}`, { method: 'DELETE' });
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — TypeSafe / Jev status (read-only; flags are environment settings)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface TypeSafeUsage {
+  featureCode: string;
+  /** 7-day window, `typesafe-jev` provider only. */
+  calls: number;
+  failures: number;
+  avgLatencyMs: number;
+  costUsd: number;
+}
+
+export interface TypeSafeSurface extends TypeSafeUsage {
+  /** Option name, e.g. `WritingVerifyEnabled`. */
+  flag: string;
+  /** Environment variable that sets it, e.g. `TYPESAFE__WRITINGVERIFYENABLED`. */
+  envVar: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface TypeSafeSetting {
+  name: string;
+  envVar: string;
+  value: number;
+}
+
+export interface TypeSafeStatus {
+  /** Master switch (`TYPESAFE__ENABLED`); every surface is a no-op while false. */
+  enabled: boolean;
+  /** Pinned model id. */
+  model: string;
+  providerCode: string;
+  /** Writing guard Block may skip the paid grade (owner decision; default false). */
+  guardEnforced: boolean;
+  /** The API key itself is never returned: presence flags and the provider row's last-4 hint only. */
+  key: {
+    envKeyConfigured: boolean;
+    providerRowExists: boolean;
+    providerRowKeyConfigured: boolean;
+    providerRowActive: boolean;
+    apiKeyHint: string | null;
+    /** An active provider-row key wins at call time, the env key is the fallback. */
+    effectiveKeyAvailable: boolean;
+  };
+  surfaces: TypeSafeSurface[];
+  /** Jev feature codes seen in the window that no listed surface owns. */
+  otherUsage: TypeSafeUsage[];
+  thresholds: TypeSafeSetting[];
+  limits: TypeSafeSetting[];
+  usageWindowDays: number;
+}
+
+export const fetchTypeSafeStatus = () =>
+  aiApi<TypeSafeStatus>('/v1/admin/ai/typesafe/status');

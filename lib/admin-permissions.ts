@@ -99,6 +99,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/conformance': [AdminPermission.ContentRead],
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
+  '/admin/ai-providers/typesafe': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
   '/admin/writing-ai': [AdminPermission.AiConfig],
   '/admin/voice-design': [AdminPermission.AiConfig],
@@ -173,6 +174,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-providers/ubag': [AdminPermission.AiConfig],
+  '/admin/ai-providers/typesafe': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
   // Owner Agent Console: system_admin here; owner allow-list + unlock cookie
   // are enforced by the API (`OwnerAgent` policy) and the console gate.

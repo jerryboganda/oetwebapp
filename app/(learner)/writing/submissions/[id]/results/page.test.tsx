@@ -78,6 +78,8 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import WritingSubmissionResultsPage from './page';
+import enWriting from '@/messages/en/writing.json';
+import arWriting from '@/messages/ar/writing.json';
 
 const SUBMISSION = {
   id: 'sub-1',
@@ -597,5 +599,68 @@ describe('Writing results page — paid Revise & Resubmit', () => {
 
     expect(await screen.findByTestId('free-sample-revise-cta')).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
     expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+  });
+});
+
+// WritingGrade.ConfidenceFlag is a grader band OR a review state set after grading
+// ('jev_review' = queued for a human review, 'tutor_reviewed'). The learner only
+// ever sees neutral copy, never the stored code.
+describe('Writing results page — confidence flag copy', () => {
+  const LOADED = /I am writing to refer this patient/;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
+    getWritingSubmission.mockResolvedValue(SUBMISSION);
+    getWritingSubmissionGrade.mockResolvedValue(GRADE);
+    getWritingAssessmentV11.mockResolvedValue(null);
+    getTutorReview.mockResolvedValue(null);
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it.each([
+    ['high', 'writing.submissions.results.confidence.high'],
+    ['medium', 'writing.submissions.results.confidence.medium'],
+    ['low', 'writing.submissions.results.confidence.low'],
+    ['jev_review', 'writing.submissions.results.confidence.awaitingReview'],
+    ['tutor_reviewed', 'writing.submissions.results.confidence.tutorReviewed'],
+  ])('shows the learner label for %s, never the stored code', async (flag, labelKey) => {
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, confidenceFlag: flag });
+    const { container } = renderPage();
+
+    expect(await screen.findByText(labelKey)).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/jev_review|tutor_reviewed/);
+  });
+
+  it('hides the confidence stat for a flag it does not know instead of printing it', async () => {
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, confidenceFlag: 'some_future_state' });
+    const { container } = renderPage();
+
+    await screen.findByText(LOADED);
+    expect(screen.queryByText('writing.submissions.results.highlights.confidence')).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain('some_future_state');
+  });
+
+  it('shows no review-state copy on a mock (human-marked, zero AI)', async () => {
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, mode: 'mock' });
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, confidenceFlag: 'jev_review' });
+    renderPage();
+
+    await screen.findByText(LOADED);
+    expect(screen.queryByText('writing.submissions.results.highlights.confidence')).not.toBeInTheDocument();
+    expect(screen.queryByText('writing.submissions.results.confidence.awaitingReview')).not.toBeInTheDocument();
+  });
+
+  it('ships neutral copy for the two review states in every locale', () => {
+    for (const bundle of [enWriting, arWriting] as Array<Record<string, string>>) {
+      for (const key of [
+        'writing.submissions.results.confidence.awaitingReview',
+        'writing.submissions.results.confidence.tutorReviewed',
+      ]) {
+        expect(bundle[key], key).toBeTruthy();
+        expect(bundle[key], key).not.toMatch(/jev|typesafe|claude|codex|anthropic|openai|\bai\b/i);
+      }
+    }
   });
 });

@@ -40,6 +40,7 @@ import type {
   WritingCaseNotesDto,
   WritingCriteriaScoresDto,
   WritingCriterionCode,
+  WritingGradeConfidenceFlag,
   WritingGradeDto,
   WritingAssessmentV11ErrorDto,
   WritingAssessmentV11ReportDto,
@@ -247,6 +248,17 @@ export default function WritingSubmissionResultsPage() {
     if (code) (findingsByCriterion[code] ??= []).push(finding);
   }
 
+  // The stored flag is a grader band or a review state; the learner only ever
+  // sees neutral copy. A value this page does not know hides the stat.
+  const confidenceLabels: Record<WritingGradeConfidenceFlag, string> = {
+    high: t('writing.submissions.results.confidence.high'),
+    medium: t('writing.submissions.results.confidence.medium'),
+    low: t('writing.submissions.results.confidence.low'),
+    jev_review: t('writing.submissions.results.confidence.awaitingReview'),
+    tutor_reviewed: t('writing.submissions.results.confidence.tutorReviewed'),
+  };
+  const confidenceLabel = grade ? confidenceLabels[grade.confidenceFlag] : null;
+
   const sectionCard = cardClassName({ padding: 'lg' });
 
   return (
@@ -294,7 +306,7 @@ export default function WritingSubmissionResultsPage() {
               { label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/${WRITING_RAW_MAX}`, tone: 'info', icon: <Award /> },
               { label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-', tone: 'default', icon: <FileText /> },
               // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
-              ...(isMock ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag, tone: 'default' as const, icon: <Sparkles /> }]),
+              ...(isMock || !confidenceLabel ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: confidenceLabel, tone: 'default' as const, icon: <Sparkles /> }]),
             ]}
           />
         ) : (

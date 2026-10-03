@@ -54,6 +54,9 @@ export default function LearnerAiUsagePage() {
   useEffect(() => { void load(); }, [load]);
 
   const maxDailyCalls = summary ? Math.max(0, ...summary.daily.map((b) => b.calls)) : 0;
+  // Platform-only judgment calls ("jev.*") are never the learner's to see; the API
+  // already leaves them out, this keeps a stale or older response from printing a raw code.
+  const byFeature = summary ? summary.byFeature.filter((f) => !f.featureCode.startsWith('jev.')) : [];
 
   return (
     <>
@@ -130,7 +133,7 @@ export default function LearnerAiUsagePage() {
           {/* Per-feature breakdown */}
           <MotionSection delayIndex={1} className="space-y-4">
             <LearnerSurfaceSectionHeader title="By feature" />
-            {summary.byFeature.length === 0 ? (
+            {byFeature.length === 0 ? (
               <EmptyState icon={<Sparkles className="h-8 w-8" />} title="No AI calls yet in this window." />
             ) : (
               <Card padding="none" className="overflow-x-auto">
@@ -142,7 +145,7 @@ export default function LearnerAiUsagePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.byFeature.map((f) => (
+                    {byFeature.map((f) => (
                       <tr key={f.featureCode} className="border-t border-border">
                         <td className="px-4 py-2 font-mono text-xs text-navy">{f.featureCode}</td>
                         <td className="px-4 py-2 text-end tabular-nums text-navy">{f.calls.toLocaleString()}</td>

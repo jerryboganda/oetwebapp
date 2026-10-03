@@ -126,9 +126,20 @@ const SIDECAR_STATUS_MESSAGE: Record<number, string> = {
   429: 'Too many turns are running. Wait for one to finish.',
 };
 
+/**
+ * 409 from POST /sessions and POST /sessions/:id/messages when the triage could not
+ * establish the task and impact of a substantive message. A flat `{ code, message }`
+ * from the API (not a sidecar pass-through), so it is recognised by code, not status.
+ * Nothing was sent: the draft stays, so the owner can add detail and send again.
+ */
+export const OWNER_AGENT_JEV_REVIEW_REQUIRED_CODE = 'jev_review_required';
+const JEV_REVIEW_REQUIRED_MESSAGE =
+  'The request is too vague to triage - add the task, files and expected result, then send again.';
+
 /** Best human-readable message for an owner-agent failure. */
 export function describeOwnerAgentError(error: unknown, fallback = 'Request failed.'): string {
   if (error && typeof error === 'object') {
+    if (errorCode(error) === OWNER_AGENT_JEV_REVIEW_REQUIRED_CODE) return JEV_REVIEW_REQUIRED_MESSAGE;
     const status = errorStatus(error);
     const message = (error as { message?: unknown }).message;
     if (

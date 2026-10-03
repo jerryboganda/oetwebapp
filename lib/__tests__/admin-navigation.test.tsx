@@ -6,7 +6,7 @@ import {
   adminNavItems,
   getAdminPageTitle,
 } from '../admin-navigation';
-import { AdminPermission, sidebarPermissionMap } from '../admin-permissions';
+import { AdminPermission, adminRoutePermissionMap, sidebarPermissionMap } from '../admin-permissions';
 
 describe('admin navigation registry', () => {
   it('uses the selected six top-level admin workspaces', () => {
@@ -92,6 +92,23 @@ describe('admin navigation registry', () => {
     expect(getAdminPageTitle('/admin/agent-console/history')).toBe('Agent Console History');
     // Console tabs (History, Settings) live inside the console, not in the sidebar.
     expect(adminNavItems.some((item) => item.href === '/admin/agent-console/history')).toBe(false);
+  });
+
+  it('registers the TypeSafe / Jev status page under AI & Automation behind ai_config', () => {
+    const aiGroup = adminNavGroups.find((group) => group.label === 'AI & Automation');
+    const jevItem = aiGroup?.items.find((item) => item.href === '/admin/ai-providers/typesafe');
+
+    expect(jevItem).toMatchObject({
+      label: 'TypeSafe / Jev',
+      matchPrefix: '/admin/ai-providers/typesafe',
+      requiredPermissions: [AdminPermission.AiConfig],
+    });
+    expect(sidebarPermissionMap['/admin/ai-providers/typesafe']).toEqual([AdminPermission.AiConfig]);
+    expect(adminRoutePermissionMap['/admin/ai-providers/typesafe']).toEqual([AdminPermission.AiConfig]);
+    // The parent AI Providers page keeps its own title.
+    expect(getAdminPageTitle('/admin/ai-providers/typesafe')).toBe('TypeSafe / Jev');
+    expect(getAdminPageTitle('/admin/ai-providers')).toBe('AI Providers');
+    expect(getAdminPageTitle('/admin/ai-providers/ubag')).toBe('AI Providers');
   });
 
   it('uses known admin permission constants in registry metadata', () => {

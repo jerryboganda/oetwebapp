@@ -41,8 +41,10 @@ public sealed class UsageForecastService : IUsageForecastService
         // Per-day call counts for the last 30 days. Materialize first; the
         // EF Core InMemory provider does not support GroupBy → typed-record
         // projection, and Postgres handles the same shape fine.
+        // Platform-only Jev rows are excluded so hidden calls never move the learner-visible forecast.
         var rawRecords = await _db.AiUsageRecords
-            .Where(r => r.UserId == userId && r.CreatedAt >= thirtyDaysAgo)
+            .Where(r => r.UserId == userId && r.CreatedAt >= thirtyDaysAgo
+                && !r.FeatureCode.StartsWith(AiUsageAnalyticsService.PlatformOnlyFeaturePrefix))
             .Select(r => new
             {
                 r.PeriodDayKey,

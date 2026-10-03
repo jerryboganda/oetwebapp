@@ -1,0 +1,66 @@
+{
+  "name": "speaking-crosscheck",
+  "note": "Synthetic, invented role play (no real learner speech). Gates TYPESAFE__SPEAKINGCROSSCHECKENABLED (jev.speaking.crosscheck) for BOTH rubrics (classic 4+5 criteria and the v1.1 simulation). A strong and a weak transcript of the same card must be ordered correctly on every criterion Jev is asked about (normalised margin >= expect.order_margin_gte), the strong mean must sit high and the weak mean low. Divergence mirrors the backend rule (distance / scale >= 0.34; 'confident' also needs confidence >= 0.60): an accurate grader on the strong transcript raises at most 2 confident divergences, a generous grader on the weak one diverges by position on at least 4 criteria (position-only, so a low-confidence Score cannot make the check vacuous; the confident count is printed for information). Claim support runs on the classic rubric only: a quote that shows the claim is 'supported', a quote that shows the opposite is 'contradicted', a quote that is not in the transcript is flagged as unsupported at confidence >= 0.60. Grader scores are hypothetical inputs, never stored anywhere.",
+  "crosscheck": {
+    "card": "Scenario: Newly diagnosed type 2 diabetes\nSetting: Outpatient diabetes clinic\nCandidate role: Nurse\nClinical topic: Explaining a new diagnosis of type 2 diabetes and starting lifestyle changes\nTask 1: Find out what the patient already knows about diabetes.\nTask 2: Explain the diagnosis and the importance of diet and exercise.\nTask 3: Check the patient's understanding and discuss next steps.",
+    "schemas": ["classic", "v11"],
+    "expect": {
+      "order_margin_gte": 0.2,
+      "strong_mean_gte": 0.6,
+      "weak_mean_lte": 0.45,
+      "strong_confident_diverged_lte": 2,
+      "weak_position_diverged_gte": 4
+    },
+    "strong": {
+      "transcript": "patient: Hello nurse. The doctor said my blood tests show I have diabetes.\ncandidate: Good morning, Mr Hayes. My name is Sam and I am one of the nurses in the diabetes clinic. Please take a seat. Before we start, how are you feeling about what the doctor told you?\npatient: A bit shocked, to be honest. My father had it and he lost a toe.\ncandidate: I can hear how worrying that must be, especially after what happened to your father. Would it be all right if I asked what you already know about diabetes, and what concerns you most?\npatient: Only that it is to do with sugar. I am worried I will have to stop work and take injections.\ncandidate: Thank you for telling me. Those are very common worries. So, you are mainly concerned about your job and injections, is that right?\npatient: Yes, exactly.\ncandidate: Let me explain in small steps. Diabetes means the sugar in your blood is higher than it should be. For many people with your type, we can bring it down with food choices and regular exercise, and injections are often not needed at the start. Does that make sense so far?\npatient: Yes, that is a relief.\ncandidate: Good. Next I would like to talk about eating and exercise. What does a normal day of meals look like for you?\npatient: Toast, a sandwich and a big dinner. And lots of biscuits.\ncandidate: Thank you, that helps me. To make sure I have explained things clearly, could you tell me in your own words what we have agreed to try over the next month?\npatient: Cut the biscuits, walk every day, and come back in four weeks.\ncandidate: Exactly right. Is there anything else you would like to ask me before we finish?",
+      "grader": {
+        "classic": { "appropriateness": 5, "grammar": 5, "relationship": 3, "perspective": 3, "structure": 3, "gathering": 3, "giving": 3 },
+        "v11": { "appropriateness": 85, "grammar": 85, "relationship": 85, "perspective": 85, "structure": 85, "gathering": 85, "giving": 85 }
+      },
+      "claims": [
+        {
+          "topic": "gathering",
+          "claim": "The candidate began with open questions about the patient's feelings and existing knowledge before moving to closed questions.",
+          "quotes": [
+            "Before we start, how are you feeling about what the doctor told you?",
+            "Would it be all right if I asked what you already know about diabetes, and what concerns you most?"
+          ],
+          "expect_verdict": "supported"
+        },
+        {
+          "topic": "giving",
+          "claim": "The candidate checked the patient's understanding by asking him to restate the plan in his own words.",
+          "quotes": [
+            "could you tell me in your own words what we have agreed to try over the next month?"
+          ],
+          "expect_verdict": "supported"
+        }
+      ]
+    },
+    "weak": {
+      "transcript": "patient: Hello nurse. The doctor said my blood tests show I have diabetes.\ncandidate: Yes you have diabetes type two. Your HbA1c is high and you have hyperglycaemia so we must start metformin.\npatient: A bit shocked. My father had it and he lost a toe.\ncandidate: You should not worry, it is nothing. Do you eat much sugar, and do you drink alcohol, and do you smoke?\npatient: A bit of everything, I suppose. Will I need injections?\ncandidate: No. Are you exercising? You need to exercise more and stop eat sugar. Diet is very important for diabetic people.\npatient: What do I have to do exactly?\ncandidate: Just follow diet and exercise. Come back later. Okay?\npatient: Okay, I suppose.",
+      "grader": {
+        "classic": { "appropriateness": 5, "grammar": 5, "relationship": 3, "perspective": 3, "structure": 3, "gathering": 3, "giving": 3 },
+        "v11": { "appropriateness": 85, "grammar": 85, "relationship": 85, "perspective": 85, "structure": 85, "gathering": 85, "giving": 85 }
+      },
+      "claims": [
+        {
+          "topic": "relationship",
+          "claim": "The candidate acknowledged the patient's feelings and reassured him with empathy.",
+          "quotes": [
+            "You should not worry, it is nothing."
+          ],
+          "expect_verdict": "contradicted"
+        },
+        {
+          "topic": "giving",
+          "claim": "The candidate checked the patient's understanding and summarised the plan before finishing.",
+          "quotes": [
+            "Do you understand the plan?"
+          ],
+          "expect_unsupported": true
+        }
+      ]
+    }
+  }
+}

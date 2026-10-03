@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Listening;
@@ -47,6 +48,11 @@ public sealed class ListeningExplanationService(
 {
     private const string PromptTemplateId = "listening.explanation.v1";
     private const string Module = "listening";
+
+    // Key variant for the learner's own copy of a Jev-held explanation. It must NOT share the normal key:
+    // AiResultCaches.CacheKey is unique and never purged, so an expired short-lived row under the normal
+    // key would silently block every later normal store (StoreAsync swallows the unique violation).
+    private const string HeldPromptVersion = PromptTemplateId + ".jev-held";
 
     public async Task<ListeningExplanationDto> GetSubmittedAttemptExplanationAsync(
         string userId,
@@ -132,6 +138,7 @@ public sealed class ListeningExplanationService(
         // language + prompt/rulebook versions), then the W3 cross-learner
         // explanation cache as a second hit path.
         string? resultCacheKey = null;
+        string? heldCacheKey = null;
         if (resultCache is not null)
         {
             resultCacheKey = resultCache.BuildCacheKey(
@@ -149,6 +156,24 @@ public sealed class ListeningExplanationService(
                 && fromResultCache is not null)
             {
                 return fromResultCache with { Cached = true };
+            }
+
+            // This learner's own re-view of an explanation Jev held back (see the gate below).
+            heldCacheKey = resultCache.BuildCacheKey(
+                AiFeatureCodes.ListeningExplanation,
+                Module,
+                attemptId,
+                question.Id,
+                storedAnswer,
+                lang,
+                HeldPromptVersion,
+                approvedRationale.Id);
+            var heldJson = await resultCache.TryGetAsync(heldCacheKey, ct);
+            if (heldJson is not null
+                && TryDeserializeExplanation(heldJson, lang, out var fromHeld)
+                && fromHeld is not null)
+            {
+                return fromHeld with { Cached = true };
             }
         }
 
@@ -178,6 +203,7 @@ public sealed class ListeningExplanationService(
         });
 
         ListeningExplanationDto generated;
+        JevResponseAdvisory? advisory;
         try
         {
             var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -193,6 +219,7 @@ public sealed class ListeningExplanationService(
             generated = TryParse(result.Completion, lang)
                 ?? throw new ListeningGroundedExplanationUnavailableException(
                     "The grounded gateway returned no usable explanation for this question.");
+            advisory = result.JevAdvisory;
         }
         catch (OperationCanceledException)
         {
@@ -208,6 +235,31 @@ public sealed class ListeningExplanationService(
         }
 
         var payload = JsonSerializer.Serialize(generated);
+
+        // Jev flagged this explanation: the learner still gets it, but it must not be replayed from the 30-day
+        // result cache or the cross-learner cache. The one exception is this learner's own re-view inside the
+        // AI replay window: the coordinator refuses an identical gateway call there (the re-view would fail),
+        // so the learner keeps their copy under the held key for exactly that window.
+        // ponytail: ttl pinned to the default window; read Ai:Coordination:ReplayWindowSeconds here if ops ever raises it.
+        if (JevHoldsBackFromCache(advisory, question.Id))
+        {
+            if (heldCacheKey is not null)
+            {
+                await resultCache!.StoreAsync(
+                    heldCacheKey,
+                    AiFeatureCodes.ListeningExplanation,
+                    Module,
+                    payload,
+                    HeldPromptVersion,
+                    approvedRationale.Id,
+                    question.Version.ToString(),
+                    ttl: AiOperationReplayPolicy.DefaultReplayWindow,
+                    CancellationToken.None);
+            }
+
+            return generated with { Cached = false };
+        }
+
         if (resultCacheKey is not null)
         {
             await resultCache!.StoreAsync(
@@ -229,6 +281,20 @@ public sealed class ListeningExplanationService(
         }
 
         return generated with { Cached = false };
+    }
+
+    /// <summary>
+    /// True only for a real Jev judgment (<c>review_required</c>) that wants a human look. A null,
+    /// <c>ok</c> or <c>unavailable</c> advisory (flag off, outage, bad config) never blocks caching.
+    /// Logs the question id and the label/score fields only, never the explanation text.
+    /// </summary>
+    private bool JevHoldsBackFromCache(JevResponseAdvisory? advisory, string questionId)
+    {
+        if (advisory is not { Status: "review_required", RequiresHumanReview: true }) return false;
+        logger?.LogWarning(
+            "ListeningExplanationService — Jev advisory held question '{QuestionId}' out of the shared explanation caches (relation={Relation}, evidenceConfidence={EvidenceConfidence}, taskRelevance={TaskRelevance}, safetyConcern={SafetyConcern}); served to this learner only, kept for their re-view inside the AI replay window.",
+            questionId, advisory.EvidenceRelation, advisory.EvidenceConfidence, advisory.TaskRelevanceProbability, advisory.SafetyConcernProbability);
+        return true;
     }
 
     private static bool TryDeserializeExplanation(string json, string lang, out ListeningExplanationDto? dto)

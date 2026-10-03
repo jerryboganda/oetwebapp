@@ -2983,6 +2983,7 @@ app.MapAiUsageAdminEndpoints();
 app.MapAiOperationsAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
+app.MapTypeSafeAdminEndpoints();
 app.MapCompanionKnowledgeAdminEndpoints();
 app.MapCompanionAccessAdminEndpoints();
 app.MapCompanionLearnerEndpoints();
