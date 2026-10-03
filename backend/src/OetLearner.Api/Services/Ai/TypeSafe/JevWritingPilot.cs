@@ -148,8 +148,9 @@ public sealed record WritingFindingsResult(
         new(Array.Empty<WritingFindingClassification>(), false, JevCallStatus.Unavailable, reason);
 }
 
-/// <summary>Why a Jev hook asked for tutor review. Persisted nowhere (the
-/// assignment row has no text column); logged with the submission id.</summary>
+/// <summary>Why a Jev hook asked for tutor review. Persisted (comma-separated, fixed
+/// vocabulary) on <c>WritingTutorReviewAssignment.ReviewReason</c> and logged with the
+/// submission id; the pipeline's merge helper whitelists exactly these codes.</summary>
 public static class WritingJevReviewReasons
 {
     public const string GuardBlock = "guard_block";

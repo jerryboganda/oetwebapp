@@ -182,6 +182,8 @@ export interface TutorWritingQueueItem {
   userId: string;
   profession: string;
   letterType: string;
+  /** Why Jev flagged this submission for review: comma-separated fixed codes; null/absent for older rows. */
+  reviewReason?: string | null;
   [key: string]: unknown;
 }
 

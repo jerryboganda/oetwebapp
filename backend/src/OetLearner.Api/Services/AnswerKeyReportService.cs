@@ -1,13 +1,30 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 
 namespace OetLearner.Api.Services;
 
-public sealed class AnswerKeyReportService(LearnerDbContext db)
+// The optional trailing parameters are the Jev triage seam (jev.answerkey.triage). When they are
+// absent, or TypeSafe:Enabled / AnswerKeyTriageEnabled is off, the service behaves exactly as before.
+public sealed class AnswerKeyReportService(
+    LearnerDbContext db,
+    ITypeSafeJudgmentService? judgments = null,
+    IOptions<TypeSafeOptions>? typeSafe = null,
+    IMemoryCache? cache = null,
+    ILogger<AnswerKeyReportService>? logger = null)
 {
     public const string ScoringSystemUrl = "/admin/content/scoring-system";
+
+    // The hint is computed on read and never stored (no schema change). Cached briefly so
+    // refreshing the queue does not re-spend a Jev call; a failed attempt backs off even shorter.
+    private static readonly TimeSpan TriageCacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan TriageFailureTtl = TimeSpan.FromMinutes(2);
+    private const int TriageCandidateLimit = 25;
 
     private static readonly HashSet<string> Assessments = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -109,7 +126,8 @@ public sealed class AnswerKeyReportService(LearnerDbContext db)
             .ToListAsync(ct);
 
         var names = await LoadDisplayNamesAsync(rows.Select(x => x.ReporterUserId), ct);
-        return rows.Select(row => ToAdminDto(row, names)).ToArray();
+        var hints = await TriageAsync(rows, ct);
+        return rows.Select(row => ToAdminDto(row, names, hints.GetValueOrDefault(row.Id))).ToArray();
     }
 
     public async Task<AnswerKeyReportAdminDto> GetAdminAsync(string id, CancellationToken ct)
@@ -119,7 +137,8 @@ public sealed class AnswerKeyReportService(LearnerDbContext db)
             ?? throw ApiException.NotFound("answer_key_report_not_found", "Answer-key report not found.");
 
         var names = await LoadDisplayNamesAsync([report.ReporterUserId], ct);
-        return ToAdminDto(report, names);
+        var hints = await TriageAsync([report], ct);
+        return ToAdminDto(report, names, hints.GetValueOrDefault(report.Id));
     }
 
     public async Task<AnswerKeyReportAdminDto> UpdateAdminAsync(
@@ -439,7 +458,8 @@ public sealed class AnswerKeyReportService(LearnerDbContext db)
 
     private static AnswerKeyReportAdminDto ToAdminDto(
         AssessmentAnswerKeyReport report,
-        IReadOnlyDictionary<string, string> displayNames)
+        IReadOnlyDictionary<string, string> displayNames,
+        AnswerKeyTriageHintDto? triage = null)
     {
         displayNames.TryGetValue(report.ReporterUserId, out var displayName);
         return new AnswerKeyReportAdminDto(
@@ -465,7 +485,134 @@ public sealed class AnswerKeyReportService(LearnerDbContext db)
             report.ResolvedByAdminId,
             report.ResolvedAt,
             report.CreatedAt,
-            report.UpdatedAt);
+            report.UpdatedAt,
+            triage);
+    }
+
+    // ── Jev triage (annotation only) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Advisory Jev hints for the pending reports in <paramref name="reports"/>, in one batched call.
+    /// Read-only: it never writes a report, a key, an accepted variant or a mark, never throws for a
+    /// Jev problem (no hint is the fallback), and makes no call at all when the flag is off.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, AnswerKeyTriageHintDto>> TriageAsync(
+        IReadOnlyList<AssessmentAnswerKeyReport> reports,
+        CancellationToken ct)
+    {
+        var hints = new Dictionary<string, AnswerKeyTriageHintDto>(StringComparer.Ordinal);
+        var options = typeSafe?.Value;
+        if (judgments is null || options is null || !JevAnswerKeyTriage.Enabled(options)) return hints;
+
+        try
+        {
+            var misses = new List<AssessmentAnswerKeyReport>();
+            foreach (var report in reports.Where(r => PendingStatuses.Contains(r.Status)).Take(TriageCandidateLimit))
+            {
+                if (cache is not null && cache.TryGetValue(TriageCacheKey(report), out TriageCacheEntry? hit))
+                {
+                    if (hit?.Hint is { } cached) hints[report.Id] = cached;
+                }
+                else
+                {
+                    misses.Add(report);
+                }
+            }
+
+            misses = misses.Take(JevAnswerKeyTriage.MaxReportsPerCall).ToList();
+            if (misses.Count == 0) return hints;
+
+            var inputs = await LoadTriageInputsAsync(misses, ct);
+            var fresh = await JevAnswerKeyTriage.TriageAsync(
+                judgments, options, inputs, resourceId: null, ct, logger: logger);
+
+            foreach (var report in misses)
+            {
+                var hint = fresh.GetValueOrDefault(report.Id);
+                if (hint is not null) hints[report.Id] = hint;
+                cache?.Set(TriageCacheKey(report), new TriageCacheEntry(hint), hint is null ? TriageFailureTtl : TriageCacheTtl);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Answer-key Jev triage failed; the queue is shown without hints.");
+        }
+
+        return hints;
+    }
+
+    private static string TriageCacheKey(AssessmentAnswerKeyReport report)
+        => $"jev-akr-triage:{report.Id}:{report.UpdatedAt.UtcTicks}";
+
+    private sealed record TriageCacheEntry(AnswerKeyTriageHintDto? Hint);
+
+    /// <summary>Evidence for each report from the live question (stem, options, accepted variants,
+    /// source passage or audio-script excerpt). The key is the snapshot the learner was marked against.
+    /// The learner's free-text Details is deliberately not sent.</summary>
+    private async Task<IReadOnlyList<AnswerKeyTriageInput>> LoadTriageInputsAsync(
+        IReadOnlyList<AssessmentAnswerKeyReport> reports,
+        CancellationToken ct)
+    {
+        var readingIds = reports.Where(r => r.Assessment == AnswerKeyReportAssessments.Reading)
+            .Select(r => r.QuestionId).Distinct().ToArray();
+        var listeningIds = reports.Where(r => r.Assessment == AnswerKeyReportAssessments.Listening)
+            .Select(r => r.QuestionId).Distinct().ToArray();
+
+        var reading = await db.ReadingQuestions.AsNoTracking()
+            .Where(q => readingIds.Contains(q.Id))
+            .Select(q => new { q.Id, q.Stem, q.OptionsJson, q.AcceptedSynonymsJson, q.ExplanationMarkdown, q.ReadingTextId })
+            .ToDictionaryAsync(q => q.Id, ct);
+        var textIds = reading.Values.Where(q => q.ReadingTextId != null).Select(q => q.ReadingTextId!).Distinct().ToArray();
+        var texts = await db.ReadingTexts.AsNoTracking()
+            .Where(t => textIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.BodyHtml })
+            .ToDictionaryAsync(t => t.Id, t => t.BodyHtml, ct);
+        var listening = await db.ListeningQuestions.AsNoTracking()
+            .Where(q => listeningIds.Contains(q.Id))
+            .Select(q => new
+            {
+                q.Id,
+                q.Stem,
+                q.AcceptedSynonymsJson,
+                q.ExplanationMarkdown,
+                q.TranscriptEvidenceText,
+                Options = q.Options.OrderBy(o => o.DisplayOrder).Select(o => o.OptionKey + ": " + o.Text).ToList(),
+            })
+            .ToDictionaryAsync(q => q.Id, ct);
+
+        var inputs = new List<AnswerKeyTriageInput>();
+        foreach (var report in reports)
+        {
+            if (report.Assessment == AnswerKeyReportAssessments.Reading && reading.TryGetValue(report.QuestionId, out var rq))
+            {
+                var passage = rq.ReadingTextId is not null && texts.TryGetValue(rq.ReadingTextId, out var html)
+                    ? JevAnswerKeyTriage.PlainText(html)
+                    : null;
+                inputs.Add(new AnswerKeyTriageInput(
+                    report.Id, report.Assessment, report.PartCode, report.QuestionNumber,
+                    rq.Stem, rq.OptionsJson,
+                    JevAnswerKeyTriage.AnswerText(report.OfficialAnswerSnapshot),
+                    JevAnswerKeyTriage.ParseVariants(rq.AcceptedSynonymsJson),
+                    JevAnswerKeyTriage.AnswerText(report.LearnerAnswerSnapshot),
+                    passage, rq.ExplanationMarkdown));
+            }
+            else if (report.Assessment == AnswerKeyReportAssessments.Listening && listening.TryGetValue(report.QuestionId, out var lq))
+            {
+                inputs.Add(new AnswerKeyTriageInput(
+                    report.Id, report.Assessment, report.PartCode, report.QuestionNumber,
+                    lq.Stem, lq.Options.Count == 0 ? null : string.Join("\n", lq.Options),
+                    JevAnswerKeyTriage.AnswerText(report.OfficialAnswerSnapshot),
+                    JevAnswerKeyTriage.ParseVariants(lq.AcceptedSynonymsJson),
+                    JevAnswerKeyTriage.AnswerText(report.LearnerAnswerSnapshot),
+                    lq.TranscriptEvidenceText, lq.ExplanationMarkdown));
+            }
+        }
+
+        return inputs;
     }
 
     internal static string BuildEditorUrl(string assessment, string paperId, string questionId, string partCode)

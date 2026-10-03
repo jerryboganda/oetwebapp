@@ -164,6 +164,9 @@ public static class AiFeaturePolicyDefaults
     private static readonly Dictionary<string, AiOperationClass> ClassOverrides = new(StringComparer.OrdinalIgnoreCase)
     {
         [AiFeatureCodes.JevDevelopmentTriage] = AiOperationClass.AdminBatch,
+        [AiFeatureCodes.JevWritingModelReview] = AiOperationClass.AdminBatch,
+        [AiFeatureCodes.JevAnswerKeyTriage] = AiOperationClass.AdminBatch,
+        [AiFeatureCodes.JevExtractionVerify] = AiOperationClass.AdminBatch,
         // Admin AI-draft tool for role-play cards — an authoring tool despite
         // not carrying the "admin." prefix.
         [SpeakingAiFeatureCodes.CardDraftV1] = AiOperationClass.AdminBatch,

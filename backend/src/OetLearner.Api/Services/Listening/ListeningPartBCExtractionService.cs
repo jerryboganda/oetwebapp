@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
 
@@ -77,7 +78,9 @@ public sealed class ListeningPartBCExtractionService(
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartBCExtractionService> logger,
-    IListeningPolicyService? listeningPolicyService = null) : IListeningPartBCExtractionService
+    IListeningPolicyService? listeningPolicyService = null,
+    ITypeSafeJudgmentService? judgments = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafe = null) : IListeningPartBCExtractionService
 {
     // Owner policy is checked before any OCR or model call. This path returns
     // a projection only; the admin must still review and save it explicitly.
@@ -178,10 +181,14 @@ public sealed class ListeningPartBCExtractionService(
         }
 
         var (answers, warnings) = ValidateAndProject(part, parsed?.Answers ?? new List<BcToolAnswer>());
+        // IsStub / StubReason come from the deterministic warnings only; Jev review flags are
+        // advisory and surface in the summary without flipping them.
+        var jevFlags = await JevReviewFlagsAsync(answers, answerMarkdown, adminId, paperId, part, ct);
         var isStub = warnings.Count > 0;
         var summary = isStub
             ? $"AI extraction for Part {part} with {warnings.Count} issue(s) to review — {answers.Count} answer(s)."
             : $"AI extraction OK for Part {part} — {answers.Count} answer(s).";
+        if (jevFlags.Count > 0) summary += " " + string.Join(" ", jevFlags);
 
         // Projection-only: there is no draft row to point at, so the operation
         // closes with no ResultRef rather than a pointer to nothing.
@@ -312,6 +319,43 @@ public sealed class ListeningPartBCExtractionService(
         await db.SaveChangesAsync(ct);
 
         return attemptedSoFar + 1;
+    }
+
+    /// <summary>
+    /// Jev review flags (jev.extraction.verify): whether the printed answer key supports each extracted
+    /// correct option, and whether an item's stem or options look OCR-corrupted. Flags are advisory text
+    /// only, kept apart from the deterministic warnings so they never change IsStub or StubReason: the
+    /// projection is never edited, saved or blocked, and a Jev problem (or the flag being off) returns no flags.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> JevReviewFlagsAsync(
+        IReadOnlyList<ListeningPartBCAnswer> answers, string answerMarkdown,
+        string adminId, string paperId, string part, CancellationToken ct)
+    {
+        var options = typeSafe?.Value;
+        if (judgments is null || options is null || !JevExtractionVerify.Enabled(options)) return Array.Empty<string>();
+
+        try
+        {
+            var items = answers.Select(a => new ExtractionVerifyItem(
+                $"Q{a.Number}",
+                a.Stem,
+                string.Join("\n", new[] { ("A", a.OptionA), ("B", a.OptionB), ("C", a.OptionC) }
+                    .Where(o => !string.IsNullOrWhiteSpace(o.Item2))
+                    .Select(o => $"{o.Item1}: {o.Item2}")),
+                a.CorrectAnswer)).ToList();
+            var advisory = await JevExtractionVerify.VerifyAsync(
+                judgments, options, items, answerMarkdown, adminId, $"{paperId}:{part}", ct, logger: logger);
+            return JevExtractionVerify.FlagsOf(advisory);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Jev extraction verification failed for paper {PaperId} part {Part}; the projection carries no Jev flags.", paperId, part);
+            return Array.Empty<string>();
+        }
     }
 
     private static (IReadOnlyList<ListeningPartBCAnswer> Answers, IReadOnlyList<string> Warnings)

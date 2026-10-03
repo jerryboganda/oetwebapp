@@ -879,6 +879,7 @@ export type {
   AdminAnswerKeyReport,
   AdminAnswerKeyReportAssessment,
   AdminAnswerKeyReportStatus,
+  AdminAnswerKeyTriageHint,
   AdminMockItemAnalysisResponse,
   AdminMockItemAnalysisRow,
   AdminMockLeakReport,

@@ -1,9 +1,12 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 
@@ -49,7 +52,9 @@ public sealed class WritingCoachServiceV2(
     IMemoryCache cache,
     IRuntimeSettingsProvider settingsProvider,
     TimeProvider clock,
-    ILogger<WritingCoachServiceV2> logger) : IWritingCoachServiceV2
+    ILogger<WritingCoachServiceV2> logger,
+    ITypeSafeJudgmentService? typeSafe = null,
+    IOptions<TypeSafeOptions>? typeSafeOptions = null) : IWritingCoachServiceV2
 {
     public async Task<WritingCoachResponse> RequestHintAsync(WritingCoachRequest request, CancellationToken ct)
     {
@@ -112,6 +117,29 @@ public sealed class WritingCoachServiceV2(
                 SecondsUntilNextHint: 0);
         }
 
+        // Jev need-routing (coach hints only). Skips the paid coach call ONLY on a confident 'none';
+        // every other outcome (doubt, outage, timeout, flag off) falls through to the LLM unchanged.
+        string? likelyNeed = null;
+        var jevOptions = typeSafeOptions?.Value;
+        if (typeSafe is not null && jevOptions is not null && JevWritingCoachAdvisor.IsEnabled(jevOptions))
+        {
+            var need = await JevWritingCoachAdvisor.NeedAsync(
+                typeSafe, jevOptions, request.DraftContent,
+                $"Letter type: {request.LetterType ?? "routine_referral"}; profession: {request.Profession ?? "medicine"}; word count: {request.WordCount}",
+                ct, request.UserId);
+            if (JevWritingCoachAdvisor.CanSkipCoachCall(need, jevOptions))
+            {
+                // Same shape as an LLM call that returned no hints. Only the pacing key is touched: no hint is
+                // persisted, counted, costed or cached as if an LLM had produced it.
+                cache.Set(rateKey, now, TimeSpan.FromMinutes(5));
+                return new WritingCoachResponse(request.SessionId, Array.Empty<WritingCoachHint>(),
+                    Throttled: false, DailyCapReached: false,
+                    HintsRemainingInSession: Math.Max(0, opts.CoachMaxHintsPerSession - sessionCount),
+                    SecondsUntilNextHint: opts.CoachMinSecondsBetweenHints);
+            }
+            likelyNeed = JevWritingCoachAdvisor.ConfidentSpecificNeed(need, jevOptions);
+        }
+
         AiGatewayResult result;
         try
         {
@@ -124,7 +152,7 @@ public sealed class WritingCoachServiceV2(
             result = await aiGateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
-                UserInput = BuildCoachInput(request),
+                UserInput = BuildCoachInput(request, likelyNeed),
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.WritingCoachV1,
                 PromptTemplateId = "writing.coach.v1",
@@ -155,17 +183,22 @@ public sealed class WritingCoachServiceV2(
             SecondsUntilNextHint: opts.CoachMinSecondsBetweenHints);
     }
 
-    private static string BuildCoachInput(WritingCoachRequest request)
+    internal static string BuildCoachInput(WritingCoachRequest request, string? likelyNeed = null)
     {
-        return string.Join('\n',
+        // The optional focus line is omitted entirely (no blank line) when null, so the prompt is byte-identical to before.
+        string?[] lines =
+        [
             $"Profession: {request.Profession ?? "medicine"}",
             $"Letter type: {request.LetterType ?? "routine_referral"}",
             $"Word count: {request.WordCount}",
+            likelyNeed is null ? null : $"Likely focus area (advisory): {likelyNeed}",
             "Letter so far:",
             "---",
-            request.DraftContent,
+            request.DraftContent ?? string.Empty,
             "---",
-            "Return JSON { \"hints\": [{\"category\":\"style|structure|length|encouragement\",\"text\":\"≤12 words\",\"ruleId\":\"optional\",\"charStart\":int?,\"charEnd\":int?}] } with at most 4 hints.");
+            "Return JSON { \"hints\": [{\"category\":\"style|structure|length|encouragement\",\"text\":\"≤12 words\",\"ruleId\":\"optional\",\"charStart\":int?,\"charEnd\":int?}] } with at most 4 hints.",
+        ];
+        return string.Join('\n', lines.Where(l => l is not null));
     }
 
     private static IReadOnlyList<WritingCoachHint> ParseCoachHints(string completion, int draftLength)

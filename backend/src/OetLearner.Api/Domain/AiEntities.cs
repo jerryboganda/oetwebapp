@@ -495,6 +495,40 @@ public static class AiFeatureCodes
     /// code keeps the 350/500 threshold. Advisory only.</summary>
     public const string JevWritingOutcome = "jev.writing.outcome";
 
+    /// <summary>Writing helper routing: Choice of what a learner paragraph needs
+    /// (purpose / structure / length / style / none) so a code-owned hint can be
+    /// used or the coach LLM call skipped when nothing is needed.</summary>
+    public const string JevWritingCoachNeed = "jev.writing.coachneed";
+
+    /// <summary>Conversation evaluation cross-check: per-criterion Score and an
+    /// ASR-artifact-vs-candidate-error Choice. Advisory only.</summary>
+    public const string JevConversationCrosscheck = "jev.conversation.crosscheck";
+
+    /// <summary>Pronunciation word-level Choice for the text-only refinement path.
+    /// Acoustic truth stays with Azure / Gemini audio. Advisory only.</summary>
+    public const string JevPronunciationWords = "jev.pronunciation.words";
+
+    /// <summary>Writing Model Answer semantic review: parallel Nouls over the
+    /// checklist (admin authoring tool, AdminBatch). Replaces the paid free-text
+    /// semantic validator when explicitly enabled by the owner.</summary>
+    public const string JevWritingModelReview = "jev.writing.modelreview";
+
+    /// <summary>Listening Part A per-gap advisory verdict (Choice per gap) for the
+    /// expert review surface. Never changes IsCorrect or any mark.</summary>
+    public const string JevListeningGaps = "jev.listening.gaps";
+
+    /// <summary>Mock report weakness ranking: Choice/Score over the closed
+    /// remediation catalogue. Text is rendered from templates; no pass claims.</summary>
+    public const string JevMockWeakness = "jev.mock.weakness";
+
+    /// <summary>Answer-key dispute triage for the tutor queue (AdminBatch).
+    /// Annotates only; marks change solely through the existing tutor recalc.</summary>
+    public const string JevAnswerKeyTriage = "jev.answerkey.triage";
+
+    /// <summary>Content extraction verification for admin drafts (AdminBatch):
+    /// key-support Choice and OCR-corruption Noul. Humans still approve.</summary>
+    public const string JevExtractionVerify = "jev.extraction.verify";
+
     /// <summary>Writing finding classification: per AI finding, Choice of the
     /// OET criterion plus severity / valid-alternative Nouls. Advisory only.</summary>
     public const string JevWritingFindings = "jev.writing.findings";

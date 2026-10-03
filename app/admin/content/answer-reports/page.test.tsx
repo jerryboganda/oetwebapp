@@ -70,4 +70,68 @@ describe('AdminAnswerKeyReportsPage', () => {
       '/admin/content/reading/paper-1/questions',
     );
   });
+
+  it('shows no Jev hint when the report carries none', async () => {
+    render(<AdminAnswerKeyReportsPage />);
+
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Open editor' })).toBeInTheDocument());
+    expect(screen.queryByText('Jev hint (advisory)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Worth reviewing first')).not.toBeInTheDocument();
+  });
+
+  it('shows the Jev triage as a neutral advisory hint and lists prioritised reports first', async () => {
+    const first = {
+      id: 'akr-plain',
+      assessment: 'listening',
+      attemptId: 'attempt-2',
+      paperId: 'paper-2',
+      paperTitle: 'Plain Listening Paper',
+      questionId: 'q-2',
+      questionNumber: 5,
+      partCode: 'A1',
+      questionStemSnapshot: 'Stem two',
+      learnerAnswerSnapshot: '"x"',
+      officialAnswerSnapshot: '"y"',
+      reasonCode: 'other',
+      details: null,
+      reportedByUserDisplayName: 'Learner Two',
+      reportedByUserId: 'learner-2',
+      editorUrl: '/admin/content/listening/paper-2/part-a',
+      scoringSystemUrl: '/admin/content/scoring-system',
+      createdAt: '2026-05-13T00:00:00.000Z',
+      status: 'open',
+      resolvedAt: null,
+      resolutionNote: null,
+      jevTriage: null,
+    };
+    const flagged = {
+      ...first,
+      id: 'akr-flagged',
+      paperTitle: 'Flagged Reading Paper',
+      assessment: 'reading',
+      createdAt: '2026-05-12T00:00:00.000Z',
+      jevTriage: {
+        equivalenceProbability: 0.91,
+        likelyCause: 'missing_accepted_variant',
+        causeConfidence: 0.88,
+        prioritiseReview: true,
+        summary: 'Jev reads the learner’s answer as likely equivalent to the key (91%): possibly a missing accepted variant.',
+        model: 'jev-1.13.0',
+      },
+    };
+    mockListReports.mockResolvedValue({ items: [first, flagged] });
+
+    render(<AdminAnswerKeyReportsPage />);
+
+    const hint = await screen.findByTestId('jev-triage-akr-flagged');
+    expect(within(hint).getByText('Jev hint (advisory)')).toBeInTheDocument();
+    expect(within(hint).getByText(/possibly a missing accepted variant/)).toBeInTheDocument();
+    expect(within(hint).getByText('Worth reviewing first')).toBeInTheDocument();
+    expect(screen.queryByTestId('jev-triage-akr-plain')).not.toBeInTheDocument();
+
+    // Advisory only: the report actions are unchanged and nothing is updated by viewing the hint.
+    expect(mockUpdateReport).not.toHaveBeenCalled();
+    const paperCells = screen.getAllByText(/Paper$/).map((el) => el.textContent);
+    expect(paperCells.indexOf('Flagged Reading Paper')).toBeLessThan(paperCells.indexOf('Plain Listening Paper'));
+  });
 });

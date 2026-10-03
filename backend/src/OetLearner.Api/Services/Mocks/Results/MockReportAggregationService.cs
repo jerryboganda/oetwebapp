@@ -296,7 +296,9 @@ public sealed class MockReportAggregationService(
     NotificationService notifications,
     MockSectionResultResolver sectionResolver,
     RemediationPlanService remediationPlan,
-    ILogger<MockReportAggregationService> logger) : IMockReportAggregationService
+    ILogger<MockReportAggregationService> logger,
+    OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentService? jev = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null) : IMockReportAggregationService
 {
     public async Task GenerateAsync(BackgroundJobItem job, CancellationToken ct)
     {
@@ -436,12 +438,19 @@ public sealed class MockReportAggregationService(
             : new { subtest = weakest.name, criterion = "Lowest scaled sub-test", description = $"Prioritise {weakest.name} next; current scaled score is {weakest.scaledScore}/500." };
         var config = JsonSupport.Deserialize<Dictionary<string, object?>>(mockAttempt.ConfigJson, new Dictionary<string, object?>());
 
+        // Advisory Jev weakness ranking (flag-gated, fail-soft). Read-only over the numbers
+        // above: it only supplies catalogue-rendered Tags for weaknessNarrative.
+        var weaknessNarrative = await TryBuildWeaknessNarrativeAsync(
+            mockAttempt,
+            sections.Select(x => (x.sectionAttempt.SubtestCode, x.sectionAttempt.ContentAttemptId)).ToList(),
+            ct);
+
         report.State = AsyncState.Completed;
         report.GeneratedAt = DateTimeOffset.UtcNow;
         // V1 schema marker — consumers branch on payloadSchemaVersion. See MockReportPayloadV1.cs
         // and lib/mocks/report-payload.ts for the typed contract.
         report.PayloadSchemaVersion = "v1";
-        report.PayloadJson = JsonSupport.Serialize(new
+        var payloadJson = JsonSupport.Serialize(new
         {
             payloadSchemaVersion = "v1",
             id = report.Id,
@@ -528,6 +537,8 @@ public sealed class MockReportAggregationService(
                 }
                 : new { exists = false, priorMockName = string.Empty, overallTrend = "flat", details = "No earlier generated mock report is available for comparison." }
         });
+        // No narrative = the payload is byte-identical to what it was before this feature.
+        report.PayloadJson = OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.ApplyToPayload(payloadJson, weaknessNarrative);
 
         mockAttempt.ReportId = report.Id;
         mockAttempt.State = AttemptState.Completed;
@@ -569,6 +580,76 @@ public sealed class MockReportAggregationService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Auto-seed of remediation plan failed for report {ReportId}; learner can still POST to /remediation-plan/generate.", report.Id);
+        }
+    }
+
+    /// <summary>
+    /// Jev weakness ranking over the learner's own Listening/Reading answer review. Returns null
+    /// (and touches neither the database nor Jev) when the flag is off; null on any failure too,
+    /// so the report is exactly what it is without the feature. Writing and Speaking sections are
+    /// never read. Advisory: it supplies tags and nothing else.
+    /// </summary>
+    private async Task<MockReportWeaknessNarrativeV1?> TryBuildWeaknessNarrativeAsync(
+        MockAttempt mockAttempt,
+        IReadOnlyList<(string Subtest, string? ContentAttemptId)> sections,
+        CancellationToken ct)
+    {
+        var options = typeSafeOptions?.Value;
+        if (jev is null || !OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.Enabled(options)) return null;
+
+        try
+        {
+            var evidence = new List<OetLearner.Api.Services.Ai.TypeSafe.JevSkillEvidence>();
+            foreach (var (subtest, attemptId) in sections)
+            {
+                if (string.IsNullOrWhiteSpace(attemptId)) continue;
+                var skill = subtest.Trim().ToLowerInvariant();
+
+                if (skill == "listening")
+                {
+                    var owned = await db.ListeningAttempts.AsNoTracking()
+                        .AnyAsync(x => x.Id == attemptId && x.UserId == mockAttempt.UserId, ct);
+                    if (!owned) continue;
+                    var rows = await (
+                        from a in db.ListeningAnswers.AsNoTracking()
+                        join q in db.ListeningQuestions.AsNoTracking() on a.ListeningQuestionId equals q.Id
+                        join p in db.ListeningParts.AsNoTracking() on q.ListeningPartId equals p.Id
+                        where a.ListeningAttemptId == attemptId
+                        select new { p.PartCode, a.IsCorrect, a.MissReason }).ToListAsync(ct);
+                    evidence.Add(OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.BuildEvidence(
+                        "listening",
+                        rows.Select(r => (r.PartCode.ToString()[..1], r.IsCorrect, r.MissReason?.ToString()))));
+                }
+                else if (skill == "reading")
+                {
+                    var owned = await db.ReadingAttempts.AsNoTracking()
+                        .AnyAsync(x => x.Id == attemptId && x.UserId == mockAttempt.UserId, ct);
+                    if (!owned) continue;
+                    var rows = await (
+                        from a in db.ReadingAnswers.AsNoTracking()
+                        join q in db.ReadingQuestions.AsNoTracking() on a.ReadingQuestionId equals q.Id
+                        join p in db.ReadingParts.AsNoTracking() on q.ReadingPartId equals p.Id
+                        where a.ReadingAttemptId == attemptId
+                        select new { p.PartCode, a.IsCorrect, a.MissReason }).ToListAsync(ct);
+                    evidence.Add(OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.BuildEvidence(
+                        "reading",
+                        rows.Select(r => (r.PartCode.ToString()[..1], r.IsCorrect, r.MissReason))));
+                }
+            }
+
+            if (evidence.Count == 0) return null;
+            var advisory = await OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.RankAsync(
+                jev, options!, evidence, mockAttempt.UserId, mockAttempt.Id, ct, logger: logger);
+            return OetLearner.Api.Services.Ai.TypeSafe.JevMockWeakness.BuildNarrative(advisory);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Jev mock weakness ranking failed for mock attempt {MockAttemptId}; report is unchanged.", mockAttempt.Id);
+            return null;
         }
     }
 

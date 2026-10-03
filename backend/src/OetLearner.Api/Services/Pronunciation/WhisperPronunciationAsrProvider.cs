@@ -1,11 +1,14 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
@@ -32,7 +35,10 @@ public sealed class WhisperPronunciationAsrProvider(
     IRuntimeSettingsProvider runtimeSettings,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
-    ILogger<WhisperPronunciationAsrProvider> logger) : IPronunciationAsrProvider
+    ILogger<WhisperPronunciationAsrProvider> logger,
+    ITypeSafeJudgmentService? judgments = null,
+    IOptions<TypeSafeOptions>? typeSafeOptions = null,
+    IServiceScopeFactory? scopeFactory = null) : IPronunciationAsrProvider
 {
     private const string WhisperProviderCode = "whisper-asr";
     private readonly PronunciationOptions _options = options.Value;
@@ -196,6 +202,10 @@ public sealed class WhisperPronunciationAsrProvider(
             PauseCount: Math.Max(0, CountPauses(heardWords)),
             AveragePauseDurationMs: 400);
 
+        // Advisory Jev word classification (flag-gated, time-boxed, fail-soft). Reads the
+        // alignment above and persists an AuditEvent only; no score below can change.
+        await TryAdviseWordsAsync(request, sttStartedAt, transcript, refWords, heard, ct);
+
         // ── Step 3: Grounded AI phoneme-level refinement ─────────────────────
         //
         // Whisper does not expose native phoneme scores. Rather than fabricate
@@ -226,6 +236,43 @@ public sealed class WhisperPronunciationAsrProvider(
             FluencyMarkers: markers,
             ProviderName: "whisper",
             ProviderResponseSummary: $"whisper: transcript='{Truncate(transcript, 80)}', {matched}/{refLower.Count} words matched");
+    }
+
+    private async Task TryAdviseWordsAsync(
+        AsrRequest request,
+        DateTimeOffset startedAt,
+        string transcript,
+        IReadOnlyList<string> refWords,
+        IReadOnlyList<string> heardWords,
+        CancellationToken ct)
+    {
+        var tsOptions = typeSafeOptions?.Value;
+        if (judgments is null || scopeFactory is null || !JevPronunciationWords.Enabled(tsOptions)) return;
+        try
+        {
+            var pairs = JevPronunciationWords.MismatchedPairs(refWords, heardWords);
+            if (pairs.Count == 0) return;
+
+            // Same key as the STT usage lease, so the advisory links to its AiUsageRecord.
+            var resourceId = $"{request.UserId}:{startedAt.ToUnixTimeMilliseconds()}";
+            if (resourceId.Length > 64) resourceId = resourceId[^64..];
+
+            var advisory = await JevPronunciationWords.ClassifyAsync(
+                judgments, tsOptions!, request.ReferenceText, transcript, pairs, request.UserId, resourceId, ct, logger: logger);
+            var payload = JevPronunciationWords.AdvisoryPayload(advisory, request.UserId, request.TargetPhoneme, request.TargetRuleId);
+            if (payload is null) return;
+
+            // Own scope: never touch the caller's tracked DbContext state.
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.AuditEvents.Add(JevSpeakingAdvisor.ReviewEvent(
+                JevPronunciationWords.AdvisoryAction, JevPronunciationWords.ResourceType, resourceId, clock.GetUtcNow(), payload));
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Jev pronunciation word advisory failed; scoring is unaffected.");
+        }
     }
 
     private async Task<AsrResult?> TryRefineViaGroundedAiAsync(

@@ -137,6 +137,35 @@ public sealed class TypeSafeOptions
     /// flags the submission for tutor attention.</summary>
     public double ReadinessFlagThreshold { get; set; } = 0.80;
 
+    /// <summary>Writing helper need-routing (<c>jev.writing.coachneed</c>).</summary>
+    public bool WritingCoachNeedEnabled { get; set; } = false;
+
+    /// <summary>Conversation evaluation cross-check (<c>jev.conversation.crosscheck</c>).</summary>
+    public bool ConversationCrosscheckEnabled { get; set; } = false;
+
+    /// <summary>Pronunciation word-level Choice (<c>jev.pronunciation.words</c>).</summary>
+    public bool PronunciationWordsEnabled { get; set; } = false;
+
+    /// <summary>Owner-approved (2026-10-03) Jev replacement for the paid Writing
+    /// Model Answer semantic validator (<c>jev.writing.modelreview</c>).</summary>
+    public bool WritingModelReviewEnabled { get; set; } = false;
+
+    /// <summary>Listening Part A per-gap advisory verdict (<c>jev.listening.gaps</c>).</summary>
+    public bool ListeningGapVerdictEnabled { get; set; } = false;
+
+    /// <summary>Mock report weakness ranking (<c>jev.mock.weakness</c>).</summary>
+    public bool MockWeaknessEnabled { get; set; } = false;
+
+    /// <summary>Answer-key dispute triage (<c>jev.answerkey.triage</c>).</summary>
+    public bool AnswerKeyTriageEnabled { get; set; } = false;
+
+    /// <summary>Extraction verification for admin drafts (<c>jev.extraction.verify</c>).</summary>
+    public bool ExtractionVerifyEnabled { get; set; } = false;
+
+    /// <summary>Coach need-routing: a "nothing needed" Choice must reach this
+    /// confidence before the coach LLM call may be skipped.</summary>
+    public double CoachSkipConfidenceThreshold { get; set; } = 0.85;
+
     public bool ResponseVerifyEnabled { get; set; } = false;
     public double ResponseConfidenceThreshold { get; set; } = 0.80;
     public bool DevelopmentTriageEnabled { get; set; } = false;
