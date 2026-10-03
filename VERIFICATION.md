@@ -6,6 +6,11 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 18:32 | CI triage | CI triage | 37144560414 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b9df2ec6d |
+| 2026-10-03 18:32 | AX Ledger Tools | AX Ledger Tools | 37144557240 | self-test (linux, node 22)=success self-test (windows, node 22)=success self-test (windows, node 24)=success | SUCCESS | b9df2ec6d |
+| 2026-10-03 18:25 | CI triage | CI triage | 37144115145 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 9ffb41d34 |
+| 2026-10-03 18:24 | CI triage | CI triage | 37144053151 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9ffb41d34 |
+| 2026-10-03 18:24 | AX Ledger Tools | AX Ledger Tools | 37144049823 | self-test (linux, node 22)=failure self-test (windows, node 22)=failure self-test (windows, node 24)=failure | FAILURE | 9ffb41d34 |
 | 2026-10-03 14:52 | CI triage | CI triage | 37131219592 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8c7f2b189 |
 | 2026-10-02 02:01 | AX Ledger Tools | AX Ledger Tools | 36953672160 | self-test (windows, node 22)=success self-test (linux, node 22)=success self-test (windows, node 24)=success | SUCCESS | 333e92aa5 |
 | 2026-10-02 02:01 | SBOM and SCA | SBOM and SCA | 36953672111 | sbom-sca=success | SUCCESS | 333e92aa5 |
