@@ -297,7 +297,7 @@ Shared secret `OWNER_AGENT_PROXY_TOKEN` (file `/run/secrets/owner_agent_proxy_to
 → blocks until decided (≤ 600 s) → `{ decision: "approve" | "deny", scope: "once" | "session" }`.
 The sidecar applies mode + taint rules (read_only ⇒ deny; guarded ⇒ owner card; autopilot ⇒ auto-approve unless the session is tainted ⇒ owner card; unknown/absent session ⇒ owner card on a global "system" queue shown on the console home) and emits `approval_request` / `approval_resolved` events on the session stream.
 
-**Egress policy** — static allowlist (suffix match): `api.anthropic.com`, `claude.ai`, `console.anthropic.com`, `platform.claude.com`, `statsig.anthropic.com`, `chatgpt.com`, `auth.openai.com`, `api.openai.com`, `ab.chatgpt.com`, `github.com`, `api.github.com`, `githubusercontent.com`, `ghcr.io`, `registry.npmjs.org`, `oetwithdrhesham.co.uk`. Anything else ⇒ approval callback; `scope:"session"` adds the host for that session until the session ends. Denied ⇒ `403` with body `blocked by oet-agent-egress: <host>`.
+**Egress policy** — static allowlist (suffix match): `api.anthropic.com`, `claude.ai`, `console.anthropic.com`, `platform.claude.com`, `statsig.anthropic.com`, `chatgpt.com`, `auth.openai.com`, `api.openai.com`, `ab.chatgpt.com`, `github.com`, `api.github.com`, `githubusercontent.com`, `ghcr.io`, `registry.npmjs.org`, `oetwithdrhesham.co.uk`, `opencode.ai`, `models.opencode.ai`, `oaiusercontent.com`. Anything else ⇒ approval callback; `scope:"session"` adds the host for that session until the session ends. Denied ⇒ `403` with body `blocked by oet-agent-egress: <host>`.
 
 **Docker policy** — first match wins:
 1. `deny`: any request touching containers `oet-agent-*`, the egress/dockerproxy/dbproxy containers, or the console volumes.

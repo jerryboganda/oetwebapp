@@ -28,6 +28,11 @@ export const STATIC_ALLOWLIST: readonly string[] = Object.freeze([
   'ghcr.io',
   'registry.npmjs.org',
   'oetwithdrhesham.co.uk',
+  // Built-in OpenCode provider (native provider defaults, "opencode" / fledge
+  // models and Zen); the console's first-level backend and free-model traffic.
+  'opencode.ai',
+  'models.opencode.ai',
+  'oaiusercontent.com',
 ]);
 
 export const DEFAULT_CONNECT_PORTS: readonly number[] = Object.freeze([443]);

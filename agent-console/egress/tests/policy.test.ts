@@ -38,6 +38,9 @@ describe('static allowlist (CONTRACT.md §6)', () => {
         'ghcr.io',
         'registry.npmjs.org',
         'oetwithdrhesham.co.uk',
+        'opencode.ai',
+        'models.opencode.ai',
+        'oaiusercontent.com',
       ].sort(),
     );
   });
@@ -74,6 +77,12 @@ describe('static allowlist (CONTRACT.md §6)', () => {
     ['app.oetwithdrhesham.co.uk', true],
     ['api.oetwithdrhesham.co.uk', true],
     ['xoetwithdrhesham.co.uk', false],
+    ['opencode.ai', true],
+    ['models.opencode.ai', true],
+    ['www.models.opencode.ai', true],
+    ['sdmntprwestcentralus.oaiusercontent.com', true],
+    ['evilopencode.ai', false],
+    ['opencode.ai.evil.io', false],
     ['example.com', false],
     ['140.82.112.3', false],
   ])('matchesAllowlist(%s) === %s', (host, expected) => {
