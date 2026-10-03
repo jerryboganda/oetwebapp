@@ -461,7 +461,7 @@ export async function mobileChecks(session, url, shotPrefix, targets = null) {
       problems.push(...[...new Set(found)].map((p) => `${at}: ${p}`));
       if (verdict === 'NOT_PROVEN') {
         const runtimeKind = await page.evaluate(() => document.documentElement.dataset.runtimeKind ?? null).catch(() => null);
-        partials.push(`${at}: mobile overlap NOT PROVEN (native-shell emulation not confirmed: menu button ${menuFound ? 'found' : 'missing'}, aria-expanded=${menuExpanded}, native entries attached ${menuEntries}/2, data-runtime-kind=${runtimeKind})`);
+        partials.push(`${at}: web mobile layout checks passed (bottom-nav clearance, report controls clear and top-most); native-shell-only handle/menu NOT PROVEN (emulation not confirmed: menu button ${menuFound ? 'found' : 'missing'}, aria-expanded=${menuExpanded}, native entries attached ${menuEntries}/2, data-runtime-kind=${runtimeKind})`);
       }
     }
   } finally {
