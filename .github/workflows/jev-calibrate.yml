@@ -104,7 +104,9 @@ jobs:
                 echo "calibrate verdict:"
                 echo '```'
                 # `FAIL: ` catch lines can embed an API error body: print only record lines and a clipped catch line.
-                grep -E '^[0-9]+ checks, |^FAIL  ' "$RUNNER_TEMP/calibrate.log" | head -n 40 || true
+                # SUITE lines (one per gated TypeSafe flag) and the totals first, so a long FAIL list cannot truncate them.
+                grep -E '^SUITE  |^[0-9]+ checks, ' "$RUNNER_TEMP/calibrate.log" || true
+                grep -E '^FAIL  ' "$RUNNER_TEMP/calibrate.log" | head -n 40 || true
                 grep -E '^FAIL: ' "$RUNNER_TEMP/calibrate.log" | cut -c1-80 | head -n 5 || true
                 echo '```'
               fi

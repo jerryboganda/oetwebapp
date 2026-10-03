@@ -52,6 +52,9 @@ public sealed record TopUserUsage(string UserId, int Calls, long TotalTokens, de
 
 public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
 {
+    /// <summary>Feature-code prefix of platform-only TypeSafe/Jev judgments, hidden from the learner summary.</summary>
+    internal const string PlatformOnlyFeaturePrefix = "jev.";
+
     private readonly LearnerDbContext _db;
 
     public AiUsageAnalyticsService(LearnerDbContext db) => _db = db;
@@ -61,9 +64,12 @@ public sealed class AiUsageAnalyticsService : IAiUsageAnalyticsService
         var fromTs = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toTs = new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
 
+        // Jev ("jev.") judgments are platform-only plumbing recorded against the learner's id
+        // for cost attribution; the learner never sees them (admin summaries still do).
         var q = _db.AiUsageRecords
             .AsNoTracking()
-            .Where(r => r.UserId == userId && r.CreatedAt >= fromTs && r.CreatedAt <= toTs);
+            .Where(r => r.UserId == userId && r.CreatedAt >= fromTs && r.CreatedAt <= toTs
+                && !r.FeatureCode.StartsWith(PlatformOnlyFeaturePrefix));
 
         var aggregate = await q
             .GroupBy(_ => 1)

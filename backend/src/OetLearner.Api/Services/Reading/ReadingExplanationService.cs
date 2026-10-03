@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Rulebook;
 
@@ -58,8 +59,17 @@ public sealed class ReadingExplanationService(
     IAiResultCacheService? resultCache = null)
     : IReadingExplanationService
 {
-    private const string PromptTemplateId = "reading.explanation.v1";
+    // v2: trapName vocabulary is now the canonical ReadingDistractorCategory names. The version is part of
+    // both cache keys, so explanations cached under the old v1 vocabulary are never served again.
+    private const string PromptTemplateId = "reading.explanation.v2";
     private const string Module = "reading";
+
+    // Key variant for the learner's own copy of a Jev-held explanation. It must NOT share the normal key:
+    // AiResultCaches.CacheKey is unique and never purged, so an expired short-lived row under the normal
+    // key would silently block every later normal store (StoreAsync swallows the unique violation).
+    private const string HeldPromptVersion = PromptTemplateId + ".jev-held";
+
+    private static readonly string TrapNameVocabulary = string.Join('|', Enum.GetNames<ReadingDistractorCategory>());
 
     // ── AI generation ───────────────────────────────────────────────────────
 
@@ -79,6 +89,7 @@ public sealed class ReadingExplanationService(
         // W5 AiResultCache first (attempt + question + answer + language +
         // prompt/rulebook versions), then the W3 cross-learner explanation cache.
         string? resultCacheKey = null;
+        string? heldCacheKey = null;
         if (resultCache is not null)
         {
             resultCacheKey = resultCache.BuildCacheKey(
@@ -97,24 +108,68 @@ public sealed class ReadingExplanationService(
             {
                 return fromResultCache with { Cached = true };
             }
+
+            // This learner's own re-view of an explanation Jev held back (see the gate below).
+            heldCacheKey = resultCache.BuildCacheKey(
+                AiFeatureCodes.ReadingExplanation,
+                Module,
+                attemptId,
+                question.Id,
+                wrongOption,
+                language,
+                HeldPromptVersion,
+                rationaleId);
+            var heldJson = await resultCache.TryGetAsync(heldCacheKey, ct);
+            if (heldJson is not null
+                && TryDeserializeExplanation(heldJson, language, out var fromHeld)
+                && fromHeld is not null)
+            {
+                return fromHeld with { Cached = true };
+            }
         }
 
         string? cacheKey = null;
         if (explanationCache is not null)
         {
+            // The shared key has no prompt-version slot, so the template id rides in extraEvidence.
             cacheKey = explanationCache.BuildCacheKey(
                 Module, question.Id, questionVersion: null,
                 normalizedSelectedAnswer: wrongOption, language,
-                approvedRationale, sourceSentence, extraEvidence: sourcePassage);
+                approvedRationale, sourceSentence, extraEvidence: PromptTemplateId + "\n" + sourcePassage);
 
             var cached = await TryReadCacheAsync(cacheKey, language, ct);
             if (cached is not null) return cached with { Cached = true };
         }
 
-        var generated = await CallGatewayAsync(
+        var (generated, advisory) = await CallGatewayAsync(
             question, correctAnswer, wrongOption, language, approvedRationale, sourceSentence, sourcePassage, userId, ct);
 
         var payload = System.Text.Json.JsonSerializer.Serialize(generated);
+
+        // Jev flagged this explanation: the learner still gets it, but it must not be replayed from the 30-day
+        // result cache or the cross-learner cache. The one exception is this learner's own re-view inside the
+        // AI replay window: the coordinator refuses an identical gateway call there (the re-view would fail),
+        // so the learner keeps their copy under the held key for exactly that window.
+        // ponytail: ttl pinned to the default window; read Ai:Coordination:ReplayWindowSeconds here if ops ever raises it.
+        if (JevHoldsBackFromCache(advisory, question.Id))
+        {
+            if (heldCacheKey is not null)
+            {
+                await resultCache!.StoreAsync(
+                    heldCacheKey,
+                    AiFeatureCodes.ReadingExplanation,
+                    Module,
+                    payload,
+                    HeldPromptVersion,
+                    rationaleId,
+                    question.Id,
+                    ttl: AiOperationReplayPolicy.DefaultReplayWindow,
+                    CancellationToken.None);
+            }
+
+            return generated with { Cached = false };
+        }
+
         if (resultCacheKey is not null)
         {
             await resultCache!.StoreAsync(
@@ -136,6 +191,20 @@ public sealed class ReadingExplanationService(
         }
 
         return generated with { Cached = false };
+    }
+
+    /// <summary>
+    /// True only for a real Jev judgment (<c>review_required</c>) that wants a human look. A null,
+    /// <c>ok</c> or <c>unavailable</c> advisory (flag off, outage, bad config) never blocks caching.
+    /// Logs the question id and the label/score fields only, never the explanation text.
+    /// </summary>
+    private bool JevHoldsBackFromCache(JevResponseAdvisory? advisory, string questionId)
+    {
+        if (advisory is not { Status: "review_required", RequiresHumanReview: true }) return false;
+        logger?.LogWarning(
+            "ReadingExplanationService — Jev advisory held question '{QuestionId}' out of the shared explanation caches (relation={Relation}, evidenceConfidence={EvidenceConfidence}, taskRelevance={TaskRelevance}, safetyConcern={SafetyConcern}); served to this learner only, kept for their re-view inside the AI replay window.",
+            questionId, advisory.EvidenceRelation, advisory.EvidenceConfidence, advisory.TaskRelevanceProbability, advisory.SafetyConcernProbability);
+        return true;
     }
 
     private static bool TryDeserializeExplanation(string json, string language, out ExplanationDto? dto)
@@ -174,7 +243,7 @@ public sealed class ReadingExplanationService(
         }
     }
 
-    private async Task<ExplanationDto> CallGatewayAsync(
+    private async Task<(ExplanationDto Explanation, JevResponseAdvisory? Advisory)> CallGatewayAsync(
         ReadingQuestion question,
         string correctAnswer,
         string wrongOption,
@@ -227,9 +296,10 @@ public sealed class ReadingExplanationService(
                 UserId = userId,
             }, ct);
 
-            return TryParseExplanation(result.Completion, language)
+            var explanation = TryParseExplanation(result.Completion, language)
                 ?? throw new ReadingGroundedExplanationUnavailableException(
                     "The grounded gateway returned no usable explanation for this question.");
+            return (explanation, result.JevAdvisory);
         }
         catch (OperationCanceledException)
         {
@@ -359,7 +429,7 @@ public sealed class ReadingExplanationService(
         sb.AppendLine("{");
         sb.AppendLine("  \"whyCorrect\": \"explain in ≤ 40 words why the correct answer is right\",");
         sb.AppendLine("  \"whyWrong\": \"explain in ≤ 40 words why the student's chosen option is a trap\",");
-        sb.AppendLine("  \"trapName\": \"one of: Opposite|DistortedDetail|NotInText|TooGeneral|TooSpecific|ReusedKeyword|WrongSpeaker\",");
+        sb.AppendLine($"  \"trapName\": \"one of: {TrapNameVocabulary}\",");
         sb.AppendLine("  \"avoidTip\": \"one actionable tip (≤ 25 words) to avoid this trap in future\"");
         sb.AppendLine("}");
         return sb.ToString();

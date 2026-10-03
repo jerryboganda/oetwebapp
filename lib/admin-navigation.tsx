@@ -306,6 +306,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.AiConfig],
       },
       {
+        href: '/admin/ai-providers/typesafe',
+        label: 'TypeSafe / Jev',
+        icon: <Activity className={iconClassName} />,
+        matchPrefix: '/admin/ai-providers/typesafe',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
         href: '/admin/writing-ai',
         label: 'Writing AI Provider',
         icon: <Cpu className={iconClassName} />,
@@ -590,6 +597,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/agent-console', title: 'Agent Console' },
   { prefix: '/admin/companion', title: 'Learning Companion' },
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },
+  { prefix: '/admin/ai-providers/typesafe', title: 'TypeSafe / Jev' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },
   { prefix: '/admin/ai-usage', title: 'AI/API Usage & Billing' },
   { prefix: '/admin/writing-ai', title: 'Writing AI Provider' },

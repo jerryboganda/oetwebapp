@@ -1,6 +1,6 @@
 {
   "name": "urgent-referral-stemi",
-  "note": "Canonical positive: real urgent-referral letter. Anchor for route + guard + criteria + verify calibration. criteria ranges sit on the pilot's 0-3 level scale.",
+  "note": "Canonical positive: realistic synthetic urgent-referral letter (invented patient, no learner text). Anchor for route + guard + criteria + verify calibration. criteria ranges sit on the OFFICIAL descriptor scale the pilot now uses (JevWritingPilot.Criteria): c1_purpose 0-3 (four levels), c2..c6 0-7 (one level per score). The request to the reader is made in the LAST paragraph, so the official 'immediately clear' Purpose descriptor keeps c1 below the top level: the c1 range only requires that purpose is not judged unclear (>= 1). The pass-level c1 anchor (purpose stated in the opening) lives in writing-outcome.json.",
   "state": {
     "task": "score",
     "letterType": "urgent_referral",
@@ -14,28 +14,28 @@
     "route": "writing_grade",
     "criteria": {
       "c1_purpose": [
-        1.8,
+        1,
         3
       ],
       "c2_content": [
-        2,
-        3
+        4,
+        7
       ],
       "c3_conciseness": [
-        2,
-        3
+        4,
+        7
       ],
       "c4_genre": [
-        2,
-        3
+        4,
+        7
       ],
       "c5_organisation": [
-        2,
-        3
+        4,
+        7
       ],
       "c6_language": [
-        2,
-        3
+        4,
+        7
       ]
     },
     "verify": [

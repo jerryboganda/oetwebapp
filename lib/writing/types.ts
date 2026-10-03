@@ -138,6 +138,13 @@ export type WritingItemKind =
   | 'exemplar-review'
   | 'canon-refresher';
 export type WritingConfidenceFlag = 'high' | 'medium' | 'low';
+/**
+ * `WritingGrade.ConfidenceFlag` as persisted: the grader's confidence band, or a
+ * review state set after grading ('jev_review' = queued for a human review,
+ * 'tutor_reviewed' = a tutor has reviewed it). Pre-assessment confidence
+ * (tutor workspace) stays the three-level `WritingConfidenceFlag`.
+ */
+export type WritingGradeConfidenceFlag = WritingConfidenceFlag | 'jev_review' | 'tutor_reviewed';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Onboarding & profile
@@ -347,7 +354,7 @@ export interface WritingGradeDto {
   bandLabel: string;
   perCriterion: Record<WritingCriterionCode, WritingPerCriterionFeedbackDto>;
   topThreePriorities: string[];
-  confidenceFlag: WritingConfidenceFlag;
+  confidenceFlag: WritingGradeConfidenceFlag;
   modelUsed: string;
   canonVersion: string;
   canonViolations: WritingCanonViolationDto[];

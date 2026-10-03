@@ -74,12 +74,16 @@ public sealed class ChurnPredictionService : IChurnPredictionService
             .Where(p => p.LearnerUserId == userId && p.Status == "refunded" && p.CreatedAt >= sixtyDaysAgo)
             .CountAsync(ct);
 
-        // AI usage trend: last 7d calls vs prior 7d.
-        var aiCallsRecent = await _db.AiUsageRecords
-            .Where(r => r.UserId == userId && r.CreatedAt >= sevenDaysAgo)
+        // AI usage trend: last 7d calls vs prior 7d. Platform-only Jev rows are excluded:
+        // they are not learner activity and the learner is served this snapshot.
+        var aiCalls = _db.AiUsageRecords
+            .Where(r => r.UserId == userId
+                && !r.FeatureCode.StartsWith(AiUsageAnalyticsService.PlatformOnlyFeaturePrefix));
+        var aiCallsRecent = await aiCalls
+            .Where(r => r.CreatedAt >= sevenDaysAgo)
             .CountAsync(ct);
-        var aiCallsPrior = await _db.AiUsageRecords
-            .Where(r => r.UserId == userId && r.CreatedAt >= fourteenDaysAgo && r.CreatedAt < sevenDaysAgo)
+        var aiCallsPrior = await aiCalls
+            .Where(r => r.CreatedAt >= fourteenDaysAgo && r.CreatedAt < sevenDaysAgo)
             .CountAsync(ct);
 
         var lastLogin = account.LastLoginAt ?? account.CreatedAt;

@@ -217,6 +217,32 @@ describe('owner-agent REST client', () => {
     expect(describeOwnerAgentError(flat)).toBe('Session is busy.');
   });
 
+  it('explains a vague-request triage conflict by its code, for the first message and follow-ups alike', async () => {
+    const TRIAGE_COPY = 'The request is too vague to triage - add the task, files and expected result, then send again.';
+    const conflict = Object.assign(
+      new Error('Jev could not establish the task and impact. Clarify the request before continuing.'),
+      { status: 409, code: 'jev_review_required', userMessage: 'Jev could not establish the task and impact. Clarify the request before continuing.' },
+    );
+
+    expect(describeOwnerAgentError(conflict)).toBe(TRIAGE_COPY);
+    expect(describeOwnerAgentError(conflict, 'Message was not sent.')).toBe(TRIAGE_COPY);
+
+    mockRequest.mockRejectedValueOnce(conflict);
+    const created = createSession({ engine: 'claude', model: 'opaque', mode: 'guarded', initialMessage: 'make it better somehow' });
+    await expect(created).rejects.toBe(conflict);
+    expect(lastCall().path).toBe('/v1/owner-agent/sessions');
+
+    mockRequest.mockRejectedValueOnce(conflict);
+    await expect(sendMessage(SESSION, { text: 'make it better somehow' })).rejects.toBe(conflict);
+    expect(lastCall().path).toBe(`/v1/owner-agent/sessions/${SESSION}/messages`);
+
+    // A triage conflict is not a lock failure, and other 409s keep their own text.
+    expect(isOwnerAgentLockError(conflict)).toBe(false);
+    expect(isUnlocked()).toBe(true);
+    const busy = Object.assign(new Error('Request failed: 409'), { status: 409, code: 'unknown_error', userMessage: 'Request failed: 409' });
+    expect(describeOwnerAgentError(busy)).toMatch(/busy/);
+  });
+
   it('keeps the unlock state on unrelated failures', async () => {
     mockRequest.mockRejectedValueOnce(Object.assign(new Error('busy'), { status: 429, code: 'rate_limited' }));
     await expect(getStatus()).rejects.toThrow('busy');
